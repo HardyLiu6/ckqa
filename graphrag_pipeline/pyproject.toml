@@ -1,0 +1,73 @@
+[project]
+name = "graphrag-pipeline"
+version = "2.0.1"
+description = "Knowledge graph Q&A system built on Microsoft GraphRAG 2.7.0, providing an OpenAI-compatible REST API with local, global, and mixed search modes."
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+
+dependencies = [
+    # Core Framework
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+
+    # GraphRAG
+    "graphrag==2.7.0",
+
+    # Data Processing
+    "pandas>=2.2.3,<3.0",
+    "numpy>=1.26.0,<2.0.0",
+
+    # LLM & Tokenization
+    "tiktoken>=0.8.0",
+
+    # Pydantic (GraphRAG 2.x requires Pydantic 2.x)
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+
+    # Environment & Configuration
+    "python-dotenv>=1.0.1",
+
+    # Async & HTTP
+    "aiohttp>=3.10.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    # Machine Learning & NLP
+    "scikit-learn>=1.5.0",
+    "matplotlib>=3.9.0",
+    "seaborn>=0.13.0",
+    "nltk>=3.9.0",
+    "spacy>=3.7.5",
+    # Deep Learning
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    "torchaudio>=2.2.0",
+    "transformers>=4.44.0",
+]
+graph = [
+    # Graph Processing & Visualization
+    "networkx>=3.2.0",
+    "plotly>=5.18.0",
+    # Vector & Graph Databases
+    "lancedb>=0.5.0",
+    "pyarrow>=14.0.0",
+    "neo4j>=5.15.0",
+]
+scraper = [
+    # Web Scraping
+    "scrapy>=2.11.0",
+    "beautifulsoup4>=4.12.0",
+    "html2text>=2024.2.26",
+]
+all = [
+    "graphrag-pipeline[ml,graph,scraper]",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []  # script-based project, no installable packages

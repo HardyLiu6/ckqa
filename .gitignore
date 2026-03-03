@@ -1,4 +1,10 @@
 # =========================
+# direnv
+# =========================
+.envrc
+.direnv/
+
+# =========================
 # Python
 # =========================
 __pycache__/
@@ -163,4 +169,4 @@ pdf_ingest/output/
 temp_*/
 
 # CLAUDE.md
-pdf_ingest/CLAUDE.md
+CLAUDE.md

@@ -1,0 +1,29 @@
+[project]
+name = "pdf-ingest"
+version = "2.0.0"
+description = "PDF processing pipeline — parses course materials via MinerU cloud API, stores in MinIO, tracks metadata in MySQL, and exports to GraphRAG format."
+requires-python = ">=3.10"
+license = "MIT"
+
+dependencies = [
+    "requests>=2.32",
+    "PyMySQL>=1.1",
+    "DBUtils>=3.1",
+    "minio>=7.2",
+    "python-dotenv>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []  # script-based project, no installable packages
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
