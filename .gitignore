@@ -140,6 +140,7 @@ Thumbs.db
 # =========================
 graphrag_pipeline/cache/
 graphrag_pipeline/output/
+graphrag_pipeline/input/
 graphrag_pipeline/inputs/artifacts/
 
 # LanceDB

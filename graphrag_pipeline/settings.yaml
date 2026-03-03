@@ -20,7 +20,7 @@ models:
     max_retries: 10
     tokens_per_minute: null
     requests_per_minute: null
-  
+
   default_embedding_model:
     type: embedding
     model_provider: openai
@@ -42,12 +42,21 @@ input:
   storage:
     type: file # or blob
     base_dir: ${GRAPHRAG_INPUT_DIR}
-  file_type: text # [csv, text, json]
+  file_type: json # [csv, text, json]
+  text_column: text
+  title_column: title
+  metadata:
+    - page_start
+    - page_end
+    - section_level
+    - source_file
+    - course_id
 
 chunks:
   size: 1200
   overlap: 100
   group_by_columns: [id]
+  prepend_metadata: true
 
 ### Output/storage settings ###
 ## If blob storage is specified in the following four sections,
@@ -56,7 +65,7 @@ chunks:
 output:
   type: file # [file, blob, cosmosdb]
   base_dir: ${GRAPHRAG_STORAGE_DIR}
-    
+
 cache:
   type: file # [file, blob, cosmosdb]
   base_dir: ${GRAPHRAG_CACHE_DIR}
@@ -81,7 +90,7 @@ embed_text:
 extract_graph:
   model_id: default_chat_model
   prompt: ${GRAPHRAG_ENTITY_EXTRACTION_PROMPT_FILE}
-  entity_types: [organization,person,geo,event]
+  entity_types: [organization, person, geo, event]
   max_gleanings: 1
 
 summarize_descriptions:
