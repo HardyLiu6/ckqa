@@ -53,7 +53,7 @@ input:
     - course_id
 
 chunks:
-  size: 1200
+  size: 800
   overlap: 100
   group_by_columns: [id]
   prepend_metadata: true
