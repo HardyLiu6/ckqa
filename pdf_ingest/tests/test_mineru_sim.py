@@ -6,8 +6,9 @@ MinerU PDF解析 - 简化版
 快速测试脚本，将本地PDF上传到MinerU云端解析并获取JSON结果
 
 使用方法:
-1. 修改下方的 TOKEN 和 PDF_FILE 变量
-2. 运行: python mineru_simple.py
+1. 设置环境变量 `MINERU_API_TOKEN`
+2. 按需修改下方的 `PDF_FILE`
+3. 运行: python test_mineru_sim.py
 """
 
 import requests
@@ -18,7 +19,7 @@ import zipfile
 import io
 
 # ===================== 配置区（请修改这里）=====================
-TOKEN = "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiIzNTQwMDEzNCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc2ODgyMjQ0OSwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiYmEzNTZhODQtOWIyNi00ODUxLWJmMGMtY2M4YTQ4MjcyY2E4IiwiZW1haWwiOiIiLCJleHAiOjE3NzAwMzIwNDl9.jBI71Dq3JZ3YFJb8mJGRCfJUurREtzsXP9gq-rkV_orJrIGKwCdlKS_SUW_ci2LLqX1KD3nAwGjHjsD3BsQIXw"      # 替换为你的MinerU API Token
+TOKEN = os.getenv("MINERU_API_TOKEN", "").strip()
 PDF_FILE = "data/os/book.pdf"          # 替换为你的PDF文件路径
 OUTPUT_DIR = "artifacts/test/mineru/sim" # 输出目录
 # ==============================================================
@@ -32,8 +33,9 @@ HEADERS = {
 
 def main():
     # 检查配置
-    if TOKEN == "YOUR_API_TOKEN":
-        print("❌ 请先修改脚本中的 TOKEN 变量!")
+    if not TOKEN or TOKEN == "YOUR_API_TOKEN":
+        print("❌ 请先设置环境变量 MINERU_API_TOKEN!")
+        print("   示例: export MINERU_API_TOKEN=your_token_here")
         print("   获取方式: https://mineru.net/apiManage")
         return
     

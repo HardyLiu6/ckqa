@@ -1,0 +1,130 @@
+# CKQA Codex Project Config
+
+本仓库是一个以中文为主的多模块项目，当前工作重点在两个 Python 子项目：
+
+- `pdf_ingest/`：课程 PDF 解析与导出流水线。调用 MinerU 云 API，使用 MinIO 存储文件与产物，使用 MySQL 跟踪状态，并将解析结果导出为 GraphRAG 可 ingest 的 JSONL。
+- `graphrag_pipeline/`：基于 Microsoft GraphRAG 2.7.0 的知识图谱问答服务。读取 `pdf_ingest` 导出的输入，构建索引，并通过 FastAPI 提供 OpenAI 兼容接口。
+
+另有一个次要模块：
+
+- `backend/ckqa-back/`：Java 21 + Spring Boot 4 的后端壳项目，目前仓库内只有基础骨架与 `application.properties`，不是当前主工作流核心。
+
+## 必读文档
+
+开始动手前，优先阅读以下文件：
+
+1. `pdf_ingest/CLAUDE.md`
+2. `graphrag_pipeline/CLAUDE.md`
+3. 需要细节时再读：
+   - `pdf_ingest/docs/MinerU PDF Parser.md`
+   - `graphrag_pipeline/README.md`
+
+如果这些文档与代码实现不一致，以实际代码为准，并在结果里明确指出差异。
+
+## 仓库级工作规则
+
+- 默认使用中文沟通、注释、提交说明与文档更新。
+- 优先修改最小范围，不要顺手重构无关模块。
+- 修改前先判断自己位于哪个子项目目录，不要混淆两套环境与依赖。
+- 避免直接修改 `.env`、运行产物、缓存文件、数据库导出结果，除非用户明确要求。
+- 不要提交或传播任何真实密钥、Token、账号密码。仓库里如果发现敏感值，视为待清理风险而不是可复用配置。
+
+## 项目结构与职责
+
+### 1. `pdf_ingest/`
+
+核心入口：
+
+- `pdf_ingest/scripts/pdf_processor/mineru_parser.py`
+
+关键模块：
+
+- `block_model.py`：统一 MinerU 解析块结构
+- `block_renderer.py`：按块类型渲染文本
+- `text_cleaner.py`：清洗页眉页脚、噪声文本
+- `graphrag_exporter.py`：导出 GraphRAG 输入
+- `db_service.py`：MySQL 服务层
+- `storage_service.py`：MinIO 服务层
+
+常用命令：
+
+- `conda activate courseKg`
+- `pip install -e .`
+- `pip install -e ".[dev]"`
+- `python scripts/pdf_processor/mineru_parser.py upload <course_id> -f <pdf> --parse`
+- `python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --mode section`
+- `python -m pytest tests/`
+
+实现注意事项：
+
+- 运行配置主要来自 `pdf_ingest/.env`，由 `Config.from_env()` 自动查找并加载。
+- 状态流转依赖 MySQL：`pending -> processing -> done/failed`。
+- 文件与结果依赖 MinIO，不要把本地临时文件路径误当成最终存储。
+- GraphRAG 导出是这个子项目对外最重要的输出接口，涉及字段改动时要考虑 `graphrag_pipeline` 兼容性。
+
+### 2. `graphrag_pipeline/`
+
+核心入口：
+
+- `graphrag_pipeline/utils/main.py`
+
+关键文件：
+
+- `settings.yaml`：GraphRAG CLI 索引配置
+- `.env`：GraphRAG CLI 使用的环境变量
+- `utils/fetch_from_minio.py`：从 MinIO 拉取 `pdf_ingest` 的导出数据
+- `utils/neo4jTest.py`：将 GraphRAG 输出导入 Neo4j
+- `utils/graphrag3dknowledge.py`：3D 知识图谱可视化
+
+常用命令：
+
+- `conda activate graphrag-oneapi`
+- `pip install -e ".[all]"`
+- `graphrag index --root .`
+- `graphrag query --root . --method local --query "问题"`
+- `graphrag query --root . --method global --query "问题"`
+- `python utils/main.py`
+
+实现注意事项：
+
+- 这是 GraphRAG 2.7.0 项目，依赖版本不要随意漂移，尤其是 `graphrag==2.7.0`。
+- `settings.yaml` + `.env` 用于索引；`utils/main.py` 还有一套硬编码运行时配置，两者并不自动同步。
+- `output/` 同时包含 parquet 与 `lancedb/`，API 服务启动依赖二者同时存在。
+- 新旧 parquet 命名兼容逻辑已经存在，调整读取逻辑时要同时验证两种命名。
+
+### 3. `backend/ckqa-back/`
+
+- 当前是一个很轻的 Spring Boot 骨架工程，技术栈为 Java 21、Spring Boot 4、Redis、MySQL。
+- 代码量很少，仓库中主要起占位或后续扩展作用。
+- 若用户请求未明确指向 Java 模块，优先排查和修改前两个 Python 子项目。
+
+## 跨模块关系
+
+主链路如下：
+
+1. `pdf_ingest` 解析课程 PDF
+2. `pdf_ingest` 导出 GraphRAG 输入
+3. `graphrag_pipeline` 拉取或读取输入并构建索引
+4. `graphrag_pipeline` 提供问答 API、Neo4j 导入和可视化
+
+因此，凡是涉及导出格式、metadata 字段、文件命名、对象存储路径的改动，都要检查是否会影响下游 GraphRAG 流程。
+
+## 修改优先级建议
+
+- 数据入库/出库问题：先看 `pdf_ingest`
+- GraphRAG 索引或问答问题：先看 `graphrag_pipeline`
+- 只有明确涉及 Java API 或 Spring 配置时再进入 `backend/ckqa-back`
+
+## 不要误改的内容
+
+- 根目录与子项目中的 `.env`
+- `output/`、`cache/`、`reports/`、`.pytest_cache/`
+- `*.egg-info/`、`__pycache__/`、IDE 元数据
+- 测试或文档里出现的真实 token、路径、账号信息
+
+## 交付时应说明
+
+- 这次改动影响的是哪个子项目
+- 是否涉及跨模块接口兼容性
+- 是否需要特定 conda 环境、数据库、MinIO、Neo4j 或 OneAPI 才能验证
+- 如果没有执行测试，要明确说明原因

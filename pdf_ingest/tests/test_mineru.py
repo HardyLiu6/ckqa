@@ -12,8 +12,10 @@ MinerU PDF解析测试脚本
 
 使用方法:
     python test_mineru.py -f your_file.pdf -t YOUR_API_TOKEN
-    
-或者直接修改脚本中的 API_TOKEN 变量
+
+或先设置环境变量:
+    export MINERU_API_TOKEN=YOUR_API_TOKEN
+    python test_mineru.py -f your_file.pdf
 """
 
 import requests
@@ -27,7 +29,7 @@ from pathlib import Path
 
 
 # ===================== 配置区 =====================
-API_TOKEN = "eyJ0eXBlIjoiSldUIiwiYWxnIjoiSFM1MTIifQ.eyJqdGkiOiIzNTQwMDEzNCIsInJvbCI6IlJPTEVfUkVHSVNURVIiLCJpc3MiOiJPcGVuWExhYiIsImlhdCI6MTc2ODgyMjQ0OSwiY2xpZW50SWQiOiJsa3pkeDU3bnZ5MjJqa3BxOXgydyIsInBob25lIjoiIiwib3BlbklkIjpudWxsLCJ1dWlkIjoiYmEzNTZhODQtOWIyNi00ODUxLWJmMGMtY2M4YTQ4MjcyY2E4IiwiZW1haWwiOiIiLCJleHAiOjE3NzAwMzIwNDl9.jBI71Dq3JZ3YFJb8mJGRCfJUurREtzsXP9gq-rkV_orJrIGKwCdlKS_SUW_ci2LLqX1KD3nAwGjHjsD3BsQIXw"  # 在这里填写你的API Token，或通过命令行参数传入
+API_TOKEN = os.getenv("MINERU_API_TOKEN", "").strip()
 API_BASE_URL = "https://mineru.net/api/v4"
 # ==================================================
 
@@ -340,6 +342,7 @@ def main():
   python mineru_pdf_parser.py -f document.pdf -t YOUR_TOKEN
   python mineru_pdf_parser.py -f document.pdf -t YOUR_TOKEN -o ./output
   python mineru_pdf_parser.py -f document.pdf -t YOUR_TOKEN -m pipeline -l en
+  export MINERU_API_TOKEN=YOUR_TOKEN && python mineru_pdf_parser.py -f document.pdf
 
 获取Token:
   1. 访问 https://mineru.net/ 注册账号
@@ -349,7 +352,12 @@ def main():
     )
     
     parser.add_argument("-f", "--file", required=True, help="PDF文件路径")
-    parser.add_argument("-t", "--token", default=API_TOKEN, help="MinerU API Token")
+    parser.add_argument(
+        "-t",
+        "--token",
+        default=API_TOKEN,
+        help="MinerU API Token，未传入时将读取环境变量 MINERU_API_TOKEN",
+    )
     parser.add_argument("-o", "--output", default="./mineru_output", help="输出目录")
     parser.add_argument("-m", "--model", default="vlm", choices=["vlm", "pipeline"],
                         help="模型版本: vlm(高精度) 或 pipeline(快速)")
@@ -363,9 +371,9 @@ def main():
     args = parser.parse_args()
     
     # 检查Token
-    if args.token == "YOUR_API_TOKEN":
+    if not args.token or args.token == "YOUR_API_TOKEN":
         print("错误: 请提供有效的API Token!")
-        print("使用 -t 参数传入Token，或修改脚本中的 API_TOKEN 变量")
+        print("使用 -t 参数传入Token，或设置环境变量 MINERU_API_TOKEN")
         print("\n获取Token方法:")
         print("1. 访问 https://mineru.net/ 注册账号")
         print("2. 在 https://mineru.net/apiManage 申请API权限")
