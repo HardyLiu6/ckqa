@@ -383,6 +383,29 @@ class PDFParserApp:
         self.storage.delete_artifacts(course_id, f"pdf_{file_id}")
         self.storage.delete_artifacts(course_id, f"graphrag/pdf_{file_id}")
         self.db.delete_pdf_file(file_id)
+
+    def _cleanup_parse_temp_files(
+        self,
+        course_id: str,
+        temp_pdf: Optional[Path] = None,
+        artifact_prefix: Optional[str] = None,
+    ) -> None:
+        """清理解析过程中的本地临时文件。"""
+        if temp_pdf:
+            temp_pdf.unlink(missing_ok=True)
+
+        if artifact_prefix:
+            shutil.rmtree(
+                self.config.get_temp_path(course_id, artifact_prefix),
+                ignore_errors=True,
+            )
+
+        course_temp_dir = self.config.get_temp_path(course_id)
+        if course_temp_dir.exists():
+            try:
+                course_temp_dir.rmdir()
+            except OSError:
+                pass
     
     def upload(self, course_id: str, file_path: str, 
                force: bool = False) -> Dict[str, Any]:
@@ -504,6 +527,9 @@ class PDFParserApp:
         # 更新状态为处理中
         self.db.update_parse_status(resolved_file_id, ParseStatus.PROCESSING)
         self.db.add_log(resolved_file_id, "开始解析")
+
+        temp_pdf: Optional[Path] = None
+        artifact_prefix: Optional[str] = None
         
         try:
             # 从MinIO下载文件到临时目录
@@ -560,10 +586,6 @@ class PDFParserApp:
             # 更新状态为完成
             self.db.update_parse_status(resolved_file_id, ParseStatus.DONE)
             self.db.add_log(resolved_file_id, f"解析完成，共 {len(uploaded_files)} 个结果文件")
-            
-            # 清理临时文件
-            shutil.rmtree(self.config.get_temp_path(course_id, artifact_prefix), ignore_errors=True)
-            
             self.logger.info(f"解析完成! 共 {len(uploaded_files)} 个文件")
             
             return {
@@ -579,6 +601,12 @@ class PDFParserApp:
             self.db.update_parse_status(resolved_file_id, ParseStatus.FAILED, error_msg=str(e))
             self.db.add_log(resolved_file_id, f"解析失败: {e}", level="error")
             raise
+        finally:
+            self._cleanup_parse_temp_files(
+                course_id,
+                temp_pdf=temp_pdf,
+                artifact_prefix=artifact_prefix,
+            )
     
     def status(
         self,
