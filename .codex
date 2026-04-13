@@ -1,8 +1,8 @@
 # CKQA Codex Project Config
 
-本仓库是一个以中文为主的多模块项目，当前工作重点在两个 Python 子项目：
+本仓库是一个以中文为主的多模块项目，课题是面向课程的混合型问答系统，当前工作重点在两个 Python 子项目：
 
-- `pdf_ingest/`：课程 PDF 解析与导出流水线。调用 MinerU 云 API，使用 MinIO 存储文件与产物，使用 MySQL 跟踪状态，并将解析结果导出为 GraphRAG 可 ingest 的 JSONL。
+- `pdf_ingest/`：课程 PDF 解析与导出流水线。调用 MinerU 云 API，使用 MinIO 存储文件与产物，使用 MySQL 跟踪状态，并将解析结果导出为 GraphRAG 可 ingest 的 JSON。
 - `graphrag_pipeline/`：基于 Microsoft GraphRAG 2.7.0 的知识图谱问答服务。读取 `pdf_ingest` 导出的输入，构建索引，并通过 FastAPI 提供 OpenAI 兼容接口。
 
 另有一个次要模块：
@@ -52,13 +52,15 @@
 - `pip install -e .`
 - `pip install -e ".[dev]"`
 - `python scripts/pdf_processor/mineru_parser.py upload <course_id> -f <pdf> --parse`
-- `python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --mode section`
+- `python scripts/pdf_processor/mineru_parser.py parse <course_id> --file-name <pdf_name>`
+- `python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --file-id <id> --mode section`
 - `python -m pytest tests/`
 
 实现注意事项：
 
 - 运行配置主要来自 `pdf_ingest/.env`，由 `Config.from_env()` 自动查找并加载。
 - 状态流转依赖 MySQL：`pending -> processing -> done/failed`。
+- 同一课程下可以存在多份 PDF；一旦课程下不止一份文件，后续命令应优先使用 `--file-id` 或 `--file-name` 精确指定。
 - 文件与结果依赖 MinIO，不要把本地临时文件路径误当成最终存储。
 - GraphRAG 导出是这个子项目对外最重要的输出接口，涉及字段改动时要考虑 `graphrag_pipeline` 兼容性。
 
@@ -80,6 +82,8 @@
 
 - `conda activate graphrag-oneapi`
 - `pip install -e ".[all]"`
+- `python utils/fetch_from_minio.py <course_id> --clean`
+- `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
 - `graphrag index --root .`
 - `graphrag query --root . --method local --query "问题"`
 - `graphrag query --root . --method global --query "问题"`
@@ -89,6 +93,7 @@
 
 - 这是 GraphRAG 2.7.0 项目，依赖版本不要随意漂移，尤其是 `graphrag==2.7.0`。
 - `settings.yaml` + `.env` 用于索引；`utils/main.py` 还有一套硬编码运行时配置，两者并不自动同步。
+- GraphRAG 输入现在直接使用 `json`；`fetch_from_minio.py` 仅对历史 `jsonl` 保留兼容读取。
 - `output/` 同时包含 parquet 与 `lancedb/`，API 服务启动依赖二者同时存在。
 - 新旧 parquet 命名兼容逻辑已经存在，调整读取逻辑时要同时验证两种命名。
 

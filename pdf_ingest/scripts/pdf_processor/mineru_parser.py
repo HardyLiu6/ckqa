@@ -5,12 +5,15 @@ MinerU PDF解析脚本 (v2.0)
 ========================
 将课程PDF文件上传到MinerU云端进行解析，获取结构化JSON结果。
 支持MinIO存储和MySQL元数据管理，通过MD5校验避免重复上传。
+当前版本支持同一课程下管理多份 PDF，后续操作可通过 `--file-id`
+或 `--file-name` 精确指定目标文件。
 
 目录结构:
     project_root/
     ├── data/
     │   └── {课程id}/
-    │       └── book.pdf          # 本地上传源（可选）
+    │       ├── book.pdf          # 本地上传源（可选）
+    │       └── slides.pdf
     ├── scripts/
     │   └── pdf_processor/
     │       ├── mineru_parser.py  # 主脚本
@@ -22,20 +25,23 @@ MinerU PDF解析脚本 (v2.0)
     └── .temp/                    # 临时文件目录
 
 使用方法 (在项目根目录运行):
-    # 从本地文件上传并解析
+    # 上传PDF文件
     python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf
-    
-    # 解析已上传的文件
-    python scripts/pdf_processor/mineru_parser.py parse os
-    
+
+    # 同一课程可继续上传其他PDF
+    python scripts/pdf_processor/mineru_parser.py upload os -f data/os/slides.pdf
+
+    # 解析指定文件
+    python scripts/pdf_processor/mineru_parser.py parse os --file-name book.pdf
+
     # 上传并立即解析
     python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
-    
-    # 查看状态
-    python scripts/pdf_processor/mineru_parser.py status os
-    
-    # 下载解析结果
-    python scripts/pdf_processor/mineru_parser.py download os -o ./output
+
+    # 先列出课程下文件，再按 file_id 查看状态 / 导出 / 下载
+    python scripts/pdf_processor/mineru_parser.py list
+    python scripts/pdf_processor/mineru_parser.py status os --file-id 3
+    python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section
+    python scripts/pdf_processor/mineru_parser.py download os --file-id 3 -o ./output
 """
 
 import requests
@@ -328,6 +334,55 @@ class PDFParserApp:
         self.db = DatabaseService(config.mysql)
         self.parser = MinerUParser(config)
         self.logger = logging.getLogger("PDFParserApp")
+
+    def _resolve_pdf_file(
+        self,
+        course_id: str,
+        file_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        解析课程下要操作的具体 PDF 文件。
+
+        规则：
+        - 指定 file_id：按 ID 精确定位，并校验 course_id
+        - 指定 file_name：按课程ID+文件名定位
+        - 都未指定：若课程下只有一份文件则自动选择，否则报错要求显式指定
+        """
+        if file_id is not None:
+            pdf_file = self.db.get_pdf_file_by_id(file_id)
+            if not pdf_file or pdf_file["course_id"] != course_id:
+                raise Exception(f"课程 {course_id} 下不存在 file_id={file_id} 的PDF文件")
+            return pdf_file
+
+        if file_name:
+            pdf_file = self.db.get_pdf_file_by_course(course_id, file_name)
+            if not pdf_file:
+                raise Exception(f"课程 {course_id} 下不存在文件: {file_name}")
+            return pdf_file
+
+        pdf_files = self.db.get_pdf_files_by_course(course_id)
+        if not pdf_files:
+            raise Exception(f"课程 {course_id} 没有上传的PDF文件")
+        if len(pdf_files) == 1:
+            return pdf_files[0]
+
+        choices = ", ".join(
+            f"{row['id']}:{row['file_name']}" for row in pdf_files[:10]
+        )
+        raise Exception(
+            "课程下存在多份PDF，请使用 --file-id 或 --file-name 指定。"
+            f" 可选文件: {choices}"
+        )
+
+    def _delete_pdf_related_data(self, pdf_file: Dict[str, Any]) -> None:
+        """删除某一份 PDF 相关的原始文件、解析产物和 GraphRAG 导出。"""
+        course_id = pdf_file["course_id"]
+        file_id = pdf_file["id"]
+        self.storage.delete_pdf(course_id, pdf_file["file_name"])
+        self.storage.delete_artifacts(course_id, f"pdf_{file_id}")
+        self.storage.delete_artifacts(course_id, f"graphrag/pdf_{file_id}")
+        self.db.delete_pdf_file(file_id)
     
     def upload(self, course_id: str, file_path: str, 
                force: bool = False) -> Dict[str, Any]:
@@ -343,6 +398,7 @@ class PDFParserApp:
             上传结果
         """
         file_path_obj = Path(file_path)
+        upload_file_name = file_path_obj.name
         
         if not file_path_obj.exists():
             raise FileNotFoundError(f"文件不存在: {file_path}")
@@ -358,6 +414,11 @@ class PDFParserApp:
         # 检查MD5是否已存在
         existing = self.db.check_md5_exists(file_md5)
         if existing:
+            if existing["course_id"] != course_id:
+                raise Exception(
+                    "检测到相同内容的PDF已存在于其他课程中，当前系统使用全局MD5唯一约束，"
+                    f"无法将同一份文件同时归属到多个课程。已存在课程: {existing['course_id']}"
+                )
             if not force:
                 self.logger.warning(f"文件已存在 (课程: {existing['course_id']})")
                 return {
@@ -369,33 +430,28 @@ class PDFParserApp:
                 }
             else:
                 self.logger.info("强制覆盖已存在的文件")
-                # 删除旧记录
-                self.storage.delete_pdf(existing["course_id"])
-                self.storage.delete_artifacts(existing["course_id"])
-                self.db.delete_pdf_file(existing["id"])
+                self._delete_pdf_related_data(existing)
         
-        # 检查同课程是否有其他文件
-        course_file = self.db.get_pdf_file_by_course(course_id)
+        # 检查同课程下是否已有同名文件
+        course_file = self.db.get_pdf_file_by_course(course_id, upload_file_name)
         if course_file and course_file["file_md5"] != file_md5:
             if not force:
                 raise Exception(
-                    f"课程 {course_id} 已有不同的PDF文件，使用 --force 覆盖"
+                    f"课程 {course_id} 已存在同名文件 {upload_file_name}，使用 --force 覆盖该文件"
                 )
             else:
-                self.storage.delete_pdf(course_id)
-                self.storage.delete_artifacts(course_id)
-                self.db.delete_pdf_file(course_file["id"])
+                self._delete_pdf_related_data(course_file)
         
         # 上传到MinIO
         self.logger.info("上传到MinIO...")
         upload_result = self.storage.upload_pdf(
-            course_id, str(file_path), "book.pdf"
+            course_id, str(file_path), upload_file_name
         )
         
         # 写入数据库
         file_id = self.db.create_pdf_file(
             course_id=course_id,
-            file_name="book.pdf",
+            file_name=upload_file_name,
             file_md5=file_md5,
             file_size=file_size,
             minio_bucket=upload_result["bucket"],
@@ -414,7 +470,12 @@ class PDFParserApp:
             "size": file_size
         }
     
-    def parse(self, course_id: str) -> Dict[str, Any]:
+    def parse(
+        self,
+        course_id: str,
+        file_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         解析已上传的PDF文件
         
@@ -424,19 +485,16 @@ class PDFParserApp:
         Returns:
             解析结果
         """
-        # 获取文件记录
-        pdf_file = self.db.get_pdf_file_by_course(course_id)
-        if not pdf_file:
-            raise Exception(f"课程 {course_id} 没有上传的PDF文件")
+        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
         
-        file_id = pdf_file["id"]
+        resolved_file_id: int = int(pdf_file["id"])
         
         # 检查状态
         if pdf_file["parse_status"] == "done":
             self.logger.warning("文件已解析完成")
             return {
                 "status": "already_done",
-                "file_id": file_id,
+                "file_id": resolved_file_id,
                 "message": "文件已解析完成"
             }
         
@@ -444,49 +502,53 @@ class PDFParserApp:
             raise Exception("文件正在解析中，请稍后重试")
         
         # 更新状态为处理中
-        self.db.update_parse_status(file_id, ParseStatus.PROCESSING)
-        self.db.add_log(file_id, "开始解析")
+        self.db.update_parse_status(resolved_file_id, ParseStatus.PROCESSING)
+        self.db.add_log(resolved_file_id, "开始解析")
         
         try:
             # 从MinIO下载文件到临时目录
-            temp_pdf = self.config.get_temp_path(course_id, "book.pdf")
+            source_file_name = pdf_file["file_name"]
+            temp_pdf = self.config.get_temp_path(course_id, source_file_name)
             self.logger.info(f"从MinIO下载文件...")
-            self.storage.download_pdf(course_id, str(temp_pdf))
+            self.storage.download_pdf(course_id, str(temp_pdf), source_file_name)
             
             # 申请上传链接
-            upload_info = self.parser.apply_upload_url(["book.pdf"])
+            upload_info = self.parser.apply_upload_url([source_file_name])
             batch_id = upload_info["batch_id"]
             
-            self.db.update_parse_status(file_id, ParseStatus.PROCESSING, batch_id=batch_id)
-            self.db.add_log(file_id, f"MinerU Batch ID: {batch_id}")
+            self.db.update_parse_status(resolved_file_id, ParseStatus.PROCESSING, batch_id=batch_id)
+            self.db.add_log(resolved_file_id, f"MinerU Batch ID: {batch_id}")
             
             # 上传到MinerU
             if not self.parser.upload_file(temp_pdf, upload_info["file_urls"][0]):
                 raise Exception("上传到MinerU失败")
             
-            self.db.add_log(file_id, "文件已上传到MinerU")
+            self.db.add_log(resolved_file_id, "文件已上传到MinerU")
             
             # 等待解析完成
             batch_result = self.parser.get_batch_results(batch_id)
             
             # 下载结果到临时目录
-            temp_output = self.config.get_temp_path(course_id, "output")
+            artifact_prefix = f"pdf_{resolved_file_id}"
+            temp_output = self.config.get_temp_path(course_id, artifact_prefix, "output")
             results = self.parser.download_results(batch_result, temp_output)
             
             if not results:
                 raise Exception("未获取到解析结果")
             
-            self.db.add_log(file_id, f"下载解析结果: {len(results[0]['files'])} 个文件")
+            self.db.add_log(resolved_file_id, f"下载解析结果: {len(results[0]['files'])} 个文件")
             
             # 上传结果到MinIO
             self.logger.info("上传解析结果到MinIO...")
-            uploaded_files = self.storage.upload_artifacts_dir(course_id, str(temp_output))
+            uploaded_files = self.storage.upload_artifacts_dir(
+                course_id, str(temp_output), base_prefix=artifact_prefix
+            )
             
             # 记录结果到数据库
             for uf in uploaded_files:
                 result_type = infer_result_type(uf["file_name"])
                 self.db.create_parse_result(
-                    pdf_file_id=file_id,
+                    pdf_file_id=resolved_file_id,
                     course_id=course_id,
                     result_type=result_type,
                     file_name=uf["file_name"],
@@ -496,35 +558,41 @@ class PDFParserApp:
                 )
             
             # 更新状态为完成
-            self.db.update_parse_status(file_id, ParseStatus.DONE)
-            self.db.add_log(file_id, f"解析完成，共 {len(uploaded_files)} 个结果文件")
+            self.db.update_parse_status(resolved_file_id, ParseStatus.DONE)
+            self.db.add_log(resolved_file_id, f"解析完成，共 {len(uploaded_files)} 个结果文件")
             
             # 清理临时文件
-            shutil.rmtree(self.config.get_temp_path(course_id), ignore_errors=True)
+            shutil.rmtree(self.config.get_temp_path(course_id, artifact_prefix), ignore_errors=True)
             
             self.logger.info(f"解析完成! 共 {len(uploaded_files)} 个文件")
             
             return {
                 "status": "success",
-                "file_id": file_id,
+                "file_id": resolved_file_id,
                 "course_id": course_id,
+                "file_name": pdf_file["file_name"],
                 "result_count": len(uploaded_files),
                 "files": [f["relative_path"] for f in uploaded_files]
             }
             
         except Exception as e:
-            self.db.update_parse_status(file_id, ParseStatus.FAILED, error_msg=str(e))
-            self.db.add_log(file_id, f"解析失败: {e}", level="error")
+            self.db.update_parse_status(resolved_file_id, ParseStatus.FAILED, error_msg=str(e))
+            self.db.add_log(resolved_file_id, f"解析失败: {e}", level="error")
             raise
     
-    def status(self, course_id: str) -> Dict[str, Any]:
+    def status(
+        self,
+        course_id: str,
+        file_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """获取课程状态"""
-        pdf_file = self.db.get_pdf_file_by_course(course_id)
-        
-        if not pdf_file:
+        try:
+            pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+        except Exception as e:
             return {
                 "status": "not_found",
-                "message": f"课程 {course_id} 没有上传的PDF文件"
+                "message": str(e),
             }
         
         results = self.db.get_parse_results(pdf_file["id"])
@@ -551,12 +619,15 @@ class PDFParserApp:
             ]
         }
     
-    def download(self, course_id: str, output_dir: str) -> Dict[str, Any]:
+    def download(
+        self,
+        course_id: str,
+        output_dir: str,
+        file_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """下载解析结果"""
-        pdf_file = self.db.get_pdf_file_by_course(course_id)
-        
-        if not pdf_file:
-            raise Exception(f"课程 {course_id} 没有上传的PDF文件")
+        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
         
         if pdf_file["parse_status"] != "done":
             raise Exception(f"文件尚未解析完成 (状态: {pdf_file['parse_status']})")
@@ -566,13 +637,29 @@ class PDFParserApp:
         
         self.logger.info(f"下载解析结果到: {output_path}")
         
-        downloaded = self.storage.download_artifacts_dir(course_id, str(output_path))
+        results = self.db.get_parse_results(pdf_file["id"])
+        downloaded = []
+        prefix = f"{course_id}/"
+        for record in results:
+            object_key = record["minio_object_key"]
+            if not object_key.startswith(prefix):
+                relative_path = record["file_name"]
+            else:
+                relative_path = object_key[len(prefix):]
+
+            local_path = output_path / relative_path
+            self.storage.download_object(
+                record["minio_bucket"], object_key, str(local_path)
+            )
+            downloaded.append(str(local_path))
         
         self.logger.info(f"下载完成! 共 {len(downloaded)} 个文件")
         
         return {
             "status": "success",
             "course_id": course_id,
+            "file_id": pdf_file["id"],
+            "file_name": pdf_file["file_name"],
             "output_dir": str(output_path),
             "file_count": len(downloaded),
             "files": downloaded
@@ -588,6 +675,7 @@ class PDFParserApp:
             "courses": [
                 {
                     "course_id": o["course_id"],
+                    "file_id": o["pdf_file_id"],
                     "file_name": o["file_name"],
                     "parse_status": o["parse_status"],
                     "result_count": o["result_file_count"]
@@ -596,7 +684,13 @@ class PDFParserApp:
             ]
         }
 
-    def export_graphrag(self, course_id: str, options: ExportOptions) -> Dict[str, Any]:
+    def export_graphrag(
+        self,
+        course_id: str,
+        options: ExportOptions,
+        file_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         导出 GraphRAG 输入文件
 
@@ -610,7 +704,8 @@ class PDFParserApp:
         exporter = GraphRAGExporter(
             db=self.db, storage=self.storage, config=self.config
         )
-        return exporter.export(course_id, options)
+        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+        return exporter.export(pdf_file, options)
 
 
 # ===================== 命令行入口 =====================
@@ -637,19 +732,19 @@ def main():
   python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
 
   # 解析已上传的文件
-  python scripts/pdf_processor/mineru_parser.py parse os
+  python scripts/pdf_processor/mineru_parser.py parse os --file-name book.pdf
 
   # 查看状态
-  python scripts/pdf_processor/mineru_parser.py status os
+  python scripts/pdf_processor/mineru_parser.py status os --file-id 3
 
   # 下载解析结果
-  python scripts/pdf_processor/mineru_parser.py download os -o ./output
+  python scripts/pdf_processor/mineru_parser.py download os --file-name slides.pdf -o ./output
 
   # 列出所有课程
   python scripts/pdf_processor/mineru_parser.py list
 
   # 导出 GraphRAG 输入 (章节模式，默认开启表格语义化)
-  python scripts/pdf_processor/mineru_parser.py export-graphrag os --mode section
+  python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section
 
   # 关闭表格语义化，使用原始 TSV 格式
   python scripts/pdf_processor/mineru_parser.py export-graphrag os --no-semantic-table
@@ -673,14 +768,20 @@ def main():
     # parse 命令
     parse_parser = subparsers.add_parser("parse", help="解析已上传的PDF")
     parse_parser.add_argument("course_id", help="课程ID")
+    parse_parser.add_argument("--file-id", type=int, help="指定要解析的PDF文件ID")
+    parse_parser.add_argument("--file-name", help="指定要解析的PDF文件名")
     
     # status 命令
     status_parser = subparsers.add_parser("status", help="查看课程状态")
     status_parser.add_argument("course_id", help="课程ID")
+    status_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
+    status_parser.add_argument("--file-name", help="指定PDF文件名")
     
     # download 命令
     download_parser = subparsers.add_parser("download", help="下载解析结果")
     download_parser.add_argument("course_id", help="课程ID")
+    download_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
+    download_parser.add_argument("--file-name", help="指定PDF文件名")
     download_parser.add_argument("-o", "--output", default="./output", help="输出目录")
     
     # list 命令
@@ -691,6 +792,8 @@ def main():
         "export-graphrag", help="导出 GraphRAG 输入文件"
     )
     export_parser.add_argument("course_id", help="课程ID")
+    export_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
+    export_parser.add_argument("--file-name", help="指定PDF文件名")
     export_parser.add_argument(
         "--mode", choices=["section", "page"], default="section",
         help="聚合模式: section(章节) / page(页面)，默认 section"
@@ -749,19 +852,32 @@ def main():
             
             if args.parse and result["status"] == "success":
                 print("\n开始解析...")
-                parse_result = app.parse(args.course_id)
+                parse_result = app.parse(args.course_id, file_id=result["file_id"])
                 print(json.dumps(parse_result, ensure_ascii=False, indent=2))
         
         elif args.command == "parse":
-            result = app.parse(args.course_id)
+            result = app.parse(
+                args.course_id,
+                file_id=args.file_id,
+                file_name=args.file_name,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
         elif args.command == "status":
-            result = app.status(args.course_id)
+            result = app.status(
+                args.course_id,
+                file_id=args.file_id,
+                file_name=args.file_name,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
         elif args.command == "download":
-            result = app.download(args.course_id, args.output)
+            result = app.download(
+                args.course_id,
+                args.output,
+                file_id=args.file_id,
+                file_name=args.file_name,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
         elif args.command == "list":
@@ -777,7 +893,12 @@ def main():
                 max_chars=args.max_chars,
                 output_prefix=args.output_prefix,
             )
-            result = app.export_graphrag(args.course_id, options)
+            result = app.export_graphrag(
+                args.course_id,
+                options,
+                file_id=args.file_id,
+                file_name=args.file_name,
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
         return 0

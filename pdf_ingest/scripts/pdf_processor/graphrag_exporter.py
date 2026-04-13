@@ -3,7 +3,7 @@
 """
 GraphRAG 导出器
 ===============
-从 MinerU 解析产物生成 GraphRAG 可 ingest 的 JSONL 输入文件。
+从 MinerU 解析产物生成 GraphRAG 可 ingest 的 JSON 输入文件。
 
 流程:
     1. 从 DB 定位解析产物 (content_list.json + markdown)
@@ -11,7 +11,7 @@ GraphRAG 导出器
     3. 解析 content_list.json → 统一 Block 列表
     4. 清洗去噪 (页眉页脚、空白、断行合并)
     5. 聚合为 documents (section / page 模式)
-    6. 输出 JSONL + 上传 MinIO + 写入 DB
+    6. 输出 JSON 数组 + 上传 MinIO + 写入 DB
 """
 
 from __future__ import annotations
@@ -34,6 +34,16 @@ from storage_service import MinIOService
 logger = logging.getLogger("GraphRAGExporter")
 
 
+# GraphRAG 会从顶层字段读取 metadata，因此需要将部分 metadata 展平。
+_METADATA_FIELDS_TO_FLATTEN = [
+    "course_id",
+    "source_file",
+    "section_level",
+    "page_start",
+    "page_end",
+]
+
+
 # ===================== 数据结构 =====================
 
 @dataclass
@@ -43,12 +53,15 @@ class GraphRAGDocument:
     text: str
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_jsonl_dict(self) -> Dict[str, Any]:
-        return {
+    def to_graphrag_dict(self) -> Dict[str, Any]:
+        record = {
             "title": self.title,
             "text": self.text,
-            "metadata": self.metadata,
         }
+        for field in _METADATA_FIELDS_TO_FLATTEN:
+            if field in self.metadata:
+                record[field] = self.metadata[field]
+        return record
 
 
 @dataclass
@@ -78,20 +91,17 @@ class GraphRAGExporter:
 
     # -------------------- 公开入口 --------------------
 
-    def export(self, course_id: str, options: ExportOptions) -> Dict[str, Any]:
+    def export(self, pdf_file: Dict[str, Any], options: ExportOptions) -> Dict[str, Any]:
         """
         端到端导出流程。
 
         Returns:
             {status, course_id, documents_count, output_files: [...], minio_keys: [...]}
         """
-        # 1) 定位 PDF 文件记录
-        pdf_file = self.db.get_pdf_file_by_course(course_id)
-        if not pdf_file:
-            raise RuntimeError(f"课程 {course_id} 没有上传的 PDF 文件")
-
+        # 1) 读取 PDF 文件记录
+        course_id: str = pdf_file["course_id"]
         file_id: int = pdf_file["id"]
-        source_file: str = pdf_file["file_name"]  # book.pdf
+        source_file: str = pdf_file["file_name"]
 
         if pdf_file["parse_status"] != ParseStatus.DONE.value:
             raise RuntimeError(
@@ -189,21 +199,21 @@ class GraphRAGExporter:
                         blocks, course_id, file_id, source_file,
                         md_text, cl_trace, options,
                     )
-                    out_name = "section_docs.jsonl"
+                    out_name = "section_docs.json"
                 else:
                     docs = self._aggregate_page(
                         blocks, course_id, file_id, source_file,
                         cl_trace, options,
                     )
-                    out_name = "page_docs.jsonl"
+                    out_name = "page_docs.json"
 
-                # 写 JSONL
+                # 写 GraphRAG 可直接 ingest 的 JSON 数组
                 out_path = tmp_dir / out_name
-                self._write_jsonl(docs, out_path)
+                self._write_json(docs, out_path)
                 all_doc_count += len(docs)
 
                 # 上传 MinIO
-                relative_path = f"{options.output_prefix}/{out_name}"
+                relative_path = f"{options.output_prefix}/pdf_{file_id}/{out_name}"
                 upload_result = self.storage.upload_artifact(
                     course_id, str(out_path), relative_path,
                 )
@@ -614,7 +624,7 @@ class GraphRAGExporter:
                     images_meta.append(result.metadata)
 
         text = "\n\n".join(text_parts)
-        title = f"{source_file}-{section_title}"
+        title = self._build_doc_title(course_id, section_title)
 
         metadata: Dict[str, Any] = {
             "course_id": course_id,
@@ -646,6 +656,17 @@ class GraphRAGExporter:
             metadata["images"] = images_meta
 
         return GraphRAGDocument(title=title, text=text, metadata=metadata)
+
+    @staticmethod
+    def _build_doc_title(course_id: str, section_title: str) -> str:
+        """
+        为 GraphRAG 生成更语义化的标题。
+
+        - 保留 source_file 在 metadata 中用于溯源
+        - title 避免直接使用用户上传文件名（如 book.pdf）
+        """
+        normalized = section_title.strip() or "未命名章节"
+        return f"{course_id}-{normalized}"
 
     # -------------------- 长文档拆分 --------------------
 
@@ -687,13 +708,16 @@ class GraphRAGExporter:
             ))
         return docs
 
-    # -------------------- JSONL 输出 --------------------
+    # -------------------- JSON 输出 --------------------
 
     @staticmethod
-    def _write_jsonl(docs: List[GraphRAGDocument], path: Path):
-        """将文档列表写入 JSONL 文件。"""
+    def _write_json(docs: List[GraphRAGDocument], path: Path):
+        """将文档列表写入 GraphRAG 可直接 ingest 的 JSON 数组文件。"""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            for doc in docs:
-                line = json.dumps(doc.to_jsonl_dict(), ensure_ascii=False)
-                f.write(line + "\n")
+            json.dump(
+                [doc.to_graphrag_dict() for doc in docs],
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )

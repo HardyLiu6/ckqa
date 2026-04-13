@@ -176,16 +176,41 @@ class DatabaseService:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM pdf_files WHERE file_md5 = %s", (file_md5,))
             return cursor.fetchone()
-    
-    def get_pdf_file_by_course(self, course_id: str, 
-                                file_name: str = "book.pdf") -> Optional[Dict]:
-        """根据课程ID和文件名获取PDF文件记录"""
+
+    def get_pdf_files_by_course(self, course_id: str) -> List[Dict]:
+        """获取课程下的所有PDF文件记录，按最新上传排序。"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM pdf_files WHERE course_id = %s AND file_name = %s",
-                (course_id, file_name)
-            )
+            cursor.execute("""
+                SELECT * FROM pdf_files
+                WHERE course_id = %s
+                ORDER BY upload_time DESC, id DESC
+            """, (course_id,))
+            return cursor.fetchall()
+    
+    def get_pdf_file_by_course(
+        self, course_id: str, file_name: Optional[str] = None
+    ) -> Optional[Dict]:
+        """
+        根据课程ID获取PDF文件记录。
+
+        - 传入 file_name 时按课程ID+文件名精确匹配
+        - 未传入时返回该课程最新上传的一条记录
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if file_name is not None:
+                cursor.execute(
+                    "SELECT * FROM pdf_files WHERE course_id = %s AND file_name = %s",
+                    (course_id, file_name)
+                )
+            else:
+                cursor.execute("""
+                    SELECT * FROM pdf_files
+                    WHERE course_id = %s
+                    ORDER BY upload_time DESC, id DESC
+                    LIMIT 1
+                """, (course_id,))
             return cursor.fetchone()
     
     def check_md5_exists(self, file_md5: str) -> Optional[Dict]:

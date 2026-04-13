@@ -3,11 +3,14 @@
 """
 从 MinIO 获取 GraphRAG 输入数据
 ================================
-从 MinIO 下载 pdf_ingest 生成的 section_docs.jsonl，
-将 JSONL 转换为 JSON 数组格式（.json）供 GraphRAG 索引使用。
+优先从 MinIO 下载 pdf_ingest 直接生成的 GraphRAG JSON 输入文件，
+并写入本地 `input/` 目录供 GraphRAG 直接索引。
 
-GraphRAG 不支持 JSONL 格式，但支持 JSON 数组格式。
-本脚本同时会将嵌套的 metadata 字段展平为顶层字段，
+兼容说明：
+- 新版本 pdf_ingest 直接产出 `section_docs.json` / `page_docs.json`
+- 若 MinIO 中仍是历史 `*.jsonl` 文件，本脚本会自动转换为 JSON 数组
+
+同时会确保 GraphRAG 需要的 metadata 字段位于顶层，
 使 GraphRAG 的 metadata 收集功能可以直接读取 page_start、
 page_end、section_level 等信息。
 
@@ -71,7 +74,7 @@ _METADATA_FIELDS_TO_FLATTEN = [
 
 def flatten_record(record: dict) -> dict:
     """
-    将 JSONL 记录转换为 GraphRAG 兼容的扁平 JSON 对象。
+    将记录转换为 GraphRAG 兼容的扁平 JSON 对象。
 
     输入格式 (来自 pdf_ingest):
         {
@@ -106,31 +109,84 @@ def flatten_record(record: dict) -> dict:
     }
 
     metadata = record.get("metadata", {})
+    if isinstance(metadata, dict):
+        for field in _METADATA_FIELDS_TO_FLATTEN:
+            if field in metadata:
+                flat[field] = metadata[field]
+
     for field in _METADATA_FIELDS_TO_FLATTEN:
-        if field in metadata:
-            flat[field] = metadata[field]
+        if field not in flat and field in record:
+            flat[field] = record[field]
 
     return flat
 
 
 # ===================== 核心逻辑 =====================
 
-def fetch_and_convert(
+def _download_object(client: Minio, bucket: str, object_key: str, local_path: Path) -> bool:
+    """下载单个 MinIO 对象。若对象不存在返回 False。"""
+    try:
+        client.fget_object(
+            bucket_name=bucket,
+            object_name=object_key,
+            file_path=str(local_path),
+        )
+        return True
+    except S3Error as e:
+        if e.code == "NoSuchKey":
+            return False
+        raise
+
+
+def _find_unique_namespaced_key(
+    client: Minio,
+    bucket: str,
+    course_id: str,
+    graphrag_prefix: str,
+    filename: str,
+) -> tuple[str | None, bool]:
+    """
+    在 `course_id/graphrag/pdf_*/` 下寻找唯一匹配文件。
+
+    Returns:
+        (object_key, ambiguous)
+    """
+    prefix = f"{course_id}/{graphrag_prefix}/"
+    matches = []
+    for obj in client.list_objects(bucket, prefix=prefix, recursive=True):
+        object_name = obj.object_name
+        if not object_name:
+            continue
+        if not object_name.endswith(f"/{filename}"):
+            continue
+        if "/pdf_" not in object_name:
+            continue
+        matches.append(object_name)
+
+    if len(matches) == 1:
+        return matches[0], False
+    if len(matches) > 1:
+        return None, True
+    return None, False
+
+
+def fetch_and_prepare(
     course_id: str,
     input_dir: Path,
     clean: bool = False,
     graphrag_prefix: str = "graphrag",
-    jsonl_filename: str = "section_docs.jsonl",
+    json_filename: str = "section_docs.json",
+    pdf_file_id: int | None = None,
 ) -> dict:
     """
-    从 MinIO 下载 section_docs.jsonl 并转换为 JSON 数组文件。
+    从 MinIO 下载 GraphRAG 输入文件，并在必要时兼容转换历史 JSONL。
 
     Args:
         course_id: 课程 ID
         input_dir: GraphRAG input 目录
         clean: 是否清空旧的 .json 输入文件
         graphrag_prefix: MinIO 中的前缀路径
-        jsonl_filename: JSONL 文件名
+        json_filename: GraphRAG 输入文件名
 
     Returns:
         {status, course_id, documents_count, output_file, input_dir}
@@ -138,33 +194,95 @@ def fetch_and_convert(
     client = get_minio_client()
     bucket = get_bucket()
 
-    # MinIO 对象路径: {course_id}/graphrag/section_docs.jsonl
-    object_key = f"{course_id}/{graphrag_prefix}/{jsonl_filename}"
+    if json_filename.endswith(".jsonl"):
+        output_filename = json_filename[:-1]
+        preferred_filename = output_filename
+        legacy_filename = json_filename
+    elif json_filename.endswith(".json"):
+        output_filename = json_filename
+        preferred_filename = json_filename
+        legacy_filename = json_filename[:-1] + "l"
+    else:
+        output_filename = f"{json_filename}.json"
+        preferred_filename = output_filename
+        legacy_filename = f"{json_filename}.jsonl"
 
-    print(f"[MinIO] 正在下载 {bucket}/{object_key} ...")
+    if pdf_file_id is not None:
+        subdir = f"{graphrag_prefix}/pdf_{pdf_file_id}"
+        preferred_key = f"{course_id}/{subdir}/{preferred_filename}"
+        legacy_key = f"{course_id}/{subdir}/{legacy_filename}"
+    else:
+        preferred_key = f"{course_id}/{graphrag_prefix}/{preferred_filename}"
+        legacy_key = f"{course_id}/{graphrag_prefix}/{legacy_filename}"
 
-    # 1) 下载 JSONL 到临时文件
+    print(f"[MinIO] 优先下载 {bucket}/{preferred_key} ...")
+
+    # 1) 下载源文件到临时目录
     tmp_dir = Path(tempfile.mkdtemp(prefix=f"graphrag_fetch_{course_id}_"))
-    tmp_jsonl = tmp_dir / jsonl_filename
+    tmp_input = tmp_dir / preferred_filename
 
-    try:
-        client.fget_object(
-            bucket_name=bucket,
-            object_name=object_key,
-            file_path=str(tmp_jsonl),
-        )
-    except S3Error as e:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-        if e.code == "NoSuchKey":
-            print(
-                f"[错误] MinIO 中未找到 {object_key}。"
-                f"请先在 pdf_ingest 中运行 export-graphrag 命令。",
-                file=sys.stderr,
+    source_format = None
+    if _download_object(client, bucket, preferred_key, tmp_input):
+        source_format = "json"
+        print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+    else:
+        if pdf_file_id is None:
+            namespaced_key, ambiguous = _find_unique_namespaced_key(
+                client, bucket, course_id, graphrag_prefix, preferred_filename
             )
-            return {"status": "not_found", "course_id": course_id}
-        raise
+            if ambiguous:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                print(
+                    f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 指定。",
+                    file=sys.stderr,
+                )
+                return {"status": "ambiguous", "course_id": course_id}
+            if namespaced_key:
+                tmp_input = tmp_dir / preferred_filename
+                if _download_object(client, bucket, namespaced_key, tmp_input):
+                    source_format = "json"
+                    print(
+                        f"[MinIO] 在 namespaced 路径找到文件: {namespaced_key}"
+                    )
+                    print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
 
-    print(f"[MinIO] 下载完成: {tmp_jsonl} ({tmp_jsonl.stat().st_size} bytes)")
+        if source_format is None:
+            tmp_input = tmp_dir / legacy_filename
+            print(f"[MinIO] 未找到 {preferred_key}，尝试兼容历史文件 {legacy_key} ...")
+            if _download_object(client, bucket, legacy_key, tmp_input):
+                source_format = "jsonl"
+                print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+            else:
+                if pdf_file_id is None:
+                    namespaced_key, ambiguous = _find_unique_namespaced_key(
+                        client, bucket, course_id, graphrag_prefix, legacy_filename
+                    )
+                    if ambiguous:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                        print(
+                            f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 指定。",
+                            file=sys.stderr,
+                        )
+                        return {"status": "ambiguous", "course_id": course_id}
+                    if namespaced_key and _download_object(client, bucket, namespaced_key, tmp_input):
+                        source_format = "jsonl"
+                        print(
+                            f"[MinIO] 在 namespaced 路径找到历史文件: {namespaced_key}"
+                        )
+                        print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+
+            if source_format is None:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                print(
+                    f"[错误] MinIO 中未找到 {preferred_key} 或 {legacy_key}。"
+                    f"请先在 pdf_ingest 中运行 export-graphrag 命令。",
+                    file=sys.stderr,
+                )
+                return {"status": "not_found", "course_id": course_id}
+
+    if source_format is None:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return {"status": "not_found", "course_id": course_id}
 
     # 2) 准备 input 目录
     input_dir.mkdir(parents=True, exist_ok=True)
@@ -176,34 +294,56 @@ def fetch_and_convert(
             f.unlink()
         print(f"[清理] 已删除 {len(old_files)} 个旧输入文件")
 
-    # 3) 解析 JSONL → JSON 数组
+    # 3) 解析输入文件，并确保记录为 GraphRAG 可读的扁平结构
     documents = []
     skipped = 0
 
-    with open(tmp_jsonl, "r", encoding="utf-8") as f:
-        for line_no, line in enumerate(f, start=1):
-            line = line.strip()
-            if not line:
-                continue
-
+    if source_format == "json":
+        with open(tmp_input, "r", encoding="utf-8") as f:
             try:
-                record = json.loads(line)
+                payload = json.load(f)
             except json.JSONDecodeError as e:
-                print(f"[警告] 第 {line_no} 行 JSON 解析失败: {e}", file=sys.stderr)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                raise RuntimeError(f"JSON 文件解析失败: {tmp_input}: {e}") from e
+
+        if not isinstance(payload, list):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise RuntimeError(f"期望 JSON 数组，但实际为: {type(payload).__name__}")
+
+        for idx, record in enumerate(payload, start=1):
+            if not isinstance(record, dict):
+                print(f"[警告] 第 {idx} 条记录不是对象，已跳过", file=sys.stderr)
                 continue
 
             text = record.get("text", "")
             if not text.strip():
-                print(f"[跳过] 第 {line_no} 行 text 为空: {record.get('title', '?')}")
+                print(f"[跳过] 第 {idx} 条记录 text 为空: {record.get('title', '?')}")
                 skipped += 1
                 continue
 
-            flat = flatten_record(record)
-            documents.append(flat)
+            documents.append(flatten_record(record))
+    else:
+        with open(tmp_input, "r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError as e:
+                    print(f"[警告] 第 {line_no} 行 JSON 解析失败: {e}", file=sys.stderr)
+                    continue
+
+                text = record.get("text", "")
+                if not text.strip():
+                    print(f"[跳过] 第 {line_no} 行 text 为空: {record.get('title', '?')}")
+                    skipped += 1
+                    continue
+
+                documents.append(flatten_record(record))
 
     # 4) 写入 JSON 数组文件
-    # 输出文件名: section_docs.jsonl → section_docs.json
-    output_filename = jsonl_filename.replace(".jsonl", ".json")
     output_path = input_dir / output_filename
 
     with open(output_path, "w", encoding="utf-8") as f:
@@ -212,7 +352,8 @@ def fetch_and_convert(
     # 5) 清理临时目录
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    print(f"\n[完成] 共转换 {len(documents)} 条文档 (跳过 {skipped} 条空文档)")
+    action = "准备" if source_format == "json" else "转换"
+    print(f"\n[完成] 共{action} {len(documents)} 条文档 (跳过 {skipped} 条空文档)")
     print(f"  → 输出文件: {output_path}")
     print(f"  → 文件大小: {output_path.stat().st_size:,} bytes")
 
@@ -243,7 +384,9 @@ def main() -> int:
 示例:
   python utils/fetch_from_minio.py os --clean
   python utils/fetch_from_minio.py os --input-dir ./my_input
-  python utils/fetch_from_minio.py os --jsonl-file page_docs.jsonl
+  python utils/fetch_from_minio.py os --pdf-file-id 12
+  python utils/fetch_from_minio.py os --json-file page_docs.json
+  python utils/fetch_from_minio.py os --json-file page_docs.jsonl
         """,
     )
 
@@ -262,9 +405,17 @@ def main() -> int:
         help="清空输入目录中的旧 .json/.txt 文件",
     )
     parser.add_argument(
+        "--pdf-file-id",
+        type=int,
+        default=None,
+        help="指定课程下某一份 PDF 的 file_id；多 PDF 场景下建议显式传入",
+    )
+    parser.add_argument(
+        "--json-file",
         "--jsonl-file",
-        default="section_docs.jsonl",
-        help="JSONL 文件名 (默认: section_docs.jsonl, 也可用 page_docs.jsonl)",
+        dest="json_filename",
+        default="section_docs.json",
+        help="输入文件名，默认 section_docs.json；也兼容历史 *.jsonl 文件",
     )
     parser.add_argument(
         "--env-file",
@@ -290,14 +441,15 @@ def main() -> int:
         project_root = Path(__file__).resolve().parent.parent
         input_dir = project_root / input_dir
 
-    result = fetch_and_convert(
+    result = fetch_and_prepare(
         course_id=args.course_id,
         input_dir=input_dir,
         clean=args.clean,
-        jsonl_filename=args.jsonl_file,
+        json_filename=args.json_filename,
+        pdf_file_id=args.pdf_file_id,
     )
 
-    if result["status"] == "not_found":
+    if result["status"] in {"not_found", "ambiguous"}:
         return 1
     return 0
 

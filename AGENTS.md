@@ -16,7 +16,7 @@ This repository has three modules:
    - Main PDF processing pipeline.
    - Parses course PDFs through MinerU cloud API.
    - Stores files in MinIO and metadata/state in MySQL.
-   - Exports GraphRAG-compatible JSONL.
+   - Exports GraphRAG-compatible JSON.
 2. `graphrag_pipeline/`
    - Main knowledge graph Q&A pipeline.
    - Built on Microsoft GraphRAG `2.7.0`.
@@ -64,6 +64,7 @@ Notes:
 
 - Runtime config comes from `.env`, loaded by `Config.from_env()`.
 - MySQL state flow matters: `pending -> processing -> done/failed`.
+- A course may contain multiple PDFs. When there is more than one file, prefer `--file-id` or `--file-name` for parse/status/download/export commands.
 - MinIO object paths are part of the real interface. Be careful when changing filenames or storage layout.
 - `export-graphrag` output is the main contract consumed by `graphrag_pipeline`.
 
@@ -82,6 +83,8 @@ Environment and commands:
 
 - Conda env: `graphrag-oneapi`
 - Install: `pip install -e ".[all]"`
+- Input sync: `python utils/fetch_from_minio.py <course_id> --clean`
+- Multi-PDF sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
 - Index: `graphrag index --root .`
 - Query local: `graphrag query --root . --method local --query "问题"`
 - Query global: `graphrag query --root . --method global --query "问题"`
@@ -92,6 +95,7 @@ Notes:
 - Keep `graphrag==2.7.0` pinned unless the task explicitly includes an upgrade.
 - `settings.yaml` and `.env` are used by GraphRAG CLI.
 - `utils/main.py` also has hardcoded runtime config that is not automatically synced with `.env`.
+- GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.
 
 ### `backend/ckqa-back/`

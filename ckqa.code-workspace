@@ -1,0 +1,19 @@
+{
+  "folders": [
+    {
+      "name": "pdf_ingest",
+      "path": "pdf_ingest"
+    },
+    {
+      "name": "graphrag_pipeline",
+      "path": "graphrag_pipeline"
+    },
+    {
+      "name": "backend",
+      "path": "backend/ckqa-back"
+    }
+  ],
+  "settings": {
+    "python.terminal.activateEnvironment": true
+  }
+}

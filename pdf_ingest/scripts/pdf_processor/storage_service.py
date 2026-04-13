@@ -81,8 +81,7 @@ class MinIOService:
         stream.seek(0)  # 重置流位置
         return hash_md5.hexdigest()
     
-    def upload_pdf(self, course_id: str, file_path: str, 
-                   file_name: str = "book.pdf") -> dict:
+    def upload_pdf(self, course_id: str, file_path: str, file_name: str) -> dict:
         """
         上传PDF文件到MinIO
         
@@ -114,8 +113,9 @@ class MinIOService:
             "size": file_size
         }
     
-    def upload_pdf_stream(self, course_id: str, stream: BinaryIO, 
-                          file_size: int, file_name: str = "book.pdf") -> dict:
+    def upload_pdf_stream(
+        self, course_id: str, stream: BinaryIO, file_size: int, file_name: str
+    ) -> dict:
         """
         从流上传PDF文件到MinIO
         
@@ -146,8 +146,7 @@ class MinIOService:
             "size": file_size
         }
     
-    def download_pdf(self, course_id: str, local_path: str,
-                     file_name: str = "book.pdf") -> str:
+    def download_pdf(self, course_id: str, local_path: str, file_name: str) -> str:
         """
         从MinIO下载PDF文件
         
@@ -172,8 +171,7 @@ class MinIOService:
         
         return local_path
     
-    def get_pdf_stream(self, course_id: str, 
-                       file_name: str = "book.pdf") -> Any:
+    def get_pdf_stream(self, course_id: str, file_name: str) -> Any:
         """
         获取PDF文件流
         
@@ -193,8 +191,9 @@ class MinIOService:
         
         return response
     
-    def upload_artifact(self, course_id: str, local_path: str,
-                        relative_path: str) -> dict:
+    def upload_artifact(
+        self, course_id: str, local_path: str, relative_path: str
+    ) -> dict:
         """
         上传解析结果文件到MinIO
         
@@ -237,8 +236,9 @@ class MinIOService:
             "size": file_size
         }
     
-    def upload_artifacts_dir(self, course_id: str, 
-                             local_dir: str) -> list[dict]:
+    def upload_artifacts_dir(
+        self, course_id: str, local_dir: str, base_prefix: str = ""
+    ) -> list[dict]:
         """
         上传整个解析结果目录到MinIO
         
@@ -255,6 +255,8 @@ class MinIOService:
         for file_path in local_dir_path.rglob("*"):
             if file_path.is_file():
                 relative_path = str(file_path.relative_to(local_dir_path))
+                if base_prefix:
+                    relative_path = f"{base_prefix}/{relative_path}"
                 result = self.upload_artifact(course_id, str(file_path), relative_path)
                 result["file_name"] = file_path.name
                 result["relative_path"] = relative_path
@@ -285,6 +287,16 @@ class MinIOService:
             file_path=local_path
         )
         
+        return local_path
+
+    def download_object(self, bucket: str, object_key: str, local_path: str) -> str:
+        """按 bucket + object_key 直接下载对象。"""
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        self.client.fget_object(
+            bucket_name=bucket,
+            object_name=object_key,
+            file_path=local_path,
+        )
         return local_path
     
     def download_artifacts_dir(self, course_id: str, 
@@ -351,7 +363,7 @@ class MinIOService:
         
         return files
     
-    def pdf_exists(self, course_id: str, file_name: str = "book.pdf") -> bool:
+    def pdf_exists(self, course_id: str, file_name: str) -> bool:
         """检查PDF文件是否存在"""
         object_key = f"{course_id}/{file_name}"
         try:
@@ -360,14 +372,16 @@ class MinIOService:
         except S3Error:
             return False
     
-    def delete_pdf(self, course_id: str, file_name: str = "book.pdf"):
+    def delete_pdf(self, course_id: str, file_name: str):
         """删除PDF文件"""
         object_key = f"{course_id}/{file_name}"
         self.client.remove_object(self.config.bucket_pdf, object_key)
     
-    def delete_artifacts(self, course_id: str):
-        """删除课程的所有解析结果"""
+    def delete_artifacts(self, course_id: str, relative_prefix: str = ""):
+        """删除课程下指定前缀的解析结果；默认删除整个课程目录。"""
         prefix = f"{course_id}/"
+        if relative_prefix:
+            prefix = f"{prefix}{relative_prefix.rstrip('/')}/"
         
         objects = self.client.list_objects(
             bucket_name=self.config.bucket_artifacts,
