@@ -203,6 +203,10 @@ class TestImageRenderer(unittest.TestCase):
             asset_ref="images/fig1.jpg",
             page=10,
             block_id="os:10:5",
+            extra={
+                "image_caption": ["图1: 体系结构"],
+                "image_footnote": ["来源: 教材"],
+            },
         )
         registry = BlockRendererRegistry.create_default()
         result = registry.render(block)
@@ -210,9 +214,13 @@ class TestImageRenderer(unittest.TestCase):
         self.assertIn("[IMAGE]", result.text)
         self.assertIn("ref=images/fig1.jpg", result.text)
         self.assertIn("page=10", result.text)
+        self.assertIn("Caption: 图1: 体系结构", result.text)
+        self.assertIn("Footnote: 来源: 教材", result.text)
         self.assertEqual(result.metadata["type"], "image")
         self.assertEqual(result.metadata["img_path"], "images/fig1.jpg")
         self.assertEqual(result.metadata["block_id"], "os:10:5")
+        self.assertEqual(result.metadata["caption"], "图1: 体系结构")
+        self.assertEqual(result.metadata["footnote"], "来源: 教材")
 
 
 class TestTextAndTitleRenderer(unittest.TestCase):

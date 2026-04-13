@@ -160,7 +160,17 @@ class ImageRenderer(BlockRenderer):
     def render(self, block: Block) -> str:
         img_path = block.asset_ref or block.extra.get("img_path", "")
         page = block.page if block.page is not None else "?"
-        return f"[IMAGE] ref={img_path} page={page}"
+        parts = [f"[IMAGE] ref={img_path} page={page}"]
+
+        caption = _join_list_field(block.extra.get("image_caption", []))
+        if caption:
+            parts.append(f"Caption: {caption}")
+
+        footnote = _join_list_field(block.extra.get("image_footnote", []))
+        if footnote:
+            parts.append(f"Footnote: {footnote}")
+
+        return "\n".join(parts)
 
     def render_metadata(self, block: Block) -> Dict[str, Any]:
         return {
@@ -168,6 +178,8 @@ class ImageRenderer(BlockRenderer):
             "img_path": block.asset_ref or block.extra.get("img_path", ""),
             "page_idx": block.page,
             "block_id": block.block_id,
+            "caption": _join_list_field(block.extra.get("image_caption", [])),
+            "footnote": _join_list_field(block.extra.get("image_footnote", [])),
         }
 
 

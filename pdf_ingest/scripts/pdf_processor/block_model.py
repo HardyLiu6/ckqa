@@ -181,6 +181,195 @@ def _is_title_block(raw: Dict[str, Any]) -> bool:
     return raw.get("text_level") is not None
 
 
+def _flatten_mineru_text_content(value: Any) -> str:
+    """
+    将 MinerU v2 中嵌套的富文本结构拍平成字符串。
+
+    常见输入形态：
+    - {"type": "text", "content": "..."}
+    - {"type": "equation_inline", "content": "\\equiv"}
+    - {"item_content": [...]}
+    - [{"type": "text", ...}, ...]
+    """
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value
+
+    if isinstance(value, (int, float)):
+        return str(value)
+
+    if isinstance(value, list):
+        return "".join(_flatten_mineru_text_content(item) for item in value)
+
+    if isinstance(value, dict):
+        if "content" in value:
+            return _flatten_mineru_text_content(value.get("content"))
+
+        parts: List[str] = []
+        for key, item in value.items():
+            if key.endswith("_content"):
+                parts.append(_flatten_mineru_text_content(item))
+        return "".join(parts)
+
+    return str(value)
+
+
+def _normalize_text_list(items: Any) -> List[str]:
+    """将 MinerU v2 的文本数组归一化为字符串列表。"""
+    if not items:
+        return []
+
+    if not isinstance(items, list):
+        items = [items]
+
+    texts: List[str] = []
+    for item in items:
+        text = _flatten_mineru_text_content(item).strip()
+        if text:
+            texts.append(text)
+    return texts
+
+
+def _normalize_list_items(items: Any) -> List[str]:
+    """将 MinerU v2 的 list_items 归一化为字符串列表。"""
+    if not items:
+        return []
+
+    normalized: List[str] = []
+    for item in items:
+        text = _flatten_mineru_text_content(item).strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
+def _extract_image_path(value: Any) -> str:
+    """从 MinerU v2 的 image_source 结构中提取图片路径。"""
+    if isinstance(value, dict):
+        return str(value.get("path", "")).strip()
+    return ""
+
+
+def _normalize_mineru_v2_block(raw: Dict[str, Any], page_idx: int) -> Dict[str, Any]:
+    """
+    将 MinerU v2 单个 block 归一化为旧版扁平结构，
+    供现有 parse_content_list 继续处理。
+    """
+    raw_type = raw.get("type", "unknown")
+    content = raw.get("content", {})
+    normalized: Dict[str, Any] = {
+        "bbox": raw.get("bbox"),
+        "page_idx": page_idx,
+    }
+
+    if raw_type == "title":
+        normalized.update({
+            "type": "text",
+            "text": _flatten_mineru_text_content(content.get("title_content", "")).strip(),
+            "text_level": content.get("level"),
+        })
+    elif raw_type == "paragraph":
+        normalized.update({
+            "type": "text",
+            "text": _flatten_mineru_text_content(content.get("paragraph_content", "")).strip(),
+        })
+    elif raw_type == "page_header":
+        normalized.update({
+            "type": "header",
+            "text": _flatten_mineru_text_content(content.get("page_header_content", "")).strip(),
+        })
+    elif raw_type == "page_footer":
+        normalized.update({
+            "type": "footer",
+            "text": _flatten_mineru_text_content(content.get("page_footer_content", "")).strip(),
+        })
+    elif raw_type == "page_number":
+        normalized.update({
+            "type": "page_number",
+            "text": _flatten_mineru_text_content(content.get("page_number_content", "")).strip(),
+        })
+    elif raw_type == "list":
+        normalized.update({
+            "type": "list",
+            "list_items": _normalize_list_items(content.get("list_items", [])),
+        })
+    elif raw_type == "image":
+        normalized.update({
+            "type": "image",
+            "img_path": _extract_image_path(content.get("image_source")),
+            "image_caption": _normalize_text_list(content.get("image_caption", [])),
+            "image_footnote": _normalize_text_list(content.get("image_footnote", [])),
+        })
+    elif raw_type == "table":
+        normalized.update({
+            "type": "table",
+            "img_path": _extract_image_path(content.get("image_source")),
+            "table_body": content.get("html", ""),
+            "table_caption": _normalize_text_list(content.get("table_caption", [])),
+            "table_footnote": _normalize_text_list(content.get("table_footnote", [])),
+        })
+    elif raw_type == "equation_interline":
+        normalized.update({
+            "type": "equation",
+            "text": str(content.get("math_content", "")).strip(),
+            "text_format": str(content.get("math_type", "")).strip(),
+            "img_path": _extract_image_path(content.get("image_source")),
+        })
+    elif raw_type == "code":
+        normalized.update({
+            "type": "code",
+            "code_body": _flatten_mineru_text_content(content.get("code_content", "")).strip(),
+            "guess_lang": str(content.get("code_language", "")).strip(),
+            "code_caption": _normalize_text_list(content.get("code_caption", [])),
+        })
+    elif raw_type == "algorithm":
+        normalized.update({
+            "type": "code",
+            "code_body": _flatten_mineru_text_content(content.get("algorithm_content", "")).strip(),
+            "guess_lang": "algorithm",
+            "code_caption": _normalize_text_list(content.get("algorithm_caption", [])),
+        })
+    else:
+        normalized.update({
+            "type": raw_type,
+            "text": _flatten_mineru_text_content(content).strip(),
+        })
+
+    return normalized
+
+
+def _normalize_content_list_data(data: List[Any]) -> List[Dict[str, Any]]:
+    """兼容旧版扁平 content_list 与新版按页分组的 content_list_v2。"""
+    if not data:
+        return []
+
+    first_item = data[0]
+    if isinstance(first_item, dict):
+        return data
+
+    if not isinstance(first_item, list):
+        raise ValueError(
+            f"content_list.json 格式错误: 列表元素需为 dict 或 list，实际 {type(first_item).__name__}"
+        )
+
+    normalized: List[Dict[str, Any]] = []
+    for page_idx, page_blocks in enumerate(data):
+        if not isinstance(page_blocks, list):
+            raise ValueError(
+                f"content_list.json 格式错误: 第 {page_idx} 页应为 list，实际 {type(page_blocks).__name__}"
+            )
+        for item in page_blocks:
+            if not isinstance(item, dict):
+                raise ValueError(
+                    "content_list.json 格式错误: page block 应为 dict，"
+                    f"实际 {type(item).__name__}"
+                )
+            normalized.append(_normalize_mineru_v2_block(item, page_idx))
+    return normalized
+
+
 def parse_content_list(
     content_list: List[Dict[str, Any]],
     course_id: str,
@@ -229,7 +418,11 @@ def parse_content_list(
             block_type = BlockType.IMAGE
             text = _extract_text_from_image(raw)
             text_level = None
-            extra = {"img_path": raw.get("img_path", "")}
+            extra = {
+                "img_path": raw.get("img_path", ""),
+                "image_caption": raw.get("image_caption", []),
+                "image_footnote": raw.get("image_footnote", []),
+            }
         elif raw_type == "list":
             block_type = BlockType.LIST
             text = _extract_text_from_list(raw)
@@ -278,7 +471,7 @@ def parse_content_list(
 
 
 def load_content_list_file(path: str | Path) -> List[Dict[str, Any]]:
-    """安全加载 content_list.json 文件"""
+    """安全加载并归一化 content_list.json 文件。"""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"content_list.json 不存在: {path}")
@@ -286,4 +479,4 @@ def load_content_list_file(path: str | Path) -> List[Dict[str, Any]]:
         data = json.load(f)
     if not isinstance(data, list):
         raise ValueError(f"content_list.json 格式错误: 期望 list, 实际 {type(data).__name__}")
-    return data
+    return _normalize_content_list_data(data)
