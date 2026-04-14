@@ -1,0 +1,26 @@
+{
+  "id": "os:计算机操作系统.pdf:ch2-sec2.1",
+  "source_file": "计算机操作系统.pdf",
+  "document_type": "textbook",
+  "course_id": "os",
+  "chapter": "第二章 进程的描述与控制",
+  "section": "2.1 前趋图和程序执行",
+  "subsection": null,
+  "heading_level": 2,
+  "heading_path": [
+    "第二章 进程的描述与控制",
+    "2.1 前趋图和程序执行"
+  ],
+  "content": "前趋图用于描述程序和进程之间的执行先后关系。\n\n表2-1 进程状态说明：状态=就绪；说明=等待处理机分配。\n\n公式：P_i \\to P_j。\n\n图2-1 前趋图示意：用于说明进程执行关系。",
+  "page_start": 3,
+  "page_end": 3,
+  "metadata": {
+    "source_page_indices": [2],
+    "has_table": true,
+    "has_equation": true,
+    "has_image": true,
+    "table_count": 1,
+    "equation_count": 1,
+    "image_count": 1
+  }
+}

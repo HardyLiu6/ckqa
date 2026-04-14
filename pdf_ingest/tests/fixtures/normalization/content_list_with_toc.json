@@ -1,0 +1,74 @@
+[
+  {
+    "type": "text",
+    "text": "目录",
+    "page_idx": 0,
+    "bbox": [0, 0, 100, 20]
+  },
+  {
+    "type": "text",
+    "text": "第二章 进程的描述与控制 32",
+    "text_level": 1,
+    "page_idx": 0,
+    "bbox": [0, 30, 400, 60]
+  },
+  {
+    "type": "list",
+    "list_items": [
+      "2.1 前趋图和程序执行 32",
+      "2.2 进程的描述 35"
+    ],
+    "page_idx": 0,
+    "bbox": [0, 70, 400, 120]
+  },
+  {
+    "type": "text",
+    "text": "第二章 进程的描述与控制",
+    "text_level": 1,
+    "page_idx": 1,
+    "bbox": [0, 0, 400, 30]
+  },
+  {
+    "type": "text",
+    "text": "本章介绍进程的描述、控制、同步与通信。",
+    "page_idx": 1,
+    "bbox": [0, 40, 400, 100]
+  },
+  {
+    "type": "text",
+    "text": "2.1 前趋图和程序执行",
+    "text_level": 2,
+    "page_idx": 2,
+    "bbox": [0, 0, 400, 30]
+  },
+  {
+    "type": "text",
+    "text": "前趋图用于描述程序和进程之间的执行先后关系。",
+    "page_idx": 2,
+    "bbox": [0, 40, 400, 100]
+  },
+  {
+    "type": "table",
+    "table_body": "<table><tr><th>状态</th><th>说明</th></tr><tr><td>就绪</td><td>等待处理机分配</td></tr></table>",
+    "table_caption": ["表2-1 进程状态说明"],
+    "table_footnote": ["注：示例数据"],
+    "img_path": "images/table-2-1.png",
+    "page_idx": 2,
+    "bbox": [0, 110, 400, 220]
+  },
+  {
+    "type": "equation",
+    "text": "P_i \\to P_j",
+    "text_format": "latex",
+    "page_idx": 2,
+    "bbox": [0, 230, 400, 260]
+  },
+  {
+    "type": "image",
+    "img_path": "images/fig-2-1.png",
+    "image_caption": ["图2-1 前趋图示意"],
+    "image_footnote": ["用于说明进程执行关系"],
+    "page_idx": 2,
+    "bbox": [0, 270, 400, 360]
+  }
+]
