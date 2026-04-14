@@ -453,6 +453,84 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertTrue(docs)
         self.assertTrue(all(doc.document_type.value == "syllabus" for doc in docs))
 
+    def test_special_exercise_title_is_split_out_of_previous_section(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "1.5 OS结构设计",
+                "text_level": 2,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "这里是本节正文内容，用于模拟教材中的结构性讲解，长度足够保留。",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "1.5.4 微内核OS结构",
+                "text_level": 3,
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "这里是微内核章节的正文内容，用于验证功能性标题不会再被并入上一节正文。",
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "习题",
+                "text_level": 1,
+                "page_idx": 2,
+            },
+            {
+                "type": "list",
+                "list_items": [
+                    "1. 什么是微内核？",
+                    "2. 请说明微内核结构的优缺点。",
+                ],
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "2.1 前趋图和程序执行",
+                "text_level": 2,
+                "page_idx": 3,
+            },
+            {
+                "type": "text",
+                "text": "这里是下一节正文内容，用于验证导出会继续向后切分。",
+                "page_idx": 3,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="教材.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=9,
+            source_file="教材.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        exercise_doc = next(doc for doc in docs if doc.heading_path[-1] == "习题")
+        section_doc = next(doc for doc in docs if doc.heading_path[-1] == "1.5.4 微内核OS结构")
+
+        self.assertEqual(exercise_doc.heading_path, ["1.5 OS结构设计", "习题"])
+        self.assertNotIn("习题", section_doc.content)
+        self.assertIn("什么是微内核", exercise_doc.content)
+        self.assertEqual(len({doc.id for doc in docs}), len(docs))
+
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""

@@ -141,6 +141,13 @@ class GraphRAGExporter:
         r"|参考文献"
         r")"
     )
+    _SPECIAL_SECTION_TITLE_RE = re.compile(
+        r"^(?:"
+        r"本章小结|小结|总结"
+        r"|习题|思考题|练习题|复习题"
+        r"|参考文献|附录(?:[\sA-Z一二三四五六七八九十\d].*)?"
+        r")$"
+    )
     _TRAILING_PAGE_NOISE_RE = re.compile(
         r"^(?P<title>.*?)(?:\s*(?:\.{2,}|…{2,}|·{2,})\s*|\s+)(?P<page>\d+)\s*$"
     )
@@ -608,6 +615,14 @@ class GraphRAGExporter:
                 indices.append(index)
         return indices
 
+    @classmethod
+    def _is_special_section_title(cls, title_text: str) -> bool:
+        """判断是否为应保留为独立 section 的功能性标题。"""
+        normalized = cls._normalize_heading_text(title_text)
+        if not normalized:
+            return False
+        return bool(cls._SPECIAL_SECTION_TITLE_RE.match(normalized))
+
     def _select_title_indices(
         self,
         blocks: List[Block],
@@ -624,6 +639,7 @@ class GraphRAGExporter:
         """
         title_candidates: List[Tuple[int, Block, str]] = []
         numbered_indices: List[int] = []
+        special_indices: List[int] = []
 
         for index, block in enumerate(blocks):
             if block.block_type != BlockType.TITLE:
@@ -635,9 +651,11 @@ class GraphRAGExporter:
             title_candidates.append((index, block, text))
             if self._SECTION_BOUNDARY_RE.match(text):
                 numbered_indices.append(index)
+            elif self._is_special_section_title(text):
+                special_indices.append(index)
 
         if numbered_indices:
-            return numbered_indices
+            return sorted(set(numbered_indices + special_indices))
 
         if not title_candidates:
             return self._heuristic_title_indices(blocks)
@@ -669,6 +687,39 @@ class GraphRAGExporter:
                 return selected
 
         return [index for index, _, _ in title_candidates]
+
+    def _resolve_effective_section_level(
+        self,
+        section_title: str,
+        title_block: Block,
+        md_headings: Optional[Dict[str, int]],
+        heading_stack: List[Tuple[int, str]],
+        document_type: DocumentType,
+    ) -> int:
+        """
+        为当前 section 计算有效层级。
+
+        对教材中的“习题 / 参考文献 / 本章小结”等功能性标题做一层保守修正：
+        - 它们通常不应覆盖为新的根层级
+        - 更合理的是挂在当前最高可用结构标题之下
+        """
+        inferred_level = self._infer_title_level(
+            section_title,
+            md_headings,
+            text_level=title_block.text_level,
+        )
+
+        if document_type != DocumentType.TEXTBOOK:
+            return inferred_level
+
+        if not self._is_special_section_title(section_title):
+            return inferred_level
+
+        if not heading_stack:
+            return inferred_level
+
+        parent_anchor_level = max(heading_stack[0][0], 1)
+        return max(2, parent_anchor_level + 1)
 
     # -------------------- 标准文档聚合 --------------------
 
@@ -740,10 +791,12 @@ class GraphRAGExporter:
             sec_blocks = blocks[start:end]
             title_block = blocks[start]
             section_title = self._normalize_heading_text(title_block.text) or "未命名章节"
-            source_section_level = self._infer_title_level(
+            source_section_level = self._resolve_effective_section_level(
                 section_title,
+                title_block,
                 md_headings,
-                text_level=title_block.text_level,
+                heading_stack,
+                document_type,
             )
 
             while heading_stack and heading_stack[-1][0] >= source_section_level:

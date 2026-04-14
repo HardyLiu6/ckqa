@@ -121,20 +121,57 @@ _EXPERIMENT_SIGNALS = (
     "实验要求",
     "实验环境",
     "实验原理",
-    "上机",
-    "课程项目",
+    "实验任务",
+    "实验说明",
     "实验报告",
 )
 _ASSIGNMENT_SIGNALS = (
-    "作业",
-    "习题",
-    "思考题",
     "题目要求",
+    "作业要求",
     "提交要求",
-    "测验",
-    "考试",
     "报告要求",
     "评分标准",
+    "回答下列问题",
+    "请完成",
+    "请回答",
+    "请分析",
+    "请证明",
+)
+_EXERCISE_PROMPT_SIGNALS = (
+    "为什么",
+    "何谓",
+    "试说明",
+    "试分析",
+    "试比较",
+    "试证明",
+    "试画出",
+    "试简述",
+    "请说明",
+    "请分析",
+    "请证明",
+    "请完成",
+)
+_EXPERIMENT_TITLE_SIGNALS = (
+    "实验",
+    "上机",
+    "课程项目",
+    "项目实践",
+    "实验报告",
+)
+_ASSIGNMENT_TITLE_SIGNALS = (
+    "习题",
+    "思考题",
+    "练习题",
+    "复习题",
+    "作业要求",
+    "课程作业",
+    "平时作业",
+    "大作业",
+    "实验报告",
+    "测验",
+    "测试",
+    "考试",
+    "试题",
 )
 _FORMULA_SIGNALS = (
     "定义为",
@@ -156,6 +193,7 @@ _METHOD_SIGNALS = (
     "实现",
     "伪代码",
 )
+_QUESTION_ITEM_RE = re.compile(r"(?:^|\n)\s*(?:[-*•]\s*)?\d+[\.\)）、]")
 
 _SAMPLE_TYPE_ORDER = (
     "chapter_concept_explanation",
@@ -707,14 +745,71 @@ def _jaccard_similarity(left: frozenset[str], right: frozenset[str]) -> float:
     return intersection / union
 
 
+def _count_signal_hits(text: str, signals: Sequence[str]) -> int:
+    return sum(1 for signal in signals if signal in text)
+
+
+def _build_sample_type_context(doc: AdaptedDocument) -> tuple[str, str]:
+    title_context_parts = [doc.title]
+    for field in (doc.chapter, doc.section, doc.subsection):
+        cleaned = _clean_string(field)
+        if cleaned and cleaned not in title_context_parts:
+            title_context_parts.append(cleaned)
+    title_context = "\n".join(part for part in title_context_parts if part)
+    body_context = doc.text[:1200]
+    return title_context, body_context
+
+
+def _is_experiment_instruction(doc: AdaptedDocument, title_context: str, body_context: str) -> bool:
+    if doc.document_type == "lab":
+        return True
+
+    leaf_title = doc.title or title_context
+    title_hits = _count_signal_hits(leaf_title, _EXPERIMENT_TITLE_SIGNALS)
+    body_hits = _count_signal_hits(body_context, _EXPERIMENT_SIGNALS)
+
+    if title_hits >= 1:
+        return body_hits >= 1 or doc.document_type in {"slides", "notes"}
+
+    return False
+
+
+def _is_assignment_requirement(doc: AdaptedDocument, title_context: str, body_context: str) -> bool:
+    if doc.document_type == "exam":
+        return True
+
+    leaf_title = doc.title or title_context
+    title_hits = _count_signal_hits(leaf_title, _ASSIGNMENT_TITLE_SIGNALS)
+    body_hits = _count_signal_hits(body_context, _ASSIGNMENT_SIGNALS)
+
+    if title_hits >= 1:
+        if body_hits >= 1 or doc.document_type in {"slides", "notes", "syllabus"}:
+            return True
+        return _looks_like_exercise_question_set(body_context)
+
+    return False
+
+
+def _looks_like_exercise_question_set(text: str) -> bool:
+    question_item_count = len(_QUESTION_ITEM_RE.findall(text))
+    prompt_hits = _count_signal_hits(text, _EXERCISE_PROMPT_SIGNALS)
+
+    if question_item_count >= 4:
+        return True
+    if question_item_count >= 2 and prompt_hits >= 2:
+        return True
+    return False
+
+
 def guess_sample_type(doc: AdaptedDocument) -> str:
-    text_head = f"{doc.title}\n{doc.text[:1200]}"
+    title_context, body_context = _build_sample_type_context(doc)
+    text_head = f"{title_context}\n{body_context}"
     text_head_lower = text_head.lower()
 
-    if doc.document_type == "lab" or any(signal in text_head for signal in _EXPERIMENT_SIGNALS):
+    if _is_experiment_instruction(doc, title_context, body_context):
         return "experiment_instruction"
 
-    if doc.document_type == "exam" or any(signal in text_head for signal in _ASSIGNMENT_SIGNALS):
+    if _is_assignment_requirement(doc, title_context, body_context):
         return "assignment_requirement"
 
     if doc.document_type == "syllabus" or any(signal in text_head for signal in _COURSE_REQUIREMENT_SIGNALS):
