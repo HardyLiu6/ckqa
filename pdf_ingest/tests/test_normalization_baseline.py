@@ -222,6 +222,157 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertIsNone(second_section.chapter)
         self.assertEqual(second_section.heading_path, ["1.2 第二节"])
 
+    def test_front_matter_publication_page_is_filtered_but_preface_is_kept(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "图书在版编目(CIP)数据",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "ISBN 978-7-1234-5678-9",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "西安电子科技大学出版社",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "版权所有 侵权必究",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "前言",
+                "text_level": 1,
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "本资料用于介绍课程结构、学习方法与后续章节安排，"
+                        "这是一段足够长的有效导读内容，不应被误删。",
+                "page_idx": 1,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="课程资料.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        self.assertTrue(all(block.page != 0 for block in cleaned))
+        self.assertTrue(any(block.text == "前言" for block in cleaned))
+        self.assertTrue(any("课程结构" in block.text for block in cleaned))
+
+    def test_unnumbered_titles_can_still_split_generic_documents(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "课程概述",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "这里是课程概述部分的正文，用于说明文档整体目标与范围，长度足以保留。",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "学习目标",
+                "text_level": 1,
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "这里列出学习目标、知识结构和掌握要求，属于独立章节内容。",
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "考核方式",
+                "text_level": 1,
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "这里介绍平时成绩、实验报告和期末考核方式，也应独立切分。",
+                "page_idx": 2,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="course",
+            source_file="课程说明.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="course",
+            file_id=5,
+            source_file="课程说明.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        headings = [doc.heading_path[-1] for doc in docs]
+        self.assertEqual(headings, ["课程概述", "学习目标", "考核方式"])
+
+    def test_long_section_is_soft_split_without_explicit_max_chars(self):
+        long_paragraph = (
+            "这是一个用于测试软切分策略的长段落。"
+            "它包含连续的完整句子，适合被按句子边界切分。"
+        ) * 80
+        content_list = [
+            {
+                "type": "text",
+                "text": "课程总结",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": long_paragraph,
+                "page_idx": 0,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="course",
+            source_file="课程总结.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="course",
+            file_id=6,
+            source_file="课程总结.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        self.assertGreater(len(docs), 1)
+        self.assertTrue(all(doc.metadata.get("chunk_total", 1) == len(docs) for doc in docs))
+        self.assertTrue(all(doc.metadata.get("chunk_strategy") == "soft" for doc in docs))
+        self.assertTrue(all(len(doc.content) <= ExportOptions().soft_max_chars for doc in docs))
+
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""

@@ -22,6 +22,7 @@ from block_model import Block, BlockType
 DEFAULT_MIN_CHARS = 5          # 最短有效文本长度
 DEFAULT_REPEAT_THRESHOLD = 3   # 页眉页脚重复阈值（跨页出现次数）
 DEFAULT_MAX_HEADER_LEN = 80    # 页眉页脚候选最大长度
+DEFAULT_FRONT_MATTER_SCAN_PAGES = 6   # 仅扫描前几页的出版/版权噪声
 
 
 # 目录页检测
@@ -34,6 +35,31 @@ _TOC_ENTRY_RE = re.compile(
     r"|参考文献[^\n]{0,20}?"
     r")(?:[\.\s·…]{1,12}\d+)\s*$",
     re.I | re.M,
+)
+
+# 出版/版权前置页检测
+_FRONT_MATTER_MARKER_RE = re.compile(
+    r"(?:"
+    r"图书在版编目|cip|isbn|版权(?:所有|声明)?|copyright"
+    r"|出版社|出版发行|责任编辑|版次|印次|定价|开本|印张|字数"
+    r"|侵权必究|邮编|联系电话|传真"
+    r")",
+    re.I,
+)
+_FRONT_MATTER_TITLE_RE = re.compile(
+    r"^(?:"
+    r"图书在版编目(?:\(cip\))?数据"
+    r"|版权页|版权声明|出版说明|作者简介|内容简介|内容提要"
+    r")$",
+    re.I,
+)
+_FRONT_MATTER_KEEP_TITLE_RE = re.compile(
+    r"^(?:"
+    r"前言|序言|摘要|abstract|引言|绪论"
+    r"|课程简介|课程说明|课程目标|学习目标|考核方式"
+    r"|实验目的|实验要求|实验原理"
+    r")$",
+    re.I,
 )
 
 
@@ -127,6 +153,70 @@ def detect_toc_pages(blocks: List[Block]) -> Set[Optional[int]]:
             toc_pages.add(page)
 
     return toc_pages
+
+
+def detect_front_matter_noise_pages(
+    blocks: List[Block],
+    scan_page_limit: int = DEFAULT_FRONT_MATTER_SCAN_PAGES,
+) -> Set[Optional[int]]:
+    """
+    检测前置出版/版权噪声页。
+
+    设计原则：
+    1. 仅扫描文档最前面的少量页面，避免误伤正文
+    2. 只有命中多个强信号时才整页过滤
+    3. 对“前言/摘要/课程说明/实验目的”等有效导读页保持保守
+
+    返回：
+        需要整体过滤掉的页码集合
+    """
+    page_texts: Dict[Optional[int], List[str]] = {}
+    page_title_texts: Dict[Optional[int], List[str]] = {}
+
+    for block in blocks:
+        if block.page is None or block.page < 0 or block.page > scan_page_limit:
+            continue
+
+        text = (block.text or "").strip()
+        if not text:
+            continue
+
+        page_texts.setdefault(block.page, []).append(text)
+        if block.block_type == BlockType.TITLE:
+            page_title_texts.setdefault(block.page, []).append(text)
+
+    noise_pages: Set[Optional[int]] = set()
+    for page, texts in page_texts.items():
+        joined = "\n".join(texts)
+        marker_hits = len(_FRONT_MATTER_MARKER_RE.findall(joined))
+        short_line_count = sum(1 for text in texts if len(text) <= 40)
+        long_paragraph_chars = sum(len(text) for text in texts if len(text) >= 80)
+        title_texts = page_title_texts.get(page, [])
+
+        has_keep_title = any(
+            _FRONT_MATTER_KEEP_TITLE_RE.match(text.strip())
+            for text in title_texts
+        )
+        if has_keep_title:
+            continue
+
+        has_front_matter_title = any(
+            _FRONT_MATTER_TITLE_RE.match(text.strip())
+            for text in title_texts + texts
+        )
+
+        if has_front_matter_title and marker_hits >= 1:
+            noise_pages.add(page)
+            continue
+
+        if marker_hits >= 3 and long_paragraph_chars < 600:
+            noise_pages.add(page)
+            continue
+
+        if marker_hits >= 2 and short_line_count >= 4 and long_paragraph_chars < 180:
+            noise_pages.add(page)
+
+    return noise_pages
 
 
 # ===================== 页眉页脚检测 =====================
@@ -290,6 +380,7 @@ def clean_blocks(
         blocks, max_len=max_header_len, repeat_threshold=repeat_threshold
     )
     toc_pages = detect_toc_pages(blocks)
+    front_matter_pages = detect_front_matter_noise_pages(blocks)
 
     cleaned: List[Block] = []
     for b in blocks:
@@ -299,6 +390,10 @@ def clean_blocks(
 
         # Step 1b: 丢弃目录页
         if b.page in toc_pages:
+            continue
+
+        # Step 1c: 丢弃出版/版权等前置噪声页
+        if b.page in front_matter_pages:
             continue
 
         text = b.text.strip()

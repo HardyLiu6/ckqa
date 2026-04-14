@@ -103,6 +103,8 @@ class ExportOptions:
     semantic_table: bool = True       # 表格语义化 (列名=值 描述，利于实体抽取)
     with_page_docs: bool = False      # 同时生成 page 模式文档
     max_chars: Optional[int] = None   # 每个文档最大字符数 (0=不限)
+    soft_max_chars: int = 2200        # 未显式设置 max_chars 时的节级软切分上限
+    min_chunk_chars: int = 500        # 尽量避免产出过短 chunk
     output_prefix: str = "graphrag"   # 输出前缀路径
     table_to_markdown: bool = True    # 表格 HTML → Markdown (否则纯文本)
 
@@ -142,6 +144,10 @@ class GraphRAGExporter:
     _TRAILING_PAGE_NOISE_RE = re.compile(
         r"^(?P<title>.*?)(?:\s*(?:\.{2,}|…{2,}|·{2,})\s*|\s+)(?P<page>\d+)\s*$"
     )
+    _MAX_GENERIC_TITLE_LEN = 120
+    _SOFT_CHUNK_TRIGGER_FACTOR = 1.35
+    _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？；.!?;])")
+    _CLAUSE_SPLIT_RE = re.compile(r"(?<=[，、,:：])")
 
     def __init__(self, db: DatabaseService, storage: MinIOService, config: Any):
         self.db = db
@@ -503,18 +509,23 @@ class GraphRAGExporter:
         self,
         title_text: str,
         md_headings: Optional[Dict[str, int]],
+        text_level: Optional[int] = None,
     ) -> int:
         """
         推断标题层级：
-        1. 优先用标题编号模式推断
-        2. 若模式未匹配，用 markdown 标题映射
-        3. 默认 level=1
+        1. 优先使用 MinerU 原生 text_level
+        2. 再用标题编号模式推断
+        3. 若模式未匹配，用 markdown 标题映射
+        4. 默认 level=1
         """
         text = self._normalize_heading_text(title_text)
 
         for pattern, level in self._TITLE_LEVEL_PATTERNS:
             if pattern.match(text):
                 return level
+
+        if text_level is not None and text_level > 0:
+            return text_level
 
         if md_headings:
             normalized = re.sub(r"\s+", "", text.lower())
@@ -529,7 +540,9 @@ class GraphRAGExporter:
         text = self._normalize_heading_text(block.text)
         if not text:
             return False
-        return bool(self._SECTION_BOUNDARY_RE.match(text))
+        if self._SECTION_BOUNDARY_RE.match(text):
+            return True
+        return block.text_level is not None and block.text_level > 0
 
     @classmethod
     def _normalize_heading_text(cls, text: str) -> str:
@@ -560,6 +573,68 @@ class GraphRAGExporter:
                 indices.append(index)
         return indices
 
+    def _select_title_indices(
+        self,
+        blocks: List[Block],
+        md_headings: Optional[Dict[str, int]],
+    ) -> List[int]:
+        """
+        选择章节边界标题。
+
+        规则尽量兼顾教材和非教材文档：
+        1. 优先保留带编号的显式章节标题
+        2. 若无编号，但存在 MinerU TITLE + text_level，则选择最高两层标题
+        3. 若 markdown 中有标题映射，则使用较浅层标题
+        4. 最后退化为全部 TITLE 块
+        """
+        title_candidates: List[Tuple[int, Block, str]] = []
+        numbered_indices: List[int] = []
+
+        for index, block in enumerate(blocks):
+            if block.block_type != BlockType.TITLE:
+                continue
+            text = self._normalize_heading_text(block.text)
+            if not text or len(text) > self._MAX_GENERIC_TITLE_LEN:
+                continue
+
+            title_candidates.append((index, block, text))
+            if self._SECTION_BOUNDARY_RE.match(text):
+                numbered_indices.append(index)
+
+        if numbered_indices:
+            return numbered_indices
+
+        if not title_candidates:
+            return self._heuristic_title_indices(blocks)
+
+        level_candidates = [
+            (index, block, text)
+            for index, block, text in title_candidates
+            if block.text_level is not None and block.text_level > 0
+        ]
+        if level_candidates:
+            min_level = min(block.text_level for _, block, _ in level_candidates)
+            level_cutoff = min_level + 1
+            selected = [
+                index
+                for index, block, _ in title_candidates
+                if (block.text_level or min_level) <= level_cutoff
+            ]
+            if selected:
+                return selected
+
+        if md_headings:
+            selected = []
+            for index, _, text in title_candidates:
+                normalized = re.sub(r"\s+", "", text.lower())
+                md_level = md_headings.get(normalized)
+                if md_level is not None and md_level <= 3:
+                    selected.append(index)
+            if selected:
+                return selected
+
+        return [index for index, _, _ in title_candidates]
+
     # -------------------- 标准文档聚合 --------------------
 
     def _aggregate_normalized_section(
@@ -582,13 +657,7 @@ class GraphRAGExporter:
         if md_text:
             md_headings = self._parse_md_headings(md_text)
 
-        title_indices = [
-            index for index, block in enumerate(blocks)
-            if block.block_type == BlockType.TITLE and self._is_section_boundary(block)
-        ]
-
-        if not title_indices:
-            title_indices = self._heuristic_title_indices(blocks)
+        title_indices = self._select_title_indices(blocks, md_headings)
 
         if not title_indices:
             doc = self._blocks_to_normalized_doc(
@@ -603,7 +672,7 @@ class GraphRAGExporter:
                 source_section_level=1,
                 drop_leading_title=False,
             )
-            return self._split_normalized_doc_by_chars(doc, options.max_chars)
+            return self._split_normalized_doc_by_chars(doc, options)
 
         sections: List[Tuple[int, int]] = []
         for index, title_index in enumerate(title_indices):
@@ -626,14 +695,18 @@ class GraphRAGExporter:
                 source_section_level=0,
                 drop_leading_title=False,
             )
-            docs.extend(self._split_normalized_doc_by_chars(pre_doc, options.max_chars))
+            docs.extend(self._split_normalized_doc_by_chars(pre_doc, options))
 
         heading_stack: List[Tuple[int, str]] = []
         for start, end in sections:
             sec_blocks = blocks[start:end]
             title_block = blocks[start]
             section_title = self._normalize_heading_text(title_block.text) or "未命名章节"
-            source_section_level = self._infer_title_level(section_title, md_headings)
+            source_section_level = self._infer_title_level(
+                section_title,
+                md_headings,
+                text_level=title_block.text_level,
+            )
 
             while heading_stack and heading_stack[-1][0] >= source_section_level:
                 heading_stack.pop()
@@ -651,7 +724,7 @@ class GraphRAGExporter:
                 source_section_level=source_section_level,
                 drop_leading_title=True,
             )
-            docs.extend(self._split_normalized_doc_by_chars(doc, options.max_chars))
+            docs.extend(self._split_normalized_doc_by_chars(doc, options))
 
         return docs
 
@@ -687,7 +760,7 @@ class GraphRAGExporter:
                 page_no=human_page_no,
                 drop_leading_title=False,
             )
-            docs.extend(self._split_normalized_doc_by_chars(doc, options.max_chars))
+            docs.extend(self._split_normalized_doc_by_chars(doc, options))
 
         return docs
 
@@ -933,6 +1006,7 @@ class GraphRAGExporter:
             metadata["images"] = rendered.images_meta
 
         content = rendered.text or heading_path[-1]
+        metadata["content_char_count"] = len(content)
 
         return NormalizedDocument(
             id=self._build_normalized_doc_id(course_id, source_file, heading_path),
@@ -1014,7 +1088,7 @@ class GraphRAGExporter:
             return DocumentType.SYLLABUS
         if any(token in name for token in ("lab", "实验", "实验指导")):
             return DocumentType.LAB
-        if any(token in name for token in ("notes", "note", "笔记")):
+        if any(token in name for token in ("notes", "note", "笔记", "讲义", "lecture", "handout")):
             return DocumentType.NOTES
         if any(token in name for token in ("exam", "试卷", "题库")):
             return DocumentType.EXAM
@@ -1026,41 +1100,34 @@ class GraphRAGExporter:
 
     # -------------------- 长文档拆分 --------------------
 
-    @staticmethod
     def _split_normalized_doc_by_chars(
+        self,
         doc: NormalizedDocument,
-        max_chars: Optional[int],
+        options: ExportOptions,
     ) -> List[NormalizedDocument]:
-        """按 max_chars 拆分标准课程文档，按段落边界切割。"""
+        """按显式或软切分阈值拆分标准课程文档。"""
+        max_chars = self._resolve_chunk_limit(doc, options)
         if not max_chars:
             return [doc]
 
-        paragraphs = doc.content.split("\n\n")
-        chunks: List[str] = []
-        current: List[str] = []
-        current_len = 0
-
-        for para in paragraphs:
-            para_len = len(para) + 2  # \n\n
-            if current and current_len + para_len > max_chars:
-                chunks.append("\n\n".join(current))
-                current = [para]
-                current_len = para_len
-            else:
-                current.append(para)
-                current_len += para_len
-
-        if current:
-            chunks.append("\n\n".join(current))
+        units = self._build_chunk_units(doc.content, max_chars)
+        chunks = self._pack_chunk_units(
+            units=units,
+            max_chars=max_chars,
+            min_chunk_chars=max(options.min_chunk_chars, 1),
+        )
 
         if len(chunks) <= 1:
             return [doc]
 
         docs: List[NormalizedDocument] = []
+        strategy = "explicit" if options.max_chars else "soft"
         for index, chunk in enumerate(chunks):
             sub_meta = dict(doc.metadata)
             sub_meta["chunk_index"] = index
             sub_meta["chunk_total"] = len(chunks)
+            sub_meta["chunk_char_count"] = len(chunk)
+            sub_meta["chunk_strategy"] = strategy
             docs.append(NormalizedDocument(
                 id=f"{doc.id}:part{index + 1}",
                 source_file=doc.source_file,
@@ -1077,6 +1144,107 @@ class GraphRAGExporter:
                 metadata=sub_meta,
             ))
         return docs
+
+    def _resolve_chunk_limit(
+        self,
+        doc: NormalizedDocument,
+        options: ExportOptions,
+    ) -> Optional[int]:
+        """计算文档拆分阈值。"""
+        if options.max_chars:
+            return max(200, options.max_chars)
+
+        if doc.metadata.get("doc_unit") != "section":
+            return None
+
+        soft_limit = max(400, options.soft_max_chars)
+        content_length = len((doc.content or "").strip())
+        if content_length <= int(soft_limit * self._SOFT_CHUNK_TRIGGER_FACTOR):
+            return None
+
+        return soft_limit
+
+    def _build_chunk_units(self, content: str, max_chars: int) -> List[str]:
+        """将正文按段落/句子拆为更稳定的切分单元。"""
+        paragraphs = [
+            para.strip()
+            for para in re.split(r"\n{2,}", content or "")
+            if para.strip()
+        ]
+        if not paragraphs:
+            return []
+
+        units: List[str] = []
+        for para in paragraphs:
+            if len(para) <= max_chars:
+                units.append(para)
+                continue
+            units.extend(self._split_oversized_text(para, max_chars))
+        return units
+
+    def _split_oversized_text(self, text: str, max_chars: int) -> List[str]:
+        """对超长段落继续按句子、分句或硬切分。"""
+        for splitter in (self._SENTENCE_SPLIT_RE, self._CLAUSE_SPLIT_RE):
+            parts = [
+                part.strip()
+                for part in splitter.split(text)
+                if part and part.strip()
+            ]
+            if len(parts) <= 1:
+                continue
+
+            chunks: List[str] = []
+            current = ""
+            for part in parts:
+                if current and len(current) + len(part) > max_chars:
+                    chunks.append(current.strip())
+                    current = part
+                else:
+                    current += part
+            if current.strip():
+                chunks.append(current.strip())
+
+            if all(len(chunk) <= max_chars for chunk in chunks):
+                return chunks
+
+        return [
+            text[start:start + max_chars].strip()
+            for start in range(0, len(text), max_chars)
+            if text[start:start + max_chars].strip()
+        ]
+
+    @staticmethod
+    def _pack_chunk_units(
+        units: List[str],
+        max_chars: int,
+        min_chunk_chars: int,
+    ) -> List[str]:
+        """将切分单元打包为最终 chunk，尽量避免过短尾块。"""
+        if not units:
+            return []
+
+        chunks: List[str] = []
+        current: List[str] = []
+        current_len = 0
+
+        for unit in units:
+            unit_len = len(unit) + (2 if current else 0)
+            if current and current_len + unit_len > max_chars and current_len >= min_chunk_chars:
+                chunks.append("\n\n".join(current))
+                current = [unit]
+                current_len = len(unit)
+            else:
+                current.append(unit)
+                current_len += unit_len
+
+        if current:
+            tail = "\n\n".join(current)
+            if chunks and len(tail) < min_chunk_chars:
+                chunks[-1] = f"{chunks[-1]}\n\n{tail}".strip()
+            else:
+                chunks.append(tail)
+
+        return chunks
 
     # -------------------- JSON 输出 --------------------
 
