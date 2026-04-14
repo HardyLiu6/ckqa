@@ -1,0 +1,470 @@
+{
+  "schema_version": "v1",
+  "domain": "course_qa",
+  "scenario": "面向课程的混合式问答系统设计与实现",
+  "design_principles": [
+    "只抽取服务于课程问答、知识建图和教学评测的课程领域实体",
+    "默认以课程内边界为主，不在当前版本中跨课程自动合并同名实体",
+    "优先保留教学结构、知识对象、学习活动和工具平台四类实体"
+  ],
+  "entity_type_order": [
+    "Course",
+    "Chapter",
+    "Section",
+    "KnowledgePoint",
+    "Concept",
+    "Term",
+    "FormulaOrDefinition",
+    "AlgorithmOrMethod",
+    "Experiment",
+    "Assignment",
+    "ToolOrPlatform"
+  ],
+  "entity_types": {
+    "Course": {
+      "label_zh": "课程",
+      "category": "curriculum_root",
+      "identity_scope": "global",
+      "description": "完整课程或稳定课程实例，是后续章节、知识点、实验和作业的顶层教学对象。",
+      "canonical_name_rule": "优先使用课程正式名称；若文本中缺失课程正式名称，可退化为 course_id，但不要把学期、班级、通知标题当作课程名。",
+      "preferred_context_fields": [
+        "course_id",
+        "document_type",
+        "source_file"
+      ],
+      "extract_from": [
+        "syllabus",
+        "slides",
+        "textbook",
+        "notes",
+        "lab",
+        "exam",
+        "reference"
+      ],
+      "positive_signals": [
+        "课程名称",
+        "课程简介",
+        "课程目标",
+        "课程安排",
+        "course_id"
+      ],
+      "negative_signals": [
+        "任课教师姓名",
+        "学期批次",
+        "课程通知标题",
+        "教室信息"
+      ],
+      "examples": [
+        "操作系统",
+        "数据结构",
+        "计算机网络"
+      ]
+    },
+    "Chapter": {
+      "label_zh": "章节",
+      "category": "course_structure",
+      "identity_scope": "course",
+      "description": "课程中的章、单元、模块级结构化标题，通常对应 heading_level=1 的稳定教学单元。",
+      "canonical_name_rule": "保留原始章节编号和标题语义，例如“第二章 进程的描述与控制”；不要去掉有意义的编号。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "heading_path_text",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "syllabus"
+      ],
+      "positive_signals": [
+        "第x章",
+        "单元",
+        "模块",
+        "heading_level=1"
+      ],
+      "negative_signals": [
+        "目录页伪标题",
+        "版权页栏目",
+        "图号",
+        "表号"
+      ],
+      "examples": [
+        "第二章 进程的描述与控制",
+        "第三章 存储器管理"
+      ]
+    },
+    "Section": {
+      "label_zh": "节",
+      "category": "course_structure",
+      "identity_scope": "course",
+      "description": "章以下的结构化教学单元，统一覆盖节、小节、专题、实验步骤、项目阶段等非章级标题；三级及以上标题仍归入 Section。",
+      "canonical_name_rule": "保留原始编号和标题；若同名节在不同章出现，必须结合 heading_path 或上级结构区分。",
+      "preferred_context_fields": [
+        "course_id",
+        "section",
+        "subsection",
+        "heading_path_text",
+        "heading_level",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "syllabus",
+        "exam"
+      ],
+      "positive_signals": [
+        "x.x 标题",
+        "x.x.x 标题",
+        "专题",
+        "实验一",
+        "heading_level>=2"
+      ],
+      "negative_signals": [
+        "目录页伪标题",
+        "图题",
+        "表题",
+        "无内容的装饰性小标题"
+      ],
+      "examples": [
+        "2.1 前趋图和程序执行",
+        "2.1.1 进程的定义",
+        "实验一 进程调度"
+      ]
+    },
+    "KnowledgePoint": {
+      "label_zh": "知识点",
+      "category": "learning_object",
+      "identity_scope": "course",
+      "description": "课程中需要掌握、理解、记忆或考核的稳定知识单元，通常能直接成为问答或考核对象。",
+      "canonical_name_rule": "使用最短且稳定的教学名词短语，不使用完整陈述句；若它只是某个更大概念的考点，可保留课程内常用表述。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "exam",
+        "syllabus"
+      ],
+      "positive_signals": [
+        "学习目标",
+        "重点",
+        "考点",
+        "本节介绍",
+        "实验目标"
+      ],
+      "negative_signals": [
+        "本章内容",
+        "相关知识",
+        "如下所示",
+        "基本要求"
+      ],
+      "examples": [
+        "进程调度",
+        "死锁避免",
+        "页表地址转换"
+      ]
+    },
+    "Concept": {
+      "label_zh": "概念",
+      "category": "knowledge_content",
+      "identity_scope": "course",
+      "description": "可被独立解释、比较和问答的理论概念、机制或对象。",
+      "canonical_name_rule": "优先使用课程正文中的标准概念名称；如果一个对象既像术语又像概念，优先归为 Concept，除非它主要是缩写或符号。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "exam",
+        "reference"
+      ],
+      "positive_signals": [
+        "定义",
+        "概念",
+        "机制",
+        "原理",
+        "对象"
+      ],
+      "negative_signals": [
+        "泛化形容词",
+        "无语义短语",
+        "临时示例标题"
+      ],
+      "examples": [
+        "进程",
+        "线程",
+        "临界区",
+        "虚拟内存"
+      ]
+    },
+    "Term": {
+      "label_zh": "术语",
+      "category": "knowledge_content",
+      "identity_scope": "course",
+      "description": "主要承担命名、缩写、符号或标准术语作用的实体，适合支撑术语检索、别名映射和缩写归一化。",
+      "canonical_name_rule": "优先使用正文中的全称；若课程内更常用缩写，可用全称作为 canonical name，并把缩写视为别名。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "exam",
+        "reference"
+      ],
+      "positive_signals": [
+        "缩写",
+        "英文全称/简称",
+        "专有术语",
+        "符号约定"
+      ],
+      "negative_signals": [
+        "常见停用短语",
+        "纯数字",
+        "单字符公式碎片"
+      ],
+      "examples": [
+        "PCB",
+        "TLB",
+        "周转时间",
+        "时间片"
+      ]
+    },
+    "FormulaOrDefinition": {
+      "label_zh": "公式或定义",
+      "category": "formal_knowledge",
+      "identity_scope": "course",
+      "description": "具有稳定名称的定义、公式、定律、判定条件或符号化表达，用于支撑定义问答与公式检索。",
+      "canonical_name_rule": "优先使用“X定义”“X公式”“X定律”这类可复用名称；不要把无标题、无语义的孤立公式片段直接当实体名。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "exam",
+        "reference"
+      ],
+      "positive_signals": [
+        "定义为",
+        "公式",
+        "定律",
+        "判定条件",
+        "表示为"
+      ],
+      "negative_signals": [
+        "孤立数学符号",
+        "OCR 残片",
+        "图中坐标刻度"
+      ],
+      "examples": [
+        "进程定义",
+        "周转时间公式",
+        "响应比公式",
+        "Amdahl 定律"
+      ]
+    },
+    "AlgorithmOrMethod": {
+      "label_zh": "算法或方法",
+      "category": "procedural_knowledge",
+      "identity_scope": "course",
+      "description": "具有明确步骤、策略或机制的算法、方法、协议、处理流程或实现策略。",
+      "canonical_name_rule": "保留课程中通用的算法/方法名称；若存在中英文或全称/简称，使用课程内最稳定的标准名。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "textbook",
+        "slides",
+        "notes",
+        "lab",
+        "exam",
+        "reference"
+      ],
+      "positive_signals": [
+        "算法",
+        "方法",
+        "策略",
+        "步骤",
+        "机制"
+      ],
+      "negative_signals": [
+        "一般性动作动词",
+        "课堂组织用语",
+        "未命名过程描述"
+      ],
+      "examples": [
+        "FCFS 调度算法",
+        "银行家算法",
+        "LRU 页面置换算法",
+        "PV 同步方法"
+      ]
+    },
+    "Experiment": {
+      "label_zh": "实验",
+      "category": "learning_activity",
+      "identity_scope": "course",
+      "description": "课程中的实验、上机、课程项目、综合实践或验证任务。",
+      "canonical_name_rule": "优先使用实验正式标题；若只有编号，保留“实验x + 标题”组合，不单独使用空泛的“实验一”。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "document_type",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "lab",
+        "slides",
+        "notes",
+        "syllabus",
+        "exam"
+      ],
+      "positive_signals": [
+        "实验目的",
+        "实验内容",
+        "上机",
+        "课程项目",
+        "实验步骤"
+      ],
+      "negative_signals": [
+        "实验通知",
+        "签到提醒",
+        "课后随手练习"
+      ],
+      "examples": [
+        "进程调度实验",
+        "生产者-消费者同步实验",
+        "文件系统设计实验"
+      ]
+    },
+    "Assignment": {
+      "label_zh": "作业",
+      "category": "learning_activity",
+      "identity_scope": "course",
+      "description": "作业、习题、报告、测验、考试题组或用于评估学习结果的任务集合。",
+      "canonical_name_rule": "优先使用任务正式标题；如果只有编号，至少保留“作业x”“实验报告x”“期末题组”这类稳定标识。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "document_type",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "exam",
+        "slides",
+        "notes",
+        "lab",
+        "syllabus"
+      ],
+      "positive_signals": [
+        "作业",
+        "习题",
+        "报告",
+        "测验",
+        "考试题"
+      ],
+      "negative_signals": [
+        "截止时间提醒",
+        "提交公告",
+        "群通知",
+        "评分说明碎片"
+      ],
+      "examples": [
+        "作业 1",
+        "实验报告",
+        "期末复习题"
+      ]
+    },
+    "ToolOrPlatform": {
+      "label_zh": "工具或平台",
+      "category": "resource",
+      "identity_scope": "course",
+      "description": "用于教学、实验、实现或演示的软件、平台、开发环境、框架、硬件平台或数据处理工具。",
+      "canonical_name_rule": "保留课程中稳定使用的工具/平台名称；版本号仅在确有区分意义时并入名称。",
+      "preferred_context_fields": [
+        "course_id",
+        "chapter",
+        "section",
+        "subsection",
+        "document_type",
+        "page_start",
+        "page_end"
+      ],
+      "extract_from": [
+        "lab",
+        "slides",
+        "notes",
+        "reference",
+        "textbook"
+      ],
+      "positive_signals": [
+        "平台",
+        "环境",
+        "工具",
+        "软件",
+        "框架"
+      ],
+      "negative_signals": [
+        "普通文件名",
+        "下载链接文本",
+        "无说明的命令残片"
+      ],
+      "examples": [
+        "Linux",
+        "VMware",
+        "GCC",
+        "GraphRAG",
+        "MinerU"
+      ]
+    }
+  }
+}

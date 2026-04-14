@@ -1,0 +1,323 @@
+{
+  "schema_version": "v1",
+  "domain": "course_qa",
+  "scenario": "面向课程的混合式问答系统设计与实现",
+  "design_principles": [
+    "关系优先表达课程结构、知识依赖、教学活动和评测闭环",
+    "优先使用最具体的关系类型，避免把所有共现都降级为 related_to",
+    "弱位置关系 appears_in 只用于补充定位，不替代更强语义关系"
+  ],
+  "relation_type_order": [
+    "contains",
+    "belongs_to",
+    "depends_on",
+    "prerequisite_of",
+    "related_to",
+    "defined_by",
+    "applied_in",
+    "implemented_by",
+    "evaluated_by",
+    "appears_in"
+  ],
+  "relation_types": {
+    "contains": {
+      "label_zh": "包含",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": "belongs_to",
+      "can_be_derived": false,
+      "description": "表示上级教学单元或结构化容器包含下级单元、知识对象或学习活动。",
+      "source_types": [
+        "Course",
+        "Chapter",
+        "Section"
+      ],
+      "target_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment",
+        "ToolOrPlatform"
+      ],
+      "extraction_hint": "用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明确的容器关系。",
+      "examples": [
+        "Course -> Chapter",
+        "Chapter -> Section",
+        "Section -> KnowledgePoint",
+        "Section -> Section"
+      ]
+    },
+    "belongs_to": {
+      "label_zh": "属于",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": "contains",
+      "can_be_derived": true,
+      "description": "表示实体从属于某个课程结构单元或教学容器，是 contains 的反向表达。",
+      "source_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment",
+        "ToolOrPlatform"
+      ],
+      "target_types": [
+        "Course",
+        "Chapter",
+        "Section"
+      ],
+      "extraction_hint": "当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；后续脚本也可以由 contains 自动反推。",
+      "examples": [
+        "Section -> Chapter",
+        "KnowledgePoint -> Section",
+        "Assignment -> Course"
+      ]
+    },
+    "depends_on": {
+      "label_zh": "依赖于",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": "prerequisite_of",
+      "can_be_derived": false,
+      "description": "表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。",
+      "source_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment"
+      ],
+      "target_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment"
+      ],
+      "extraction_hint": "用于“X 的理解/实现/推导依赖 Y”“完成该实验需要先掌握 Y”这类依赖表达。",
+      "examples": [
+        "页面置换算法 depends_on 页面访问局部性",
+        "进程同步 depends_on 临界区概念"
+      ]
+    },
+    "prerequisite_of": {
+      "label_zh": "先修于",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": "depends_on",
+      "can_be_derived": true,
+      "description": "表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。",
+      "source_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment"
+      ],
+      "target_types": [
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment"
+      ],
+      "extraction_hint": "用于课程安排、教学目标、实验说明中的先修关系；若文本只给出 depends_on，也可由脚本在后处理阶段反推。",
+      "examples": [
+        "进程概念 prerequisite_of 进程同步",
+        "环境配置 prerequisite_of 进程调度实验"
+      ]
+    },
+    "related_to": {
+      "label_zh": "相关",
+      "directed": false,
+      "symmetric": true,
+      "inverse_of": "related_to",
+      "can_be_derived": false,
+      "description": "表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。",
+      "source_types": [
+        "Course",
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment",
+        "ToolOrPlatform"
+      ],
+      "target_types": [
+        "Course",
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment",
+        "ToolOrPlatform"
+      ],
+      "extraction_hint": "只有在 contains、defined_by、depends_on、applied_in、implemented_by、evaluated_by 等都不合适时才使用。",
+      "examples": [
+        "死锁处理 related_to 资源分配图",
+        "虚拟内存 related_to 页面置换算法"
+      ]
+    },
+    "defined_by": {
+      "label_zh": "由…定义",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": null,
+      "can_be_derived": false,
+      "description": "表示概念、术语或知识点由某一定义、公式、定律或判定条件来界定。",
+      "source_types": [
+        "KnowledgePoint",
+        "Concept",
+        "Term"
+      ],
+      "target_types": [
+        "FormulaOrDefinition"
+      ],
+      "extraction_hint": "用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系。",
+      "examples": [
+        "进程 defined_by 进程定义",
+        "周转时间 defined_by 周转时间公式"
+      ]
+    },
+    "applied_in": {
+      "label_zh": "应用于",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": null,
+      "can_be_derived": false,
+      "description": "表示知识、方法、公式或算法被用于某实验、作业、章节讲解或平台操作场景。",
+      "source_types": [
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod"
+      ],
+      "target_types": [
+        "Section",
+        "Experiment",
+        "Assignment",
+        "ToolOrPlatform"
+      ],
+      "extraction_hint": "用于“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类场景化关系。",
+      "examples": [
+        "PV 同步方法 applied_in 生产者-消费者实验",
+        "周转时间公式 applied_in 调度算法作业"
+      ]
+    },
+    "implemented_by": {
+      "label_zh": "由…实现",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": null,
+      "can_be_derived": false,
+      "description": "表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。",
+      "source_types": [
+        "KnowledgePoint",
+        "Concept",
+        "AlgorithmOrMethod",
+        "Experiment",
+        "Assignment"
+      ],
+      "target_types": [
+        "AlgorithmOrMethod",
+        "ToolOrPlatform"
+      ],
+      "extraction_hint": "用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”这类实现关系。",
+      "examples": [
+        "进程同步 implemented_by PV 同步方法",
+        "页面置换实验 implemented_by Python 模拟器"
+      ]
+    },
+    "evaluated_by": {
+      "label_zh": "由…评估",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": null,
+      "can_be_derived": false,
+      "description": "表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。",
+      "source_types": [
+        "Course",
+        "Chapter",
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "AlgorithmOrMethod",
+        "Experiment"
+      ],
+      "target_types": [
+        "Assignment",
+        "Experiment"
+      ],
+      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。",
+      "examples": [
+        "死锁处理 evaluated_by 作业 3",
+        "文件系统概念 evaluated_by 文件系统设计实验"
+      ]
+    },
+    "appears_in": {
+      "label_zh": "出现于",
+      "directed": true,
+      "symmetric": false,
+      "inverse_of": null,
+      "can_be_derived": true,
+      "description": "表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。",
+      "source_types": [
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "ToolOrPlatform",
+        "Experiment",
+        "Assignment"
+      ],
+      "target_types": [
+        "Course",
+        "Chapter",
+        "Section",
+        "Experiment",
+        "Assignment"
+      ],
+      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；若能判断 contains、applied_in、evaluated_by 等关系，则优先使用更强关系。",
+      "examples": [
+        "TLB appears_in 第三章 存储器管理",
+        "银行家算法 appears_in 作业 2"
+      ]
+    }
+  }
+}
