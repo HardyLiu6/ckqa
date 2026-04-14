@@ -69,7 +69,8 @@ def _install_optional_dependency_stubs() -> None:
 _install_optional_dependency_stubs()
 
 from block_model import parse_content_list
-from graphrag_exporter import ExportOptions, GraphRAGDocument, GraphRAGExporter
+from graphrag_exporter import ExportOptions, GraphRAGExporter
+from normalized_document import NormalizedDocument, validate_normalized_document_dict
 from text_cleaner import clean_blocks
 
 
@@ -129,6 +130,32 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertTrue(all(doc.title.startswith("os-") for doc in docs))
         self.assertTrue(any("表2-1" in doc.text for doc in docs))
 
+    def test_fixture_can_generate_normalized_section_docs(self):
+        content_list = _load_json_fixture("content_list_with_toc.json")
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="计算机操作系统.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=3,
+            source_file="计算机操作系统.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        self.assertGreaterEqual(len(docs), 2)
+        self.assertTrue(all(isinstance(doc, NormalizedDocument) for doc in docs))
+        self.assertTrue(all(validate_normalized_document_dict(doc.to_dict()) == [] for doc in docs))
+        self.assertTrue(any(doc.section == "2.1 前趋图和程序执行" for doc in docs))
+
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""
@@ -164,14 +191,11 @@ class TestFutureNormalizationContracts(unittest.TestCase):
             ],
         )
 
-    @unittest.expectedFailure
-    def test_graphrag_projection_should_eventually_include_standard_fields(self):
+    def test_graphrag_projection_includes_standard_fields(self):
         normalized_payload = _load_json_fixture("normalized_doc_v1.json")
-        doc = GraphRAGDocument(
-            title="os-2.1 前趋图和程序执行",
-            text=normalized_payload["content"],
-            metadata=normalized_payload,
-        )
+        normalized_doc = NormalizedDocument.from_dict(normalized_payload)
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        doc = exporter._project_normalized_document(normalized_doc)
 
         payload = doc.to_graphrag_dict()
 
@@ -180,3 +204,5 @@ class TestFutureNormalizationContracts(unittest.TestCase):
         self.assertIn("section", payload)
         self.assertIn("subsection", payload)
         self.assertIn("metadata", payload)
+        self.assertEqual(payload["document_type"], "textbook")
+        self.assertEqual(payload["page_start"], 3)

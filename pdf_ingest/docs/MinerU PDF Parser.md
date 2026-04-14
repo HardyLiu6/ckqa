@@ -239,6 +239,7 @@ course-artifacts/               # 解析结果存储桶
 │   │   └── full.md
 │   └── graphrag/
 │       └── pdf_3/
+│           ├── normalized_docs.json
 │           ├── section_docs.json
 │           └── page_docs.json
 └── ...
