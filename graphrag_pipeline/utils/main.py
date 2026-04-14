@@ -15,6 +15,7 @@ import time
 import uuid
 import json
 import re
+import subprocess
 import pandas as pd
 import logging
 from fastapi import FastAPI, HTTPException
@@ -23,34 +24,48 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Union
 from contextlib import asynccontextmanager
+from pathlib import Path
 import uvicorn
 
-# GraphRAG 2.7.0 导入
-from graphrag.config.enums import ModelType
-from graphrag.config.models.language_model_config import LanguageModelConfig
-from graphrag.config.models.vector_store_config import VectorStoreConfig
-from graphrag.language_model.manager import ModelManager
-from graphrag.tokenizer.get_tokenizer import get_tokenizer
-from graphrag.query.context_builder.entity_extraction import EntityVectorStoreKey
-from graphrag.query.indexer_adapters import (
-    read_indexer_covariates,
-    read_indexer_entities,
-    read_indexer_relationships,
-    read_indexer_reports,
-    read_indexer_text_units,
-    read_indexer_communities,
-)
-from graphrag.query.question_gen.local_gen import LocalQuestionGen
-from graphrag.query.structured_search.local_search.mixed_context import LocalSearchMixedContext
-from graphrag.query.structured_search.local_search.search import LocalSearch
-from graphrag.query.structured_search.global_search.community_context import GlobalCommunityContext
-from graphrag.query.structured_search.global_search.search import GlobalSearch
-from graphrag.vector_stores.lancedb import LanceDBVectorStore
-from graphrag.config.models.vector_store_schema_config import VectorStoreSchemaConfig
+# GraphRAG 内部导入（2.x 可用；3.x 可能变化）
+GRAPHRAG_INTERNALS_AVAILABLE = True
+GRAPHRAG_IMPORT_ERROR = None
+
+try:
+    from graphrag.config.enums import ModelType
+    from graphrag.config.models.language_model_config import LanguageModelConfig
+    from graphrag.config.models.vector_store_config import VectorStoreConfig
+    from graphrag.language_model.manager import ModelManager
+    from graphrag.tokenizer.get_tokenizer import get_tokenizer
+    from graphrag.query.context_builder.entity_extraction import EntityVectorStoreKey
+    from graphrag.query.indexer_adapters import (
+        read_indexer_covariates,
+        read_indexer_entities,
+        read_indexer_relationships,
+        read_indexer_reports,
+        read_indexer_text_units,
+        read_indexer_communities,
+    )
+    from graphrag.query.question_gen.local_gen import LocalQuestionGen
+    from graphrag.query.structured_search.local_search.mixed_context import LocalSearchMixedContext
+    from graphrag.query.structured_search.local_search.search import LocalSearch
+    from graphrag.query.structured_search.global_search.community_context import GlobalCommunityContext
+    from graphrag.query.structured_search.global_search.search import GlobalSearch
+    from graphrag.vector_stores.lancedb import LanceDBVectorStore
+    from graphrag.config.models.vector_store_schema_config import VectorStoreSchemaConfig
+except Exception as exc:
+    GRAPHRAG_INTERNALS_AVAILABLE = False
+    GRAPHRAG_IMPORT_ERROR = exc
 
 # 设置日志配置
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+if not GRAPHRAG_INTERNALS_AVAILABLE:
+    logger.warning(
+        "GraphRAG 内部 API 导入失败，将使用 CLI 查询兼容模式。错误: %s",
+        GRAPHRAG_IMPORT_ERROR,
+    )
 
 
 # ==================== 配置区域 ====================
@@ -112,6 +127,45 @@ EMBEDDING_MODEL = "text-embedding-v1"
 local_search_engine = None
 global_search_engine = None
 question_generator = None
+
+
+def get_project_root() -> Path:
+    """返回 graphrag_pipeline 项目根目录。"""
+    return Path(__file__).resolve().parents[1]
+
+
+async def run_graphrag_query_cli(method: str, prompt: str) -> str:
+    """通过 graphrag CLI 执行查询，避免依赖易变的内部 Python API。"""
+    root = get_project_root()
+    cmd = [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        method,
+        "--query",
+        prompt,
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        cwd=str(root),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        err = stderr.decode("utf-8", errors="ignore").strip()
+        raise RuntimeError(f"graphrag query 执行失败(method={method}): {err}")
+
+    output = stdout.decode("utf-8", errors="ignore").strip()
+    if not output:
+        return ""
+
+    lines = [line for line in output.splitlines() if line.strip()]
+    return "\n".join(lines)
 
 
 # Pydantic 模型定义
@@ -463,6 +517,12 @@ async def lifespan(app: FastAPI):
     """
     global local_search_engine, global_search_engine, question_generator
     
+    if not GRAPHRAG_INTERNALS_AVAILABLE:
+        logger.info("GraphRAG CLI 兼容模式启用：跳过内部搜索引擎初始化")
+        yield
+        logger.info("正在关闭...")
+        return
+
     try:
         logger.info("正在初始化搜索引擎 (GraphRAG 2.7.0)...")
         
@@ -501,7 +561,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GraphRAG API Server",
-    description="基于 Microsoft GraphRAG 2.7.0 的知识图谱问答服务",
+    description="基于 Microsoft GraphRAG 的知识图谱问答服务（支持 3.x CLI 兼容模式）",
     version="2.0.1",
     lifespan=lifespan
 )
@@ -520,17 +580,22 @@ async def full_model_search(prompt: str):
     """
     执行全模型搜索
     """
-    if not local_search_engine or not global_search_engine:
-        raise ValueError("搜索引擎未初始化")
-    
-    local_result = await local_search_engine.search(prompt)
-    global_result = await global_search_engine.search(prompt)
-    
+    if GRAPHRAG_INTERNALS_AVAILABLE:
+        if not local_search_engine or not global_search_engine:
+            raise ValueError("搜索引擎未初始化")
+        local_result = await local_search_engine.search(prompt)
+        global_result = await global_search_engine.search(prompt)
+        local_text = format_response(local_result.response)
+        global_text = format_response(global_result.response)
+    else:
+        local_text = format_response(await run_graphrag_query_cli("local", prompt))
+        global_text = format_response(await run_graphrag_query_cli("global", prompt))
+
     formatted_result = "# 综合搜索结果:\n\n"
     formatted_result += "## 本地检索结果:\n"
-    formatted_result += format_response(local_result.response) + "\n\n"
+    formatted_result += local_text + "\n\n"
     formatted_result += "## 全局检索结果:\n"
-    formatted_result += format_response(global_result.response) + "\n\n"
+    formatted_result += global_text + "\n\n"
     return formatted_result
 
 
@@ -539,7 +604,7 @@ async def chat_completions(request: ChatCompletionRequest):
     """
     OpenAI 兼容的聊天完成接口
     """
-    if not local_search_engine or not global_search_engine:
+    if GRAPHRAG_INTERNALS_AVAILABLE and (not local_search_engine or not global_search_engine):
         logger.error("搜索引擎未初始化")
         raise HTTPException(status_code=500, detail="搜索引擎未初始化")
 
@@ -549,14 +614,20 @@ async def chat_completions(request: ChatCompletionRequest):
         logger.info(f"处理提示: {prompt[:100]}...")
 
         # 根据模型选择搜索方法
-        if request.model == "graphrag-global-search:latest":
-            result = await global_search_engine.search(prompt)
-            formatted_response = format_response(result.response)
-        elif request.model == "full-model:latest":
+        if request.model == "full-model:latest":
             formatted_response = await full_model_search(prompt)
+        elif request.model == "graphrag-global-search:latest":
+            if GRAPHRAG_INTERNALS_AVAILABLE:
+                result = await global_search_engine.search(prompt)
+                formatted_response = format_response(result.response)
+            else:
+                formatted_response = format_response(await run_graphrag_query_cli("global", prompt))
         else:  # 默认本地搜索
-            result = await local_search_engine.search(prompt)
-            formatted_response = format_response(result.response)
+            if GRAPHRAG_INTERNALS_AVAILABLE:
+                result = await local_search_engine.search(prompt)
+                formatted_response = format_response(result.response)
+            else:
+                formatted_response = format_response(await run_graphrag_query_cli("local", prompt))
 
         logger.info(f"搜索完成，响应长度: {len(formatted_response)}")
 
@@ -648,9 +719,10 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "2.0.1",
-        "graphrag_version": "2.7.0",
-        "local_search_ready": local_search_engine is not None,
-        "global_search_ready": global_search_engine is not None,
+        "graphrag_version_target": "3.0.9",
+        "compat_mode": "internal_api" if GRAPHRAG_INTERNALS_AVAILABLE else "cli_query",
+        "local_search_ready": (local_search_engine is not None) if GRAPHRAG_INTERNALS_AVAILABLE else True,
+        "global_search_ready": (global_search_engine is not None) if GRAPHRAG_INTERNALS_AVAILABLE else True,
     }
 
 

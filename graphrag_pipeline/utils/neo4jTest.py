@@ -114,8 +114,13 @@ SET d += value {.title, .text}
 CHUNK_STATEMENT = """
 MERGE (c:__Chunk__ {id: value.id})
 SET c += value {.text, .n_tokens}
-WITH c, value
-UNWIND value.document_ids AS document
+WITH c, value,
+CASE
+    WHEN value.document_ids IS NOT NULL THEN value.document_ids
+    WHEN value.document_id IS NOT NULL THEN [value.document_id]
+    ELSE []
+END AS document_ids
+UNWIND document_ids AS document
 MATCH (d:__Document__ {id: document})
 MERGE (c)-[:PART_OF]->(d)
 """
@@ -373,10 +378,24 @@ def import_all_data(importer: GraphRAGImporter, data_folder: str) -> dict:
     # 步骤 3: 导入文本块
     logger.info("-" * 50)
     if filepath := check_parquet_file(data_folder, "text_units.parquet"):
-        df = pd.read_parquet(filepath, columns=[
-            "id", "text", "n_tokens", "document_ids", 
+        df = pd.read_parquet(filepath)
+
+        if "document_ids" not in df.columns and "document_id" in df.columns:
+            df["document_ids"] = df["document_id"].apply(
+                lambda v: [v] if pd.notna(v) else []
+            )
+        elif "document_ids" not in df.columns:
+            df["document_ids"] = [[] for _ in range(len(df))]
+
+        for column in ["entity_ids", "relationship_ids", "covariate_ids"]:
+            if column not in df.columns:
+                df[column] = [[] for _ in range(len(df))]
+
+        needed_columns = [
+            "id", "text", "n_tokens", "document_ids",
             "entity_ids", "relationship_ids", "covariate_ids"
-        ])
+        ]
+        df = df[needed_columns]
         stats["文本块"] = importer.batched_import(CHUNK_STATEMENT, df, "文本块")
     
     # 步骤 4: 导入实体
