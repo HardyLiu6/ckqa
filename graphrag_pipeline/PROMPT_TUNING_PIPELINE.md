@@ -1,0 +1,71 @@
+# GraphRAG 自动化提示词调优流水线
+
+本文档描述 `graphrag_pipeline/` 内新增的“GraphRAG 自动化提示词调优流水线”基础结构。当前阶段只初始化目录与职责边界，不实现任何业务脚本。
+
+## 作用
+
+这条流水线用于把 GraphRAG 提示词迭代从“手工改 prompt、手工比结果”整理为可重复执行的实验流程，后续可逐步支持：
+
+1. 候选提示词管理
+2. 抽样数据与评测集管理
+3. 信息抽取质量评估
+4. 问答效果评估
+5. 评估报告沉淀与最终 prompt 固化
+
+## 输入
+
+当前规划中的主要输入包括：
+
+1. `pdf_ingest` 导出的课程标准化文档或 GraphRAG 输入 JSON
+2. GraphRAG 当前正在使用的 prompt 模板
+3. 人工整理的 prompt tuning 样本
+4. 面向抽取或问答的评测集、参考答案与评分配置
+5. 评测所需的 schema 说明文件
+
+## 输出
+
+后续流水线的主要输出规划为：
+
+1. 候选 prompt 版本及其元信息
+2. 已验证的最终 prompt 集合
+3. 抽取评测结果
+4. QA 评测结果
+5. 汇总报告、对比报表与推荐结论
+
+## 目录职责
+
+```text
+graphrag_pipeline/
+├── config/schema/              # 调优样本、评测配置、结果汇总等 schema 占位
+├── data/prompt_tuning_samples/ # 人工整理的调优样本
+├── data/eval/                  # 抽取评测、QA 评测数据集
+├── prompts/candidates/         # 候选 prompt 模板
+├── prompts/final/              # 经验证后准备固化的 prompt 模板
+├── results/extraction_eval/    # 抽取质量评测输出
+├── results/qa_eval/            # 问答效果评测输出
+├── results/reports/            # 汇总报告、对比结论、可读化产物
+└── scripts/                    # 未来用于编排调优流水线的脚本
+```
+
+## 后续脚本职责建议
+
+当前 `scripts/` 目录只是占位，后续最适合逐步补齐以下脚本：
+
+1. `prepare_samples`
+   - 从 `normalized_docs.json`、`section_docs.json` 或人工样本中整理调优输入。
+2. `build_prompt_candidates`
+   - 把当前生产 prompt 与候选修改版本规范化写入 `prompts/candidates/`。
+3. `run_extraction_eval`
+   - 对 `extract_graph`、`extract_claims`、`community_report_*` 等链路做结构化评测。
+4. `run_qa_eval`
+   - 对 local/global/full 三类问答模式做效果对比。
+5. `summarize_results`
+   - 聚合多轮实验结果，生成 `results/reports/` 下的汇总报告。
+6. `promote_prompt`
+   - 将通过评测的候选 prompt 提升到 `prompts/final/`，并为后续人工接入生产配置做准备。
+
+## 当前约束
+
+1. 现阶段不改动 `settings.yaml`、现有生产 prompt 或 GraphRAG 主流程。
+2. 现阶段不新增任何业务执行逻辑，只保留结构与职责说明。
+3. 现有 `prompts/`、`reports/`、`utils/` 继续按原用途工作；新目录仅为后续自动化调优预留。
