@@ -39,7 +39,7 @@ input:
 
 chunking:
   type: tokens
-  size: 800
+  size: 1000
   overlap: 100
   encoding_model: o200k_base
   prepend_metadata:
