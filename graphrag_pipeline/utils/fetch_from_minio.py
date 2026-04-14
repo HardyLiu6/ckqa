@@ -10,9 +10,9 @@
 - 新版本 pdf_ingest 直接产出 `section_docs.json` / `page_docs.json`
 - 若 MinIO 中仍是历史 `*.jsonl` 文件，本脚本会自动转换为 JSON 数组
 
-同时会确保 GraphRAG 需要的 metadata 字段位于顶层，
-使 GraphRAG 的 metadata 收集功能可以直接读取 page_start、
-page_end、section_level 等信息。
+同时会尽量保留 pdf_ingest 导出的标准字段，并确保 GraphRAG
+需要的 metadata 字段位于顶层，使 GraphRAG 的 metadata
+收集功能可以直接读取 page_start、page_end、section_level 等信息。
 
 用法:
     python utils/fetch_from_minio.py <course_id> [--clean] [--input-dir input]
@@ -64,12 +64,56 @@ def get_bucket() -> str:
 
 # 需要从嵌套 metadata 中提升到顶层的字段
 _METADATA_FIELDS_TO_FLATTEN = [
+    "id",
     "course_id",
     "source_file",
+    "document_type",
+    "chapter",
+    "section",
+    "subsection",
+    "heading_level",
+    "heading_path",
+    "doc_unit",
     "section_level",
     "page_start",
     "page_end",
+    "page_no",
+    "has_table",
+    "has_equation",
+    "has_image",
+    "table_count",
+    "equation_count",
+    "image_count",
+    "chunk_index",
+    "chunk_total",
+    "chunk_char_count",
+    "chunk_strategy",
 ]
+
+
+def _build_heading_path_text(value) -> str:
+    """将 heading_path 归一化为便于 GraphRAG 使用的文本。"""
+    if isinstance(value, list):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+        return " > ".join(parts)
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
+def _extract_primary_text(record: dict) -> str:
+    """
+    提取记录的主文本字段。
+
+    兼容两类输入：
+    1. GraphRAG 投影记录：使用 `text`
+    2. 标准文档记录：使用 `content`
+    """
+    for field in ("text", "content"):
+        value = record.get(field, "")
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
 
 
 def flatten_record(record: dict) -> dict:
@@ -103,20 +147,34 @@ def flatten_record(record: dict) -> dict:
             "page_end": 84
         }
     """
-    flat = {
-        "title": record.get("title", ""),
-        "text": record.get("text", ""),
-    }
+    # 优先保留上游已经提供的顶层字段，避免未来标准字段再次在此处丢失。
+    flat = dict(record)
+    if "title" in record:
+        flat["title"] = record.get("title", "")
+    if "text" in record:
+        flat["text"] = record.get("text", "")
 
     metadata = record.get("metadata", {})
     if isinstance(metadata, dict):
         for field in _METADATA_FIELDS_TO_FLATTEN:
-            if field in metadata:
+            if field in metadata and field not in flat:
                 flat[field] = metadata[field]
 
     for field in _METADATA_FIELDS_TO_FLATTEN:
         if field not in flat and field in record:
             flat[field] = record[field]
+
+    if "heading_path_text" not in flat:
+        heading_path = flat.get("heading_path")
+        heading_path_text = _build_heading_path_text(heading_path)
+        if heading_path_text:
+            flat["heading_path_text"] = heading_path_text
+
+    # 对标准文档保持原始 `content` 字段，同时为本地预览补一个标题。
+    if "title" not in flat:
+        derived_title = flat.get("heading_path_text", "")
+        if derived_title:
+            flat["title"] = derived_title
 
     return flat
 
@@ -315,7 +373,7 @@ def fetch_and_prepare(
                 print(f"[警告] 第 {idx} 条记录不是对象，已跳过", file=sys.stderr)
                 continue
 
-            text = record.get("text", "")
+            text = _extract_primary_text(record)
             if not text.strip():
                 print(f"[跳过] 第 {idx} 条记录 text 为空: {record.get('title', '?')}")
                 skipped += 1
@@ -335,7 +393,7 @@ def fetch_and_prepare(
                     print(f"[警告] 第 {line_no} 行 JSON 解析失败: {e}", file=sys.stderr)
                     continue
 
-                text = record.get("text", "")
+                text = _extract_primary_text(record)
                 if not text.strip():
                     print(f"[跳过] 第 {line_no} 行 text 为空: {record.get('title', '?')}")
                     skipped += 1

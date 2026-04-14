@@ -101,6 +101,19 @@ graphrag init --root .
 graphrag index --root .
 ```
 
+如果输入来自 `pdf_ingest`，建议先同步导出结果：
+
+```bash
+python utils/fetch_from_minio.py os --clean
+```
+
+当前 `fetch_from_minio.py` 会尽量保留 `pdf_ingest` 导出的标准字段，例如
+`document_type`、`chapter`、`section`、`subsection`、`heading_level`、
+`heading_path_text` 等，同时继续兼容旧版 `section_docs.json`。
+它也支持直接拉取 `normalized_docs.json` 供人工验收使用。
+
+如果你要手工验证导出质量和字段保留情况，建议同时参考 `../docs/标准化导出验证说明.md`。
+
 ### 5. 启动 API 服务
 
 ```bash
@@ -210,6 +223,20 @@ extract_graph:
 community_reports:
   max_length: 2000                # 社区报告最大长度
 ```
+
+当前配置会把以下结构化字段作为 GraphRAG metadata 收集或预置到 chunk：
+
+- `document_type`
+- `chapter`
+- `section`
+- `subsection`
+- `heading_level`
+- `heading_path_text`
+- `page_start`
+- `page_end`
+- `section_level`
+- `source_file`
+- `course_id`
 
 ## 🔧 常用命令
 

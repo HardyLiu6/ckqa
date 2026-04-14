@@ -31,8 +31,17 @@ input:
   text_column: text
   title_column: title
   metadata:
+    - id
+    - document_type
+    - chapter
+    - section
+    - subsection
+    - heading_level
+    - heading_path_text
+    - doc_unit
     - page_start
     - page_end
+    - page_no
     - section_level
     - source_file
     - course_id
@@ -43,6 +52,12 @@ chunking:
   overlap: 100
   encoding_model: o200k_base
   prepend_metadata:
+    - document_type
+    - chapter
+    - section
+    - subsection
+    - heading_level
+    - heading_path_text
     - page_start
     - page_end
     - section_level

@@ -168,3 +168,5 @@ CLAUDE.md
 
 pdf_ingest/.temp/
 
+#暂时忽略前端,避免之后回退导致前端文件丢失
+frontend

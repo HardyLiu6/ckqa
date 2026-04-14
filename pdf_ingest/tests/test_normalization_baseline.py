@@ -373,6 +373,86 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertTrue(all(doc.metadata.get("chunk_strategy") == "soft" for doc in docs))
         self.assertTrue(all(len(doc.content) <= ExportOptions().soft_max_chars for doc in docs))
 
+    def test_document_type_can_be_inferred_from_textbook_front_matter(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "高等学校计算机类规划教材",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "前言",
+                "text_level": 1,
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "本教材对传统操作系统和现代操作系统进行了系统介绍，"
+                        "全书共分12章，并由出版社正式出版发行。",
+                "page_idx": 1,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="计算机操作系统.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=7,
+            source_file="计算机操作系统.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        self.assertTrue(docs)
+        self.assertTrue(all(doc.document_type.value == "textbook" for doc in docs))
+
+    def test_document_type_can_be_inferred_from_syllabus_content(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "课程说明",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "本课程教学大纲包含课程目标、学时安排、学分要求和考核方式。",
+                "page_idx": 0,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="操作系统.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=8,
+            source_file="操作系统.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        self.assertTrue(docs)
+        self.assertTrue(all(doc.document_type.value == "syllabus" for doc in docs))
+
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""

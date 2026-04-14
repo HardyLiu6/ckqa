@@ -135,6 +135,8 @@ python scripts/pdf_processor/mineru_parser.py list
 
 `export-graphrag` 当前会先导出标准化中间结果 `normalized_docs.json`，再投影生成 GraphRAG 兼容文件 `section_docs.json` 或 `page_docs.json`。
 
+手工验证这些导出结果时，建议配合仓库根目录文档 `../../docs/标准化导出验证说明.md` 一起使用。
+
 ## 命令详解
 
 ### upload - 上传PDF文件

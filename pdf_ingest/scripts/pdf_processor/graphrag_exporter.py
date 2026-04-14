@@ -148,6 +148,41 @@ class GraphRAGExporter:
     _SOFT_CHUNK_TRIGGER_FACTOR = 1.35
     _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？；.!?;])")
     _CLAUSE_SPLIT_RE = re.compile(r"(?<=[，、,:：])")
+    _DOCUMENT_TYPE_FILENAME_HINTS = [
+        (DocumentType.SLIDES, ("slides", "slide", "ppt", "pptx", "课件")),
+        (DocumentType.SYLLABUS, ("syllabus", "大纲", "教学计划", "课程说明")),
+        (DocumentType.LAB, ("lab", "实验", "实验指导")),
+        (DocumentType.NOTES, ("notes", "note", "笔记", "讲义", "lecture", "handout")),
+        (DocumentType.EXAM, ("exam", "试卷", "题库", "习题集")),
+        (DocumentType.REFERENCE, ("reference", "参考", "论文", "paper")),
+        (DocumentType.TEXTBOOK, ("book", "教材", "课本", "教科书")),
+    ]
+    _DOCUMENT_TYPE_CONTENT_HINTS = [
+        (
+            DocumentType.SYLLABUS,
+            ("教学大纲", "课程目标", "课程简介", "课程性质", "学时", "学分", "考核方式", "教学安排"),
+        ),
+        (
+            DocumentType.LAB,
+            ("实验目的", "实验要求", "实验内容", "实验步骤", "实验原理", "实验报告"),
+        ),
+        (
+            DocumentType.NOTES,
+            ("课程讲义", "授课讲义", "课堂笔记", "复习提纲", "学习笔记"),
+        ),
+        (
+            DocumentType.EXAM,
+            ("试卷", "考试时间", "一、选择题", "二、填空题", "参考答案", "标准答案"),
+        ),
+        (
+            DocumentType.REFERENCE,
+            ("参考文献", "doi", "关键词", "摘要", "abstract", "作者简介"),
+        ),
+        (
+            DocumentType.TEXTBOOK,
+            ("本教材", "全书共分", "编著", "出版社", "教材", "图书在版编目", "isbn", "第4版", "第四版"),
+        ),
+    ]
 
     def __init__(self, db: DatabaseService, storage: MinIOService, config: Any):
         self.db = db
@@ -656,6 +691,7 @@ class GraphRAGExporter:
         md_headings: Optional[Dict[str, int]] = None
         if md_text:
             md_headings = self._parse_md_headings(md_text)
+        document_type = self._infer_document_type(source_file, blocks)
 
         title_indices = self._select_title_indices(blocks, md_headings)
 
@@ -670,6 +706,7 @@ class GraphRAGExporter:
                 cl_trace=cl_trace,
                 options=options,
                 source_section_level=1,
+                document_type=document_type,
                 drop_leading_title=False,
             )
             return self._split_normalized_doc_by_chars(doc, options)
@@ -693,6 +730,7 @@ class GraphRAGExporter:
                 cl_trace=cl_trace,
                 options=options,
                 source_section_level=0,
+                document_type=document_type,
                 drop_leading_title=False,
             )
             docs.extend(self._split_normalized_doc_by_chars(pre_doc, options))
@@ -722,6 +760,7 @@ class GraphRAGExporter:
                 cl_trace=cl_trace,
                 options=options,
                 source_section_level=source_section_level,
+                document_type=document_type,
                 drop_leading_title=True,
             )
             docs.extend(self._split_normalized_doc_by_chars(doc, options))
@@ -738,6 +777,7 @@ class GraphRAGExporter:
         options: ExportOptions,
     ) -> List[NormalizedDocument]:
         """页面模式聚合为标准课程文档。"""
+        document_type = self._infer_document_type(source_file, blocks)
         page_groups: Dict[Optional[int], List[Block]] = {}
         for block in blocks:
             page_groups.setdefault(block.page, []).append(block)
@@ -758,6 +798,7 @@ class GraphRAGExporter:
                 options=options,
                 source_section_level=None,
                 page_no=human_page_no,
+                document_type=document_type,
                 drop_leading_title=False,
             )
             docs.extend(self._split_normalized_doc_by_chars(doc, options))
@@ -928,6 +969,7 @@ class GraphRAGExporter:
         options: Optional[ExportOptions] = None,
         source_section_level: Optional[int] = None,
         page_no: Optional[int] = None,
+        document_type: Optional[DocumentType] = None,
         drop_leading_title: bool = False,
     ) -> NormalizedDocument:
         """将一组 blocks 合并为单个标准课程文档。"""
@@ -1011,7 +1053,7 @@ class GraphRAGExporter:
         return NormalizedDocument(
             id=self._build_normalized_doc_id(course_id, source_file, heading_path),
             source_file=source_file,
-            document_type=self._infer_document_type(source_file),
+            document_type=document_type or self._infer_document_type(source_file),
             course_id=course_id,
             chapter=chapter,
             section=section,
@@ -1078,25 +1120,71 @@ class GraphRAGExporter:
         path_part = "__".join(self._normalize_id_part(item) for item in heading_path)
         return f"{course_id}:{file_part}:{path_part}"
 
-    @staticmethod
-    def _infer_document_type(source_file: str) -> DocumentType:
-        """基于文件名做轻量文档类型识别。"""
+    @classmethod
+    def _infer_document_type(
+        cls,
+        source_file: str,
+        blocks: Optional[List[Block]] = None,
+    ) -> DocumentType:
+        """基于文件名优先、正文内容补充的方式推断文档类型。"""
         name = source_file.strip().lower()
-        if any(token in name for token in ("slides", "slide", "ppt", "pptx", "课件")):
-            return DocumentType.SLIDES
-        if any(token in name for token in ("syllabus", "大纲", "教学计划")):
-            return DocumentType.SYLLABUS
-        if any(token in name for token in ("lab", "实验", "实验指导")):
-            return DocumentType.LAB
-        if any(token in name for token in ("notes", "note", "笔记", "讲义", "lecture", "handout")):
-            return DocumentType.NOTES
-        if any(token in name for token in ("exam", "试卷", "题库")):
-            return DocumentType.EXAM
-        if any(token in name for token in ("reference", "参考")):
-            return DocumentType.REFERENCE
-        if any(token in name for token in ("book", "教材", "课本")):
-            return DocumentType.TEXTBOOK
+        filename_hit = cls._match_document_type_by_tokens(
+            name,
+            cls._DOCUMENT_TYPE_FILENAME_HINTS,
+        )
+        if filename_hit is not None:
+            return filename_hit
+
+        if not blocks:
+            return DocumentType.UNKNOWN
+
+        sample_text = cls._build_document_type_sample(blocks)
+        if not sample_text:
+            return DocumentType.UNKNOWN
+
+        content_hit = cls._match_document_type_by_tokens(
+            sample_text,
+            cls._DOCUMENT_TYPE_CONTENT_HINTS,
+        )
+        if content_hit is not None:
+            return content_hit
+
         return DocumentType.UNKNOWN
+
+    @staticmethod
+    def _match_document_type_by_tokens(
+        text: str,
+        hints: List[Tuple[DocumentType, Tuple[str, ...]]],
+    ) -> Optional[DocumentType]:
+        """按 token 匹配文档类型。"""
+        normalized = text.lower()
+        for doc_type, tokens in hints:
+            if any(token.lower() in normalized for token in tokens):
+                return doc_type
+        return None
+
+    @staticmethod
+    def _build_document_type_sample(blocks: List[Block]) -> str:
+        """抽取文档前部文本作为类型推断样本。"""
+        parts: List[str] = []
+        total_chars = 0
+
+        for block in blocks:
+            if block.page is not None and block.page > 10:
+                break
+            if block.block_type not in (BlockType.TEXT, BlockType.TITLE, BlockType.LIST):
+                continue
+
+            text = (block.text or "").strip()
+            if not text:
+                continue
+
+            parts.append(text)
+            total_chars += len(text)
+            if total_chars >= 6000 or len(parts) >= 120:
+                break
+
+        return "\n".join(parts)
 
     # -------------------- 长文档拆分 --------------------
 
