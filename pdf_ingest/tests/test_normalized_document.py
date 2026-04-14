@@ -95,13 +95,37 @@ class TestNormalizedDocumentContract(unittest.TestCase):
 
         self.assertTrue(any("document_type" in error for error in errors))
 
-    def test_heading_level_must_match_heading_path_length(self):
+    def test_heading_level_cannot_be_smaller_than_heading_path_length(self):
         payload = _load_fixture("normalized_doc_v1.json")
-        payload["heading_level"] = 3
+        payload["heading_level"] = 1
 
         errors = validate_normalized_document_dict(payload)
 
         self.assertTrue(any("heading_level" in error for error in errors))
+
+    def test_missing_chapter_can_still_use_real_section_level(self):
+        payload = {
+            "id": "os:book:sec-1.1",
+            "source_file": "book.pdf",
+            "document_type": "textbook",
+            "course_id": "os",
+            "chapter": None,
+            "section": "1.1 操作系统的目标和作用",
+            "subsection": None,
+            "heading_level": 2,
+            "heading_path": ["1.1 操作系统的目标和作用"],
+            "content": "正文",
+            "page_start": 9,
+            "page_end": 9,
+            "metadata": {
+                "doc_unit": "section",
+                "source_page_indices": [8],
+            },
+        }
+
+        errors = validate_normalized_document_dict(payload)
+
+        self.assertEqual(errors, [])
 
     def test_page_range_must_use_positive_one_based_pages(self):
         payload = _load_fixture("normalized_doc_v1.json")

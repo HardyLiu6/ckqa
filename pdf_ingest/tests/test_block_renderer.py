@@ -4,10 +4,10 @@
 BlockRenderer 单元测试
 ======================
 覆盖场景:
-    1. TABLE 无 text (仅 table_body HTML) → 渲染出 Markdown/纯文本
+    1. TABLE 无 text (仅 table_body HTML) → 渲染出语义正文 + metadata
     2. TABLE 有 text (semantic_table=True) → 直接使用语义文本
     3. 未知 block_type → FallbackRenderer 兜底不报错
-    4. IMAGE → 占位符 + metadata
+    4. IMAGE → 优先保留图题/图注, 资源引用进入 metadata
     5. TEXT/TITLE/LIST/CODE/EQUATION → 基本渲染
     6. 异常 block (text=None) → 安全降级
     7. HTML 表格 → Markdown 转换 (regex)
@@ -93,13 +93,8 @@ class TestTableRendererNoText(unittest.TestCase):
         registry = BlockRendererRegistry.create_default(prefer_markdown=True)
         result = registry.render(block)
 
-        # 应包含占位符
-        self.assertIn("[TABLE]", result.text)
-        self.assertIn("ref=images/table1.png", result.text)
-        self.assertIn("page=5", result.text)
-
         # 应包含 caption
-        self.assertIn("Caption: 表1: 人员信息", result.text)
+        self.assertIn("表1: 人员信息", result.text)
 
         # 应包含表格内容 (Markdown 或纯文本)
         self.assertIn("张三", result.text)
@@ -107,7 +102,7 @@ class TestTableRendererNoText(unittest.TestCase):
         self.assertIn("姓名", result.text)
 
         # 应包含 footnote
-        self.assertIn("Footnote: 数据来源: 2024年调查", result.text)
+        self.assertIn("表注：数据来源: 2024年调查", result.text)
 
         # metadata 应包含结构化信息
         self.assertEqual(result.metadata["type"], "table")
@@ -137,8 +132,6 @@ class TestTableRendererWithText(unittest.TestCase):
         registry = BlockRendererRegistry.create_default(prefer_markdown=True)
         result = registry.render(block)
 
-        # 占位符应存在
-        self.assertIn("[TABLE]", result.text)
         # 应包含语义文本 (来自 block.text, 而非 HTML 重转换)
         self.assertIn("姓名=张三", result.text)
         self.assertIn("姓名=李四", result.text)
@@ -157,8 +150,9 @@ class TestTableRendererWithText(unittest.TestCase):
         registry = BlockRendererRegistry.create_default()
         result = registry.render(block)
 
-        # text 应只出现一次 caption 相关内容
-        self.assertIn("[TABLE]", result.text)
+        # text 应只出现清理后的 caption 与正文
+        self.assertNotIn("[TABLE CAPTION]", result.text)
+        self.assertIn("表1", result.text)
         self.assertIn("张三", result.text)
 
 
@@ -196,7 +190,7 @@ class TestUnknownBlockType(unittest.TestCase):
 class TestImageRenderer(unittest.TestCase):
     """IMAGE block 渲染。"""
 
-    def test_image_placeholder_and_metadata(self):
+    def test_image_caption_and_metadata(self):
         block = _make_block(
             block_type=BlockType.IMAGE,
             text="",
@@ -211,16 +205,25 @@ class TestImageRenderer(unittest.TestCase):
         registry = BlockRendererRegistry.create_default()
         result = registry.render(block)
 
-        self.assertIn("[IMAGE]", result.text)
-        self.assertIn("ref=images/fig1.jpg", result.text)
-        self.assertIn("page=10", result.text)
-        self.assertIn("Caption: 图1: 体系结构", result.text)
-        self.assertIn("Footnote: 来源: 教材", result.text)
+        self.assertEqual(result.text, "图1: 体系结构\n图片说明：来源: 教材")
         self.assertEqual(result.metadata["type"], "image")
         self.assertEqual(result.metadata["img_path"], "images/fig1.jpg")
         self.assertEqual(result.metadata["block_id"], "os:10:5")
         self.assertEqual(result.metadata["caption"], "图1: 体系结构")
         self.assertEqual(result.metadata["footnote"], "来源: 教材")
+
+    def test_image_without_caption_returns_empty_text(self):
+        block = _make_block(
+            block_type=BlockType.IMAGE,
+            text="",
+            asset_ref="images/decorative.jpg",
+            extra={},
+        )
+        registry = BlockRendererRegistry.create_default()
+        result = registry.render(block)
+
+        self.assertEqual(result.text, "")
+        self.assertEqual(result.metadata["img_path"], "images/decorative.jpg")
 
 
 class TestTextAndTitleRenderer(unittest.TestCase):
@@ -251,6 +254,15 @@ class TestTextAndTitleRenderer(unittest.TestCase):
         registry = BlockRendererRegistry.create_default(use_heading_marker=False)
         result = registry.render(block)
         self.assertEqual(result.text, "第一章 绪论")
+
+    def test_equation_renderer_adds_formula_prefix(self):
+        block = _make_block(
+            block_type=BlockType.EQUATION,
+            text="$$E = mc^2$$",
+        )
+        registry = BlockRendererRegistry.create_default()
+        result = registry.render(block)
+        self.assertEqual(result.text, "公式：$$E = mc^2$$")
 
 
 class TestSafeRendering(unittest.TestCase):
@@ -285,7 +297,7 @@ class TestSafeRendering(unittest.TestCase):
 
         # 不应抛错
         self.assertIsInstance(result.text, str)
-        self.assertIn("[TABLE]", result.text)
+        self.assertIn("unclosed", result.text)
 
 
 class TestHtmlTableConversion(unittest.TestCase):

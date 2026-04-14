@@ -151,24 +151,27 @@ class EquationRenderer(BlockRenderer):
     """EQUATION: 保留公式文本。"""
 
     def render(self, block: Block) -> str:
-        return _safe_text(block)
+        text = _safe_text(block)
+        if not text:
+            return ""
+        if text.startswith("公式："):
+            return text
+        return f"公式：{text}"
 
 
 class ImageRenderer(BlockRenderer):
-    """IMAGE: 输出 [IMAGE] 占位符 + ref/page。"""
+    """IMAGE: 优先保留图题/图注，不把资源引用写入正文。"""
 
     def render(self, block: Block) -> str:
-        img_path = block.asset_ref or block.extra.get("img_path", "")
-        page = block.page if block.page is not None else "?"
-        parts = [f"[IMAGE] ref={img_path} page={page}"]
+        parts: List[str] = []
 
         caption = _join_list_field(block.extra.get("image_caption", []))
         if caption:
-            parts.append(f"Caption: {caption}")
+            parts.append(caption)
 
         footnote = _join_list_field(block.extra.get("image_footnote", []))
         if footnote:
-            parts.append(f"Footnote: {footnote}")
+            parts.append(f"图片说明：{footnote}")
 
         return "\n".join(parts)
 
@@ -188,16 +191,15 @@ class TableRenderer(BlockRenderer):
     TABLE: 多级降级渲染。
 
     渲染策略:
-        1. 输出 [TABLE] ref=<img_path> page=<page_idx> 占位符
-        2. 附加 caption (若有)
-        3. 内容:
+        1. 优先保留表题
+        2. 内容:
            a) 若 extra.table_body 存在 → 尝试转为 Markdown (可选)
               → 失败则转为纯文本 (TSV)
               → 再失败保留原 HTML
            b) 否则使用 block.text (block_model 已提取的文本)
-           c) 都没有 → 仅保留占位符
-        4. 附加 footnote (若有)
-        5. render_metadata() 输出结构化表格信息
+           c) 都没有 → 保留空字符串
+        3. 附加表注 (若有)
+        4. render_metadata() 输出结构化表格信息
     """
 
     def __init__(self, *, prefer_markdown: bool = True) -> None:
@@ -206,38 +208,30 @@ class TableRenderer(BlockRenderer):
     def render(self, block: Block) -> str:
         parts: List[str] = []
 
-        # ---- 占位符 ----
-        img_path = block.asset_ref or block.extra.get("img_path", "")
-        page = block.page if block.page is not None else "?"
-        parts.append(f"[TABLE] ref={img_path} page={page}")
-
         # ---- Caption ----
         caption = _join_list_field(block.extra.get("table_caption", []))
         if caption:
-            parts.append(f"Caption: {caption}")
+            parts.append(caption)
 
         # ---- 表格内容 ----
         #   优先级: block.text (语义文本) > table_body HTML 转换
         table_body: str = block.extra.get("table_body", "")
         block_text = _safe_text(block)
-        has_semantic_text = (
-            block_text
-            and not block_text.startswith("[TABLE]")
-        )
+        normalized_text = self._normalize_table_text(block_text)
+        has_semantic_text = bool(normalized_text)
 
         if has_semantic_text:
             # block.text 已有语义文本 (semantic_table=True 等场景)
-            parts.append(block_text)
+            parts.append(normalized_text)
         elif table_body:
             content = self._convert_html(table_body)
             if content:
                 parts.append(content)
-        # else: 仅保留占位符
 
         # ---- Footnote ----
         footnote = _join_list_field(block.extra.get("table_footnote", []))
         if footnote:
-            parts.append(f"Footnote: {footnote}")
+            parts.append(f"表注：{footnote}")
 
         return "\n".join(parts)
 
@@ -273,6 +267,20 @@ class TableRenderer(BlockRenderer):
             return plain
         # 最终降级: 原始 HTML
         return html_str.strip()
+
+    @staticmethod
+    def _normalize_table_text(text: str) -> str:
+        """清理 block_model 中的表格占位标签，避免正文重复。"""
+        normalized = text.strip()
+        if not normalized:
+            return ""
+
+        lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+        if lines and lines[0].startswith("[TABLE CAPTION]"):
+            lines[0] = lines[0].replace("[TABLE CAPTION]", "", 1).strip()
+            if not lines[0]:
+                lines = lines[1:]
+        return "\n".join(lines).strip()
 
 
 class FallbackRenderer(BlockRenderer):

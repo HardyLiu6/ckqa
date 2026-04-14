@@ -101,7 +101,9 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         cleaned = clean_blocks(blocks)
 
         self.assertEqual(len(blocks), 10)
-        self.assertGreaterEqual(len(cleaned), 7)
+        self.assertEqual(len(cleaned), 7)
+        self.assertTrue(all(block.page != 0 for block in cleaned))
+        self.assertTrue(all("目录" not in block.text for block in cleaned))
         self.assertTrue(any(block.text.startswith("第二章") for block in cleaned))
         self.assertTrue(any("前趋图" in block.text for block in cleaned))
 
@@ -129,6 +131,9 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertGreaterEqual(len(docs), 2)
         self.assertTrue(all(doc.title.startswith("os-") for doc in docs))
         self.assertTrue(any("表2-1" in doc.text for doc in docs))
+        self.assertTrue(all("[TABLE]" not in doc.text for doc in docs))
+        self.assertTrue(all("[IMAGE]" not in doc.text for doc in docs))
+        self.assertTrue(any("公式：" in doc.text for doc in docs))
 
     def test_fixture_can_generate_normalized_section_docs(self):
         content_list = _load_json_fixture("content_list_with_toc.json")
@@ -155,12 +160,72 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertTrue(all(isinstance(doc, NormalizedDocument) for doc in docs))
         self.assertTrue(all(validate_normalized_document_dict(doc.to_dict()) == [] for doc in docs))
         self.assertTrue(any(doc.section == "2.1 前趋图和程序执行" for doc in docs))
+        self.assertTrue(any("图2-1 前趋图示意" in doc.content for doc in docs))
+
+    def test_missing_chapter_does_not_cascade_section_hierarchy(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "1.1 第一节",
+                "text_level": 2,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "第一节的正文内容足够长，可以作为有效语义文本。",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "1.1.1 小节",
+                "text_level": 3,
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "小节正文内容同样足够长，用于验证层级构建。",
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "1.2 第二节",
+                "text_level": 2,
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "第二节正文内容足够长，且不应挂到 1.1 第一节 之下。",
+                "page_idx": 2,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="讲义.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=4,
+            source_file="讲义.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        second_section = next(doc for doc in docs if doc.section == "1.2 第二节")
+        self.assertIsNone(second_section.chapter)
+        self.assertEqual(second_section.heading_path, ["1.2 第二节"])
 
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""
 
-    @unittest.expectedFailure
     def test_section_aggregation_should_filter_toc_titles_and_page_numbers(self):
         content_list = _load_json_fixture("content_list_with_toc.json")
         blocks = parse_content_list(

@@ -133,6 +133,8 @@ python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --m
 python scripts/pdf_processor/mineru_parser.py list
 ```
 
+`export-graphrag` 当前会先导出标准化中间结果 `normalized_docs.json`，再投影生成 GraphRAG 兼容文件 `section_docs.json` 或 `page_docs.json`。
+
 ## 命令详解
 
 ### upload - 上传PDF文件
@@ -244,6 +246,19 @@ course-artifacts/               # 解析结果存储桶
 │           └── page_docs.json
 └── ...
 ```
+
+其中：
+
+1. `normalized_docs.json` 是标准化后的上游事实来源，保留章节层级、标准页码、文档类型与多模态元数据。
+2. `section_docs.json` / `page_docs.json` 是面向 GraphRAG 的兼容投影。
+
+当前阶段 4 已经补上的导出规则包括：
+
+1. 目录页会在章节聚合前整体过滤，避免产生目录伪章节。
+2. 标题尾部页码和目录点线会在聚合前清洗。
+3. 表格正文不再默认输出 `[TABLE] ref=...` 占位符。
+4. 图片正文不再默认输出 `[IMAGE] ref=...` 占位符，仅保留图题和图注。
+5. 独立公式在正文中统一以 `公式：...` 形式出现。
 
 ## 配置说明
 

@@ -58,6 +58,40 @@ def _is_optional_string(value: Any) -> bool:
     return value is None or _is_non_empty_string(value)
 
 
+def _resolve_heading_fields(
+    heading_path: List[str],
+    heading_level: int,
+    doc_unit: Optional[str],
+) -> Dict[str, Optional[str]]:
+    """
+    根据 heading_path 和真实标题层级推导 chapter/section/subsection。
+
+    说明：
+    - 当上层标题缺失时，heading_path 允许短于 heading_level。
+    - page 模式文档不映射 chapter/section/subsection。
+    """
+    fields = {
+        "chapter": None,
+        "section": None,
+        "subsection": None,
+    }
+
+    if doc_unit == "page" or not heading_path:
+        return fields
+
+    start_level = max(1, heading_level - len(heading_path) + 1)
+    for index, item in enumerate(heading_path):
+        level = start_level + index
+        if level == 1:
+            fields["chapter"] = item
+        elif level == 2:
+            fields["section"] = item
+        elif level == 3:
+            fields["subsection"] = item
+
+    return fields
+
+
 def validate_normalized_document_dict(payload: Dict[str, Any]) -> List[str]:
     """
     校验标准课程文档字典，返回错误列表。
@@ -106,18 +140,22 @@ def validate_normalized_document_dict(payload: Dict[str, Any]) -> List[str]:
     else:
         if not all(_is_non_empty_string(item) for item in heading_path):
             errors.append("heading_path 中的每个元素都必须是非空字符串")
-        if isinstance(heading_level, int) and heading_level != len(heading_path):
-            errors.append("heading_level 必须与 heading_path 长度一致")
+        if isinstance(heading_level, int) and heading_level < len(heading_path):
+            errors.append("heading_level 不能小于 heading_path 长度")
 
-        chapter = payload["chapter"]
-        section = payload["section"]
-        subsection = payload["subsection"]
-        if chapter and heading_path[0] != chapter:
-            errors.append("chapter 必须与 heading_path[0] 一致")
-        if section and len(heading_path) >= 2 and heading_path[1] != section:
-            errors.append("section 必须与 heading_path[1] 一致")
-        if subsection and len(heading_path) >= 3 and heading_path[2] != subsection:
-            errors.append("subsection 必须与 heading_path[2] 一致")
+        metadata = payload.get("metadata", {})
+        doc_unit = metadata.get("doc_unit") if isinstance(metadata, dict) else None
+        expected_fields = _resolve_heading_fields(
+            heading_path=heading_path,
+            heading_level=heading_level if isinstance(heading_level, int) else len(heading_path),
+            doc_unit=doc_unit,
+        )
+        for field_name, expected_value in expected_fields.items():
+            if payload[field_name] != expected_value:
+                errors.append(
+                    f"{field_name} 与 heading_path/heading_level 不一致，"
+                    f"期望 {expected_value!r}，实际 {payload[field_name]!r}"
+                )
 
     if not _is_non_empty_string(payload["content"]):
         errors.append("content 必须是非空字符串")

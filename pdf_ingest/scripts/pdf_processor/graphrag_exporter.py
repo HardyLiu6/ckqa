@@ -131,6 +131,17 @@ class GraphRAGExporter:
         r"|\d+\.\d+"
         r")"
     )
+    _TOCISH_TITLE_RE = re.compile(
+        r"^(?:"
+        r"第[一二三四五六七八九十百千\d]+[章节篇]"
+        r"|(?:\d+\.)+\d*"
+        r"|习题"
+        r"|参考文献"
+        r")"
+    )
+    _TRAILING_PAGE_NOISE_RE = re.compile(
+        r"^(?P<title>.*?)(?:\s*(?:\.{2,}|…{2,}|·{2,})\s*|\s+)(?P<page>\d+)\s*$"
+    )
 
     def __init__(self, db: DatabaseService, storage: MinIOService, config: Any):
         self.db = db
@@ -499,7 +510,7 @@ class GraphRAGExporter:
         2. 若模式未匹配，用 markdown 标题映射
         3. 默认 level=1
         """
-        text = title_text.strip()
+        text = self._normalize_heading_text(title_text)
 
         for pattern, level in self._TITLE_LEVEL_PATTERNS:
             if pattern.match(text):
@@ -515,10 +526,23 @@ class GraphRAGExporter:
 
     def _is_section_boundary(self, block: Block) -> bool:
         """判断一个 TITLE 块是否构成章节边界。"""
-        text = block.text.strip()
+        text = self._normalize_heading_text(block.text)
         if not text:
             return False
         return bool(self._SECTION_BOUNDARY_RE.match(text))
+
+    @classmethod
+    def _normalize_heading_text(cls, text: str) -> str:
+        """清理标题中的目录点线、尾部页码和多余空白。"""
+        normalized = re.sub(r"\s+", " ", (text or "").strip())
+        normalized = re.sub(r"^[-•]\s*", "", normalized)
+
+        match = cls._TRAILING_PAGE_NOISE_RE.match(normalized)
+        if match and cls._TOCISH_TITLE_RE.match(match.group("title").strip()):
+            normalized = match.group("title").strip()
+
+        normalized = re.sub(r"(?:\.{2,}|…{2,}|·{2,})\s*$", "", normalized).strip()
+        return normalized
 
     def _heuristic_title_indices(self, blocks: List[Block]) -> List[int]:
         """
@@ -529,7 +553,7 @@ class GraphRAGExporter:
         for index, block in enumerate(blocks):
             if block.block_type != BlockType.TEXT:
                 continue
-            text = block.text.strip()
+            text = self._normalize_heading_text(block.text)
             if not text or len(text) > 80:
                 continue
             if self._SECTION_BOUNDARY_RE.match(text):
@@ -604,23 +628,23 @@ class GraphRAGExporter:
             )
             docs.extend(self._split_normalized_doc_by_chars(pre_doc, options.max_chars))
 
-        heading_stack: List[str] = []
+        heading_stack: List[Tuple[int, str]] = []
         for start, end in sections:
             sec_blocks = blocks[start:end]
             title_block = blocks[start]
-            section_title = title_block.text.strip() or "未命名章节"
+            section_title = self._normalize_heading_text(title_block.text) or "未命名章节"
             source_section_level = self._infer_title_level(section_title, md_headings)
 
-            keep_depth = max(source_section_level - 1, 0)
-            heading_stack = heading_stack[:keep_depth]
-            heading_stack.append(section_title)
+            while heading_stack and heading_stack[-1][0] >= source_section_level:
+                heading_stack.pop()
+            heading_stack.append((source_section_level, section_title))
 
             doc = self._blocks_to_normalized_doc(
                 blocks=sec_blocks,
                 course_id=course_id,
                 file_id=file_id,
                 source_file=source_file,
-                heading_path=list(heading_stack),
+                heading_path=[item[1] for item in heading_stack],
                 doc_unit="section",
                 cl_trace=cl_trace,
                 options=options,
@@ -867,9 +891,16 @@ class GraphRAGExporter:
             page_start = page_no or 1
             page_end = page_no or 1
 
-        chapter = heading_path[0] if len(heading_path) >= 1 else None
-        section = heading_path[1] if len(heading_path) >= 2 else None
-        subsection = heading_path[2] if len(heading_path) >= 3 else None
+        heading_level = (
+            source_section_level
+            if source_section_level is not None and source_section_level > 0
+            else len(heading_path)
+        )
+        chapter, section, subsection = self._resolve_heading_fields(
+            heading_path=heading_path,
+            heading_level=heading_level,
+            doc_unit=doc_unit,
+        )
 
         metadata: Dict[str, Any] = {
             "schema_version": DOCUMENT_SCHEMA_VERSION,
@@ -911,13 +942,39 @@ class GraphRAGExporter:
             chapter=chapter,
             section=section,
             subsection=subsection,
-            heading_level=len(heading_path),
+            heading_level=heading_level,
             heading_path=list(heading_path),
             content=content,
             page_start=page_start,
             page_end=page_end,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _resolve_heading_fields(
+        heading_path: List[str],
+        heading_level: int,
+        doc_unit: str,
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """根据真实层级将 heading_path 对齐到 chapter/section/subsection。"""
+        if doc_unit == "page" or not heading_path:
+            return None, None, None
+
+        chapter: Optional[str] = None
+        section: Optional[str] = None
+        subsection: Optional[str] = None
+
+        start_level = max(1, heading_level - len(heading_path) + 1)
+        for index, item in enumerate(heading_path):
+            level = start_level + index
+            if level == 1:
+                chapter = item
+            elif level == 2:
+                section = item
+            elif level == 3:
+                subsection = item
+
+        return chapter, section, subsection
 
     # -------------------- 文档 ID 与类型 --------------------
 

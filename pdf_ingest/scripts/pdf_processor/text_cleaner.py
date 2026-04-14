@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from block_model import Block, BlockType
 
@@ -22,6 +22,19 @@ from block_model import Block, BlockType
 DEFAULT_MIN_CHARS = 5          # 最短有效文本长度
 DEFAULT_REPEAT_THRESHOLD = 3   # 页眉页脚重复阈值（跨页出现次数）
 DEFAULT_MAX_HEADER_LEN = 80    # 页眉页脚候选最大长度
+
+
+# 目录页检测
+_TOC_MARKER_RE = re.compile(r"^(目录|contents|table\s+of\s+contents)$", re.I)
+_TOC_ENTRY_RE = re.compile(
+    r"(?:^|\n)\s*(?:[-•]\s*)?(?:"
+    r"第[一二三四五六七八九十百千\d]+[章节篇][^\n]{0,80}?"
+    r"|(?:\d+\.)+\d*[^\n]{0,80}?"
+    r"|习题[^\n]{0,20}?"
+    r"|参考文献[^\n]{0,20}?"
+    r")(?:[\.\s·…]{1,12}\d+)\s*$",
+    re.I | re.M,
+)
 
 
 # ===================== 单块过滤 =====================
@@ -68,6 +81,52 @@ def is_pure_digit_noise(text: str, min_len: int = 6) -> bool:
 def _normalize(text: str) -> str:
     """归一化文本用于比较（去空白、小写）"""
     return re.sub(r"\s+", "", text.strip().lower())
+
+
+def count_toc_like_entries(text: str) -> int:
+    """统计文本中类似目录项的条目数量。"""
+    if not text:
+        return 0
+    return len(list(_TOC_ENTRY_RE.finditer(text)))
+
+
+def detect_toc_pages(blocks: List[Block]) -> Set[Optional[int]]:
+    """
+    检测目录页。
+
+    启发式规则：
+    1. 页面出现“目录 / contents”等显式标记，且同时存在多条目录项
+    2. 页面没有显式标记，但目录项密度很高，且缺少长段落正文
+
+    返回：
+        需要整体过滤掉的页码集合
+    """
+    page_texts: Dict[Optional[int], List[str]] = {}
+    for block in blocks:
+        text = (block.text or "").strip()
+        if not text:
+            continue
+        page_texts.setdefault(block.page, []).append(text)
+
+    toc_pages: Set[Optional[int]] = set()
+    for page, texts in page_texts.items():
+        joined = "\n".join(texts)
+        toc_hits = count_toc_like_entries(joined)
+        has_toc_marker = any(_TOC_MARKER_RE.match(text.strip()) for text in texts)
+        non_toc_chars = sum(
+            len(text)
+            for text in texts
+            if not _TOC_MARKER_RE.match(text.strip()) and count_toc_like_entries(text) == 0
+        )
+
+        if has_toc_marker and toc_hits >= 2:
+            toc_pages.add(page)
+            continue
+
+        if toc_hits >= 3 and non_toc_chars <= 40:
+            toc_pages.add(page)
+
+    return toc_pages
 
 
 # ===================== 页眉页脚检测 =====================
@@ -209,11 +268,12 @@ def clean_blocks(
     对 Block 列表执行完整清洗流程：
 
     1. 丢弃页眉/页脚/页码（raw_type = header/footer/page_number）
-    2. 丢弃空白/纯符号块
-    3. 丢弃过短文本（< min_chars），但保留 title/table/image/equation
-    4. 跨页重复短文本过滤（页眉页脚启发式）
-    5. 合并断行
-    6. 连续重复块去重
+    2. 丢弃目录页
+    3. 丢弃空白/纯符号块
+    4. 丢弃过短文本（< min_chars），但保留 title/table/image/equation
+    5. 跨页重复短文本过滤（页眉页脚启发式）
+    6. 合并断行
+    7. 连续重复块去重
 
     Args:
         blocks: 原始 Block 列表
@@ -225,15 +285,20 @@ def clean_blocks(
     Returns:
         清洗后的 Block 列表
     """
-    # Step 1: 检测页眉页脚
+    # Step 1: 检测页眉页脚和目录页
     noise_texts = detect_header_footer_texts(
         blocks, max_len=max_header_len, repeat_threshold=repeat_threshold
     )
+    toc_pages = detect_toc_pages(blocks)
 
     cleaned: List[Block] = []
     for b in blocks:
         # Step 1a: 丢弃原生 header/footer/page_number
         if b.raw_type in ("header", "footer", "page_number"):
+            continue
+
+        # Step 1b: 丢弃目录页
+        if b.page in toc_pages:
             continue
 
         text = b.text.strip()
