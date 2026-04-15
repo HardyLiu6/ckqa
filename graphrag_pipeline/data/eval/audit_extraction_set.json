@@ -1,0 +1,3365 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-04-15T17:17:36",
+  "task": "audit_extraction_set",
+  "source_input": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/prompt_tuning_samples.preview.json",
+  "selection_parameters": {
+    "sample_size": 20,
+    "random_seed": 42,
+    "prefer_balanced_sampling": true,
+    "priority_fields": [
+      "guessed_sample_type",
+      "document_type",
+      "chapter",
+      "heading_level",
+      "source_file"
+    ]
+  },
+  "schema_reference": {
+    "entity_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/entity_types.json",
+    "relation_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/relation_types.json",
+    "entity_type_names": [
+      "Course",
+      "Chapter",
+      "Section",
+      "KnowledgePoint",
+      "Concept",
+      "Term",
+      "FormulaOrDefinition",
+      "AlgorithmOrMethod",
+      "Experiment",
+      "Assignment",
+      "ToolOrPlatform"
+    ],
+    "relation_type_names": [
+      "contains",
+      "belongs_to",
+      "depends_on",
+      "prerequisite_of",
+      "related_to",
+      "defined_by",
+      "applied_in",
+      "implemented_by",
+      "evaluated_by",
+      "appears_in"
+    ]
+  },
+  "stats": {
+    "input_sample_count": 120,
+    "valid_candidate_count": 120,
+    "selected_count": 20,
+    "skipped_count": 0,
+    "skipped_reasons": {},
+    "selection_strategy": "balanced_stratified",
+    "fallback_to_random": false,
+    "priority_distribution": {
+      "high": 13,
+      "medium": 7
+    },
+    "guessed_sample_type_distribution": {
+      "algorithm_or_method": 5,
+      "chapter_concept_explanation": 2,
+      "definition_or_formula": 8,
+      "assignment_requirement": 5
+    },
+    "document_type_distribution": {
+      "textbook": 20
+    },
+    "source_file_distribution": {
+      "计算机操作系统.pdf": 20
+    },
+    "heading_level_distribution": {
+      "3": 14,
+      "2": 5,
+      "1": 1
+    },
+    "length_bucket_distribution": {
+      "long": 9,
+      "medium": 4,
+      "short": 1,
+      "xlong": 6
+    },
+    "stratification_summary": {
+      "guessed_sample_type": {
+        "distinct_count": 4,
+        "distribution": {
+          "algorithm_or_method": 39,
+          "chapter_concept_explanation": 36,
+          "definition_or_formula": 33,
+          "assignment_requirement": 12
+        }
+      },
+      "document_type": {
+        "distinct_count": 1,
+        "distribution": {
+          "textbook": 120
+        }
+      },
+      "chapter": {
+        "distinct_count": 71,
+        "distribution": {
+          "4.1 存储器的层次结构": 3,
+          "5.3 页面置换算法": 3,
+          "4.5 分页存储管理方式": 3,
+          "7.2 文件的逻辑结构": 3,
+          "9.6 系统调用的实现": 3,
+          "8.4 提高磁盘可靠性的技术": 3,
+          "6.8 磁盘存储器的性能和调度": 3,
+          "3.7 避免死锁": 3,
+          "8.5 数据一致性控制": 3,
+          "2.3 进程控制": 3,
+          "4.3 连续分配存储管理方式": 3,
+          "2.1 前趋图和程序执行": 2,
+          "6.5 与设备无关的I/O软件": 2,
+          "1.5 OS结构设计": 2,
+          "3.5 死锁概述": 2,
+          "5.5 请求分段存储管理方式": 2,
+          "10.7 分布式文件系统": 2,
+          "6.2 I/O 设备和设备控制器": 2,
+          "2.6 进程通信": 2,
+          "7.5 文件保护": 2,
+          "12.6 可信系统(Trusted System)": 2,
+          "8.2 文件存储空间的管理": 2,
+          "8.1 外存的组织方式": 2,
+          "12.4 来自系统内部的攻击": 2,
+          "4.6 分段存储管理方式": 2,
+          "9.2 Shell命令语言": 2,
+          "11.7 高速缓存与磁盘调度": 2,
+          "6.7 缓冲区管理": 2,
+          "3.4 实时调度": 2,
+          "3.8 死锁的检测与解除": 2,
+          "1.2 操作系统的发展过程": 2,
+          "12.2 数据加密技术": 2,
+          "2.2 进程的描述": 2,
+          "6.4 设备驱动程序": 2,
+          "10.5 多处理机系统的进程调度": 2,
+          "11.1 多媒体系统简介": 2,
+          "5.2 请求分页存储管理方式": 2,
+          "2.5 经典进程的同步问题": 2,
+          "前言": 1,
+          "5.4 “抖动”与工作集": 1,
+          "12.1 安全环境": 1,
+          "12.3 用户验证": 1,
+          "3.3 进程调度": 1,
+          "4.2 程序的装入和链接": 1,
+          "2.8 线程的实现": 1,
+          "7.3 文件目录": 1,
+          "2.4 进程同步": 1,
+          "9.4 系统调用的概念和类型": 1,
+          "8.3 提高磁盘I/O速度的途径": 1,
+          "3.6 预防死锁": 1,
+          "3.2 作业与作业调度": 1,
+          "9.5 UNIX系统调用": 1,
+          "7.4 文件共享": 1,
+          "2.7 线程(Threads)的基本概念": 1,
+          "5.1 虚拟存储器概述": 1,
+          "4.4 对换(Swapping)": 1,
+          "10.2 多处理机系统的结构": 1,
+          "10.6 网络操作系统": 1,
+          "11.6 多媒体存储器的分配方法": 1,
+          "6.3 中断机构和中断处理程序": 1,
+          "10.4 进程同步": 1,
+          "9.1 用户接口": 1,
+          "7.1 文件和文件系统": 1,
+          "1.4 操作系统的主要功能": 1,
+          "11.3 多媒体进程管理中的问题和接纳控制": 1,
+          "9.3 联机命令接口的实现": 1,
+          "11.2 多媒体文件中的各种媒体": 1,
+          "1.3 操作系统的基本特性": 1,
+          "11.5 媒体服务器的特征和接纳控制": 1,
+          "3.1 处理机调度的层次和调度算法的目标": 1,
+          "6.6 用户层的I/O软件": 1
+        }
+      },
+      "heading_level": {
+        "distinct_count": 3,
+        "distribution": {
+          "3": 71,
+          "2": 48,
+          "1": 1
+        }
+      },
+      "source_file": {
+        "distinct_count": 1,
+        "distribution": {
+          "计算机操作系统.pdf": 120
+        }
+      },
+      "length_bucket": {
+        "distinct_count": 4,
+        "distribution": {
+          "long": 56,
+          "medium": 26,
+          "short": 24,
+          "xlong": 14
+        }
+      }
+    }
+  },
+  "audit_samples": [
+    {
+      "id": "audit-ext-0001-b39b706bc0",
+      "source_sample_id": "pts-0076-ba4dd804ee",
+      "source_doc_id": "os:计算机操作系统:11.3-多媒体进程管理中的问题和接纳控制__11.3.1-实时任务的处理需求和描述",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "11.3 多媒体进程管理中的问题和接纳控制",
+      "heading_path": [
+        "11.3 多媒体进程管理中的问题和接纳控制",
+        "11.3.1 实时任务的处理需求和描述"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "algorithm_or_method",
+      "text": "11.3.1 实时任务的处理需求和描述\n\n多媒体进程(线程)与通常的进程(线程)之间有许多相似之处，比如它们需要一定数量的资源，具有三个基本运行状态等。但它们也各有自己的特点，因此，在对多媒体进程进行管理时，必须考虑多媒体数据应遵循的时序需求。为此，应为系统配置接纳机制，来控制同时运行的进程的数目，并选用适当的调度算法，来满足进程对截止时间的要求。\n\n1. 实时任务的处理需求\n\n在通常的多媒体系统中，必须按照严格的时间间隔对实时任务进行处理。或者说，必须周期性地对数据进行处理，并在一规定的截止时间前完成。\n\n(1) 多媒体进程管理，应能保证在系统中运行的所有硬实时 HRT 任务的截止时间要求，而且是在每一个周期里都提供这样的保证，否则会引起难以预料的后果。\n\n- (2) 对在系统中运行的软实时SRT任务，进程管理应当保证它们的大多数截止时间要求，仅对极少数的截止时间要求，进程管理如不能保证，其所引发的后果并不会十分严重。\n- (3) 当系统中有硬实时任务时，决不允许出现优先级倒置的情况，这样才能保证硬实时任务的截止时间需求。如果系统中仅有软实时任务，则只允许很少出现优先级倒置的情况，以便能保证软实时任务的大多数截止时间。\n- (4) 实时任务的处理时间，不仅包含每个周期对实时任务本身的处理时间，还应包含为调度每一个任务所花费的时间，因此，应尽量减少实时调度所付出的开销。\n\n2. 软实时任务的时间特性描述\n\n在多媒体系统中，是对连续媒体数据流进行处理。在播放数字电影时，媒体服务器将周期性地(对于PAL制式为  40\\mathrm{ms} )逐帧送出数据。相应地，媒体服务器中的处理机必须在规定的时间内对它进行处理后送给用户。可见播放数字电影将联系着一个截止时间或称为最后时限。这说明数字电影是一个要求比较严格的周期性软实时任务。\n\n为了对它们进行描述，应给出它们的时序限制，其中包含有开始时间s、截止时间d和周期时间p三个时间指标，以及所需要的CPU处理时间e。这样我们对周期性任务T的时间限制可以用(s,e,d,p)来描述，由此可以算出T的速率为  r = 1 / p 。图11-1示出了T的时间特性，其中  0\\leqslant e\\leqslant d\\leqslant p 。一个任务在  s + (k - 1)p 时刻开始进行第  k 次处理，每次处理必须在  s + (k - 1)p + d 之前完成。\n\n图11-1 周期任务的时间特性",
+      "text_length": 1035,
+      "page_start": 365,
+      "page_end": 366,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：11.3 多媒体进程管理中的问题和接纳控制；命中高价值信号：方法/步骤信号、关系表达较密集、含公式或数学表达、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "11.3.1 实时任务的处理需求和描述",
+          "type": "Section",
+          "alias": [],
+          "span_text": "11.3.1 实时任务的处理需求和描述",
+          "normalized_name": "11.3.1 实时任务的处理需求和描述",
+          "notes": "当前样本标题，对应本条讲解单元。"
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "多媒体进程",
+          "type": "Concept",
+          "alias": [
+            "多媒体线程"
+          ],
+          "span_text": "多媒体进程(线程)",
+          "normalized_name": "多媒体进程",
+          "notes": "正文将进程与线程并列说明，统一归一到多媒体进程。"
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "实时任务",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "实时任务",
+          "normalized_name": "实时任务",
+          "notes": "本节核心讨论对象。"
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "硬实时任务",
+          "type": "Concept",
+          "alias": [
+            "HRT"
+          ],
+          "span_text": "硬实时 HRT 任务",
+          "normalized_name": "硬实时任务",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "软实时任务",
+          "type": "Concept",
+          "alias": [
+            "SRT"
+          ],
+          "span_text": "软实时SRT任务",
+          "normalized_name": "软实时任务",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "接纳机制",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "接纳机制",
+          "normalized_name": "接纳机制",
+          "notes": "用于控制同时运行的进程数目。"
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "调度算法",
+          "normalized_name": "调度算法",
+          "notes": "用于满足截止时间要求。"
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "周期性任务",
+          "type": "Concept",
+          "alias": [
+            "任务T"
+          ],
+          "span_text": "周期性任务T",
+          "normalized_name": "周期性任务",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-09",
+          "name": "周期性任务时间限制",
+          "type": "FormulaOrDefinition",
+          "alias": [
+            "(s,e,d,p)时间限制"
+          ],
+          "span_text": "对周期性任务T的时间限制可以用(s,e,d,p)来描述",
+          "normalized_name": "周期性任务时间限制",
+          "notes": "包含开始时间、CPU处理时间、截止时间和周期时间。"
+        },
+        {
+          "entity_id": "ent-10",
+          "name": "优先级倒置",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "优先级倒置",
+          "normalized_name": "优先级倒置",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "1. 实时任务的处理需求",
+          "notes": "本节直接围绕实时任务展开。"
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "应为系统配置接纳机制，来控制同时运行的进程的数目",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "并选用适当的调度算法，来满足进程对截止时间的要求",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-08",
+          "type": "contains",
+          "evidence_text": "这样我们对周期性任务T的时间限制可以用(s,e,d,p)来描述",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-08",
+          "target_entity_id": "ent-09",
+          "type": "defined_by",
+          "evidence_text": "对周期性任务T的时间限制可以用(s,e,d,p)来描述",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-10",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "当系统中有硬实时任务时，决不允许出现优先级倒置的情况",
+          "notes": "优先级倒置在本节作为实时任务调度中的关键问题出现。"
+        }
+      ],
+      "annotation_notes": "按正文显式任务类型与机制标注；未单独标注公式中的变量 s/e/d/p。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0002-bdd7a8bef6",
+      "source_sample_id": "pts-0069-867958925f",
+      "source_doc_id": "os:计算机操作系统:7.1-文件和文件系统__7.1.1-数据项-记录和文件",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "7.1 文件和文件系统",
+      "heading_path": [
+        "7.1 文件和文件系统",
+        "7.1.1 数据项、记录和文件"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "chapter_concept_explanation",
+      "text": "7.1.1 数据项、记录和文件\n\n1. 数据项\n\n在文件系统中，数据项是最低级的数据组织形式，可把它分成以下两种类型：\n\n- (1) 基本数据项。这是用于描述一个对象的某种属性的字符集，是数据组织中可以命名的最小逻辑数据单位，又称为字段。例如，用于描述一个学生的基本数据项有：学号、姓名、年龄、所在班级等。\n- (2) 组合数据项。是由若干个基本数据项组成的，简称组项。例如工资是个组项，它可由基本工资、工龄工资和奖励工资等基本项所组成。\n\n基本数据项除了数据名外，还应有数据类型。因为基本项仅描述某个对象的属性，根据属性的不同，需要用不同的数据类型来描述。例如，在描述学生的学号时应使用整数；描述学生的姓名则应使用字符串(含汉字)；描述性别时可用逻辑变量或汉字。可见，由数据项的名字和类型两者共同定义了一个数据项的“型”。而表征一个实体在数据项上的数据则称为“值”。例如，学号/30211、姓名/王有年、性别/男等。\n\n2. 记录\n\n记录是一组相关数据项的集合，用于描述一个对象在某方面的属性。一个记录应包含\n\n哪些数据项，取决于需要描述对象的哪个方面。由于对象所处的环境不同可把他作为不同的对象。例如，一个学生，当把他作为班上的一名学生时，对他的描述应使用学号、姓名、年龄及所在系班，也可能还包括他所学过的课程的名称、成绩等数据项。但若把学生作为一个医疗对象时，对他描述的数据项则应使用诸如病历号、姓名、性别、出生年月、身高、体重、血压及病史等项。\n\n在诸多记录中，为了能唯一地标识一个记录，必须在一个记录的各个数据项中确定出一个或几个数据项，把它们的集合称为关键字(key)。或者说，关键字是唯一能标识一个记录的数据项。通常，只需用一个数据项作为关键字。例如，前面的病历号或学号便可用来从诸多记录中标识出唯一的一个记录。然而有时找不到这样的数据项，只好把几个数据项定为能在诸多记录中唯一地标识出某个记录的关键字。\n\n3. 文件\n\n文件是指由创建者所定义的、具有文件名的一组相关元素的集合，可分为有结构文件和无结构文件两种。在有结构的文件中，文件由若干个相关记录组成，而无结构文件则被看成是一个字符流。文件在文件系统中是一个最大的数据单位，它描述了一个对象集。例如，可以将一个班的学生记录作为一个文件。\n\n文件属性可以包括：\n\n- (1) 文件类型。可以从不同的角度来规定文件的类型，如源文件、目标文件及可执行文件等。\n- (2) 文件长度。文件长度指文件的当前长度，长度的单位可以是字节、字或块，也可能是最大允许的长度。\n- (3) 文件的物理位置。该项属性通常用于指示文件所在的设备及所在设备中地址的指针。\n- (4) 文件的建立时间。这是指最后一次的修改时间等。\n\n图7-1示出了文件、记录和数据项之间的层次关系。\n\n图7-1 文件、记录和数据项之间的层次关系",
+      "text_length": 1185,
+      "page_start": 229,
+      "page_end": 230,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：7.1 文件和文件系统；命中高价值信号：定义信号、关系表达较密集、术语/别名信号、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "7.1.1 数据项、记录和文件",
+          "type": "Section",
+          "alias": [],
+          "span_text": "7.1.1 数据项、记录和文件",
+          "normalized_name": "7.1.1 数据项、记录和文件",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "数据项",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "数据项",
+          "normalized_name": "数据项",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "记录",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "记录",
+          "normalized_name": "记录",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "文件",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "文件",
+          "normalized_name": "文件",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "关键字",
+          "type": "Term",
+          "alias": [
+            "key"
+          ],
+          "span_text": "关键字(key)",
+          "normalized_name": "关键字",
+          "notes": "用于唯一标识记录的数据项集合。"
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "数据项定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "数据项是最低级的数据组织形式",
+          "normalized_name": "数据项定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "记录定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "记录是一组相关数据项的集合",
+          "normalized_name": "记录定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "文件定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "文件是指由创建者所定义的、具有文件名的一组相关元素的集合",
+          "normalized_name": "文件定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-09",
+          "name": "关键字定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "关键字是唯一能标识一个记录的数据项",
+          "normalized_name": "关键字定义",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "1. 数据项",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "2. 记录",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "3. 文件",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "关键字(key)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-06",
+          "type": "defined_by",
+          "evidence_text": "数据项是最低级的数据组织形式",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-07",
+          "type": "defined_by",
+          "evidence_text": "记录是一组相关数据项的集合",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-08",
+          "type": "defined_by",
+          "evidence_text": "文件是指由创建者所定义的、具有文件名的一组相关元素的集合",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-09",
+          "type": "defined_by",
+          "evidence_text": "关键字是唯一能标识一个记录的数据项",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按核心定义实体标注；学生、病历号和姓名等示例值未单独成实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0003-9e94f18157",
+      "source_sample_id": "pts-0077-e788223410",
+      "source_doc_id": "os:计算机操作系统:4.5-分页存储管理方式__4.5.1-分页存储管理的基本方法",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "4.5 分页存储管理方式",
+      "heading_path": [
+        "4.5 分页存储管理方式",
+        "4.5.1 分页存储管理的基本方法"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "4.5.1 分页存储管理的基本方法\n\n1.页面和物理块\n\n- (1) 页面。分页存储管理将进程的逻辑地址空间分成若干个页，并为各页加以编号，从0开始，如第0页、第1页等。相应地，也把内存的物理地址空间分成若干个块，同样也为它们加以编号，如0#块、1#块等等。在为进程分配内存时，以块为单位，将进程中的若干个页分别装入到多个可以不相邻接的物理块中。由于进程的最后一页经常装不满一块，而形成了不可利用的碎片，称之为“页内碎片”。\n- (2) 页面大小。在分页系统中，若选择过小的页面大小，虽然一方面可以减小内存碎片，起到减少内存碎片总空间的作用，有利于内存利用率的提高，但另一方面却会造成每个进程占用较多的页面，从而导致进程的页表过长，占用大量内存。此外，还会降低页面换进换出的效率。然而，如果选择的页面过大，虽然可以减少页表的长度，提高页面换进换出的速度，但却又会使页内碎片增大。因此，页面的大小应选择适中，且页面大小应是2的幂，通常为  1\\mathrm{KB} \\sim 8\\mathrm{KB}。\n\n2. 地址结构\n\n分页地址中的地址结构如下：\n\n页号P\t位移量W\n\n它包含两部分内容：前一部分为页号P，后一部分为位(偏)移量W，即页内地址。图中的地址长度为32位，其中  0\\sim 11 位为页内地址，即每页的大小为4KB；  12\\sim 31 位为页号，地址空间最多允许有1M页。\n\n对某特定机器，其地址结构是一定的。若给定一个逻辑地址空间中的地址为A，页面的大小为L，则页号P和页内地址d可按下式求得：\n\n公式：$$P = \\operatorname {I N T} \\left[ \\frac {A}{L} \\right], \\quad d = [ A ] \\mathrm {M O D L}$$\n\n其中，INT是整除函数，MOD是取余函数。例如，其系统的页面大小为1KB，设  \\mathrm{A} = 2170\\mathrm{B} 则由上式可以求得  \\mathrm{P} = 2 ，  \\mathrm{d} = 122\n\n3. 页表\n\n在分页系统中，允许将进程的各个页离散地存储在内存的任一物理块中，为保证进程仍然能够正确地运行，即能在内存中找到每个页面所对应的物理块，系统又为每个进程建立了一张页面映像表，简称页表。在进程地址空间内的所有页  (0\\sim \\mathrm{n}) ，依次在页表中有一页表项，其中记录了相应页在内存中对应的物理块号，见图4-14的中间部分。在配置了页表后，进程执行时，通过查找该表，即可找到每页在内存中的物理块号。可见，页表的作用是实现从页号到物理块号的地址映射。\n\n图4-14 页表的作用\n\n即使在简单的分页系统中，也常在页表的表项中设置一存取控制字段，用于对该存储块中的内容加以保护。当存取控制字段仅有一位时，可用来规定该存储块中的内容是允许读/写还是只读；若存取控制字段为二位，则可规定为读/写、只读和只执行等存取方式。如果有一进程试图去写一个只允许读的存储块时，将引起操作系统的一次中断。如果要利用\n\n分页系统去实现虚拟存储器，则还须增设一个数据项。我们将在本章后面做详细介绍。",
+      "text_length": 1320,
+      "page_start": 146,
+      "page_end": 148,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：4.5 分页存储管理方式；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、术语/别名信号",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "4.5.1 分页存储管理的基本方法",
+          "type": "Section",
+          "alias": [],
+          "span_text": "4.5.1 分页存储管理的基本方法",
+          "normalized_name": "4.5.1 分页存储管理的基本方法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "分页存储管理",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "分页存储管理",
+          "normalized_name": "分页存储管理",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "页面",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "页面",
+          "normalized_name": "页面",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "物理块",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "物理块",
+          "normalized_name": "物理块",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "页表",
+          "type": "Term",
+          "alias": [
+            "页面映像表"
+          ],
+          "span_text": "页面映像表，简称页表",
+          "normalized_name": "页表",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "页内碎片",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "页内碎片",
+          "normalized_name": "页内碎片",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "页号和页内地址计算公式",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "P = INT[A/L], d = A MOD L",
+          "normalized_name": "页号和页内地址计算公式",
+          "notes": "用于从逻辑地址中计算页号和页内地址。"
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "4.5.1 分页存储管理的基本方法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "(1) 页面",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "也把内存的物理地址空间分成若干个块",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "系统又为每个进程建立了一张页面映像表，简称页表",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-04",
+          "type": "related_to",
+          "evidence_text": "将进程中的若干个页分别装入到多个可以不相邻接的物理块中",
+          "notes": "页面与物理块在分页管理中形成映射关系。"
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "页表的作用是实现从页号到物理块号的地址映射",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-07",
+          "type": "depends_on",
+          "evidence_text": "页号P和页内地址d可按下式求得",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按分页核心概念与公式标注；未单独标注图号、示例地址值和变量 A/L/P/d。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0004-e93bc1b43f",
+      "source_sample_id": "pts-0035-198a7e41fc",
+      "source_doc_id": "os:计算机操作系统:9.6-系统调用的实现__习题",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "9.6 系统调用的实现",
+      "heading_path": [
+        "9.6 系统调用的实现",
+        "习题"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "assignment_requirement",
+      "text": "习题\n\n- 1. 操作系统用户接口中包括哪几种接口？它们分别适用于哪种情况？\n- 2. 什么是WIMP技术？它被应用到何种场合？\n- 3.联机命令通常有哪几种类型？每种类型中包括哪些主要命令？\n- 4. 什么是输入输出重定向？举例说明之。\n- 5. 何谓管道联接？举例说明之。\n- 6. 为了将已存文件改名，应用什么 UNIX 命令？\n- 7. 要想将工作目录移到目录树的某指定结点上，应使用什么命令？\n- 8. 如果希望把 file 1 的内容附加到原有的文件 file 2 的末尾，应用什么命令？\n- 9. 试比较 mail 和 write 命令的作用有何不同。\n- 10. 联机命令接口由哪几部分组成？\n- 11. 终端设备处理程序的主要作用是什么？它具有哪些功能？\n- 12. 命令解释程序的主要功能是什么？\n- 13. 试说明 MS-DOS 的命令处理程序 COMMAND.COM 的工作流程。\n- 14. Shell命令有何特点？它对命令解释程序有何影响。\n- 15. 试举例说明如何建立二叉树结构的命令行树。\n- 16. 试比较一般的过程调用与系统调用。\n- 17. 系统调用有哪几种类型？\n- 18. 如何设置系统调用所需的参数？\n- 19. 试说明系统调用的处理步骤。\n- 20. 为什么在访问文件之前，要用 open 系统调用先打开该文件？\n- 21. 在 UNIX 系统中是否设置了专门用来删除文件的系统调用？为什么？\n- 22. 在 IPC 软件包中包含哪几种通信机制？在每种通信机制中设置了哪些系统调用？\n- 23.trap.S是什么程序？它完成哪些主要功能？\n- 24. 在 UNIX 系统内，被保护的 CPU 环境中包含哪些数据项？\n- 25. trap.C 是什么程序？它将完成哪些处理？\n- 26. 为方便转入系统调用处理程序，在UNIX系统中配置了什么样的数据结构？\n\n计算机发展的历史清楚地表明：提高计算机系统性能的主要途径有两条：一是提高构成计算机的元器件的运行速度，特别是处理器芯片的速度，二是改进计算机系统的体系结构，特别是在系统中引入多个处理器或多台计算机，以实现对信息的高度并行处理，达到提高系统吞吐量和可靠性的目的。早期的计算机系统都是单处理机系统，到20世纪70年代出现了多处理器系统即MPS(Multiprocessor System)；进入90年代中后期，功能较强的主机系统和服务器几乎都毫无例外地采用了多处理器(机)系统，处理器的数目可从两个至数千个，甚至更多。",
+      "text_length": 1060,
+      "page_start": 314,
+      "page_end": 315,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：9.6 系统调用的实现；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "9.6 系统调用的实现",
+          "type": "Section",
+          "alias": [],
+          "span_text": "9.6 系统调用的实现",
+          "normalized_name": "9.6 系统调用的实现",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "9.6 系统调用的实现习题",
+          "type": "Assignment",
+          "alias": [
+            "习题"
+          ],
+          "span_text": "习题",
+          "normalized_name": "9.6 系统调用的实现习题",
+          "notes": "本样本主体是该节对应的题组。"
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "系统调用",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "系统调用",
+          "normalized_name": "系统调用",
+          "notes": "题组中反复出现的核心知识点。"
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "联机命令接口",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "联机命令接口",
+          "normalized_name": "联机命令接口",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "命令解释程序",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "命令解释程序",
+          "normalized_name": "命令解释程序",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "IPC 通信机制",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "IPC 软件包中包含哪几种通信机制",
+          "normalized_name": "IPC 通信机制",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "9.6 系统调用的实现 > 习题",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "系统调用有哪几种类型？如何设置系统调用所需的参数？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "联机命令接口由哪几部分组成？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "命令解释程序的主要功能是什么？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "在 IPC 软件包中包含哪几种通信机制？",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "题组按作业实体与核心知识点标注；末尾关于多处理机系统的引导段视为跨样本噪声，未纳入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    },
+    {
+      "id": "audit-ext-0005-57b6a4dd82",
+      "source_sample_id": "pts-0027-eeac080745",
+      "source_doc_id": "os:计算机操作系统:9.6-系统调用的实现__9.6.5-linux系统调用",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "9.6 系统调用的实现",
+      "heading_path": [
+        "9.6 系统调用的实现",
+        "9.6.5 Linux系统调用"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "9.6.5 Linux系统调用\n\n与 UNIX 相似，Linux 采用类似技术实现系统调用。Linux 系统在 CPU 的保护模式下提供了四个特权级别，目前内核都只用到了其中的两个特权级别，分别为“特权级 0”（即内核态)和“特权级 3”（即用户态）。用户对系统调用不能任意拦截和修改，以保证内核的安全性。Linux 最多可以有 190 个系统调用。应用程序和 Shell 需要通过系统调用机制访问 Linux 内核(功能)。每个系统调用由两部分组成：\n\n- (1) 内核函数：是实现系统调用功能的(内核)代码，作为操作系统的核心驻留在内存中，是一种共享代码，用C语言书写。它运行在内核态，数据也存放在内核空间，通常它不能再使用系统调用，也不能使用应用程序可用的库函数。\n- (2) 接口函数：是提供给应用程序的 API，以库函数形式存在 Linux 的 lib.a 中，该库中存放了所有系统调用的接口函数的目标代码，用汇编语言书写。其主要功能是：把系统调用号、入口参数地址传送给相应的核心函数，并使用户态下运行的应用程序陷入核心态。\n\nLinux 中有一个用汇编写的系统调用入口程序 entry(sys_call_table)，它包含了系统调用入口地址表，给出了所有系统调用核心函数的名字，而每个系统调用核心函数的编号由 include/asm/unistd.h 定义：\n\n```txt\nENTRY(sys-call-table) long SYMBOL_NAME(sys_xxx)i\n```\n\nLinux 的系统调用号就是系统调用入口表中位置的序号。所有系统调用通过接口函数将系统调用号传给内核，内核转入系统调用控制程序，再通过调用号位置来定位核心函数。Linux 内核的陷入由 0x80(int80h)中断实现。\n\n系统调用控制程序的工作流程为：① 取系统调用号，检验合法性；② 执行int80h产生中断；③ 进行地址空间的转换，以及堆栈的切换，进入内核态；④ 进行中断处理，根据系统调用号定位内核函数地址；⑤ 根据通用寄存器内容，从用户栈中取入口参数；⑥ 核心函数执行，把结果返回应用程序。",
+      "text_length": 899,
+      "page_start": 312,
+      "page_end": 313,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：9.6 系统调用的实现；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "9.6.5 Linux系统调用",
+          "type": "Section",
+          "alias": [],
+          "span_text": "9.6.5 Linux系统调用",
+          "normalized_name": "9.6.5 Linux系统调用",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "Linux",
+          "type": "ToolOrPlatform",
+          "alias": [],
+          "span_text": "Linux",
+          "normalized_name": "Linux",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "UNIX",
+          "type": "ToolOrPlatform",
+          "alias": [],
+          "span_text": "UNIX",
+          "normalized_name": "UNIX",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "Linux系统调用",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "Linux系统调用",
+          "normalized_name": "Linux系统调用",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "系统调用机制",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "系统调用机制",
+          "normalized_name": "系统调用机制",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "系统调用控制程序",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "系统调用控制程序",
+          "normalized_name": "系统调用控制程序",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "内核函数",
+          "type": "Term",
+          "alias": [],
+          "span_text": "内核函数",
+          "normalized_name": "内核函数",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "接口函数",
+          "type": "Term",
+          "alias": [
+            "API"
+          ],
+          "span_text": "接口函数",
+          "normalized_name": "接口函数",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-09",
+          "name": "entry(sys_call_table)",
+          "type": "Term",
+          "alias": [
+            "系统调用入口程序"
+          ],
+          "span_text": "entry(sys_call_table)",
+          "normalized_name": "entry(sys_call_table)",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "9.6.5 Linux系统调用",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "应用程序和 Shell 需要通过系统调用机制访问 Linux 内核",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "内核转入系统调用控制程序",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "applied_in",
+          "evidence_text": "Linux 系统在 CPU 的保护模式下提供了四个特权级别",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-05",
+          "type": "implemented_by",
+          "evidence_text": "Linux 采用类似技术实现系统调用",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-07",
+          "type": "depends_on",
+          "evidence_text": "把系统调用号、入口参数地址传送给相应的核心函数",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-08",
+          "type": "depends_on",
+          "evidence_text": "所有系统调用通过接口函数将系统调用号传给内核",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-09",
+          "type": "depends_on",
+          "evidence_text": "Linux 中有一个用汇编写的系统调用入口程序 entry(sys_call_table)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "与 UNIX 相似，Linux 采用类似技术实现系统调用",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按 Linux 系统调用机制中的核心对象标注；代码片段中的其余符号名未继续展开成实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0006-4bf8452dd3",
+      "source_sample_id": "pts-0068-05585f7e0a",
+      "source_doc_id": "os:计算机操作系统:2.6-进程通信",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "2.6 进程通信",
+      "heading_path": [
+        "2.6 进程通信"
+      ],
+      "heading_level": 2,
+      "guessed_sample_type": "algorithm_or_method",
+      "text": "2.6 进程通信\n\n进程通信是指进程之间的信息交换。由于进程的互斥与同步，需要在进程间交换一定的信息，故不少学者将它们也归为进程通信，但只能把它们称为低级进程通信。我们以信号量机制为例来说明，它们之所以低级的原因在于：① 效率低，生产者每次只能向缓冲池投放一个产品(消息)，消费者每次只能从缓冲区中取得一个消息；② 通信对用户不透明，OS只为进程之间的通信提供了共享存储器。而关于进程之间通信所需之共享数据结构的设置、数据的传送、进程的互斥与同步，都必须由程序员去实现，显然，对于用户而言，这是非常不方便的。\n\n在进程之间要传送大量数据时，应当利用OS提供的高级通信工具，该工具最主要的特点是：\n\n- (1) 使用方便。OS 隐藏了实现进程通信的具体细节，向用户提供了一组用于实现高级通信的命令(原语)，用户可方便地直接利用它实现进程之间的通信。或者说，通信过程对用户是透明的。这样就大大减少了通信程序编制上的复杂性。\n- (2) 高效地传送大量数据。用户可直接利用高级通信命令(原语)高效地传送大量的数据。",
+      "text_length": 454,
+      "page_start": 75,
+      "page_end": 75,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：2.6 进程通信；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "2.6 进程通信",
+          "type": "Section",
+          "alias": [],
+          "span_text": "2.6 进程通信",
+          "normalized_name": "2.6 进程通信",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "进程通信",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "进程通信是指进程之间的信息交换",
+          "normalized_name": "进程通信",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "低级进程通信",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "低级进程通信",
+          "normalized_name": "低级进程通信",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "信号量机制",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "信号量机制",
+          "normalized_name": "信号量机制",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "共享存储器",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "共享存储器",
+          "normalized_name": "共享存储器",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "高级通信工具",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "高级通信命令"
+          ],
+          "span_text": "高级通信工具",
+          "normalized_name": "高级通信工具",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "进程通信定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "进程通信是指进程之间的信息交换",
+          "normalized_name": "进程通信定义",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "2.6 进程通信",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "我们以信号量机制为例来说明",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "应当利用OS提供的高级通信工具",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-07",
+          "type": "defined_by",
+          "evidence_text": "进程通信是指进程之间的信息交换",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-04",
+          "type": "implemented_by",
+          "evidence_text": "我们以信号量机制为例来说明，它们之所以低级的原因在于",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "OS只为进程之间的通信提供了共享存储器",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-06",
+          "type": "implemented_by",
+          "evidence_text": "在进程之间要传送大量数据时，应当利用OS提供的高级通信工具",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按进程通信定义与高低级通信工具标注；未展开消息、产品等示例项。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0007-7f6c48e0b0",
+      "source_sample_id": "pts-0010-497787a059",
+      "source_doc_id": "os:计算机操作系统:12.1-安全环境",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "12.1 安全环境",
+      "heading_path": [
+        "12.1 安全环境"
+      ],
+      "heading_level": 2,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "12.1 安全环境\n\n由于社会的复杂性和某些事物的不可预知性，使得计算机系统的环境往往是不安全的。为此，必须对我们的工作环境采取“保护”措施，使之变成为一个“安全”环境。“保护”和“安全”是有不同含意的两个术语。可以把“保护”定义为：对攻击、入侵和损害系统等的行为进行防御或监视。“安全”是对系统完整性和数据安全性的可信度的衡量。因此，保护可以被视为：为保障系统中数据的机密性、完整性和系统可用性，所必须的特定机制和策略的集合。或者说，实现“安全环境”是目标，而“保护”是为了实现该目标所采取的方法和措施。",
+      "text_length": 253,
+      "page_start": 388,
+      "page_end": 388,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：short；结构层级：heading_level=2；覆盖章节/标题边界：12.1 安全环境；命中高价值信号：定义信号、方法/步骤信号、含公式或数学表达、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "12.1 安全环境",
+          "type": "Section",
+          "alias": [],
+          "span_text": "12.1 安全环境",
+          "normalized_name": "12.1 安全环境",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "安全环境",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "安全环境",
+          "normalized_name": "安全环境",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "保护",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "保护",
+          "normalized_name": "保护",
+          "notes": "在本段中被明确视为实现安全环境的方法与措施。"
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "安全",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "安全",
+          "normalized_name": "安全",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "保护定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "保护定义为：对攻击、入侵和损害系统等的行为进行防御或监视",
+          "normalized_name": "保护定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "安全定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "安全是对系统完整性和数据安全性的可信度的衡量",
+          "normalized_name": "安全定义",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "12.1 安全环境",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "必须对我们的工作环境采取“保护”措施",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "“保护”和“安全”是有不同含意的两个术语",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-05",
+          "type": "defined_by",
+          "evidence_text": "保护定义为：对攻击、入侵和损害系统等的行为进行防御或监视",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-06",
+          "type": "defined_by",
+          "evidence_text": "安全是对系统完整性和数据安全性的可信度的衡量",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "implemented_by",
+          "evidence_text": "实现“安全环境”是目标，而“保护”是为了实现该目标所采取的方法和措施",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按“安全/保护”概念边界标注；将保护视为实现安全环境的方法。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0008-ec5573777d",
+      "source_sample_id": "pts-0104-ee7a1bfaee",
+      "source_doc_id": "os:计算机操作系统:4.3-连续分配存储管理方式__4.3.3-动态分区分配",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "4.3 连续分配存储管理方式",
+      "heading_path": [
+        "4.3 连续分配存储管理方式",
+        "4.3.3 动态分区分配"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "4.3.3 动态分区分配\n\n动态分区分配又称为可变分区分配，它是根据进程的实际需要，动态地为之分配内存空间。在实现动态分区分配时，将涉及到分区分配中所用的数据结构、分区分配算法和分区的分配与回收操作这样三方面的问题。\n\n1. 动态分区分配中的数据结构\n\n为了实现动态分区分配，系统中必须配置相应的数据结构，用以描述空闲分区和已分配分区的情况，为分配提供依据。常用的数据结构有以下两种形式：① 空闲分区表，在系统中设置一张空闲分区表，用于记录每个空闲分区的情况。每个空闲分区占一个表目，表目中包括分区号、分区大小和分区始址等数据项，如图4-6所示。② 空闲分区链。为了实现对空闲分区的分配和链接，在每个分区的起始部分设置一些用于控制分区分配的信息，以及用于链接各分区所用的前向指针，在分区尾部则设置一后向指针。通过前、后向链接指针，可将所有的空闲分区链接成一个双向链，如图4-7所示。为了检索方便，在分区尾部重复设置状态位和分区大小表目。当分区被分配出去以后，把状态位由“0”改为“1”，此时，前、后向指针已无意义。\n\n图4-6 空闲分区表\n图4-6 空闲分区表\n分区号=1; 分区大小(KB)=50; 分区始址(K)=85; 状态=空闲\n分区号=2; 分区大小(KB)=32; 分区始址(K)=155; 状态=空闲\n分区号=3; 分区大小(KB)=70; 分区始址(K)=275; 状态=空闲\n分区号=4; 分区大小(KB)=60; 分区始址(K)=532; 状态=空闲\n分区号=5; 分区大小(KB)=...; 分区始址(K)=...; 状态=...\n\n图4-7 空闲链结构\n\n2. 动态分区分配算法\n\n为把一个新作业装入内存，须按照一定的分配算法，从空闲分区表或空闲分区链中选出一分区分配给该作业。由于内存分配算法对系统性能有很大的影响，故人们对它进行了较为广泛而深入的研究，于是产生了许多动态分区分配算法。我们将在下一小节先介绍传统的四种分配算法，它们都属于顺序式搜索算法。再下一节，我们将介绍三种较新的索引式搜索算法。\n\n3. 分区分配操作\n\n在动态分区存储管理方式中，主要的操作是分配内存和回收内存。\n\n1）分配内存\n\n系统应利用某种分配算法，从空闲分区链(表)中找到所需大小的分区。设请求的分区大小为  u.size，表中每个空闲分区的大小可表示为  m.size。若  m.size-u.size ≤ size(size 是事先规定的不再切割的剩余分区的大小)，说明多余部分太小，可不再切割，将整个分区分配给请求者。否则（即多余部分超过 size），便从该分区中按请求的大小划分出一块内存空间分配出去，余下的部分仍留在空闲分区链(表)中。然后，将分配区的首址返回给调用者。图 4-8 示出了分配流程。\n\n图4-8 内存分配流程\n\n2) 回收内存\n\n当进程运行完毕释放内存时，系统根据回收区的首址，从空闲区链(表)中找到相应的插入点，此时可能出现以下四种情况之一：\n\n- (1) 回收区与插入点的前一个空闲分区  \\mathrm{F}_{1} 相邻接，见图4-9(a)。此时应将回收区与插入点的前一分区合并，不必为回收分区分配新表项，而只需修改其前一分区  \\mathrm{F}_{1} 的大小。\n- (2) 回收分区与插入点的后一空闲分区  \\mathbf{F}_2 相邻接，见图4-9(b)。此时也可将两分区合并，形成新的空闲分区，但用回收区的首址作为新空闲区的首址，大小为两者之和。\n- (3) 回收区同时与插入点的前、后两个分区邻接，见图4-9(c)。此时将三个分区合并，使用  \\mathbf{F}_1 的表项和  \\mathbf{F}_1 的首址，取消  \\mathbf{F}_2 的表项，大小为三者之和。\n\n(a)\n\n(b)\n\n(c) 图4-9 内存回收时的情况\n\n(4) 回收区既不与  \\mathbf{F}_1 邻接，又不与  \\mathbf{F}_2 邻接。这时应为回收区单独建立一个新表项，填写回收区的首址和大小，并根据其首址插入到空闲链中的适当位置。图 4-10 示出了内存回收时的流程。\n\n图4-10 内存回收流程",
+      "text_length": 1726,
+      "page_start": 135,
+      "page_end": 138,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：4.3 连续分配存储管理方式；命中高价值信号：公式信号、方法/步骤信号、作业/题组信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "4.3.3 动态分区分配",
+          "type": "Section",
+          "alias": [],
+          "span_text": "4.3.3 动态分区分配",
+          "normalized_name": "4.3.3 动态分区分配",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "动态分区分配",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "可变分区分配"
+          ],
+          "span_text": "动态分区分配又称为可变分区分配",
+          "normalized_name": "动态分区分配",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "空闲分区表",
+          "type": "Term",
+          "alias": [],
+          "span_text": "空闲分区表",
+          "normalized_name": "空闲分区表",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "空闲分区链",
+          "type": "Term",
+          "alias": [],
+          "span_text": "空闲分区链",
+          "normalized_name": "空闲分区链",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "动态分区分配算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "分配算法"
+          ],
+          "span_text": "动态分区分配算法",
+          "normalized_name": "动态分区分配算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "分配内存",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "分配内存",
+          "normalized_name": "分配内存",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "回收内存",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "回收内存",
+          "normalized_name": "回收内存",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "4.3.3 动态分区分配",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "空闲分区表",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "空闲分区链",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "动态分区分配算法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "depends_on",
+          "evidence_text": "在系统中设置一张空闲分区表，用于记录每个空闲分区的情况",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-04",
+          "type": "depends_on",
+          "evidence_text": "可将所有的空闲分区链接成一个双向链",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "implemented_by",
+          "evidence_text": "将涉及到分区分配算法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-06",
+          "type": "implemented_by",
+          "evidence_text": "主要的操作是分配内存和回收内存",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-07",
+          "type": "implemented_by",
+          "evidence_text": "主要的操作是分配内存和回收内存",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按动态分区分配的核心数据结构与操作标注；图示表项中的具体数值未纳入。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0009-05dbee904d",
+      "source_sample_id": "pts-0058-449059d064",
+      "source_doc_id": "os:计算机操作系统:8.5-数据一致性控制__习题",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "8.5 数据一致性控制",
+      "heading_path": [
+        "8.5 数据一致性控制",
+        "习题"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "assignment_requirement",
+      "text": "习题\n\n- 1. 目前常用的外存有哪几种组织方式？\n- 2. 由连续组织方式所形成的顺序文件的主要优缺点是什么？它主要应用于何种场合？\n- 3. 在链接式文件中常用哪种链接方式？为什么？\n- 4. 在文件分配表中为什么要引入“簇”的概念？以“簇”为基本的分配单位有什么好处？\n- 5. 简要说明为什么要从FAT12发展为FAT16？又进一步要发展为FAT32？\n- 6. 试解释逻辑簇号和虚拟簇号这两个名词，NTFS是如何将它们映射到文件的物理地址上的？\n- 7. 在MS-DOS中有两个文件A和B，A占用11、12、16和14四个盘块；B占用13、18和20三个盘块。试画出在文件A和B中各盘块间的链接情况及FAT的情况。\n- 8. NTFS 文件系统中的文件所采用的是什么样的物理结构？\n- 9. 假定一个文件系统的组织方式与 MS-DOS 相似，在 FAT 中可有 64K 个指针，磁盘的盘块大小为  512\\mathrm{B}，试问该文件系统能否指引一个 512MB 的磁盘？\n- 10. 为了快速访问，又易于更新，当数据为以下形式时，应选用何种文件组织方式？\n\n- (1) 不经常更新，经常随机访问；\n- (2) 经常更新，经常按一定顺序访问；\n- (3) 经常更新，经常随机访问。\n\n- 11. 在 UNIX 中，如果一个盘块的大小为  1 \\mathrm{KB}，每个盘块号占 4 个字节，即每块可放 256 个地址。请转换下列文件的字节偏移量为物理地址： - (1) 9999；(2) 18000；(3) 420000。\n- 12. 什么是索引文件？为什么要引入多级索引？\n- 13. 试说明增量式索引组织方式。\n- 14. 有一计算机系统利用图8-19所示的位示图来管理空闲盘块。盘块的大小为  1\\mathrm{KB} 现要为某文件分配两个盘块，试说明盘块的具体分配过程。\n\n=1; 1=1; 2=1; 3=1; 4=1; 5=1; 6=1; 7=1; 8=1; 9=1; 10=1; 11=1; 12=1; 13=1; 14=1; 15=1; 16=1\n=2; 1=1; 2=1; 3=1; 4=1; 5=1; 6=1; 7=1; 8=1; 9=1; 10=1; 11=1; 12=1; 13=1; 14=1; 15=1; 16=1\n=3; 1=1; 2=1; 3=0; 4=1; 5=1; 6=1; 7=1; 8=1; 9=1; 10=1; 11=1; 12=1; 13=1; 14=1; 15=1; 16=1\n=4; 1=1; 2=1; 3=1; 4=1; 5=1; 6=1; 7=0; 8=1; 9=1; 10=1; 11=1; 12=0; 13=1; 14=1; 15=1; 16=1\n=5; 1=0; 2=0; 3=0; 4=0; 5=0; 6=0; 7=0; 8=0; 9=0; 10=0; 11=0; 12=0; 13=0; 14=0; 15=0; 16=0\n\n图8-19 某计算机系统的位示图\n\n15. 某操作系统的磁盘文件空间共有 500 块，若用字长为 32 位的位示图管理盘空间，试问：\n\n- (1) 位示图需多少个字？\n- (2) 第  i 字第  j 位对应的块号是多少？\n- (3) 给出申请/归还一块的工作流程。\n- 16. 对空闲磁盘空间的管理常采用哪几种分配方式？在 UNIX 系统中是采用何种分配方式？\n- 17. 可从哪几方面来提高对文件的访问速度？\n- 18. 何谓磁盘高速缓存？在设计磁盘高速缓存时需要考虑哪些问题？\n- 19. 可以采取哪几种方式将磁盘高速缓存中的数据传送给请求者进程？\n- 20. 何谓提前读和延迟写？\n- 21. 试说明廉价磁盘冗余阵列 RAID 的主要优点。\n- 22. 在第一级系统容错技术中，包括哪些容错措施？什么是写后读校验？\n- 23. 在第二级系统容错技术中，包括哪些容错措施？请画图说明之。\n- 24. 具有容错功能的集群系统的主要工作模式有哪几种？请简要说明之。\n- 25. 为什么要在系统中配置后备系统？目前常用做后备系统的设备有哪几种？\n- 26. 何谓事务？如何保证事务的原子性？\n- 27. 引入检查点的目的是什么？引入检查点后又如何进行恢复处理？\n- 28. 为何引入共享锁？如何用互斥锁或共享锁来实现事务的顺序性？\n- 29. 当系统中有重复文件时，如何保证它们的一致性？\n- 30. 如何检查盘块号的一致性？检查时可能出现哪几种情况？\n\n操作系统作为计算机系统资源的管理者，对系统中的所有硬件和软件资源进行统一的管理和操纵。无论是用户(程序)或OS的外层软件，凡是涉及到系统资源的有关操作，都必须作为服务请求提交给OS，由它来完成。为了使用户能方便地使用计算机，操作系统提供了相应的用户接口，帮助用户快速、有效、安全、可靠地操纵计算机系统中的各类资源，完成相关的处理。一般地，操作系统向用户提供了两类接口，即用户接口和程序接口。值得说明的是，在Internet广为流行的今天，OS又增加了一种面向网络的网络用户接口。",
+      "text_length": 2116,
+      "page_start": 284,
+      "page_end": 286,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：8.5 数据一致性控制；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "8.5 数据一致性控制",
+          "type": "Section",
+          "alias": [],
+          "span_text": "8.5 数据一致性控制",
+          "normalized_name": "8.5 数据一致性控制",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "8.5 数据一致性控制习题",
+          "type": "Assignment",
+          "alias": [
+            "习题"
+          ],
+          "span_text": "习题",
+          "normalized_name": "8.5 数据一致性控制习题",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "事务",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "何谓事务？如何保证事务的原子性？",
+          "normalized_name": "事务",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "检查点",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "引入检查点的目的是什么",
+          "normalized_name": "检查点",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "共享锁",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "为何引入共享锁",
+          "normalized_name": "共享锁",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "RAID",
+          "type": "KnowledgePoint",
+          "alias": [
+            "廉价磁盘冗余阵列"
+          ],
+          "span_text": "廉价磁盘冗余阵列 RAID",
+          "normalized_name": "RAID",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "8.5 数据一致性控制 > 习题",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "何谓事务？如何保证事务的原子性？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "引入检查点的目的是什么？引入检查点后又如何进行恢复处理？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "为何引入共享锁？如何用互斥锁或共享锁来实现事务的顺序性？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明廉价磁盘冗余阵列 RAID 的主要优点。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "题组按作业实体与一致性控制核心知识点标注；末尾用户接口引导段未纳入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    },
+    {
+      "id": "audit-ext-0010-d43e221de8",
+      "source_sample_id": "pts-0120-278fa92f83",
+      "source_doc_id": "os:计算机操作系统:5.2-请求分页存储管理方式__5.2.3-页面调入策略",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "5.2 请求分页存储管理方式",
+      "heading_path": [
+        "5.2 请求分页存储管理方式",
+        "5.2.3 页面调入策略"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "5.2.3 页面调入策略\n\n为使进程能够正常运行，必须事先将要执行的那部分程序和数据所在的页面调入内存。现在的问题是：\n\n- (1) 系统应在何时调入所需页面；\n- (2) 系统应从何处调入这些页面；\n- (3) 是如何进行调入的。\n\n1. 何时调入页面\n\n为了确定系统将进程运行时所缺的页面调入内存的时机，可采取预调页策略或请求调页策略，现分述如下。\n\n- (1) 预调页策略。如果进程的许多页是存放在外存的一个连续区域中，一次调入若干个相邻的页会比一次调入一页更高效些。但如果调入的一批页面中的大多数都未被访问，则又是低效的。于是便考虑采用一种以预测为基础的预调页策略，将那些预计在不久之后便会被访问的页面预先调入内存。如果预测较准确，那么这种策略显然是很有吸引力的。但遗憾的是，目前预调页的成功率仅约  50\\% 。\n- 但预调页策略又因其特有的长处取得了很好的效果。首先可用于在第一次将进程调入内存时，此时可将程序员指出的那些页先调入内存。其次是，在采用工作集的系统中，每个进程都具有一张表，表中记录有运行时的工作集，每当程序被调度运行时，将工作集中的所有页调入内存。关于工作集的概念将在5.4节中介绍。\n- (2) 请求调页策略。当进程在运行中需要访问某部分程序和数据时，若发现其所在的页面不在内存，便立即提出请求，由 OS 将其所需页面调入内存。由请求调页策略所确定调入的页是一定会被访问的，再加之请求调页策略比较易于实现，故在目前的虚拟存储器中，大多采用此策略。但这种策略每次仅调入一页，故须花费较大的系统开销，增加了磁盘 I/O 的启动频率。\n\n2. 从何处调入页面\n\n将请求分页系统中的外存分为两部分：用于存放文件的文件区和用于存放对换页面的对换区。通常，由于对换区是采用连续分配方式，而文件区是采用离散分配方式，所以对换区的数据存取(磁盘I/O)速度比文件区的高。这样，每当发生缺页请求时，系统应从何处将缺页调入内存，可分成如下三种情况进行：\n\n- (1) 系统拥有足够的对换区空间，这时可以全部从对换区调入所需页面，以提高调页速度。为此，在进程运行前，便须将与该进程有关的文件从文件区拷贝到对换区。\n- (2) 系统缺少足够的对换区空间，这时凡是不会被修改的文件，都直接从文件区调入；而当换出这些页面时，由于它们未被修改，则不必再将它们重写到磁盘(换出)，以后再调入时，仍从文件区直接调入。但对于那些可能被修改的部分，在将它们换出时便须调到对换区，以后需要时再从对换区调入。\n- (3) UNIX 方式。由于与进程有关的文件都放在文件区，故凡是未运行过的页面，都应\n\n从文件区调入。而对于曾经运行过但又被换出的页面，由于是被放在对换区，因此在下次调入时应从对换区调入。由于UNIX系统允许页面共享，因此，某进程所请求的页面有可能已被其它进程调入内存，此时也就无需再从对换区调入。\n\n3. 页面调入过程\n\n每当程序所要访问的页面未在内存时(存在位为“0”)，便向CPU发出一缺页中断，中断处理程序首先保留CPU环境，分析中断原因后转入缺页中断处理程序。该程序通过查找页表得到该页在外存的物理块后，如果此时内存能容纳新页，则启动磁盘I/O，将所缺之页调入内存，然后修改页表。如果内存已满，则须先按照某种置换算法，从内存中选出一页准备换出；如果该页未被修改过(修改位为“0”)，可不必将该页写回磁盘；但如果此页已被修改(修改位为“1”)，则必须将它写回磁盘，然后再把所缺的页调入内存，并修改页表中的相应表项，置其存在位为“1”，并将此页表项写入快表中。在缺页调入内存后，利用修改后的页表形成所要访问数据的物理地址，再去访问内存数据。整个页面的调入过程对用户是透明的。\n\n4. 缺页率\n\n假设一个进程的逻辑空间为  \\mathbf{n} 页，系统为其分配的内存物理块数为  \\mathrm{m}(\\mathrm{m}\\leqslant \\mathrm{n}) 。如果在进程的运行过程中，访问页面成功(即所访问页面在内存中)的次数为S，访问页面失败（即所访问页面不在内存中，需要从外存调入)的次数为F，则该进程总的页面访问次数为 \\mathrm{A} = \\mathrm{S} + \\mathrm{F} ，那么该进程在其运行过程中的缺页率即为\n\n公式：$$f = \\frac {F}{A}$$\n\n通常，缺页率受到以下几个因素的影响：\n\n- (1) 页面大小。页面划分较大，则缺页率较低；反之，缺页率较高。\n- (2) 进程所分配物理块的数目。所分配的物理块数目越多，缺页率越低；反之则越高。\n- (3）页面置换算法。算法的优劣决定了进程执行过程中缺页中断的次数，因此缺页率是衡量页面置换算法的重要指标。\n- (4) 程序固有特性。程序本身的编制方法对缺页中断次数有影响，根据程序执行的局部性原理，程序编制的局部化程度越高，相应执行时的缺页程度越低。\n\n事实上，在缺页中断处理时，当由于空间不足，需要置换部分页面到外存时，选择被置换页面还需要考虑到置换的代价，如页面是否被修改过。没有修改过的页面可以直接放弃，而修改过的页面则必须进行保存，所以处理这两种情况时的时间也是不同的。假设被置换的页面被修改的概率是  \\beta，其缺页中断处理时间为  t_a，被置换页面没有被修改的缺页中断时间为  t_b，那么，缺页中断处理时间的计算公式为\n\n公式：$$t = \\beta \\times t _ {a} + (1 - \\beta) \\times t _ {b}$$",
+      "text_length": 2286,
+      "page_start": 169,
+      "page_end": 170,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：5.2 请求分页存储管理方式；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、含公式或数学表达",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "5.2.3 页面调入策略",
+          "type": "Section",
+          "alias": [],
+          "span_text": "5.2.3 页面调入策略",
+          "normalized_name": "5.2.3 页面调入策略",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "页面调入策略",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "页面调入策略",
+          "normalized_name": "页面调入策略",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "预调页策略",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "预调页策略",
+          "normalized_name": "预调页策略",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "请求调页策略",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "请求调页策略",
+          "normalized_name": "请求调页策略",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "文件区",
+          "type": "Term",
+          "alias": [],
+          "span_text": "文件区",
+          "normalized_name": "文件区",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "对换区",
+          "type": "Term",
+          "alias": [],
+          "span_text": "对换区",
+          "normalized_name": "对换区",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "缺页率",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "缺页率",
+          "normalized_name": "缺页率",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "缺页率公式",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "f = F / A",
+          "normalized_name": "缺页率公式",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-09",
+          "name": "页面置换算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "页面置换算法",
+          "normalized_name": "页面置换算法",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "5.2.3 页面调入策略",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "预调页策略",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "请求调页策略",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "4. 缺页率",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-07",
+          "target_entity_id": "ent-08",
+          "type": "defined_by",
+          "evidence_text": "那么该进程在其运行过程中的缺页率即为 f = F / A",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "可采取预调页策略或请求调页策略",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-04",
+          "type": "related_to",
+          "evidence_text": "可采取预调页策略或请求调页策略",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "用于存放文件的文件区",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-06",
+          "type": "depends_on",
+          "evidence_text": "用于存放对换页面的对换区",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-10",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-09",
+          "type": "depends_on",
+          "evidence_text": "则须先按照某种置换算法，从内存中选出一页准备换出",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按页面调入策略、缺页率及相关公式标注；未单独标注中间变量 A、F、β、ta、tb。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0011-a11c74aa57",
+      "source_sample_id": "pts-0045-70d9cc3c1c",
+      "source_doc_id": "os:计算机操作系统:3.8-死锁的检测与解除__习题",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "3.8 死锁的检测与解除",
+      "heading_path": [
+        "3.8 死锁的检测与解除",
+        "习题"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "assignment_requirement",
+      "text": "习题\n\n- 1. 高级调度与低级调度的主要任务是什么？为什么要引入中级调度？\n- 2. 处理机调度算法的共同目标是什么？批处理系统的调度目标又是什么？\n- 3. 何谓作业、作业步和作业流？\n- 4. 在什么情况下需要使用作业控制块 JCB，其中包含了哪些内容？\n- 5. 在作业调度中应如何确定接纳多少个作业和接纳哪些作业？\n- 6. 为什么要引入高响应比优先调度算法？它有何优点？\n- 7. 试说明低级调度的主要功能。\n- 8. 在抢占调度方式中，抢占的原则是什么？\n\n9. 在选择调度方式和调度算法时，应遵循的准则是什么？\n\n10. 在批处理系统、分时系统和实时系统中，各采用哪几种进程(作业)调度算法？\n\n11. 何谓静态和动态优先级？确定静态优先级的依据是什么？\n\n12. 试比较FCFS和SJF两种进程调度算法。\n\n13. 在时间片轮转法中，应如何确定时间片的大小？\n\n14. 通过一个例子来说明通常的优先级调度算法为什么不能适用于实时系统？\n\n15. 为什么说多级反馈队列调度算法能较好地满足各方面用户的需要？\n\n16. 为什么说传统的几种调度算法都不能算是公平调度算法？\n\n17. 保证调度算法是如何做到调度的公平性的？\n\n18. 公平分享调度算法又是如何做到调度的公平性的？\n\n19.为什么在实时系统中，要求系统(尤其是CPU)具有较强的处理能力？\n\n20. 按调度方式可将实时调度算法分为哪几种？\n\n21. 什么是最早截止时间优先调度算法？举例说明之。\n\n22. 什么是最低松弛度优先调度算法？举例说明之。\n\n23. 何谓“优先级倒置”现象，可采取什么方法来解决？\n\n24. 试分别说明可重用资源和可消耗资源的性质。\n\n25. 试举例说明竞争不可抢占资源所引起的死锁。\n\n26. 为了破坏“请求和保持”条件而提出了两种协议，试比较这两种协议。\n\n27. 何谓死锁？产生死锁的原因和必要条件是什么？\n\n28. 在解决死锁问题的几个方法中，哪种方法最易于实现？哪种方法使资源利用率最高？\n\n29. 请详细说明可通过哪些途径预防死锁。\n\n30. 在银行家算法的例子中，如果  \\mathbf{P}_0 发出的请求向量由Request(0,2,0)改为Request(0,1,0)，问系统可否将资源分配给它？\n\n31. 在银行家算法中，若出现下述资源分配情况，试问：\n\nProcess=P0; Allocation=0032; Need=0012; Available=1622\nProcess=P1; Allocation=1000; Need=1750\nProcess=P2; Allocation=1354; Need=2356\nProcess=P3; Allocation=0332; Need=0652\nProcess=P4; Allocation=0014; Need=0656\n\n(1) 该状态是否安全？\n\n(2) 若进程  \\mathrm{P}_2 提出请求 Request(1, 2, 2, 2) 后，系统能否将资源分配给它？\n\ngogogogogogogogogogogogogogogogog\n\n存储器历来都是计算机系统的重要组成部分。近年来，随着计算机技术的发展，系统软件和应用软件在种类、功能上都急剧地膨胀，虽然存储器容量一直在不断扩大，但仍不能满足现代软件发展的需要。因此，存储器仍然是一种宝贵而又稀缺的资源。如何对它加以有效的管理，不仅直接影响到存储器的利用率，而且对系统性能也有重大影响。存储器管理的主要对象是内存。由于对外存的管理与对内存的管理相类似，只是它们的用途不同，即外存主要用来存放文件，所以我们把对外存的管理放在文件管理一章介绍。",
+      "text_length": 1542,
+      "page_start": 126,
+      "page_end": 128,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：3.8 死锁的检测与解除；命中高价值信号：定义信号、方法/步骤信号、作业/题组信号、问答/考核信号",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "3.8 死锁的检测与解除",
+          "type": "Section",
+          "alias": [],
+          "span_text": "3.8 死锁的检测与解除",
+          "normalized_name": "3.8 死锁的检测与解除",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "3.8 死锁的检测与解除习题",
+          "type": "Assignment",
+          "alias": [
+            "习题"
+          ],
+          "span_text": "习题",
+          "normalized_name": "3.8 死锁的检测与解除习题",
+          "notes": "该样本主体是混合了调度与死锁问题的一组题目。"
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "死锁",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "何谓死锁？产生死锁的原因和必要条件是什么？",
+          "normalized_name": "死锁",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "银行家算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "在银行家算法的例子中",
+          "normalized_name": "银行家算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "优先级调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "通常的优先级调度算法为什么不能适用于实时系统",
+          "normalized_name": "优先级调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "优先级倒置",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "何谓“优先级倒置”现象",
+          "normalized_name": "优先级倒置",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "实时调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "按调度方式可将实时调度算法分为哪几种",
+          "normalized_name": "实时调度算法",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "3.8 死锁的检测与解除 > 习题",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "何谓死锁？产生死锁的原因和必要条件是什么？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "在银行家算法的例子中，如果 P0 发出的请求向量改变，问系统可否将资源分配给它？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "为什么通常的优先级调度算法不能适用于实时系统？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "何谓“优先级倒置”现象，可采取什么方法来解决？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-07",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "按调度方式可将实时调度算法分为哪几种？",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "该题组同时混入调度与死锁主题，按题目正文中的核心考点人工标注；末尾转入存储管理的引导段视为跨样本噪声，未纳入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    },
+    {
+      "id": "audit-ext-0012-a80a25f136",
+      "source_sample_id": "pts-0005-1d800cadd6",
+      "source_doc_id": "os:计算机操作系统:前言",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": "前言",
+      "section": null,
+      "heading_path": [
+        "前言"
+      ],
+      "heading_level": 1,
+      "guessed_sample_type": "algorithm_or_method",
+      "text": "前言\n\n（第四版）\n\n汤小丹 梁红兵 哲凤屏 汤子瀛 编著\n\n(第四版)\n\n汤小丹 梁红兵\n\n哲凤屏 汤子瀛\n\n前言\n\n自1981年本教材第一版出版至今，我们已对它做过多次修改。本次是对2007年出版的《计算机操作系统》(第三版)教材进行的修改。在本次修订出版时，首先，根据广大师生的要求，结合国内研究生招生考试大纲的要求，对相关内容进行了调整，使之基本覆盖了考试大纲的内容；其次，结合操作系统发展的现状和前沿，增加了多处理机、多媒体、系统安全等方面的内容，并对章节进行了调整，使本教材能更好地为读者学习操作系统提供帮助。\n\n本版教材共分为12章。第一章为操作系统引论，介绍了OS的发展、特征、功能等，增加了对现代OS特征和功能的介绍；第二章和第三章深入阐述了进程和线程的基本概念、同步与通信、调度和死锁，增加了Intel x86系列CPU对多任务支持的背景知识介绍；第四章和第五章对连续和离散存储器管理方式及虚拟存储器进行了介绍，增加了Intel x86系列CPU对存储管理支持的背景知识介绍；第六章为I/O管理，自下而上地对I/O软件的各层次作了较为系统的阐述；第七章和第八章介绍了文件系统和磁盘存储器管理；第九章是操作系统接口，对接口方式和实现方法做了详细的介绍；从第十章开始到第十二章，其内容都是与目前OS发展现状紧密相关的，这几章介绍多处理机OS、网络OS、多媒体OS及系统安全性等方面的内容。\n\n本教材在编写过程中，得到西安电子科技大学出版社，特别是责任编辑李惠萍老师的大力支持与帮助。此外，王侃雅等在资料的整理、校对等工作中都付出了辛勤的劳动。在此谨向以上各位表以衷心的感谢。\n\n虽然本教材经过多次修改，希望能把它写得更好，但限于编者的水平，在本次编写的过程中，仍难免会有疏漏和不当之处，恳请读者批评指正。\n\n2014年2月\n\n操作系统(Operating System，OS)是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充。其主要作用是管理好这些设备，提高它们的利用率和系统的吞吐量，并为用户和应用程序提供一个简单的接口，便于用户使用。OS是现代计算机系统中最基本和最重要的系统软件，而其它的诸如编译程序、数据库管理系统等系统软件，以及大量的应用软件，都直接依赖于操作系统的支持，取得它所提供的服务。事实上OS已成为现代计算机系统、多处理机系统、计算机网络中都必须配置的系统软件。",
+      "text_length": 1003,
+      "page_start": 1,
+      "page_end": 9,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：long；结构层级：heading_level=1；覆盖章节/标题边界：前言；命中高价值信号：方法/步骤信号、关系表达较密集、跨页样本",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "前言",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "前言",
+          "normalized_name": "前言",
+          "notes": "作为教材的一级前置结构单元处理。"
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "计算机操作系统",
+          "type": "Course",
+          "alias": [
+            "OS"
+          ],
+          "span_text": "《计算机操作系统》",
+          "normalized_name": "计算机操作系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "操作系统",
+          "type": "Concept",
+          "alias": [
+            "Operating System",
+            "OS"
+          ],
+          "span_text": "操作系统(Operating System，OS)",
+          "normalized_name": "操作系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "多处理机",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "normalized_name": "多处理机",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "多媒体",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "normalized_name": "多媒体",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "系统安全",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "normalized_name": "系统安全",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "操作系统定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "操作系统(Operating System，OS)是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充",
+          "normalized_name": "操作系统定义",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-01",
+          "type": "contains",
+          "evidence_text": "《计算机操作系统》前言",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "第一章为操作系统引论",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "增加了多处理机、多媒体、系统安全等方面的内容",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-07",
+          "type": "defined_by",
+          "evidence_text": "操作系统(Operating System，OS)是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "前言样本按课程定位与核心内容范围标注；作者姓名、出版社、致谢信息和日期均不计入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    },
+    {
+      "id": "audit-ext-0013-a702d0a5a1",
+      "source_sample_id": "pts-0083-88bf88e5e0",
+      "source_doc_id": "os:计算机操作系统:11.2-多媒体文件中的各种媒体__11.2.2-图像",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "11.2 多媒体文件中的各种媒体",
+      "heading_path": [
+        "11.2 多媒体文件中的各种媒体",
+        "11.2.2 图像"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "11.2.2 图像\n\n1. 图像的数字表示\n\n在计算机中，图像是通过矩阵表示的，矩阵中的每个元素值对应于图像的一个基本元素，称为像素。每个像素用若干个二进制的位来表示其亮度、颜色和属性。如果图像只有两种亮度值，即黑白图像，可用一位来表示。如果要表示灰度图像，则需要多位二进制数\n\n表示，如用8位来表示，就可从白到黑分为256个不同的灰度，它可以精确地显现一般的黑白照片。显现彩色照片一般需要用24位、36位或48位来表示彩色，用24位可产生1667万种不同颜色的组合，已完全能够满足一般用户的需要。同样，我们把屏幕上的一个点也称为一个像素，屏幕上的一个像素与图像的一个像素是一一对应的。为了描述一幅图像通常需要非常大的存储容量。例如，为了存储一幅  640\\times 480 的像素矩阵，每个像素用24位表示，便需要921.6KB的存储容量。\n\n2. 图像的属性\n\n一幅图像最主要的属性是分辨率、色彩深度和真/伪彩色三个值。\n\n1)分辨率\n\n分辨率可分为两种：① 图像分辨率，用于描述一幅图像的像素密度，用每英寸多少点 (dpi) 来表示，我们可利用图像分辨率来确定一幅图像的像素数目；② 显示器分辨率，是指显示屏上能够显示的像素多少，对于分辨率为  1024 \\times 768 的显示器，整个显示屏包含有 796432 个像素。由于显示器分辨率可用来确定一幅图像的显示区域大小，因此，如果图像分辨率大于显示器分辨率，则在显示屏上只能显示部分图像，反之，若图像分辨率小于显示器分辨率，则图像只占用一部分显示屏幕。\n\n2) 色彩深度\n\n为了表现一幅彩色照片的色彩，每个像素需要用许多二进制位，所用二进制位的多少就是色彩深度。当我们用24位来表示色彩时，色彩深度就为24。色彩深度也就是色彩的分辨率，显然，色彩深度越大，它所能表示的颜色数也越多。但由于24位的色彩分辨率已远远超过人眼的分辨率，所以在一般情况下已经足够了。\n\n3)真/伪彩色\n\n由于任何一种颜色都可由三种基本颜色按不同比例合成，目前常用红、绿、蓝三色，因此，当色彩深度为24时，红色(R)占8位，绿色(G)占8位，蓝色(B)占8位，可以简单表示为RGB  8:8:8 。把用RGB  8:8:8 表示的色彩称为真彩色图像，或全彩色图像。\n\n为了减少彩色图像所占用的存储空间，在生成图像时，并不为每一个像素分配存储空间，而是对图像中的不同颜色进行采样，将所采样的各个像素的RGB分量之值分别保存在一张颜色表中。要显示图像时，再从表中取出，经适当处理后还原出原有图像。人们将用这种方式所形成的图像的颜色称为“伪彩色”。\n\n3. 图像文件格式\n\n数字图像可采用多种文件格式存储在计算机中，四种最常用的图像文件格式为：\n\n- (1) BMP 格式。BMP 采用位映射存储格式，色彩深度可选 1 位、4 位、8 位和 24 位，一般不进行图像压缩，因此所占存储空间较大。\n- (2) GIP 格式。该格式可在一个文件中存放多幅彩色图像，若将这些图像用较慢的速度依次读出，并显示在屏幕上，便可产生幻灯片效果。如果用较快的速度依次读出，便是简单的动画，GIP 图像色彩深度从 1 位到 8 位。\n- (3)TIFF格式。这是为扫描仪和桌面出版系统开发的图像文件格式，现已得到广泛应用。\n- (4) JPEG 格式。JPEG 文件是一种经过 JPEG 算法压缩过的文件，其压缩比很高，约为  5:1 到  50:1 ，非常适用于需要处理大量图片的场合。",
+      "text_length": 1452,
+      "page_start": 361,
+      "page_end": 362,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：11.2 多媒体文件中的各种媒体；命中高价值信号：定义信号、公式信号、方法/步骤信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "11.2.2 图像",
+          "type": "Section",
+          "alias": [],
+          "span_text": "11.2.2 图像",
+          "normalized_name": "11.2.2 图像",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "图像",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "在计算机中，图像是通过矩阵表示的",
+          "normalized_name": "图像",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "像素",
+          "type": "Term",
+          "alias": [],
+          "span_text": "称为像素",
+          "normalized_name": "像素",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "分辨率",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "一幅图像最主要的属性是分辨率",
+          "normalized_name": "分辨率",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "色彩深度",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "一幅图像最主要的属性是分辨率、色彩深度和真/伪彩色三个值",
+          "normalized_name": "色彩深度",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "真彩色图像",
+          "type": "Concept",
+          "alias": [
+            "全彩色图像"
+          ],
+          "span_text": "把用RGB 8:8:8 表示的色彩称为真彩色图像，或全彩色图像",
+          "normalized_name": "真彩色图像",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "伪彩色",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "人们将用这种方式所形成的图像的颜色称为“伪彩色”",
+          "normalized_name": "伪彩色",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "11.2.2 图像",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "矩阵中的每个元素值对应于图像的一个基本元素，称为像素",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "一幅图像最主要的属性是分辨率",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "一幅图像最主要的属性是分辨率、色彩深度和真/伪彩色三个值",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "把用RGB 8:8:8 表示的色彩称为真彩色图像",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "称为“伪彩色”",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "图像的一个基本元素，称为像素",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-04",
+          "type": "related_to",
+          "evidence_text": "一幅图像最主要的属性是分辨率",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "related_to",
+          "evidence_text": "每个像素需要用许多二进制位，所用二进制位的多少就是色彩深度",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-10",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-07",
+          "type": "related_to",
+          "evidence_text": "一幅图像最主要的属性是分辨率、色彩深度和真/伪彩色三个值",
+          "notes": "二者都是图像颜色表示方式。"
+        }
+      ],
+      "annotation_notes": "按图像的核心表示与属性标注；文件格式缩写和疑似 OCR 误差（如 GIP）未纳入 gold，以免引入错误规范名。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0014-49fb9a0eb1",
+      "source_sample_id": "pts-0020-cb62aeb850",
+      "source_doc_id": "os:计算机操作系统:4.2-程序的装入和链接",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "4.2 程序的装入和链接",
+      "heading_path": [
+        "4.2 程序的装入和链接"
+      ],
+      "heading_level": 2,
+      "guessed_sample_type": "algorithm_or_method",
+      "text": "4.2 程序的装入和链接\n\n用户程序要在系统中运行，必须先将它装入内存，然后再将其转变为一个可以执行的程序，通常都要经过以下几个步骤：\n\n- (1) 编译，由编译程序(Compiler)对用户源程序进行编译，形成若干个目标模块(Object Module);\n- (2) 链接，由链接程序(Linker)将编译后形成的一组目标模块以及它们所需要的库函数链接在一起，形成一个完整的装入模块(Load Module);\n- (3) 装入，由装入程序(Loader)将装入模块装入内存。\n\n图4-2示出了这样的三步过程。本节将扼要阐述程序(含数据)的链接和装入过程。\n\n图4-2 对用户程序的处理步骤",
+      "text_length": 297,
+      "page_start": 130,
+      "page_end": 131,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：4.2 程序的装入和链接；命中高价值信号：方法/步骤信号、关系表达较密集、存在步骤或列表结构、跨页样本",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "4.2 程序的装入和链接",
+          "type": "Section",
+          "alias": [],
+          "span_text": "4.2 程序的装入和链接",
+          "normalized_name": "4.2 程序的装入和链接",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "编译",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "编译，由编译程序对用户源程序进行编译",
+          "normalized_name": "编译",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "链接",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "链接，由链接程序将编译后形成的一组目标模块链接在一起",
+          "normalized_name": "链接",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "装入",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "装入，由装入程序将装入模块装入内存",
+          "normalized_name": "装入",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "目标模块",
+          "type": "Term",
+          "alias": [
+            "Object Module"
+          ],
+          "span_text": "形成若干个目标模块",
+          "normalized_name": "目标模块",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "装入模块",
+          "type": "Term",
+          "alias": [
+            "Load Module"
+          ],
+          "span_text": "形成一个完整的装入模块",
+          "normalized_name": "装入模块",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "通常都要经过以下几个步骤：(1) 编译",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "通常都要经过以下几个步骤：(2) 链接",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "通常都要经过以下几个步骤：(3) 装入",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "形成若干个目标模块",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "形成一个完整的装入模块",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "编译、链接、装入三步过程",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "将编译后形成的一组目标模块链接在一起",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-06",
+          "type": "depends_on",
+          "evidence_text": "将装入模块装入内存",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按程序处理三步过程及关键中间产物标注；Compiler、Linker、Loader 作为英文释义未单独扩成实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0015-8649663097",
+      "source_sample_id": "pts-0021-7c7b04974a",
+      "source_doc_id": "os:计算机操作系统:2.8-线程的实现__习题",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "2.8 线程的实现",
+      "heading_path": [
+        "2.8 线程的实现",
+        "习题"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "assignment_requirement",
+      "text": "习题\n\n- 1. 什么是前趋图？为什么要引入前趋图？\n- 2. 试画出下面四条语句的前趋图：\n\n- S1:  \\mathrm{a} = \\mathrm{x} + \\mathrm{y} ;\n- S2:  b = z + 1 - S3:  c = a - b - S4:  \\mathrm{w} = \\mathrm{c} + 1\n\n- 3. 为什么程序并发执行会产生间断性特征？\n- 4. 程序并发执行时为什么会失去封闭性和可再现性？\n- 5. 在操作系统中为什么要引入进程的概念？它会产生什么样的影响？\n- 6. 试从动态性、并发性和独立性上比较进程和程序。\n- 7. 试说明PCB的作用具体表现在哪几个方面，为什么说PCB是进程存在的唯一标志？\n- 8. PCB 提供了进程管理和进程调度所需要的哪些信息？\n- 9. 进程控制块的组织方式有哪几种？\n- 10. 何谓操作系统内核？内核的主要功能是什么？\n- 11. 试说明进程在三个基本状态之间转换的典型原因。\n- 12. 为什么要引入挂起状态？该状态有哪些性质？\n- 13. 在进行进程切换时，所要保存的处理机状态信息有哪些？\n- 14. 试说明引起进程创建的主要事件。\n- 15. 试说明引起进程被撤消的主要事件。\n- 16. 在创建一个进程时所要完成的主要工作是什么？\n- 17. 在撤消一个进程时所要完成的主要工作是什么？\n- 18. 试说明引起进程阻塞或被唤醒的主要事件是什么？\n- 19. 为什么要在 OS 中引入线程？\n- 20. 试说明线程具有哪些属性？\n- 21. 试从调度性、并发性、拥有资源及系统开销方面对进程和线程进行比较。\n- 22. 线程控制块TCB中包含了哪些内容？\n- 23. 何谓用户级线程和内核支持线程？\n- 24. 试说明用户级线程的实现方法。\n- 25. 试说明内核支持线程的实现方法。\n- 26. 多线程模型有哪几种类型？多对一模型有何优缺点？\n\ngogogogogogogogogogogogogog\n\n在多道程序环境下，内存中存在着多个进程，其数目往往多于处理机数目。这就要求系统能按某种算法，动态地将处理机分配给处于就绪状态的一个进程，使之执行。分配处理机的任务是由处理机调度程序完成的。对于大型系统运行时的性能，如系统吞吐量、资源利用率、作业周转时间或响应的及时性等，在很大程度上都取决于处理机调度性能的好坏。因而，处理机调度便成为OS中至关重要的部分。",
+      "text_length": 1027,
+      "page_start": 92,
+      "page_end": 93,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：2.8 线程的实现；命中高价值信号：定义信号、方法/步骤信号、作业/题组信号、问答/考核信号",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "2.8 线程的实现",
+          "type": "Section",
+          "alias": [],
+          "span_text": "2.8 线程的实现",
+          "normalized_name": "2.8 线程的实现",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "2.8 线程的实现习题",
+          "type": "Assignment",
+          "alias": [
+            "习题"
+          ],
+          "span_text": "习题",
+          "normalized_name": "2.8 线程的实现习题",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "线程",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "为什么要在 OS 中引入线程",
+          "normalized_name": "线程",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "进程",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "在操作系统中为什么要引入进程的概念",
+          "normalized_name": "进程",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "PCB",
+          "type": "Term",
+          "alias": [
+            "进程控制块"
+          ],
+          "span_text": "PCB",
+          "normalized_name": "PCB",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "TCB",
+          "type": "Term",
+          "alias": [
+            "线程控制块"
+          ],
+          "span_text": "线程控制块TCB",
+          "normalized_name": "TCB",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "用户级线程",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "何谓用户级线程",
+          "normalized_name": "用户级线程",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "内核支持线程",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "何谓内核支持线程",
+          "normalized_name": "内核支持线程",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "2.8 线程的实现 > 习题",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "为什么要在 OS 中引入线程？试说明线程具有哪些属性？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "为什么要在操作系统中引入进程的概念？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明PCB的作用具体表现在哪几个方面",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "线程控制块TCB中包含了哪些内容？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-07",
+          "type": "implemented_by",
+          "evidence_text": "何谓用户级线程和内核支持线程？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-08",
+          "type": "implemented_by",
+          "evidence_text": "何谓用户级线程和内核支持线程？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-07",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明用户级线程的实现方法。",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-08",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明内核支持线程的实现方法。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "题组按线程实现相关核心对象标注；末尾转入处理机调度的引导段视为跨样本噪声，未纳入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    },
+    {
+      "id": "audit-ext-0016-1069b2ba15",
+      "source_sample_id": "pts-0015-6b7d193e02",
+      "source_doc_id": "os:计算机操作系统:12.3-用户验证",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "12.3 用户验证",
+      "heading_path": [
+        "12.3 用户验证"
+      ],
+      "heading_level": 2,
+      "guessed_sample_type": "chapter_concept_explanation",
+      "text": "12.3 用户验证\n\n验证又称为识别或认证。当用户要登录一台多用户计算机时，操作系统将对该用户进行验证(Authentication)，这一过程称为用户验证。用户验证的目的在于确定被验证的对象(包括人和事)是否真实，即确认“你是否是你所声称的你”，以防止入侵者进行假冒、篡改等。\n\n通常利用验证技术作为保障网络安全的第一道防线。\n\n由于身份验证是通过验证被认证对象的一个或多个参数的真实性和有效性来确定被认证对象是否名副其实的，因此，在被认证对象与要验证的那些参数之间，应存在严格的对应关系。当前身份验证主要依据下述三个方面的信息来确定：\n\n(1) 所知(knowledge)，即基于用户所知道的信息，如系统的登录名、口令等。\n\n(2) 所有(possesses)，指用户所具有的东西，如身份证、信用卡等。\n\n(3) 用户特征(characteristics)，指用户所具有的特征，特别是生理特征，如指纹、声纹、DNA等。",
+      "text_length": 411,
+      "page_start": 395,
+      "page_end": 396,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：12.3 用户验证；命中高价值信号：关系表达较密集、术语/别名信号、存在步骤或列表结构、跨页样本",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "12.3 用户验证",
+          "type": "Section",
+          "alias": [],
+          "span_text": "12.3 用户验证",
+          "normalized_name": "12.3 用户验证",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "用户验证",
+          "type": "KnowledgePoint",
+          "alias": [
+            "识别",
+            "认证",
+            "Authentication"
+          ],
+          "span_text": "这一过程称为用户验证",
+          "normalized_name": "用户验证",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "所知",
+          "type": "KnowledgePoint",
+          "alias": [
+            "knowledge"
+          ],
+          "span_text": "所知(knowledge)",
+          "normalized_name": "所知",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "所有",
+          "type": "KnowledgePoint",
+          "alias": [
+            "possesses"
+          ],
+          "span_text": "所有(possesses)",
+          "normalized_name": "所有",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "用户特征",
+          "type": "KnowledgePoint",
+          "alias": [
+            "characteristics"
+          ],
+          "span_text": "用户特征(characteristics)",
+          "normalized_name": "用户特征",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "12.3 用户验证",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "当前身份验证主要依据下述三个方面的信息来确定：(1) 所知",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "(2) 所有(possesses)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "(3) 用户特征(characteristics)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "depends_on",
+          "evidence_text": "身份验证主要依据下述三个方面的信息来确定：(1) 所知",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-04",
+          "type": "depends_on",
+          "evidence_text": "身份验证主要依据下述三个方面的信息来确定：(2) 所有",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "身份验证主要依据下述三个方面的信息来确定：(3) 用户特征",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按用户验证及三类认证因子标注；登录名、口令、身份证、指纹、声纹、DNA 等实例仅作为证据，不单独扩为实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0017-67bdf61529",
+      "source_sample_id": "pts-0039-2313e43803",
+      "source_doc_id": "os:计算机操作系统:3.2-作业与作业调度__3.2.4-优先级调度算法和高响应比优先调度算法",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "3.2 作业与作业调度",
+      "heading_path": [
+        "3.2 作业与作业调度",
+        "3.2.4 优先级调度算法和高响应比优先调度算法"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "3.2.4 优先级调度算法和高响应比优先调度算法\n\n1. 优先级调度算法(priority-scheduling algorithm, PSA)\n\n我们可以这样来看作业的优先级，对于先来先服务调度算法，作业的等待时间就是作业的优先级，等待时间越长，其优先级越高。对于短作业优先调度算法，作业的长短就是作业的优先级，作业所需运行的时间越短，其优先级越高。但上述两种优先级都不能反映作业的紧迫程度。而在优先级调度算法中，则是基于作业的紧迫程度，由外部赋予作业相应的优先级，调度算法是根据该优先级进行调度的。这样就可以保证紧迫性作业优先运行。优先级调度算法可作为作业调度算法，也可作为进程调度算法。当把该算法用于作业调度时，系统是从后备队列中选择若干个优先级最高的作业装入内存。\n\n2. 高响应比优先调度算法(Highest Response Ratio Next, HRRN)\n\n在批处理系统中，FCFS算法所考虑的只是作业的等待时间，而忽视了作业的运行时间。而SJF算法正好与之相反，只考虑作业的运行时间，而忽视了作业的等待时间。高响应比优先调度算法则是既考虑了作业的等待时间，又考虑作业运行时间的调度算法，因此既照顾了短作业，又不致使长作业的等待时间过长，从而改善了处理机调度的性能。\n\n高响应比优先算法是如何实现的呢？如果我们能为每个作业引入一个动态优先级，即优先级是可以改变的，令它随等待时间延长而增加，这将使长作业的优先级在等待期间不断地增加，等到足够的时间后，必然有机会获得处理机。该优先级的变化规律可描述为：\n\n公式：$$\\text {优 先 权} = \\frac {\\text {等 待 时 间} + \\text {要 求 服 务 时 间}}{\\text {要 求 服 务 时 间}}$$\n\n由于等待时间与服务时间之和就是系统对该作业的响应时间，故该优先级又相当于响应比  R_{\\mathrm{P}} 。据此，优先又可表示为：\n\n公式：$$\\mathrm {R} _ {\\mathrm {P}} = \\frac {\\text {等 待 时 间} + \\text {要 求 服 务 时 间}}{\\text {要 求 服 务 时 间}} = \\frac {\\text {响 应 时 间}}{\\text {要 求 服 务 时 间}}$$\n\n由上式可以看出：① 如果作业的等待时间相同，则要求服务的时间愈短，其优先权愈高，因而类似于SJF算法，有利于短作业。② 当要求服务的时间相同时，作业的优先权又决定于其等待时间，因而该算法又类似于FCFS算法。③ 对于长作业的优先级，可以随等待时间的增加而提高，当其等待时间足够长时，也可获得处理机。因此该算法实现了较好的折中。当然在利用该算法时，每次要进行调度之前，都需要先做响应比的计算，显然会增加系统开销。",
+      "text_length": 1179,
+      "page_start": 98,
+      "page_end": 99,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：3.2 作业与作业调度；命中高价值信号：公式信号、方法/步骤信号、作业/题组信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "3.2.4 优先级调度算法和高响应比优先调度算法",
+          "type": "Section",
+          "alias": [],
+          "span_text": "3.2.4 优先级调度算法和高响应比优先调度算法",
+          "normalized_name": "3.2.4 优先级调度算法和高响应比优先调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "优先级调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "PSA"
+          ],
+          "span_text": "优先级调度算法(priority-scheduling algorithm, PSA)",
+          "normalized_name": "优先级调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "高响应比优先调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "HRRN"
+          ],
+          "span_text": "高响应比优先调度算法(Highest Response Ratio Next, HRRN)",
+          "normalized_name": "高响应比优先调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "先来先服务调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "FCFS"
+          ],
+          "span_text": "先来先服务调度算法",
+          "normalized_name": "先来先服务调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "短作业优先调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "SJF"
+          ],
+          "span_text": "短作业优先调度算法",
+          "normalized_name": "短作业优先调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "响应比公式",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "优先权 = (等待时间 + 要求服务时间) / 要求服务时间",
+          "normalized_name": "响应比公式",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "作业优先级",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "作业的优先级",
+          "normalized_name": "作业优先级",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "1. 优先级调度算法(priority-scheduling algorithm, PSA)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "2. 高响应比优先调度算法(Highest Response Ratio Next, HRRN)",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "FCFS算法所考虑的只是作业的等待时间",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "SJF算法正好与之相反",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "优先权 = (等待时间 + 要求服务时间) / 要求服务时间",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "作业的优先级",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-07",
+          "type": "depends_on",
+          "evidence_text": "调度算法是根据该优先级进行调度的",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-06",
+          "type": "depends_on",
+          "evidence_text": "该优先级的变化规律可描述为",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-04",
+          "type": "related_to",
+          "evidence_text": "该算法又类似于FCFS算法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-10",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-05",
+          "type": "related_to",
+          "evidence_text": "因而类似于SJF算法，有利于短作业",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按两类调度算法、对比算法和响应比公式标注；公式中的变量与推导文字未继续拆分为独立实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0018-9cb3753be3",
+      "source_sample_id": "pts-0111-57e5a89cec",
+      "source_doc_id": "os:计算机操作系统:12.2-数据加密技术__12.2.1-数据加密原理",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "12.2 数据加密技术",
+      "heading_path": [
+        "12.2 数据加密技术",
+        "12.2.1 数据加密原理"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "definition_or_formula",
+      "text": "12.2.1 数据加密原理\n\n加密是一种密写科学，用于把系统中的数据(称为明文)转换为密文。使攻击者即使截获到被加密的数据，也无法了解数据的内容，从而有效地保护了系统中信息的安全性。数据加密技术包括：数据加密、数据解密、数字签名、签名识别以及数字证明等。本小节主要介绍数据加密的原理。\n\n1. 数据加密模型\n\n早在几千年前，人类就已经有了通信保密的思想，并先后出现了易位法和置换法等加密方法。但直至进入20世纪60年代，由于科学技术的发展，才使密码学的研究进入了一个新的发展时期。计算机网络的发展，尤其是Internet广泛深入的应用，又推动了数据加密\n\n技术的迅速发展。\n\n一个数据加密模型如图12-1所示。它由四部分组成：\n\n- (1) 明文。被加密的文本称为明文  \\mathbf{P} 。\n- (2) 密文。加密后的文本称为密文  \\mathrm{Y} 。\n- (3) 加密(解密)算法 E(D)。这是指用于实现从明文(密文)到密文(明文)转换的公式、规则或程序。\n- (4) 密钥  \\mathbf{K} 。密钥是加密和解密算法中的关键参数。\n\n图12-1 数据加密模型\n\n加密过程可描述为：在发送端利用加密算法E和加密密钥Ke，对明文P进行加密，得到密文  \\mathrm{Y} = \\mathrm{E}_{\\mathrm{Ke}}(\\mathrm{P})；密文Y被传送到接收端后，再进行解密。解密过程可描述为：接收端利用解密算法D和解密密钥Kd，对密文Y进行解密，将密文恢复为明文  \\mathrm{P} = \\mathrm{D}_{\\mathrm{Kd}}(\\mathrm{Y})。在密码学中把设计密码技术称为密码编码，把破译密码技术称为密码分析。密码编码和密码分析合起来称为密码学。在加密系统中算法是相对稳定的。为了加密数据的安全性，应经常改变密钥。\n\n2. 基本加密方法\n\n最基本的加密方法有两种：易位法和置换法，其它方法大多是基于这两种方法形成的。\n\n1) 易位法\n\n易位法是按照一定的规则，重新安排明文中的比特或字符的顺序来形成密文，而字符本身保持不变。按易位单位的不同，又可分成比特易位和字符易位两种。前者的实现方法简单易行，并可用硬件实现，主要用于数字通信中；而字符易位法是利用密钥对明文进行易位后形成密文，具体方法是：假定有一密钥MEGABUCK，其长度为8，则其明文是以8个字符为一组写在密钥的下面，如图12-2所示。按密钥中字母在英文字母表中的顺序来确定明文排列后的列号。如密钥中的A所对应的列号为1，B为2，C为3，E为4等。然后再按照密钥所指示的列号，先读出第一列中的字符，读完第1列后，再读出第2列中的字符，……，这样，即完成了将明文please transfer…转换为密文AFLLSKSOSELAWAIA…的加密过程。\n\n图12-2 按字符易位加密算法\n\n2) 置换法\n\n置换法是按照一定的规则，用一个字符去置换(替代)另一个字符来形成密文。最早由朱叶斯·凯撒(Julius caeser)提出的算法非常简单，它是将字母a、b、c、…、x、y、z循环右移三位后，即利用d置换a，用e置换b等。凯撒算法的推广是移动K位。单纯移动K位的置换算法很容易被破译，比较好的置换算法是进行映像。\n\n在对英文进行加密时，可将26个英文字母通过密钥QWERTYUIOPASDFGHJKLMXCVBNM，映像到另外26个特定字母中。例如，利用置换法和上面的密钥可将attack加密，变为QZZQEA，见图12-3所示。这种密码系统被称为单字母置换。在该例中解密密钥是什么呢？从图12-3可以看出，A的明文是K，B的明文是X，C的明文是V，其余字母可以依此类推，由此即可得到该例中的解密密钥是：KXVMCNOPHQRSZYIJADLEGWBUFT。\n\n图12-3 26个字母的映像\n\n这样的加密方法是否已足够安全呢？从表面上看好像非常安全，因为，字母与字母间的置换存在着  26! = 4 \\times 10^{26} 种可能性。但由于自然语言有着一定的统计特性规律。例如，在英语中，最常用的字母排序为 e、t、o、a、n、i 等。最常用的字母组合为：th、in、er、re 等。根据自然语言规律，这种密码还是很容易被破译的。",
+      "text_length": 1775,
+      "page_start": 391,
+      "page_end": 393,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：12.2 数据加密技术；命中高价值信号：定义信号、公式信号、方法/步骤信号、关系表达较密集",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "12.2.1 数据加密原理",
+          "type": "Section",
+          "alias": [],
+          "span_text": "12.2.1 数据加密原理",
+          "normalized_name": "12.2.1 数据加密原理",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "数据加密",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "本小节主要介绍数据加密的原理",
+          "normalized_name": "数据加密",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "明文",
+          "type": "Term",
+          "alias": [
+            "P"
+          ],
+          "span_text": "被加密的文本称为明文",
+          "normalized_name": "明文",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "密文",
+          "type": "Term",
+          "alias": [
+            "Y"
+          ],
+          "span_text": "加密后的文本称为密文",
+          "normalized_name": "密文",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "密钥",
+          "type": "Term",
+          "alias": [
+            "K"
+          ],
+          "span_text": "密钥是加密和解密算法中的关键参数",
+          "normalized_name": "密钥",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "数据加密模型",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "一个数据加密模型如图12-1所示，它由四部分组成",
+          "normalized_name": "数据加密模型",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "易位法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "最基本的加密方法有两种：易位法和置换法",
+          "normalized_name": "易位法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-08",
+          "name": "置换法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "最基本的加密方法有两种：易位法和置换法",
+          "normalized_name": "置换法",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "12.2.1 数据加密原理",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "1. 数据加密模型",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "1) 易位法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-08",
+          "type": "contains",
+          "evidence_text": "2) 置换法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-06",
+          "type": "defined_by",
+          "evidence_text": "一个数据加密模型如图12-1所示，它由四部分组成",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-05",
+          "type": "depends_on",
+          "evidence_text": "密钥是加密和解密算法中的关键参数",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "related_to",
+          "evidence_text": "用于把系统中的数据(称为明文)转换为密文",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-08",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-04",
+          "type": "related_to",
+          "evidence_text": "用于把系统中的数据(称为明文)转换为密文",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-09",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-07",
+          "type": "implemented_by",
+          "evidence_text": "最基本的加密方法有两种：易位法和置换法",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-10",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-08",
+          "type": "implemented_by",
+          "evidence_text": "最基本的加密方法有两种：易位法和置换法",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按数据加密模型及两类基本加密方法标注；示例密钥串、映射字母表和中间字符序列未单独抽为实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0019-5b2311c6dd",
+      "source_sample_id": "pts-0028-359b49251a",
+      "source_doc_id": "os:计算机操作系统:7.3-文件目录",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "7.3 文件目录",
+      "heading_path": [
+        "7.3 文件目录"
+      ],
+      "heading_level": 2,
+      "guessed_sample_type": "algorithm_or_method",
+      "text": "7.3 文件目录\n\n通常，在现代计算机系统中，都要存储大量的文件。为了能对这些文件实施有效的管理，必须对它们加以妥善组织，这主要是通过文件目录实现的。文件目录也是一种数据结构，用于标识系统中的文件及其物理地址，供检索时使用。对目录管理的要求如下：\n\n- (1) 实现“按名存取”。用户只须向系统提供所需访问文件的名字，便能快速准确地找到指定文件在外存上的存储位置。这是目录管理中最基本的功能，也是文件系统向用户提供最基本的服务。\n- (2) 提高对目录的检索速度。通过合理地组织目录结构加快对目录的检索速度，从而提高对文件的存取速度。这是在设计一个大、中型文件系统时所追求的主要目标。\n- (3) 文件共享。在多用户系统中，应允许多个用户共享一个文件。这样就只须在外存中保留一份该文件的副本供不同用户使用，以节省大量的存储空间，并方便用户和提高文件利用率。\n- (4) 允许文件重名。系统应允许不同用户对不同文件采用相同的名字，以便于用户按照自己的习惯给文件命名和使用文件。",
+      "text_length": 437,
+      "page_start": 240,
+      "page_end": 240,
+      "audit_priority": "medium",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：7.3 文件目录；命中高价值信号：方法/步骤信号、关系表达较密集、存在步骤或列表结构",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "7.3 文件目录",
+          "type": "Section",
+          "alias": [],
+          "span_text": "7.3 文件目录",
+          "normalized_name": "7.3 文件目录",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "文件目录",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "这主要是通过文件目录实现的",
+          "normalized_name": "文件目录",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "文件目录定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "文件目录也是一种数据结构，用于标识系统中的文件及其物理地址，供检索时使用",
+          "normalized_name": "文件目录定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "按名存取",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "实现“按名存取”",
+          "normalized_name": "按名存取",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "目录检索速度",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "提高对目录的检索速度",
+          "normalized_name": "目录检索速度",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "文件共享",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "文件共享",
+          "normalized_name": "文件共享",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "允许文件重名",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "允许文件重名",
+          "normalized_name": "允许文件重名",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "7.3 文件目录",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-03",
+          "type": "contains",
+          "evidence_text": "文件目录也是一种数据结构，用于标识系统中的文件及其物理地址",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-04",
+          "type": "contains",
+          "evidence_text": "实现“按名存取”",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-05",
+          "type": "contains",
+          "evidence_text": "提高对目录的检索速度",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-06",
+          "type": "contains",
+          "evidence_text": "文件共享",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-07",
+          "type": "contains",
+          "evidence_text": "允许文件重名",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-07",
+          "source_entity_id": "ent-02",
+          "target_entity_id": "ent-03",
+          "type": "defined_by",
+          "evidence_text": "文件目录也是一种数据结构，用于标识系统中的文件及其物理地址，供检索时使用",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "按文件目录的定义与四项目录管理要求标注；“物理地址”仅作为定义内容的一部分，不额外拆成独立实体。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
+    },
+    {
+      "id": "audit-ext-0020-f493e3972a",
+      "source_sample_id": "pts-0050-8aaabe5288",
+      "source_doc_id": "os:计算机操作系统:6.8-磁盘存储器的性能和调度__习题",
+      "source_file": "计算机操作系统.pdf",
+      "document_type": "textbook",
+      "course_id": "os",
+      "chapter": null,
+      "section": "6.8 磁盘存储器的性能和调度",
+      "heading_path": [
+        "6.8 磁盘存储器的性能和调度",
+        "习题"
+      ],
+      "heading_level": 3,
+      "guessed_sample_type": "assignment_requirement",
+      "text": "习题\n\n- 1. 试说明 I/O 系统的基本功能。\n- 2. 简要说明 I/O 软件的四个层次的基本功能。\n- 3. I/O系统接口与软件/硬件(RW/HW)接口分别是什么接口？\n- 4. 与设备无关性的基本含义是什么？为什么要设置该层？\n- 5. 试说明设备控制器的组成。\n- 6. 为了实现 CPU 与设备控制器间的通信，设备控制器应具备哪些功能？\n- 7. 什么是内存映像 I/O? 它是如何实现的？\n- 8. 为什么说中断是 OS 赖以生存的基础？\n- 9. 对多中断源的两种处理方式分别用于何种场合？\n- 10. 设备中断处理程序通常需完成哪些工作？\n- 11. 简要说明中断处理程序对中断进行处理的几个步骤。\n- 12. 试说明设备驱动程序具有哪些特点。\n- 13. 设备驱动程序通常要完成哪些工作？\n- 14. 简要说明设备驱动程序的处理过程可分为哪几步。\n- 15. 试说明推动 I/O 控制发展的主要因素是什么。\n- 16. 有哪几种 I/O 控制方式？各适用于何种场合？\n- 17. 试说明 DMA 的工作流程。\n- 18. 为何要引入与设备的无关性？如何实现设备的独立性？\n- 19. 与设备的无关的软件中，包括了哪些公有操作的软件？\n- 20. 在考虑到设备的独立性时，应如何分配独占设备？\n- 21. 何谓设备虚拟？实现设备虚拟时所依赖的关键技术是什么？\n- 22. 在实现后台打印时，SPOOLing系统应为请求I/O的进程提供哪些服务？\n- 23. 假脱机系统向用户提供共享打印机的基本思想是什么？\n- 24. 引入缓冲的主要原因是什么？\n- 25. 在单缓冲情况下，为什么系统对一块数据的处理时间为  \\max (\\mathrm{C},\\mathrm{T}) + \\mathrm{M} ?\n- 26. 为什么在双缓冲情况下，系统对一块数据的处理时间为  \\max(T, C)?\n- 27. 试绘图说明把多缓冲用于输出时的情况。\n- 28. 试说明收容输入工作缓冲区和提取输出工作缓冲区的工作情况。\n- 29. 何谓安全分配方式和不安全分配方式？\n- 30. 磁盘访问时间由哪几部分组成？每部分时间应如何计算？\n- 31. 目前常用的磁盘调度算法有哪几种？每种算法优先考虑的问题是什么？\n\n90g90g90g90g90g90g90g90g90g\n\n由于计算机中的内存是易失性设备，断电后所存储之信息即会丢失，其容量又十分有限，所以在现代计算机系统中，都必须配置外存，将系统和用户需要用到的大量程序和数据以文件的形式存放在外存中，需要时再随时将它们调入内存，或将它们打印出来。如果由用户直接管理存放在外存上的文件，不仅要求用户熟悉外存特性，了解各种文件的属性，以及它们在外存上的位置，而且在多用户环境下还必须能保持数据的安全性和一致性。显然，这是用户所不能胜任的。于是在操作系统中又增加了文件管理功能，专门管理在外存上的文件，并把对文件的存取、共享和保护等手段提供给用户。这不仅方便了用户，保证了文件的安全性，还可有效地提高系统资源的利用率。",
+      "text_length": 1285,
+      "page_start": 228,
+      "page_end": 229,
+      "audit_priority": "high",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：6.8 磁盘存储器的性能和调度；命中高价值信号：定义信号、方法/步骤信号、作业/题组信号、问答/考核信号",
+      "gold_entities": [
+        {
+          "entity_id": "ent-01",
+          "name": "6.8 磁盘存储器的性能和调度",
+          "type": "Section",
+          "alias": [],
+          "span_text": "6.8 磁盘存储器的性能和调度",
+          "normalized_name": "6.8 磁盘存储器的性能和调度",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-02",
+          "name": "6.8 磁盘存储器的性能和调度习题",
+          "type": "Assignment",
+          "alias": [
+            "习题"
+          ],
+          "span_text": "习题",
+          "normalized_name": "6.8 磁盘存储器的性能和调度习题",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-03",
+          "name": "设备驱动程序",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "试说明设备驱动程序具有哪些特点",
+          "normalized_name": "设备驱动程序",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-04",
+          "name": "DMA",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "试说明 DMA 的工作流程",
+          "normalized_name": "DMA",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-05",
+          "name": "SPOOLing系统",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "假脱机系统"
+          ],
+          "span_text": "SPOOLing系统应为请求I/O的进程提供哪些服务",
+          "normalized_name": "SPOOLing系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-06",
+          "name": "磁盘调度算法",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "目前常用的磁盘调度算法有哪几种",
+          "normalized_name": "磁盘调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-07",
+          "name": "缓冲",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "引入缓冲的主要原因是什么",
+          "normalized_name": "缓冲",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "rel-01",
+          "source_entity_id": "ent-01",
+          "target_entity_id": "ent-02",
+          "type": "contains",
+          "evidence_text": "6.8 磁盘存储器的性能和调度 > 习题",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-02",
+          "source_entity_id": "ent-03",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明设备驱动程序具有哪些特点。",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-03",
+          "source_entity_id": "ent-04",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "试说明 DMA 的工作流程。",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-04",
+          "source_entity_id": "ent-05",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "在实现后台打印时，SPOOLing系统应为请求I/O的进程提供哪些服务？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-05",
+          "source_entity_id": "ent-06",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "目前常用的磁盘调度算法有哪几种？",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-06",
+          "source_entity_id": "ent-07",
+          "target_entity_id": "ent-02",
+          "type": "evaluated_by",
+          "evidence_text": "引入缓冲的主要原因是什么？",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "题组按 I/O 与磁盘调度核心考点标注；末尾转入文件管理的引导段视为跨样本噪声，未纳入 gold。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "medium"
+    }
+  ]
+}
