@@ -716,13 +716,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第三章习题",
+          "name": "第三章 处理机调度与死锁习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第三章习题",
+          "normalized_name": "第三章 处理机调度与死锁习题",
           "notes": ""
         },
         {
@@ -839,8 +839,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "题组同时覆盖调度与死锁，按代表性核心考点标注，不对每一道小题逐一展开。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组虽跨“调度+死锁”两个子主题，但作为章级综合作业样本结构稳定；gold 继续采用代表性考点锚点，而非题面穷举。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -1614,13 +1614,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第八章习题",
+          "name": "第八章 磁盘存储器的管理习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第八章习题",
+          "normalized_name": "第八章 磁盘存储器的管理习题",
           "notes": ""
         },
         {
@@ -1745,8 +1745,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "习题跨文件组织、容错与恢复等多个主题，仅保留代表性审计锚点。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组以文件组织、磁盘容错与恢复为主线；当前 gold 已覆盖最稳定的审计锚点，不再扩展示例算题。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -1948,8 +1948,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "图像格式处存在 OCR 噪声，原文中的“GIP”疑似“GIF”，本次不把可疑项纳入 gold。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认除“GIP”这一处 OCR 可疑格式名外，其余图像概念、属性和 JPEG 相关标注稳定；可疑项继续排除。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -2151,9 +2151,9 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "Linux 系统调用条目以机制链路为主，未把寄存器细节和 include 路径继续拆分。",
-      "reviewer_decision": "accepted_with_notes",
-      "reviewer_confidence": "medium"
+      "annotation_notes": "二审确认该条主干是“接口函数/内核函数/系统调用号/int80h”的机制链；未细拆寄存器和源码路径属于范围控制，不构成歧义。",
+      "reviewer_decision": "accepted",
+      "reviewer_confidence": "high"
     },
     {
       "id": "audit-ext-0012-f1f5dcc216",
@@ -2188,13 +2188,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第六章习题",
+          "name": "第六章 输入输出系统习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第六章习题",
+          "normalized_name": "第六章 输入输出系统习题",
           "notes": ""
         },
         {
@@ -2315,8 +2315,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "I/O 习题覆盖面很广，本次只保留设备控制、DMA、SPOOLing、缓冲与磁盘调度等核心考点。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组可稳定作为 I/O 章节综合校准样本；gold 以设备控制、DMA、SPOOLing、缓冲与磁盘调度为核心锚点。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -2622,6 +2622,24 @@
           "span_text": "可靠性",
           "normalized_name": "可靠性",
           "notes": ""
+        },
+        {
+          "entity_id": "ent-006",
+          "name": "单处理机系统",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "单处理机系统",
+          "normalized_name": "单处理机系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "ent-007",
+          "name": "系统体系结构",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "体系结构",
+          "normalized_name": "系统体系结构",
+          "notes": ""
         }
       ],
       "gold_relations": [
@@ -2656,10 +2674,26 @@
           "type": "related_to",
           "evidence_text": "达到提高系统吞吐量和可靠性的目的",
           "notes": ""
+        },
+        {
+          "relation_id": "rel-005",
+          "source_entity_id": "ent-002",
+          "target_entity_id": "ent-006",
+          "type": "related_to",
+          "evidence_text": "早期的计算机系统都是单处理机系统，到20世纪70年代出现了多处理器系统",
+          "notes": ""
+        },
+        {
+          "relation_id": "rel-006",
+          "source_entity_id": "ent-002",
+          "target_entity_id": "ent-007",
+          "type": "related_to",
+          "evidence_text": "改进计算机系统的体系结构，特别是在系统中引入多个处理器",
+          "notes": ""
         }
       ],
-      "annotation_notes": "这是章节引言，不是完整方法展开；仅标多处理器系统带来的核心性能目标。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该条是章节引言而非完整方法展开；按“多处理器系统 + 并行处理 + 性能目标”标注是合适的。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -2896,13 +2930,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第二章习题",
+          "name": "第二章 进程的描述与控制习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第二章习题",
+          "normalized_name": "第二章 进程的描述与控制习题",
           "notes": ""
         },
         {
@@ -3024,8 +3058,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "题组覆盖进程、线程、内核与状态转换等多个主题，本次只保留代表性核心概念。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组的核心覆盖“前趋图/进程/PCB/内核/线程”；当前 gold 采用章级综合题组的代表性锚点策略。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -3061,13 +3095,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第九章习题",
+          "name": "第九章 操作系统接口习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第九章习题",
+          "normalized_name": "第九章 操作系统接口习题",
           "notes": ""
         },
         {
@@ -3193,8 +3227,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "题组兼有命令接口与系统调用实现，仅标后续 Prompt 校准最关键的接口与调用概念。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组横跨命令接口与系统调用，但边界清晰；当前 gold 已覆盖最稳定的接口与调用概念。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -3545,8 +3579,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "前言混有书名、作者和出版信息；本次只保留课程内容范围相关实体，忽略版次与致谢信息。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认前言中的有效抽取对象是课程内容范围与章节主题，不把版次、作者和致谢信息纳入 gold。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     },
     {
@@ -3582,13 +3616,13 @@
         },
         {
           "entity_id": "ent-002",
-          "name": "第十一章习题",
+          "name": "第十一章 多媒体操作系统习题",
           "type": "Assignment",
           "alias": [
             "习题"
           ],
           "span_text": "习题",
-          "normalized_name": "第十一章习题",
+          "normalized_name": "第十一章 多媒体操作系统习题",
           "notes": ""
         },
         {
@@ -3756,8 +3790,8 @@
           "notes": ""
         }
       ],
-      "annotation_notes": "多媒体习题跨度大，从调度到媒体服务器再到点播存储；仅抽代表性高价值考点。",
-      "reviewer_decision": "accepted_with_notes",
+      "annotation_notes": "二审确认该题组虽覆盖调度、服务器与点播存储多个方向，但作为多媒体章综合校准样本边界稳定；保留代表性高价值考点即可。",
+      "reviewer_decision": "accepted",
       "reviewer_confidence": "medium"
     }
   ]
