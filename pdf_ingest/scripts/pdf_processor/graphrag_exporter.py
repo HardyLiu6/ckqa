@@ -148,6 +148,7 @@ class GraphRAGExporter:
         r"|参考文献|附录(?:[\sA-Z一二三四五六七八九十\d].*)?"
         r")$"
     )
+    _FUZZY_CHAPTER_TITLE_RE = re.compile(r"^第\S{1,6}章(?:\s|$)")
     _TRAILING_PAGE_NOISE_RE = re.compile(
         r"^(?P<title>.*?)(?:\s*(?:\.{2,}|…{2,}|·{2,})\s*|\s+)(?P<page>\d+)\s*$"
     )
@@ -537,15 +538,123 @@ class GraphRAGExporter:
         """
         从 markdown 文本解析标题行，返回 {归一化标题文本: 层级} 映射。
         """
+        return {
+            normalized: level
+            for normalized, (level, _) in GraphRAGExporter._parse_md_heading_catalog(md_text).items()
+        }
+
+    @staticmethod
+    def _parse_md_heading_catalog(md_text: str) -> Dict[str, Tuple[int, str]]:
+        """
+        从 markdown 文本解析标题行，返回：
+        {归一化标题文本: (层级, 规范标题文本)}
+
+        这里保留“规范标题文本”，供 OCR 轻微失真的标题做回填纠正。
+        """
         heading_re = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
-        result: Dict[str, int] = {}
+        result: Dict[str, Tuple[int, str]] = {}
         for match in heading_re.finditer(md_text):
             level = len(match.group(1))
-            title_text = match.group(2).strip()
+            title_text = GraphRAGExporter._normalize_heading_text(match.group(2).strip())
             normalized = re.sub(r"\s+", "", title_text.lower())
             if normalized:
-                result[normalized] = level
+                result[normalized] = (level, title_text)
         return result
+
+    @classmethod
+    def _is_probable_chapter_title(
+        cls,
+        title_text: str,
+        text_level: Optional[int] = None,
+    ) -> bool:
+        """
+        识别“像章标题但编号可能被 OCR 轻微破坏”的标题。
+
+        典型场景：
+        - `第八章` 被识别成 `第几章`
+        - 正式标题块存在，但不再匹配标准编号正则
+
+        这类标题若被忽略，会导致章末“习题”只能挂到最后一节下面。
+        """
+        text = cls._normalize_heading_text(title_text)
+        if not text:
+            return False
+        if cls._TITLE_LEVEL_PATTERNS[0][0].match(text):
+            return True
+        if text_level is None or text_level > 1:
+            return False
+        return bool(cls._FUZZY_CHAPTER_TITLE_RE.match(text))
+
+    @classmethod
+    def _extract_chapter_title_suffix(cls, title_text: str) -> str:
+        """
+        提取“第X章 标题”中的章名尾部，用于和 markdown 标题做保守对齐。
+        """
+        text = cls._normalize_heading_text(title_text)
+        if not text or "章" not in text:
+            return ""
+        _, suffix = text.split("章", 1)
+        return re.sub(r"\s+", "", suffix.strip().lower())
+
+    def _canonicalize_section_title(
+        self,
+        title_text: str,
+        source_section_level: int,
+        md_heading_catalog: Optional[Dict[str, Tuple[int, str]]],
+    ) -> str:
+        """
+        使用 markdown 标题目录对当前标题做轻量规范化。
+
+        当前只做保守修正：
+        1. 精确命中 markdown 标题时，直接采用 markdown 的规范写法
+        2. 对 OCR 轻微损坏的章标题（如 `第几章 ...`），若章名尾部能唯一匹配 markdown，
+           则回填为 markdown 中的标准章标题
+        """
+        normalized_title = self._normalize_heading_text(title_text) or "未命名章节"
+        if not md_heading_catalog:
+            return normalized_title
+
+        normalized_key = re.sub(r"\s+", "", normalized_title.lower())
+        exact_match = md_heading_catalog.get(normalized_key)
+        if exact_match is not None:
+            exact_title = exact_match[1]
+            if (
+                source_section_level != 1
+                or not self._is_probable_chapter_title(normalized_title, text_level=1)
+                or self._TITLE_LEVEL_PATTERNS[0][0].match(self._normalize_heading_text(exact_title))
+            ):
+                return exact_title
+
+        if source_section_level != 1:
+            return normalized_title
+
+        if not self._is_probable_chapter_title(normalized_title, text_level=1):
+            return normalized_title
+
+        suffix = self._extract_chapter_title_suffix(normalized_title)
+        if not suffix:
+            return normalized_title
+
+        candidates = [
+            canonical_title
+            for _, (level, canonical_title) in md_heading_catalog.items()
+            if level == 1 and self._extract_chapter_title_suffix(canonical_title) == suffix
+        ]
+
+        unique_candidates = list(dict.fromkeys(candidates))
+        standard_candidates = [
+            title
+            for title in unique_candidates
+            if self._TITLE_LEVEL_PATTERNS[0][0].match(self._normalize_heading_text(title))
+        ]
+
+        if len(standard_candidates) == 1:
+            return standard_candidates[0]
+
+        if len(unique_candidates) == 1:
+            return unique_candidates[0]
+
+        return normalized_title
 
     def _infer_title_level(
         self,
@@ -565,6 +674,9 @@ class GraphRAGExporter:
         for pattern, level in self._TITLE_LEVEL_PATTERNS:
             if pattern.match(text):
                 return level
+
+        if self._is_probable_chapter_title(text, text_level=text_level):
+            return 1
 
         if text_level is not None and text_level > 0:
             return text_level
@@ -650,6 +762,8 @@ class GraphRAGExporter:
 
             title_candidates.append((index, block, text))
             if self._SECTION_BOUNDARY_RE.match(text):
+                numbered_indices.append(index)
+            elif self._is_probable_chapter_title(text, text_level=block.text_level):
                 numbered_indices.append(index)
             elif self._is_special_section_title(text):
                 special_indices.append(index)
@@ -740,8 +854,13 @@ class GraphRAGExporter:
         目录页过滤、标题去页码等规则会在后续阶段继续收敛。
         """
         md_headings: Optional[Dict[str, int]] = None
+        md_heading_catalog: Optional[Dict[str, Tuple[int, str]]] = None
         if md_text:
-            md_headings = self._parse_md_headings(md_text)
+            md_heading_catalog = self._parse_md_heading_catalog(md_text)
+            md_headings = {
+                normalized: level
+                for normalized, (level, _) in md_heading_catalog.items()
+            }
         document_type = self._infer_document_type(source_file, blocks)
 
         title_indices = self._select_title_indices(blocks, md_headings)
@@ -790,13 +909,18 @@ class GraphRAGExporter:
         for start, end in sections:
             sec_blocks = blocks[start:end]
             title_block = blocks[start]
-            section_title = self._normalize_heading_text(title_block.text) or "未命名章节"
+            raw_section_title = self._normalize_heading_text(title_block.text) or "未命名章节"
             source_section_level = self._resolve_effective_section_level(
-                section_title,
+                raw_section_title,
                 title_block,
                 md_headings,
                 heading_stack,
                 document_type,
+            )
+            section_title = self._canonicalize_section_title(
+                raw_section_title,
+                source_section_level,
+                md_heading_catalog,
             )
 
             while heading_stack and heading_stack[-1][0] >= source_section_level:

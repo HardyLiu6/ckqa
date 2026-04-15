@@ -345,6 +345,22 @@ def deduplicate_consecutive(blocks: List[Block]) -> List[Block]:
     return result
 
 
+def _should_preserve_structural_title(block: Block) -> bool:
+    """
+    判断一个块是否应当在“重复页眉/页脚”过滤后仍被保留。
+
+    真实教材里经常会同时出现：
+    1. 章/节标题的正式 TITLE 块
+    2. 同文本的跨页页眉（通常被解析为 TEXT/OTHER）
+
+    如果仅按“短文本跨页重复”做全局过滤，正式标题也会被误杀，
+    进而导致后续 heading_path 丢失章级锚点。
+    """
+    if block.block_type == BlockType.TITLE:
+        return True
+    return block.text_level is not None and block.text_level > 0
+
+
 # ===================== 主清洗流程 =====================
 
 def clean_blocks(
@@ -414,7 +430,8 @@ def clean_blocks(
         # Step 4: 跨页重复检测
         norm = _normalize(text)
         if norm in noise_texts:
-            continue
+            if not _should_preserve_structural_title(b):
+                continue
 
         # Step 5: 合并断行
         if merge_lines and b.block_type in (BlockType.TEXT, BlockType.LIST):

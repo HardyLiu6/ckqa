@@ -1,7 +1,7 @@
 {
   "schema_version": "v1",
-  "generated_at": "2026-04-15T17:17:36",
-  "input_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/prompt_tuning_samples.preview.json",
+  "generated_at": "2026-04-15T18:45:35",
+  "input_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/prompt_tuning_samples.json",
   "selection_strategy": "balanced_stratified",
   "fallback_to_random": false,
   "selection_parameters": {
@@ -25,14 +25,15 @@
     "selection_strategy": "balanced_stratified",
     "fallback_to_random": false,
     "priority_distribution": {
-      "high": 13,
-      "medium": 7
+      "high": 15,
+      "medium": 3,
+      "low": 2
     },
     "guessed_sample_type_distribution": {
-      "algorithm_or_method": 5,
-      "chapter_concept_explanation": 2,
-      "definition_or_formula": 8,
-      "assignment_requirement": 5
+      "algorithm_or_method": 4,
+      "chapter_concept_explanation": 1,
+      "definition_or_formula": 9,
+      "assignment_requirement": 6
     },
     "document_type_distribution": {
       "textbook": 20
@@ -41,13 +42,13 @@
       "计算机操作系统.pdf": 20
     },
     "heading_level_distribution": {
-      "3": 14,
-      "2": 5,
-      "1": 1
+      "3": 10,
+      "2": 8,
+      "1": 2
     },
     "length_bucket_distribution": {
-      "long": 9,
-      "medium": 4,
+      "long": 11,
+      "medium": 2,
       "short": 1,
       "xlong": 6
     },
@@ -55,9 +56,9 @@
       "guessed_sample_type": {
         "distinct_count": 4,
         "distribution": {
-          "algorithm_or_method": 39,
-          "chapter_concept_explanation": 36,
-          "definition_or_formula": 33,
+          "chapter_concept_explanation": 38,
+          "algorithm_or_method": 38,
+          "definition_or_formula": 32,
           "assignment_requirement": 12
         }
       },
@@ -68,87 +69,29 @@
         }
       },
       "chapter": {
-        "distinct_count": 71,
+        "distinct_count": 13,
         "distribution": {
-          "4.1 存储器的层次结构": 3,
-          "5.3 页面置换算法": 3,
-          "4.5 分页存储管理方式": 3,
-          "7.2 文件的逻辑结构": 3,
-          "9.6 系统调用的实现": 3,
-          "8.4 提高磁盘可靠性的技术": 3,
-          "6.8 磁盘存储器的性能和调度": 3,
-          "3.7 避免死锁": 3,
-          "8.5 数据一致性控制": 3,
-          "2.3 进程控制": 3,
-          "4.3 连续分配存储管理方式": 3,
-          "2.1 前趋图和程序执行": 2,
-          "6.5 与设备无关的I/O软件": 2,
-          "1.5 OS结构设计": 2,
-          "3.5 死锁概述": 2,
-          "5.5 请求分段存储管理方式": 2,
-          "10.7 分布式文件系统": 2,
-          "6.2 I/O 设备和设备控制器": 2,
-          "2.6 进程通信": 2,
-          "7.5 文件保护": 2,
-          "12.6 可信系统(Trusted System)": 2,
-          "8.2 文件存储空间的管理": 2,
-          "8.1 外存的组织方式": 2,
-          "12.4 来自系统内部的攻击": 2,
-          "4.6 分段存储管理方式": 2,
-          "9.2 Shell命令语言": 2,
-          "11.7 高速缓存与磁盘调度": 2,
-          "6.7 缓冲区管理": 2,
-          "3.4 实时调度": 2,
-          "3.8 死锁的检测与解除": 2,
-          "1.2 操作系统的发展过程": 2,
-          "12.2 数据加密技术": 2,
-          "2.2 进程的描述": 2,
-          "6.4 设备驱动程序": 2,
-          "10.5 多处理机系统的进程调度": 2,
-          "11.1 多媒体系统简介": 2,
-          "5.2 请求分页存储管理方式": 2,
-          "2.5 经典进程的同步问题": 2,
-          "前言": 1,
-          "5.4 “抖动”与工作集": 1,
-          "12.1 安全环境": 1,
-          "12.3 用户验证": 1,
-          "3.3 进程调度": 1,
-          "4.2 程序的装入和链接": 1,
-          "2.8 线程的实现": 1,
-          "7.3 文件目录": 1,
-          "2.4 进程同步": 1,
-          "9.4 系统调用的概念和类型": 1,
-          "8.3 提高磁盘I/O速度的途径": 1,
-          "3.6 预防死锁": 1,
-          "3.2 作业与作业调度": 1,
-          "9.5 UNIX系统调用": 1,
-          "7.4 文件共享": 1,
-          "2.7 线程(Threads)的基本概念": 1,
-          "5.1 虚拟存储器概述": 1,
-          "4.4 对换(Swapping)": 1,
-          "10.2 多处理机系统的结构": 1,
-          "10.6 网络操作系统": 1,
-          "11.6 多媒体存储器的分配方法": 1,
-          "6.3 中断机构和中断处理程序": 1,
-          "10.4 进程同步": 1,
-          "9.1 用户接口": 1,
-          "7.1 文件和文件系统": 1,
-          "1.4 操作系统的主要功能": 1,
-          "11.3 多媒体进程管理中的问题和接纳控制": 1,
-          "9.3 联机命令接口的实现": 1,
-          "11.2 多媒体文件中的各种媒体": 1,
-          "1.3 操作系统的基本特性": 1,
-          "11.5 媒体服务器的特征和接纳控制": 1,
-          "3.1 处理机调度的层次和调度算法的目标": 1,
-          "6.6 用户层的I/O软件": 1
+          "第二章 进程的描述与控制": 12,
+          "第四章 存储器管理": 11,
+          "第三章 处理机调度与死锁": 11,
+          "第六章 输入输出系统": 10,
+          "第五章 虚拟存储器": 10,
+          "第七章 文件管理": 10,
+          "第八章 磁盘存储器的管理": 10,
+          "第十二章 保护和安全": 10,
+          "第九章 操作系统接口": 9,
+          "第十一章 多媒体操作系统": 9,
+          "第一章 操作系统引论": 9,
+          "第十章 多处理机操作系统": 8,
+          "前言": 1
         }
       },
       "heading_level": {
         "distinct_count": 3,
         "distribution": {
-          "3": 71,
-          "2": 48,
-          "1": 1
+          "3": 57,
+          "2": 51,
+          "1": 12
         }
       },
       "source_file": {
@@ -160,94 +103,94 @@
       "length_bucket": {
         "distinct_count": 4,
         "distribution": {
-          "long": 56,
-          "medium": 26,
-          "short": 24,
-          "xlong": 14
+          "long": 59,
+          "medium": 29,
+          "short": 22,
+          "xlong": 10
         }
       }
     }
   },
   "selected_examples": [
     {
-      "id": "audit-ext-0001-b39b706bc0",
-      "source_sample_id": "pts-0076-ba4dd804ee",
+      "id": "audit-ext-0001-0305d1ac25",
+      "source_sample_id": "pts-0108-5643e4f01a",
       "guessed_sample_type": "algorithm_or_method",
       "audit_priority": "high",
       "length_bucket": "long",
-      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：11.3 多媒体进程管理中的问题和接纳控制；命中高价值信号：方法/步骤信号、关系表达较密集、含公式或数学表达、存在步骤或列表结构"
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第五章 虚拟存储器；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
     },
     {
-      "id": "audit-ext-0002-bdd7a8bef6",
-      "source_sample_id": "pts-0069-867958925f",
+      "id": "audit-ext-0002-bebceb8b92",
+      "source_sample_id": "pts-0075-e1463f620a",
       "guessed_sample_type": "chapter_concept_explanation",
       "audit_priority": "medium",
       "length_bucket": "long",
-      "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：7.1 文件和文件系统；命中高价值信号：定义信号、关系表达较密集、术语/别名信号、存在步骤或列表结构"
+      "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第七章 文件管理；命中高价值信号：定义信号、关系表达较密集、术语/别名信号、存在步骤或列表结构"
     },
     {
-      "id": "audit-ext-0003-9e94f18157",
-      "source_sample_id": "pts-0077-e788223410",
+      "id": "audit-ext-0003-1887062863",
+      "source_sample_id": "pts-0049-3acef09ef5",
       "guessed_sample_type": "definition_or_formula",
       "audit_priority": "high",
       "length_bucket": "long",
-      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：4.5 分页存储管理方式；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、术语/别名信号"
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第四章 存储器管理；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、术语/别名信号"
     },
     {
-      "id": "audit-ext-0004-e93bc1b43f",
-      "source_sample_id": "pts-0035-198a7e41fc",
+      "id": "audit-ext-0004-6f6c12c93a",
+      "source_sample_id": "pts-0046-69521f5d7f",
       "guessed_sample_type": "assignment_requirement",
       "audit_priority": "high",
       "length_bucket": "long",
-      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：9.6 系统调用的实现；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集"
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=2；覆盖章节/标题边界：第三章 处理机调度与死锁；命中高价值信号：定义信号、方法/步骤信号、作业/题组信号、问答/考核信号"
     },
     {
-      "id": "audit-ext-0005-57b6a4dd82",
-      "source_sample_id": "pts-0027-eeac080745",
+      "id": "audit-ext-0005-1ad586fd09",
+      "source_sample_id": "pts-0066-80a157e83b",
       "guessed_sample_type": "definition_or_formula",
       "audit_priority": "high",
       "length_bucket": "long",
-      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：9.6 系统调用的实现；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第二章 进程的描述与控制；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、术语/别名信号"
     },
     {
-      "id": "audit-ext-0006-4bf8452dd3",
-      "source_sample_id": "pts-0068-05585f7e0a",
+      "id": "audit-ext-0006-c4a09e7324",
+      "source_sample_id": "pts-0050-1727742c56",
       "guessed_sample_type": "algorithm_or_method",
       "audit_priority": "medium",
       "length_bucket": "medium",
-      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：2.6 进程通信；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：第二章 进程的描述与控制；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
     },
     {
-      "id": "audit-ext-0007-7f6c48e0b0",
-      "source_sample_id": "pts-0010-497787a059",
+      "id": "audit-ext-0007-98389d2968",
+      "source_sample_id": "pts-0014-832b6c0fb6",
       "guessed_sample_type": "definition_or_formula",
       "audit_priority": "medium",
       "length_bucket": "short",
-      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：short；结构层级：heading_level=2；覆盖章节/标题边界：12.1 安全环境；命中高价值信号：定义信号、方法/步骤信号、含公式或数学表达、存在步骤或列表结构"
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：short；结构层级：heading_level=2；覆盖章节/标题边界：第十二章 保护和安全；命中高价值信号：定义信号、方法/步骤信号、含公式或数学表达、存在步骤或列表结构"
     },
     {
-      "id": "audit-ext-0008-ec5573777d",
-      "source_sample_id": "pts-0104-ee7a1bfaee",
+      "id": "audit-ext-0008-15c26f68ef",
+      "source_sample_id": "pts-0104-d733962f70",
       "guessed_sample_type": "definition_or_formula",
       "audit_priority": "high",
       "length_bucket": "xlong",
-      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：4.3 连续分配存储管理方式；命中高价值信号：公式信号、方法/步骤信号、作业/题组信号、关系表达较密集"
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：第四章 存储器管理；命中高价值信号：公式信号、方法/步骤信号、作业/题组信号、关系表达较密集"
     },
     {
-      "id": "audit-ext-0009-05dbee904d",
-      "source_sample_id": "pts-0058-449059d064",
+      "id": "audit-ext-0009-54f6ca566e",
+      "source_sample_id": "pts-0053-fb39808f3a",
       "guessed_sample_type": "assignment_requirement",
       "audit_priority": "high",
       "length_bucket": "xlong",
-      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：8.5 数据一致性控制；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集"
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：xlong；结构层级：heading_level=2；覆盖章节/标题边界：第八章 磁盘存储器的管理；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集"
     },
     {
-      "id": "audit-ext-0010-d43e221de8",
-      "source_sample_id": "pts-0120-278fa92f83",
+      "id": "audit-ext-0010-9b897c11e7",
+      "source_sample_id": "pts-0097-01142e0115",
       "guessed_sample_type": "definition_or_formula",
       "audit_priority": "high",
       "length_bucket": "xlong",
-      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：5.2 请求分页存储管理方式；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、含公式或数学表达"
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：第十一章 多媒体操作系统；命中高价值信号：定义信号、公式信号、方法/步骤信号、关系表达较密集"
     }
   ]
 }

@@ -531,6 +531,182 @@ class TestNormalizationBaselineFixture(unittest.TestCase):
         self.assertIn("什么是微内核", exercise_doc.content)
         self.assertEqual(len({doc.id for doc in docs}), len(docs))
 
+    def test_chapter_title_survives_repeated_header_noise_for_chapter_end_exercise(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "第三章 处理机调度与死锁",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "第三章 处理机调度与死锁",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "3.8 死锁的检测与解除",
+                "text_level": 2,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "这里是死锁章节正文内容，用于模拟章内最后一节的说明文字。",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "第三章 处理机调度与死锁",
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "习题",
+                "text_level": 1,
+                "page_idx": 1,
+            },
+            {
+                "type": "list",
+                "list_items": [
+                    "1. 何谓死锁？",
+                    "2. 请说明死锁解除的基本思路。",
+                ],
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "第四章 存储器管理",
+                "text_level": 1,
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "这里是第四章导语，不应并入上一章习题。",
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "4.1 存储器的层次结构",
+                "text_level": 2,
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "这里是第四章第一节正文，用于验证新章边界已生效。",
+                "page_idx": 2,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="教材.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks, repeat_threshold=2)
+
+        self.assertTrue(
+            any(block.text == "第三章 处理机调度与死锁" and block.text_level == 1 for block in cleaned)
+        )
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=10,
+            source_file="教材.pdf",
+            md_text=None,
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        exercise_doc = next(
+            doc for doc in docs if doc.heading_path == ["第三章 处理机调度与死锁", "习题"]
+        )
+        chapter_doc = next(
+            doc for doc in docs if doc.heading_path == ["第四章 存储器管理"]
+        )
+
+        self.assertIn("何谓死锁", exercise_doc.content)
+        self.assertNotIn("这里是第四章导语", exercise_doc.content)
+        self.assertIn("这里是第四章导语", chapter_doc.content)
+
+    def test_md_heading_can_repair_ocr_noisy_chapter_title_for_exercise(self):
+        content_list = [
+            {
+                "type": "text",
+                "text": "第几章 磁盘存储器的管理",
+                "text_level": 1,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "8.5 数据一致性控制",
+                "text_level": 2,
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "这里是第八章最后一节的正文内容，用于模拟章末进入习题前的上下文。",
+                "page_idx": 0,
+            },
+            {
+                "type": "text",
+                "text": "习题",
+                "text_level": 1,
+                "page_idx": 1,
+            },
+            {
+                "type": "list",
+                "list_items": [
+                    "1. 何谓事务？",
+                    "2. 为什么要引入检查点？",
+                ],
+                "page_idx": 1,
+            },
+            {
+                "type": "text",
+                "text": "第九章 操作系统接口",
+                "text_level": 1,
+                "page_idx": 2,
+            },
+            {
+                "type": "text",
+                "text": "这里是下一章导语，不应被拼入第八章习题。",
+                "page_idx": 2,
+            },
+        ]
+
+        blocks = parse_content_list(
+            content_list,
+            course_id="os",
+            source_file="教材.pdf",
+            semantic_table=True,
+        )
+        cleaned = clean_blocks(blocks)
+
+        exporter = GraphRAGExporter(db=None, storage=None, config=None)
+        docs = exporter._aggregate_normalized_section(
+            cleaned,
+            course_id="os",
+            file_id=11,
+            source_file="教材.pdf",
+            md_text=(
+                "# 第八章 磁盘存储器的管理\n\n"
+                "# 第九章 操作系统接口\n"
+            ),
+            cl_trace=_build_trace(),
+            options=ExportOptions(),
+        )
+
+        exercise_doc = next(
+            doc for doc in docs if doc.heading_path == ["第八章 磁盘存储器的管理", "习题"]
+        )
+
+        self.assertIn("何谓事务", exercise_doc.content)
+        self.assertNotIn("这里是下一章导语", exercise_doc.content)
+
 
 class TestFutureNormalizationContracts(unittest.TestCase):
     """未来目标契约，先用 expectedFailure 固化。"""
