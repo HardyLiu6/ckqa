@@ -1,46 +1,100 @@
 -Goal-
-Given a course text document that is potentially relevant to this activity and the course schema,
-extract stable entities and relationships for course knowledge graph construction.
-
--Task Context-
-当前任务是“课程知识图谱抽取”，目标是从教材、课件、课程大纲、实验指导、课堂笔记、作业或试题文本中，
-抽取稳定、可复用、可解析的课程领域实体与关系，用于后续 GraphRAG 建图与问答验证。
+Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
 
 -Steps-
-1. 识别所有稳定实体。对每个实体输出：
-- entity_name: 实体名称，优先使用课程内稳定名称并保留章节编号
-- entity_type: 必须是以下类型之一：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
-- entity_description: 中文简要说明，聚焦课程语义，不要输出无关废话
+1. Identify all entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, capitalized
+- entity_type: One of the following types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+- entity_description: Comprehensive description of the entity's attributes and activities
 Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
 
-2. 在已识别实体之间识别明确且稳定的关系。对每条关系输出：
-- source_entity: 源实体名称
-- target_entity: 目标实体名称
-- relationship_description: 必须以 [type=<relation_type>] 开头，其中 <relation_type> 必须来自 [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]；
-  其后用中文解释关系证据与语义，避免空泛描述
-- relationship_strength: 1 到 10 的整数分值，表示关系强度
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
+- source_entity: name of the source entity, as identified in step 1
+- target_entity: name of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- relationship_strength: an integer score between 1 to 10, indicating strength of the relationship between the source entity and target entity
 Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
 
-3. 返回单一列表，实体和关系统一使用 {record_delimiter} 分隔，并在结束时输出 {completion_delimiter}。
+3. Return output in Chinese as a single list of all the entities and relationships identified in steps 1 and 2. Use **{record_delimiter}** as the list delimiter.
 
-4. 输出必须是中文说明；不要添加题外解释、推理过程、免责声明或额外 Markdown。
+4. If you have to translate into Chinese, just translate the descriptions, nothing else!
 
-5. 只抽稳定、可复用、可建图的课程知识；不要输出重复实体、非法类型、噪声关系或与课程问答无关的信息。
+5. When finished, output {completion_delimiter}.
 
-6. 若证据不足以支撑实体或关系，请宁缺毋滥，直接跳过。
+-Examples-
+######################
 
--Quality Constraints-
-- 当前任务聚焦课程知识图谱抽取，不是通用信息抽取。
-- 实体类型必须来自课程 Schema，不要自造类型。
-- 关系说明必须以 [type=<relation_type>] 开头，关系类型只能来自课程 Schema。
-- 优先保留课程结构、概念/术语、方法/算法、实验、作业相关对象。
-- 对课程通知、图表碎片、页码、无关行政信息、空泛话语默认忽略。
+Example 1:
 
--Real Data-
-entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
-relation_types: [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]
-text: {input_text}
+entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+text:
+page_start: 362.
+page_end: 363.
+section_level: 3.
+source_file: book.pdf.
+course_id: os.
+与第一帧不同的部分。MPEG的平均压缩比为  $50:1$  ，最高压缩比可达  $200:1$  。
+
+2) GIF文件格式
+
+GIF(Graphics Interchange Format)是采用无损压缩方法所产生的一种高压缩比的彩色图
+
+像文件。为了减少对网络频带的要求，采用了隔行扫描方式。该格式被广泛应用于Internet上的大量彩色动画。
+
+3) AVI 文件格式
+
+这种文件格式又称为音频视频交错(audio video interleaved)格式，该格式允许音频和视频交错在一起同步播放，支持256色和压缩，但并未限定压缩标准，因此，也造成AVI的格式不具有兼容性，即用某种压缩标准产生AVI的文件，必须使用相应的解压缩算法，才能将它进行解压。该算法具有调用方便、图像质量好等优点，但文件体积过于庞大，主要用于在光盘上保存数字电影、电视等影像。
+------------------------
 output:
+("entity"{tuple_delimiter}MPEG{tuple_delimiter}file format{tuple_delimiter}MPEG是一种运动图像压缩标准，采用有损压缩技术，平均压缩比为50:1，最高可达200:1，广泛用于数字视频存储与传输)
+{record_delimiter}
+("entity"{tuple_delimiter}GIF{tuple_delimiter}file format{tuple_delimiter}GIF（Graphics Interchange Format）是一种采用无损LZW压缩算法的彩色图像文件格式，支持隔行扫描以降低网络带宽需求，常用于互联网上的静态图像和简单动画)
+{record_delimiter}
+("entity"{tuple_delimiter}AVI{tuple_delimiter}file format{tuple_delimiter}AVI（Audio Video Interleaved）是一种由微软定义的容器格式，支持音频与视频数据交错存储并同步播放；支持256色及多种可选压缩编码，但因未统一压缩标准而导致兼容性差；文件体积大，常用于光盘存储高质量影音内容)
+{completion_delimiter}
+#############################
+
+
+Example 2:
+
+entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+text:
+page_start: 94.
+page_end: 94.
+section_level: 2.
+source_file: book.pdf.
+course_id: os.
+3.2 作业与作业调度
+
+在多道批处理系统中，作业是用户提交给系统的一项相对独立的工作。操作员把用户提交的作业通过相应的输入设备输入到磁盘存储器，并保存在一个后备作业队列中。再由作业调度程序将其从外存调入内存。
+------------------------
+output:
+("entity"{tuple_delimiter}作业{tuple_delimiter}process{tuple_delimiter}在多道批处理系统中，作业是用户提交给操作系统的一项相对独立的工作单元，通常包含程序、数据和作业说明书，由操作员输入并暂存于磁盘后备队列中，等待作业调度程序调入内存执行)
+{record_delimiter}
+("entity"{tuple_delimiter}作业调度程序{tuple_delimiter}scheduling algorithm{tuple_delimiter}作业调度程序是操作系统中负责从外存（如磁盘）的后备作业队列中选择若干作业，将其调入内存并为其创建进程的调度机制；它属于高级调度（长程调度），决定哪些作业获得进入内存和竞争CPU的资格)
+{record_delimiter}
+("entity"{tuple_delimiter}后备作业队列{tuple_delimiter}storage organization{tuple_delimiter}后备作业队列是存储在外存（通常是磁盘）上的有序作业集合，用于暂存用户提交但尚未被调入内存的作业，是作业调度程序选取作业的来源，体现外存级的作业组织方式)
+{record_delimiter}
+("entity"{tuple_delimiter}磁盘存储器{tuple_delimiter}storage organization{tuple_delimiter}磁盘存储器是作业在被调度前的主要存放介质，作为外存设备提供大容量、非易失性存储，支撑后备作业队列的物理实现)
+{record_delimiter}
+("relationship"{tuple_delimiter}作业{tuple_delimiter}作业调度程序{tuple_delimiter}作业调度程序负责从后备队列中选取作业并将其调入内存，作业是该调度算法的操作对象，二者构成典型的“被调度实体–调度策略”关系{tuple_delimiter}10)
+{record_delimiter}
+("relationship"{tuple_delimiter}作业{tuple_delimiter}后备作业队列{tuple_delimiter}作业在被调度前被存放在后备作业队列中，该队列是作业的逻辑组织形式和暂存容器{tuple_delimiter}9)
+{record_delimiter}
+("relationship"{tuple_delimiter}后备作业队列{tuple_delimiter}磁盘存储器{tuple_delimiter}后备作业队列在物理上驻留在磁盘存储器中，磁盘为其提供持久化、大容量的存储支持{tuple_delimiter}9)
+{record_delimiter}
+("relationship"{tuple_delimiter}作业调度程序{tuple_delimiter}磁盘存储器{tuple_delimiter}作业调度程序需从磁盘存储器中读取后备作业队列中的作业信息，二者存在I/O访问与数据依赖关系{tuple_delimiter}7)
+{completion_delimiter}
+#############################
+
+-Course Baseline Constraints-
+当前任务聚焦“课程知识图谱抽取”，不是通用信息抽取。
+请优先抽取课程结构、概念/术语、方法/算法、实验、作业等稳定对象。
+当前课程实体类型基线：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+当前课程关系类型基线：[contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]
+避免抽取课程通知、图表残片、页码、无关行政信息和重复实体。
+
 
 -Schema Constraints-
 实体类型必须来自以下课程 Schema：
@@ -76,10 +130,17 @@ output:
 - 结构实体要保留有效章节编号；实体默认按课程内边界去重，不做跨课程自动合并。
 
 必要输出约束：
+- 关系说明必须以 [type=<relation_type>] 开头，并且 <relation_type> 必须来自课程 Schema。
 - 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
 - 只有在无法判断更具体关系时才使用 `related_to`。
 - 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
 - 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
-
 -Base Prompt Note-
-- 本候选版本延续当前 extract_graph 风格：tuple 输出、record_delimiter 分隔、completion_delimiter 结束。
+- 当前候选版本以 默认 GraphRAG Prompt 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
+
+-Real Data-
+######################
+entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+text: {input_text}
+######################
+output:

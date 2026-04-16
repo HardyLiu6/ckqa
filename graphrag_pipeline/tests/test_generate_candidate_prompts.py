@@ -158,6 +158,23 @@ output:
             encoding="utf-8",
         )
 
+    def _write_existing_manifest(self, manifest_path: Path) -> None:
+        payload = {
+            "task": "candidate_prompt_generation",
+            "generated_at": "2026-04-16T16:00:00+08:00",
+            "candidates": [
+                {
+                    "candidate_name": "auto_tuned",
+                    "source_type": "graphrag_prompt_tune",
+                    "generation_method": "graphrag_official_prompt_tune",
+                    "graphrag_invocation": "python -m graphrag prompt-tune",
+                    "notes": ["已有官方调优信息"],
+                    "files": {"prompt": "/tmp/auto/prompt.txt"},
+                }
+            ],
+        }
+        _write_json(manifest_path, payload)
+
     def _build_samples_payload(self) -> dict:
         return {
             "schema_version": "v1",
@@ -381,6 +398,11 @@ output:
             self.assertEqual(candidates["schema_fewshot"]["fewshot_example_count"], 2)
             self.assertIn("GraphRAG 官方 auto-tuned 输出不存在", "\n".join(candidates["auto_tuned"]["notes"]))
 
+            default_text = (output_dir / "default" / "prompt.txt").read_text(encoding="utf-8")
+            self.assertIn("Given a text document, identify entities and relationships.", default_text)
+            self.assertIn("Course Baseline Constraints", default_text)
+            self.assertIn("Course, Chapter, Concept", default_text)
+
             schema_aware_text = (output_dir / "schema_aware" / "prompt.txt").read_text(encoding="utf-8")
             self.assertIn("实体类型必须来自以下课程 Schema", schema_aware_text)
             self.assertIn("关系说明必须以 [type=<relation_type>]", schema_aware_text)
@@ -399,7 +421,7 @@ output:
             samples_file = root / "data" / "prompt_tuning_samples" / "samples.json"
             audit_file = root / "data" / "eval" / "audit_extraction_set.json"
             output_dir = root / "prompts" / "candidates"
-            auto_tuned_dir = root / "auto_tuned" / "run-001"
+            auto_tuned_dir = output_dir / "auto_tuned"
             report_file = root / "results" / "reports" / "prompt_generation_report.json"
 
             self._write_schema_files(schema_dir)
@@ -407,16 +429,21 @@ output:
             _write_json(audit_file, self._build_audit_payload(with_gold=False))
             auto_tuned_dir.mkdir(parents=True, exist_ok=True)
             (auto_tuned_dir / "extract_graph.txt").write_text(
-                "-Goal-\nThis is an auto tuned prompt.\n",
+                "-Goal-\nThis is an auto tuned prompt.\n-Auto Marker-\nAUTO_TUNED_BASE\n",
                 encoding="utf-8",
             )
+            (auto_tuned_dir / "README.md").write_text(
+                "# auto_tuned\n\nOfficial README marker\n",
+                encoding="utf-8",
+            )
+            self._write_existing_manifest(output_dir / "manifest.json")
 
             result = generate_candidate_prompts(
                 schema_dir=schema_dir,
                 samples_file=samples_file,
                 audit_file=audit_file,
                 default_prompt_dir=root / "missing-default-prompt",
-                auto_tuned_prompt_dir=root / "auto_tuned",
+                auto_tuned_prompt_dir=auto_tuned_dir,
                 output_dir=output_dir,
                 fewshot_k=3,
                 language="zh",
@@ -434,12 +461,77 @@ output:
 
             default_text = (output_dir / "default" / "prompt.txt").read_text(encoding="utf-8")
             auto_tuned_text = (output_dir / "auto_tuned" / "prompt.txt").read_text(encoding="utf-8")
+            schema_aware_text = (output_dir / "schema_aware" / "prompt.txt").read_text(encoding="utf-8")
             fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
+            auto_tuned_readme = (output_dir / "auto_tuned" / "README.md").read_text(encoding="utf-8")
 
             self.assertIn("课程知识图谱抽取", default_text)
             self.assertIn("This is an auto tuned prompt.", auto_tuned_text)
+            self.assertIn("AUTO_TUNED_BASE", schema_aware_text)
+            self.assertIn("AUTO_TUNED_BASE", fewshot_text)
             self.assertIn("手写最小 few-shot 示例", fewshot_text)
+            self.assertIn("Official README marker", auto_tuned_readme)
             self.assertTrue(report_file.exists())
+
+            manifest = result["manifest"]
+            auto_tuned_entry = next(item for item in manifest["candidates"] if item["candidate_name"] == "auto_tuned")
+            self.assertEqual(auto_tuned_entry["generation_method"], "graphrag_official_prompt_tune")
+            self.assertEqual(auto_tuned_entry["graphrag_invocation"], "python -m graphrag prompt-tune")
+
+    def test_generate_candidate_prompts_does_not_treat_fallback_auto_tuned_as_official_base(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            schema_dir = root / "config" / "schema"
+            default_prompt_dir = root / "prompts"
+            output_dir = root / "prompts" / "candidates"
+            auto_tuned_dir = output_dir / "auto_tuned"
+            samples_file = root / "data" / "prompt_tuning_samples" / "prompt_tuning_samples.json"
+            audit_file = root / "data" / "eval" / "audit_extraction_set.json"
+
+            self._write_schema_files(schema_dir)
+            self._write_default_prompt(default_prompt_dir)
+            _write_json(samples_file, self._build_samples_payload())
+            _write_json(audit_file, self._build_audit_payload(with_gold=True))
+
+            auto_tuned_dir.mkdir(parents=True, exist_ok=True)
+            (auto_tuned_dir / "prompt.txt").write_text(
+                "-Goal-\nPLACEHOLDER_AUTO_TUNED\n",
+                encoding="utf-8",
+            )
+            self._write_existing_manifest(output_dir / "manifest.json")
+            manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+            auto_tuned_entry = next(item for item in manifest["candidates"] if item["candidate_name"] == "auto_tuned")
+            auto_tuned_entry["source_type"] = "fallback_default_copy"
+            auto_tuned_entry.pop("generation_method", None)
+            auto_tuned_entry.pop("graphrag_invocation", None)
+            _write_json(output_dir / "manifest.json", manifest)
+
+            result = generate_candidate_prompts(
+                schema_dir=schema_dir,
+                samples_file=samples_file,
+                audit_file=audit_file,
+                default_prompt_dir=default_prompt_dir,
+                auto_tuned_prompt_dir=auto_tuned_dir,
+                output_dir=output_dir,
+                fewshot_k=2,
+                language="zh",
+                overwrite=True,
+                report_file=root / "results" / "reports" / "prompt_generation_report.json",
+            )
+
+            candidates = {item["candidate_name"]: item for item in result["manifest"]["candidates"]}
+            schema_aware_text = (output_dir / "schema_aware" / "prompt.txt").read_text(encoding="utf-8")
+            fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
+
+            auto_tuned_text = (output_dir / "auto_tuned" / "prompt.txt").read_text(encoding="utf-8")
+
+            self.assertEqual(candidates["auto_tuned"]["source_type"], "fallback_default_copy")
+            self.assertNotIn("PLACEHOLDER_AUTO_TUNED", auto_tuned_text)
+            self.assertIn("Given a text document, identify entities and relationships.", auto_tuned_text)
+            self.assertNotIn("PLACEHOLDER_AUTO_TUNED", schema_aware_text)
+            self.assertNotIn("PLACEHOLDER_AUTO_TUNED", fewshot_text)
+            self.assertIn("Given a text document, identify entities and relationships.", schema_aware_text)
+            self.assertIn("官方 auto_tuned 占位候选尚未被真实 GraphRAG prompt-tune 结果覆盖", "\n".join(candidates["auto_tuned"]["notes"]))
 
 
 if __name__ == "__main__":

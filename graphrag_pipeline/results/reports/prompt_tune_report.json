@@ -1,0 +1,77 @@
+{
+  "task": "graphrag_prompt_tune",
+  "status": "failed",
+  "generated_at": "2026-04-16T17:57:04+08:00",
+  "chosen_invocation": {
+    "name": "python_module_conda_env",
+    "display_name": "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python -m graphrag prompt-tune"
+  },
+  "detection_attempts": [
+    {
+      "name": "python_module",
+      "display_name": "python -m graphrag prompt-tune",
+      "command": [
+        "/home/sunlight/miniconda3/bin/python",
+        "-m",
+        "graphrag",
+        "prompt-tune",
+        "--help"
+      ],
+      "available": false,
+      "exit_code": 1,
+      "stdout_preview": "",
+      "stderr_preview": "/home/sunlight/miniconda3/bin/python: No module named graphrag"
+    },
+    {
+      "name": "python_module_conda_env",
+      "display_name": "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python -m graphrag prompt-tune",
+      "command": [
+        "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python",
+        "-m",
+        "graphrag",
+        "prompt-tune",
+        "--help"
+      ],
+      "available": true,
+      "exit_code": 0,
+      "stdout_preview": "Usage: graphrag prompt-tune [OPTIONS] Generate custom graphrag prompts with your own data (i.e. auto templating). ╭─ Options ────────────────────────────────────────────────────────────────────╮ │ --root -r DIRECTORY The project root │ │ d…",
+      "stderr_preview": ""
+    }
+  ],
+  "resolved_paths": {
+    "root_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "config_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/settings.yaml",
+    "invocation_root": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "output_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned",
+    "log_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/prompt_tune_run.log",
+    "report_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/prompt_tune_report.json",
+    "manifest_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json"
+  },
+  "parameters": {
+    "domain": "课程知识图谱问答",
+    "language": "Chinese",
+    "chunk_size": 1000,
+    "no_entity_types": false,
+    "extra_args": []
+  },
+  "final_command": [
+    "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python",
+    "-m",
+    "graphrag",
+    "prompt-tune",
+    "--root",
+    "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "--output",
+    "results/prompt_tune_runs/20260416T175648/raw_output",
+    "--domain",
+    "课程知识图谱问答",
+    "--language",
+    "Chinese",
+    "--chunk-size",
+    "1000"
+  ],
+  "warnings": [
+    "GraphRAG prompt-tune 执行失败，exit_code=1，stderr=╭───────────────────── Traceback (most recent call last) ──────────────────────╮ │ /home/sunlight/miniconda3/envs/graphrag-oneapi/lib/python3.11/site-packages/ │ │ litellm/llms/openai/openai.py:929 in acompletion │ │ │ │ 926 │ │ │ │ │ }, │ │ 927 │ │ │ │ ) │ │ 928 │ │ │ │ │ │ ❱ 929 │ │ │ │ headers, response = await self.make_openai_chat_compl │ │ 930 │ │ │ │ │ openai_aclient=openai_aclient, │ │ 93…"
+  ],
+  "error": "GraphRAG prompt-tune 执行失败，exit_code=1，stderr=╭───────────────────── Traceback (most recent call last) ──────────────────────╮ │ /home/sunlight/miniconda3/envs/graphrag-oneapi/lib/python3.11/site-packages/ │ │ litellm/llms/openai/openai.py:929 in acompletion │ │ │ │ 926 │ │ │ │ │ }, │ │ 927 │ │ │ │ ) │ │ 928 │ │ │ │ │ │ ❱ 929 │ │ │ │ headers, response = await self.make_openai_chat_compl │ │ 930 │ │ │ │ │ openai_aclient=openai_aclient, │ │ 93…"
+}

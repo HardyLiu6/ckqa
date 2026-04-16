@@ -33,7 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA_DIR = PROJECT_ROOT / "config" / "schema"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "prompts" / "candidates"
 DEFAULT_DEFAULT_PROMPT_DIR = PROJECT_ROOT / "prompts"
-DEFAULT_AUTO_TUNED_PROMPT_DIR = PROJECT_ROOT / "prompts" / "auto_tuned"
+DEFAULT_AUTO_TUNED_PROMPT_DIR = DEFAULT_OUTPUT_DIR / "auto_tuned"
 DEFAULT_REPORT_FILE = PROJECT_ROOT / "results" / "reports" / "prompt_generation_report.json"
 
 DEFAULT_SAMPLES_CANDIDATES: tuple[Path, ...] = (
@@ -58,6 +58,8 @@ AUTO_TUNED_FILE_KEYWORDS: tuple[str, ...] = (
     "graph",
     "prompt",
 )
+OFFICIAL_AUTO_TUNED_SOURCE_TYPES = {"graphrag_prompt_tune"}
+OFFICIAL_AUTO_TUNED_GENERATION_METHODS = {"graphrag_official_prompt_tune"}
 
 FEWSHOT_CONCEPT_TYPES = {"definition_or_formula", "chapter_concept_explanation"}
 FEWSHOT_ACTIVITY_TYPES = {
@@ -149,6 +151,16 @@ def _read_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_existing_manifest(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = _read_json(path)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _load_json_records(path: Path, list_key_candidates: Sequence[str]) -> List[Dict[str, Any]]:
     payload = _read_json(path)
     if isinstance(payload, list):
@@ -193,6 +205,39 @@ def _write_text(path: Path, text: str, overwrite: bool) -> bool:
 def _write_json(path: Path, payload: Dict[str, Any], overwrite: bool) -> bool:
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     return _write_text(path, text, overwrite=overwrite)
+
+
+def _replace_last_entity_types(text: str, entity_names: str) -> str:
+    pattern = re.compile(r"entity_types:\s*\[[^\]]*\]")
+    matches = list(pattern.finditer(text))
+    if not matches:
+        return text
+    match = matches[-1]
+    return f"{text[:match.start()]}entity_types: [{entity_names}]{text[match.end():]}"
+
+
+def _insert_before_real_data(text: str, block: str) -> str:
+    marker = "\n-Real Data-"
+    index = text.rfind(marker)
+    if index >= 0:
+        return f"{text[:index].rstrip()}\n\n{block.rstrip()}\n{text[index:]}"
+    return f"{text.rstrip()}\n\n{block.rstrip()}\n"
+
+
+def _build_course_baseline_block(schema_catalog: SchemaCatalog) -> str:
+    return f"""-Course Baseline Constraints-
+当前任务聚焦“课程知识图谱抽取”，不是通用信息抽取。
+请优先抽取课程结构、概念/术语、方法/算法、实验、作业等稳定对象。
+当前课程实体类型基线：[{_entity_names(schema_catalog)}]
+当前课程关系类型基线：[{_relation_names(schema_catalog)}]
+避免抽取课程通知、图表残片、页码、无关行政信息和重复实体。
+"""
+
+
+def _base_prompt_note(base_label: str) -> str:
+    return f"""-Base Prompt Note-
+- 当前候选版本以 {base_label} 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
+"""
 
 
 def _score_prompt_path(path: Path) -> tuple[int, int, str]:
@@ -302,7 +347,35 @@ def load_default_prompt_source(default_prompt_dir: Path) -> PromptSource:
     )
 
 
-def load_auto_tuned_prompt_source(auto_tuned_prompt_dir: Path) -> PromptSource:
+def _is_official_auto_tuned_entry(entry: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    source_type = _clean_string(entry.get("source_type"))
+    generation_method = _clean_string(entry.get("generation_method"))
+    return (
+        source_type in OFFICIAL_AUTO_TUNED_SOURCE_TYPES
+        or generation_method in OFFICIAL_AUTO_TUNED_GENERATION_METHODS
+    )
+
+
+def load_auto_tuned_prompt_source(
+    auto_tuned_prompt_dir: Path,
+    *,
+    manifest_entry: Optional[Dict[str, Any]] = None,
+) -> PromptSource:
+    if isinstance(manifest_entry, dict) and not _is_official_auto_tuned_entry(manifest_entry):
+        placeholder_note = (
+            "官方 auto_tuned 占位候选尚未被真实 GraphRAG prompt-tune 结果覆盖，将继续回退到 default。"
+            if auto_tuned_prompt_dir.exists()
+            else "GraphRAG 官方 auto-tuned 输出不存在，将保留占位目录并回退到 default 候选 Prompt。"
+        )
+        return PromptSource(
+            path=None,
+            text="",
+            source_type="missing_auto_tuned",
+            notes=[placeholder_note],
+        )
+
     prompt_path = _find_prompt_file(auto_tuned_prompt_dir, recursive=True)
     if prompt_path is None:
         return PromptSource(
@@ -424,10 +497,30 @@ output:
     )
 
 
-def build_schema_aware_prompt(schema_catalog: SchemaCatalog, language: str, base_prompt_text: str) -> str:
+def build_default_candidate_prompt(
+    schema_catalog: SchemaCatalog,
+    language: str,
+    base_prompt_text: str,
+) -> str:
+    if not base_prompt_text.strip():
+        return build_minimal_default_prompt(schema_catalog, language)
+
+    prompt = _replace_last_entity_types(base_prompt_text.strip(), _entity_names(schema_catalog))
+    prompt = _insert_before_real_data(prompt, _build_course_baseline_block(schema_catalog))
+    return prompt.rstrip() + "\n"
+
+
+def build_schema_aware_prompt(
+    schema_catalog: SchemaCatalog,
+    language: str,
+    base_prompt_text: str,
+    base_label: str,
+) -> str:
     _ = language
-    prompt = build_minimal_default_prompt(schema_catalog, language)
-    prompt += f"""
+    prompt = build_default_candidate_prompt(schema_catalog, language, base_prompt_text)
+    prompt = _insert_before_real_data(
+        prompt,
+        f"""
 -Schema Constraints-
 实体类型必须来自以下课程 Schema：
 {_summarize_entity_items(schema_catalog.entity_types)}
@@ -439,14 +532,15 @@ def build_schema_aware_prompt(schema_catalog: SchemaCatalog, language: str, base
 {_summarize_rules(schema_catalog.extraction_rules_text)}
 
 必要输出约束：
+- 关系说明必须以 [type=<relation_type>] 开头，并且 <relation_type> 必须来自课程 Schema。
 - 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
 - 只有在无法判断更具体关系时才使用 `related_to`。
 - 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
 - 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
-"""
-    if base_prompt_text:
-        prompt += "\n-Base Prompt Note-\n- 本候选版本延续当前 extract_graph 风格：tuple 输出、record_delimiter 分隔、completion_delimiter 结束。\n"
-    return prompt
+{_base_prompt_note(base_label)}
+""",
+    )
+    return prompt.rstrip() + "\n"
 
 
 def _format_input_block(record: Dict[str, Any], text_key: str = "text") -> str:
@@ -726,6 +820,15 @@ def _candidate_manifest_entry(
     }
 
 
+def _merge_manifest_entry(existing: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(existing)
+    merged.update(generated)
+    existing_notes = existing.get("notes", []) if isinstance(existing.get("notes"), list) else []
+    generated_notes = generated.get("notes", []) if isinstance(generated.get("notes"), list) else []
+    merged["notes"] = list(dict.fromkeys([*existing_notes, *generated_notes]))
+    return merged
+
+
 def generate_candidate_prompts(
     *,
     schema_dir: Path,
@@ -741,6 +844,13 @@ def generate_candidate_prompts(
 ) -> Dict[str, Any]:
     generated_at = _now_iso()
     schema_catalog = load_schema_catalog(schema_dir)
+    manifest_path = output_dir / "manifest.json"
+    existing_manifest = _load_existing_manifest(manifest_path)
+    existing_candidate_map = {
+        item.get("candidate_name"): item
+        for item in existing_manifest.get("candidates", [])
+        if isinstance(item, dict) and item.get("candidate_name")
+    }
 
     resolved_samples_file = _resolve_optional_path(samples_file, DEFAULT_SAMPLES_CANDIDATES)
     resolved_audit_file = _resolve_optional_path(audit_file, DEFAULT_AUDIT_CANDIDATES)
@@ -754,22 +864,32 @@ def generate_candidate_prompts(
         audit_records = _load_json_records(resolved_audit_file, ("audit_samples",))
 
     default_prompt_source = load_default_prompt_source(default_prompt_dir)
-    auto_tuned_prompt_source = load_auto_tuned_prompt_source(auto_tuned_prompt_dir)
+    auto_tuned_prompt_source = load_auto_tuned_prompt_source(
+        auto_tuned_prompt_dir,
+        manifest_entry=existing_candidate_map.get("auto_tuned"),
+    )
 
-    minimal_default_prompt = build_minimal_default_prompt(schema_catalog, language)
-    default_prompt_text = minimal_default_prompt
+    default_prompt_text = build_default_candidate_prompt(
+        schema_catalog=schema_catalog,
+        language=language,
+        base_prompt_text=default_prompt_source.text,
+    )
     default_source_type = "default_adapted"
     default_notes = list(default_prompt_source.notes)
     if default_prompt_source.path is None:
         default_source_type = "generated_minimal_default"
+        default_prompt_text = build_minimal_default_prompt(schema_catalog, language)
     else:
-        default_notes.append("已保留当前 extract_graph Prompt 的 tuple 输出风格，并适配为课程 schema 基线版本。")
+        default_notes.append("default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。")
 
     schema_aware_base_source = auto_tuned_prompt_source.path or default_prompt_source.path
+    schema_aware_base_text = auto_tuned_prompt_source.text or default_prompt_source.text
+    schema_aware_base_label = "官方 auto_tuned Prompt" if auto_tuned_prompt_source.text else "默认 GraphRAG Prompt"
     schema_aware_prompt_text = build_schema_aware_prompt(
         schema_catalog=schema_catalog,
         language=language,
-        base_prompt_text=auto_tuned_prompt_source.text or default_prompt_source.text,
+        base_prompt_text=schema_aware_base_text,
+        base_label=schema_aware_base_label,
     )
 
     fewshot_examples, fewshot_strategy, fewshot_source_ids, fewshot_notes = _select_fewshot_examples(
@@ -788,7 +908,8 @@ def generate_candidate_prompts(
 
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
-    auto_tuned_notes = list(auto_tuned_prompt_source.notes)
+    auto_tuned_notes = list(existing_candidate_map.get("auto_tuned", {}).get("notes", []))
+    auto_tuned_notes.extend(note for note in auto_tuned_prompt_source.notes if note not in auto_tuned_notes)
     if not auto_tuned_prompt_text:
         auto_tuned_prompt_text = default_prompt_text
         auto_tuned_source_type = "fallback_default_copy"
@@ -801,10 +922,12 @@ def generate_candidate_prompts(
         default_candidate_notes.append(f"检测到 prompt tuning 样本 {len(sample_records)} 条，可供后续 few-shot/评测使用。")
 
     schema_aware_notes = [
-        "在课程基线 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
+        f"schema_aware 优先基于{schema_aware_base_label}自动增强；若 auto_tuned 缺失则回退到 default。",
+        "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
         "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。",
     ]
     schema_fewshot_notes = list(fewshot_notes)
+    schema_fewshot_notes.insert(0, f"schema_fewshot 继承 schema_aware，并继续沿用 {schema_aware_base_label} 作为底稿。")
     if fewshot_source_ids:
         schema_fewshot_notes.append(f"few-shot 来源样本：{', '.join(fewshot_source_ids)}")
     if fewshot_examples and fewshot_examples[0].source_kind == "manual_minimal":
@@ -865,35 +988,46 @@ def generate_candidate_prompts(
     for candidate in candidates:
         candidate_dir = output_dir / candidate["name"]
         candidate_dir.mkdir(parents=True, exist_ok=True)
-        _write_text(candidate_dir / "prompt.txt", candidate["prompt_text"], overwrite=overwrite)
-        readme_text = _candidate_readme(
-            name=candidate["name"],
-            generated_at=generated_at,
-            source_type=candidate["source_type"],
-            base_prompt_source=candidate["base_prompt_source"],
-            notes=candidate["notes"],
-            schema_used=bool(candidate["schema_used"]),
-            fewshot_used=bool(candidate["fewshot_used"]),
-            fewshot_strategy=candidate["fewshot_strategy"],
+        preserve_existing_auto_tuned = (
+            candidate["name"] == "auto_tuned"
+            and candidate["source_type"] == "graphrag_prompt_tune"
+            and (candidate_dir / "README.md").exists()
         )
-        _write_text(candidate_dir / "README.md", readme_text, overwrite=overwrite)
-        manifest_candidates.append(
-            _candidate_manifest_entry(
-                candidate_name=candidate["name"],
+        if preserve_existing_auto_tuned:
+            if not (candidate_dir / "prompt.txt").exists():
+                _write_text(candidate_dir / "prompt.txt", candidate["prompt_text"], overwrite=True)
+        else:
+            _write_text(candidate_dir / "prompt.txt", candidate["prompt_text"], overwrite=overwrite)
+            readme_text = _candidate_readme(
+                name=candidate["name"],
+                generated_at=generated_at,
                 source_type=candidate["source_type"],
                 base_prompt_source=candidate["base_prompt_source"],
-                schema_used=bool(candidate["schema_used"]),
-                audit_used=bool(candidate["audit_used"]),
-                fewshot_used=bool(candidate["fewshot_used"]),
-                fewshot_example_count=int(candidate["fewshot_example_count"]),
-                fewshot_strategy=candidate["fewshot_strategy"],
                 notes=candidate["notes"],
-                output_dir=output_dir,
-                generated_at=generated_at,
+                schema_used=bool(candidate["schema_used"]),
+                fewshot_used=bool(candidate["fewshot_used"]),
+                fewshot_strategy=candidate["fewshot_strategy"],
             )
+            _write_text(candidate_dir / "README.md", readme_text, overwrite=overwrite)
+
+        generated_entry = _candidate_manifest_entry(
+            candidate_name=candidate["name"],
+            source_type=candidate["source_type"],
+            base_prompt_source=candidate["base_prompt_source"],
+            schema_used=bool(candidate["schema_used"]),
+            audit_used=bool(candidate["audit_used"]),
+            fewshot_used=bool(candidate["fewshot_used"]),
+            fewshot_example_count=int(candidate["fewshot_example_count"]),
+            fewshot_strategy=candidate["fewshot_strategy"],
+            notes=candidate["notes"],
+            output_dir=output_dir,
+            generated_at=generated_at,
         )
+        existing_entry = existing_candidate_map.get(candidate["name"], {})
+        manifest_candidates.append(_merge_manifest_entry(existing_entry, generated_entry))
 
     manifest = {
+        **{k: v for k, v in existing_manifest.items() if k != "candidates"},
         "task": "candidate_prompt_generation",
         "schema_version": schema_catalog.schema_version,
         "generated_at": generated_at,
@@ -914,7 +1048,6 @@ def generate_candidate_prompts(
         "candidates": manifest_candidates,
     }
 
-    manifest_path = output_dir / "manifest.json"
     _write_json(manifest_path, manifest, overwrite=overwrite)
 
     report = {
@@ -941,8 +1074,9 @@ def generate_candidate_prompts(
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
         "manifest_path": str(manifest_path.resolve()),
         "notes": [
-            "default 候选 Prompt 统一适配为课程 schema 的最小基线版本，但保留 GraphRAG tuple 输出风格。",
-            "schema_aware / schema_fewshot 通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
+            "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
+            "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
+            "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
         ],
     }
 

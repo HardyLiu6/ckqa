@@ -1,6 +1,6 @@
 {
   "task": "candidate_prompt_generation_report",
-  "generated_at": "2026-04-16T16:44:16+08:00",
+  "generated_at": "2026-04-16T17:59:19+08:00",
   "schema_version": "v1",
   "counts": {
     "entity_type_count": 11,
@@ -35,7 +35,8 @@
   ],
   "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
   "notes": [
-    "default 候选 Prompt 统一适配为课程 schema 的最小基线版本，但保留 GraphRAG tuple 输出风格。",
-    "schema_aware / schema_fewshot 通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。"
+    "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
+    "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
+    "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。"
   ]
 }

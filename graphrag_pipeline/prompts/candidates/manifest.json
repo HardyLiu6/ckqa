@@ -1,7 +1,7 @@
 {
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
-  "generated_at": "2026-04-16T16:44:16+08:00",
+  "generated_at": "2026-04-16T17:59:19+08:00",
   "language": "zh",
   "output_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates",
   "inputs": {
@@ -13,7 +13,7 @@
     "audit_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/eval/audit_extraction_set.json",
     "default_prompt_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts",
     "default_prompt_source": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/extract_graph.txt",
-    "auto_tuned_prompt_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/auto_tuned",
+    "auto_tuned_prompt_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned",
     "auto_tuned_prompt_source": null
   },
   "candidates": [
@@ -26,7 +26,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-04-16T16:44:16+08:00",
+      "generation_time": "2026-04-16T17:59:19+08:00",
       "files": {
         "prompt": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/default/prompt.txt",
         "readme": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/default/README.md"
@@ -34,7 +34,8 @@
       "notes": [
         "默认 Prompt 来源：/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/extract_graph.txt",
         "已保留当前 extract_graph Prompt 的 tuple 输出风格，并适配为课程 schema 基线版本。",
-        "检测到 prompt tuning 样本 120 条，可供后续 few-shot/评测使用。"
+        "检测到 prompt tuning 样本 120 条，可供后续 few-shot/评测使用。",
+        "default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。"
       ]
     },
     {
@@ -46,14 +47,15 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-04-16T16:44:16+08:00",
+      "generation_time": "2026-04-16T17:59:19+08:00",
       "files": {
         "prompt": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned/prompt.txt",
         "readme": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned/README.md"
       },
       "notes": [
         "GraphRAG 官方 auto-tuned 输出不存在，将保留占位目录并回退到 default 候选 Prompt。",
-        "由于未发现实际 auto-tuned Prompt，当前候选内容回退为 default 候选 Prompt，以保证目录结构和后续切换流程可运行。"
+        "由于未发现实际 auto-tuned Prompt，当前候选内容回退为 default 候选 Prompt，以保证目录结构和后续切换流程可运行。",
+        "官方 auto_tuned 占位候选尚未被真实 GraphRAG prompt-tune 结果覆盖，将继续回退到 default。"
       ]
     },
     {
@@ -65,14 +67,16 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-04-16T16:44:16+08:00",
+      "generation_time": "2026-04-16T17:59:19+08:00",
       "files": {
         "prompt": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_aware/prompt.txt",
         "readme": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_aware/README.md"
       },
       "notes": [
         "在课程基线 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
-        "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。"
+        "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。",
+        "schema_aware 优先基于默认 GraphRAG Prompt自动增强；若 auto_tuned 缺失则回退到 default。",
+        "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。"
       ]
     },
     {
@@ -84,14 +88,15 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "audit_gold",
-      "generation_time": "2026-04-16T16:44:16+08:00",
+      "generation_time": "2026-04-16T17:59:19+08:00",
       "files": {
         "prompt": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_fewshot/prompt.txt",
         "readme": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_fewshot/README.md"
       },
       "notes": [
         "few-shot 示例优先复用了 audit_extraction_set.json 中带 gold 标注的样本。",
-        "few-shot 来源样本：pts-0031-05cd31e343, pts-0108-5643e4f01a, pts-0066-80a157e83b"
+        "few-shot 来源样本：pts-0031-05cd31e343, pts-0108-5643e4f01a, pts-0066-80a157e83b",
+        "schema_fewshot 继承 schema_aware，并继续沿用 默认 GraphRAG Prompt 作为底稿。"
       ]
     }
   ]
