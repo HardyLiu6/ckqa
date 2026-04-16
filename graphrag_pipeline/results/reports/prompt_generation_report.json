@@ -1,6 +1,6 @@
 {
   "task": "candidate_prompt_generation_report",
-  "generated_at": "2026-04-16T17:59:19+08:00",
+  "generated_at": "2026-04-17T00:06:51+08:00",
   "schema_version": "v1",
   "counts": {
     "entity_type_count": 11,
@@ -11,7 +11,7 @@
   },
   "fallbacks": {
     "default_prompt_missing": false,
-    "auto_tuned_missing": true,
+    "auto_tuned_missing": false,
     "audit_gold_missing": false
   },
   "fewshot": {

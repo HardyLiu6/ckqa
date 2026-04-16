@@ -533,6 +533,96 @@ output:
             self.assertIn("Given a text document, identify entities and relationships.", schema_aware_text)
             self.assertIn("官方 auto_tuned 占位候选尚未被真实 GraphRAG prompt-tune 结果覆盖", "\n".join(candidates["auto_tuned"]["notes"]))
 
+    def test_generate_candidate_prompts_replaces_stale_manifest_notes_with_current_notes(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            schema_dir = root / "config" / "schema"
+            default_prompt_dir = root / "prompts"
+            output_dir = root / "prompts" / "candidates"
+            auto_tuned_dir = output_dir / "auto_tuned"
+            samples_file = root / "data" / "prompt_tuning_samples" / "prompt_tuning_samples.json"
+            audit_file = root / "data" / "eval" / "audit_extraction_set.json"
+
+            self._write_schema_files(schema_dir)
+            self._write_default_prompt(default_prompt_dir)
+            _write_json(samples_file, self._build_samples_payload())
+            _write_json(audit_file, self._build_audit_payload(with_gold=True))
+
+            auto_tuned_dir.mkdir(parents=True, exist_ok=True)
+            (auto_tuned_dir / "extract_graph.txt").write_text(
+                "-Goal-\nOfficial auto tuned prompt\n-Auto Marker-\nAUTO_TUNED_BASE\n",
+                encoding="utf-8",
+            )
+
+            stale_manifest = {
+                "task": "candidate_prompt_generation",
+                "generated_at": "2026-04-16T16:00:00+08:00",
+                "candidates": [
+                    {
+                        "candidate_name": "auto_tuned",
+                        "source_type": "graphrag_prompt_tune",
+                        "generation_method": "graphrag_official_prompt_tune",
+                        "graphrag_invocation": "python -m graphrag prompt-tune",
+                        "notes": [
+                            "GraphRAG 官方 auto-tuned 输出不存在，将保留占位目录并回退到 default 候选 Prompt。",
+                            "旧的占位说明",
+                        ],
+                    },
+                    {
+                        "candidate_name": "schema_aware",
+                        "source_type": "schema_augmented",
+                        "notes": [
+                            "schema_aware 优先基于默认 GraphRAG Prompt自动增强；若 auto_tuned 缺失则回退到 default。",
+                            "旧的 schema 备注",
+                        ],
+                    },
+                    {
+                        "candidate_name": "schema_fewshot",
+                        "source_type": "schema_fewshot",
+                        "notes": [
+                            "schema_fewshot 继承 schema_aware，并继续沿用 默认 GraphRAG Prompt 作为底稿。",
+                            "旧的 few-shot 备注",
+                        ],
+                    },
+                ],
+            }
+            _write_json(output_dir / "manifest.json", stale_manifest)
+
+            result = generate_candidate_prompts(
+                schema_dir=schema_dir,
+                samples_file=samples_file,
+                audit_file=audit_file,
+                default_prompt_dir=default_prompt_dir,
+                auto_tuned_prompt_dir=auto_tuned_dir,
+                output_dir=output_dir,
+                fewshot_k=2,
+                language="zh",
+                overwrite=True,
+                report_file=root / "results" / "reports" / "prompt_generation_report.json",
+            )
+
+            candidates = {item["candidate_name"]: item for item in result["manifest"]["candidates"]}
+
+            self.assertEqual(candidates["auto_tuned"]["source_type"], "graphrag_prompt_tune")
+            self.assertEqual(candidates["auto_tuned"]["generation_method"], "graphrag_official_prompt_tune")
+            self.assertNotIn("旧的占位说明", candidates["auto_tuned"]["notes"])
+            self.assertNotIn("回退到 default", "\n".join(candidates["auto_tuned"]["notes"]))
+            self.assertIn("auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。", candidates["auto_tuned"]["notes"])
+
+            self.assertEqual(
+                candidates["schema_aware"]["notes"],
+                [
+                    "schema_aware 优先基于官方 auto_tuned Prompt自动增强；若 auto_tuned 缺失则回退到 default。",
+                    "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
+                    "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。",
+                ],
+            )
+            self.assertEqual(
+                candidates["schema_fewshot"]["notes"][0],
+                "schema_fewshot 继承 schema_aware，并继续沿用 官方 auto_tuned Prompt 作为底稿。",
+            )
+            self.assertNotIn("旧的 few-shot 备注", candidates["schema_fewshot"]["notes"])
+
 
 if __name__ == "__main__":
     unittest.main()

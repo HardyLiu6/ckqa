@@ -46,6 +46,15 @@ DEFAULT_AUDIT_CANDIDATES: tuple[Path, ...] = (
 )
 DEFAULT_FEWSHOT_K = 3
 DEFAULT_LANGUAGE = "zh"
+AUTO_TUNED_MANIFEST_PASSTHROUGH_FIELDS = (
+    "generation_method",
+    "graphrag_invocation",
+    "root_path",
+    "config_path",
+    "output_path",
+    "status",
+    "collected_files",
+)
 
 DEFAULT_PROMPT_FILE_NAMES: tuple[str, ...] = (
     "extract_graph.txt",
@@ -205,6 +214,18 @@ def _write_text(path: Path, text: str, overwrite: bool) -> bool:
 def _write_json(path: Path, payload: Dict[str, Any], overwrite: bool) -> bool:
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     return _write_text(path, text, overwrite=overwrite)
+
+
+def _dedupe_preserve_order(values: Sequence[str]) -> List[str]:
+    ordered: List[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = _clean_string(value)
+        if not cleaned or cleaned in seen:
+            continue
+        ordered.append(cleaned)
+        seen.add(cleaned)
+    return ordered
 
 
 def _replace_last_entity_types(text: str, entity_names: str) -> str:
@@ -388,7 +409,11 @@ def load_auto_tuned_prompt_source(
         path=prompt_path,
         text=prompt_path.read_text(encoding="utf-8"),
         source_type="graphrag_prompt_tune",
-        notes=[f"auto-tuned Prompt 来源：{prompt_path.resolve()}"],
+        notes=[
+            "auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。",
+            f"主要 Prompt 文件：{prompt_path.name}",
+            f"auto-tuned Prompt 来源：{prompt_path.resolve()}",
+        ],
     )
 
 
@@ -821,11 +846,14 @@ def _candidate_manifest_entry(
 
 
 def _merge_manifest_entry(existing: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
-    merged = dict(existing)
-    merged.update(generated)
-    existing_notes = existing.get("notes", []) if isinstance(existing.get("notes"), list) else []
+    merged = dict(generated)
+    if generated.get("candidate_name") == "auto_tuned" and generated.get("source_type") == "graphrag_prompt_tune":
+        for key in AUTO_TUNED_MANIFEST_PASSTHROUGH_FIELDS:
+            if key in existing and key not in merged:
+                merged[key] = existing[key]
+
     generated_notes = generated.get("notes", []) if isinstance(generated.get("notes"), list) else []
-    merged["notes"] = list(dict.fromkeys([*existing_notes, *generated_notes]))
+    merged["notes"] = _dedupe_preserve_order(generated_notes)
     return merged
 
 
@@ -908,8 +936,7 @@ def generate_candidate_prompts(
 
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
-    auto_tuned_notes = list(existing_candidate_map.get("auto_tuned", {}).get("notes", []))
-    auto_tuned_notes.extend(note for note in auto_tuned_prompt_source.notes if note not in auto_tuned_notes)
+    auto_tuned_notes = list(auto_tuned_prompt_source.notes)
     if not auto_tuned_prompt_text:
         auto_tuned_prompt_text = default_prompt_text
         auto_tuned_source_type = "fallback_default_copy"
@@ -920,18 +947,22 @@ def generate_candidate_prompts(
     default_candidate_notes = list(default_notes)
     if sample_records:
         default_candidate_notes.append(f"检测到 prompt tuning 样本 {len(sample_records)} 条，可供后续 few-shot/评测使用。")
+    default_candidate_notes = _dedupe_preserve_order(default_candidate_notes)
 
     schema_aware_notes = [
         f"schema_aware 优先基于{schema_aware_base_label}自动增强；若 auto_tuned 缺失则回退到 default。",
         "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
         "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。",
     ]
+    schema_aware_notes = _dedupe_preserve_order(schema_aware_notes)
     schema_fewshot_notes = list(fewshot_notes)
     schema_fewshot_notes.insert(0, f"schema_fewshot 继承 schema_aware，并继续沿用 {schema_aware_base_label} 作为底稿。")
     if fewshot_source_ids:
         schema_fewshot_notes.append(f"few-shot 来源样本：{', '.join(fewshot_source_ids)}")
     if fewshot_examples and fewshot_examples[0].source_kind == "manual_minimal":
         schema_fewshot_notes.append("当前 few-shot 使用手写最小示例，仅作为 audit gold 缺失时的降级方案。")
+    schema_fewshot_notes = _dedupe_preserve_order(schema_fewshot_notes)
+    auto_tuned_notes = _dedupe_preserve_order(auto_tuned_notes)
 
     candidates = [
         {

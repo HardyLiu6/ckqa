@@ -3,9 +3,9 @@
 ## 作用
 
 - 候选名称：`schema_aware`
-- 生成时间：`2026-04-16T17:59:19+08:00`
+- 生成时间：`2026-04-17T00:06:51+08:00`
 - 来源类型：`schema_augmented`
-- 基础 Prompt 来源：`/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/extract_graph.txt`
+- 基础 Prompt 来源：`/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned/extract_graph.txt`
 - 是否注入 schema：`yes`
 - 是否包含 few-shot：`no`
 - few-shot 策略：`none`
@@ -16,6 +16,6 @@
 
 ## 备注
 
-- schema_aware 优先基于默认 GraphRAG Prompt自动增强；若 auto_tuned 缺失则回退到 default。
+- schema_aware 优先基于官方 auto_tuned Prompt自动增强；若 auto_tuned 缺失则回退到 default。
 - 在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。
 - 关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。

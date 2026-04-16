@@ -3,7 +3,7 @@
 ## 作用
 
 - 候选名称：`default`
-- 生成时间：`2026-04-16T17:59:19+08:00`
+- 生成时间：`2026-04-17T00:06:51+08:00`
 - 来源类型：`default_adapted`
 - 基础 Prompt 来源：`/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/extract_graph.txt`
 - 是否注入 schema：`no`

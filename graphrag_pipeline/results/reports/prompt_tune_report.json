@@ -1,7 +1,7 @@
 {
   "task": "graphrag_prompt_tune",
-  "status": "failed",
-  "generated_at": "2026-04-16T17:57:04+08:00",
+  "status": "success",
+  "generated_at": "2026-04-17T00:01:43+08:00",
   "chosen_invocation": {
     "name": "python_module_conda_env",
     "display_name": "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python -m graphrag prompt-tune"
@@ -62,7 +62,7 @@
     "--root",
     "/home/sunlight/Projects/ckqa/graphrag_pipeline",
     "--output",
-    "results/prompt_tune_runs/20260416T175648/raw_output",
+    "results/prompt_tune_runs/20260416T235534/raw_output",
     "--domain",
     "课程知识图谱问答",
     "--language",
@@ -70,8 +70,17 @@
     "--chunk-size",
     "1000"
   ],
-  "warnings": [
-    "GraphRAG prompt-tune 执行失败，exit_code=1，stderr=╭───────────────────── Traceback (most recent call last) ──────────────────────╮ │ /home/sunlight/miniconda3/envs/graphrag-oneapi/lib/python3.11/site-packages/ │ │ litellm/llms/openai/openai.py:929 in acompletion │ │ │ │ 926 │ │ │ │ │ }, │ │ 927 │ │ │ │ ) │ │ 928 │ │ │ │ │ │ ❱ 929 │ │ │ │ headers, response = await self.make_openai_chat_compl │ │ 930 │ │ │ │ │ openai_aclient=openai_aclient, │ │ 93…"
+  "warnings": [],
+  "start_time": "2026-04-16T23:55:34+08:00",
+  "end_time": "2026-04-16T23:55:34+08:00",
+  "duration_seconds": 368.84252511499994,
+  "exit_code": 0,
+  "primary_prompt_file": "extract_graph.txt",
+  "collected_files": [
+    "community_report_graph.txt",
+    "extract_graph.txt",
+    "prompt.txt",
+    "summarize_descriptions.txt"
   ],
-  "error": "GraphRAG prompt-tune 执行失败，exit_code=1，stderr=╭───────────────────── Traceback (most recent call last) ──────────────────────╮ │ /home/sunlight/miniconda3/envs/graphrag-oneapi/lib/python3.11/site-packages/ │ │ litellm/llms/openai/openai.py:929 in acompletion │ │ │ │ 926 │ │ │ │ │ }, │ │ 927 │ │ │ │ ) │ │ 928 │ │ │ │ │ │ ❱ 929 │ │ │ │ headers, response = await self.make_openai_chat_compl │ │ 930 │ │ │ │ │ openai_aclient=openai_aclient, │ │ 93…"
+  "manifest_candidate_count": 4
 }
