@@ -1,0 +1,85 @@
+-Goal-
+Given a course text document that is potentially relevant to this activity and the course schema,
+extract stable entities and relationships for course knowledge graph construction.
+
+-Task Context-
+当前任务是“课程知识图谱抽取”，目标是从教材、课件、课程大纲、实验指导、课堂笔记、作业或试题文本中，
+抽取稳定、可复用、可解析的课程领域实体与关系，用于后续 GraphRAG 建图与问答验证。
+
+-Steps-
+1. 识别所有稳定实体。对每个实体输出：
+- entity_name: 实体名称，优先使用课程内稳定名称并保留章节编号
+- entity_type: 必须是以下类型之一：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+- entity_description: 中文简要说明，聚焦课程语义，不要输出无关废话
+Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
+
+2. 在已识别实体之间识别明确且稳定的关系。对每条关系输出：
+- source_entity: 源实体名称
+- target_entity: 目标实体名称
+- relationship_description: 必须以 [type=<relation_type>] 开头，其中 <relation_type> 必须来自 [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]；
+  其后用中文解释关系证据与语义，避免空泛描述
+- relationship_strength: 1 到 10 的整数分值，表示关系强度
+Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
+
+3. 返回单一列表，实体和关系统一使用 {record_delimiter} 分隔，并在结束时输出 {completion_delimiter}。
+
+4. 输出必须是中文说明；不要添加题外解释、推理过程、免责声明或额外 Markdown。
+
+5. 只抽稳定、可复用、可建图的课程知识；不要输出重复实体、非法类型、噪声关系或与课程问答无关的信息。
+
+6. 若证据不足以支撑实体或关系，请宁缺毋滥，直接跳过。
+
+-Quality Constraints-
+- 当前任务聚焦课程知识图谱抽取，不是通用信息抽取。
+- 实体类型必须来自课程 Schema，不要自造类型。
+- 关系说明必须以 [type=<relation_type>] 开头，关系类型只能来自课程 Schema。
+- 优先保留课程结构、概念/术语、方法/算法、实验、作业相关对象。
+- 对课程通知、图表碎片、页码、无关行政信息、空泛话语默认忽略。
+
+-Real Data-
+entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+relation_types: [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]
+text: {input_text}
+output:
+
+-Schema Constraints-
+实体类型必须来自以下课程 Schema：
+- `Course`（课程）：完整课程或稳定课程实例，是后续章节、知识点、实验和作业的顶层教学对象。；命名规则：优先使用课程正式名称；若文本中缺失课程正式名称，可退化为 cour…
+- `Chapter`（章节）：课程中的章、单元、模块级结构化标题，通常对应 heading_level=1 的稳定教…；命名规则：保留原始章节编号和标题语义，例如“第二章 进程的描述与控制”；不要…
+- `Section`（节）：章以下的结构化教学单元，统一覆盖节、小节、专题、实验步骤、项目阶段等非章级标题；三级及…；命名规则：保留原始编号和标题；若同名节在不同章出现，必须结合 heading…
+- `KnowledgePoint`（知识点）：课程中需要掌握、理解、记忆或考核的稳定知识单元，通常能直接成为问答或考核对象。；命名规则：使用最短且稳定的教学名词短语，不使用完整陈述句；若它只是某个更大概…
+- `Concept`（概念）：可被独立解释、比较和问答的理论概念、机制或对象。；命名规则：优先使用课程正文中的标准概念名称；如果一个对象既像术语又像概念，优…
+- `Term`（术语）：主要承担命名、缩写、符号或标准术语作用的实体，适合支撑术语检索、别名映射和缩写归一化。；命名规则：优先使用正文中的全称；若课程内更常用缩写，可用全称作为 canon…
+- `FormulaOrDefinition`（公式或定义）：具有稳定名称的定义、公式、定律、判定条件或符号化表达，用于支撑定义问答与公式检索。；命名规则：优先使用“X定义”“X公式”“X定律”这类可复用名称；不要把无标题…
+- `AlgorithmOrMethod`（算法或方法）：具有明确步骤、策略或机制的算法、方法、协议、处理流程或实现策略。；命名规则：保留课程中通用的算法/方法名称；若存在中英文或全称/简称，使用课程…
+- `Experiment`（实验）：课程中的实验、上机、课程项目、综合实践或验证任务。；命名规则：优先使用实验正式标题；若只有编号，保留“实验x + 标题”组合，不…
+- `Assignment`（作业）：作业、习题、报告、测验、考试题组或用于评估学习结果的任务集合。；命名规则：优先使用任务正式标题；如果只有编号，至少保留“作业x”“实验报告x…
+- `ToolOrPlatform`（工具或平台）：用于教学、实验、实现或演示的软件、平台、开发环境、框架、硬件平台或数据处理工具。；命名规则：保留课程中稳定使用的工具/平台名称；版本号仅在确有区分意义时并入名…
+
+关系类型必须来自以下课程 Schema：
+- `contains`（包含）：表示上级教学单元或结构化容器包含下级单元、知识对象或学习活动。；抽取提示：用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明…
+- `belongs_to`（属于）：表示实体从属于某个课程结构单元或教学容器，是 contains 的反向表达。；抽取提示：当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；后续脚本也…
+- `depends_on`（依赖于）：表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。；抽取提示：用于“X 的理解/实现/推导依赖 Y”“完成该实验需要先掌握 Y”这类依赖…
+- `prerequisite_of`（先修于）：表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。；抽取提示：用于课程安排、教学目标、实验说明中的先修关系；若文本只给出 depends…
+- `related_to`（相关）：表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。；抽取提示：只有在 contains、defined_by、depends_on、ap…
+- `defined_by`（由…定义）：表示概念、术语或知识点由某一定义、公式、定律或判定条件来界定。；抽取提示：用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系。
+- `applied_in`（应用于）：表示知识、方法、公式或算法被用于某实验、作业、章节讲解或平台操作场景。；抽取提示：用于“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类场景化…
+- `implemented_by`（由…实现）：表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。；抽取提示：用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”…
+- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。；抽取提示：用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学…
+- `appears_in`（出现于）：表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。；抽取提示：当只有位置或讲授场景信息，而缺少更强语义时使用；若能判断 contains…
+
+关键抽取规则摘要：
+- 只抽取对课程问答、知识建图和教学评测有稳定价值的实体与关系。
+- 关系优先级参考：`contains` / `belongs_to` > `defined_by` > `prerequisite_of` > `depends_on` > `implemented_by` > `applied_in`
+- 仅在文本显式陈述或同一结构单元内可稳定推断时建立关系，不因简单共现连边。
+- 课程通知、无意义短语、图表残片、页眉页脚和无关行政信息默认不抽。
+- 结构实体要保留有效章节编号；实体默认按课程内边界去重，不做跨课程自动合并。
+
+必要输出约束：
+- 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
+- 只有在无法判断更具体关系时才使用 `related_to`。
+- 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
+- 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
+
+-Base Prompt Note-
+- 本候选版本延续当前 extract_graph 风格：tuple 输出、record_delimiter 分隔、completion_delimiter 结束。

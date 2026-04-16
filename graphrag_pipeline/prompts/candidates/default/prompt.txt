@@ -1,0 +1,43 @@
+-Goal-
+Given a course text document that is potentially relevant to this activity and the course schema,
+extract stable entities and relationships for course knowledge graph construction.
+
+-Task Context-
+当前任务是“课程知识图谱抽取”，目标是从教材、课件、课程大纲、实验指导、课堂笔记、作业或试题文本中，
+抽取稳定、可复用、可解析的课程领域实体与关系，用于后续 GraphRAG 建图与问答验证。
+
+-Steps-
+1. 识别所有稳定实体。对每个实体输出：
+- entity_name: 实体名称，优先使用课程内稳定名称并保留章节编号
+- entity_type: 必须是以下类型之一：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+- entity_description: 中文简要说明，聚焦课程语义，不要输出无关废话
+Format each entity as ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
+
+2. 在已识别实体之间识别明确且稳定的关系。对每条关系输出：
+- source_entity: 源实体名称
+- target_entity: 目标实体名称
+- relationship_description: 必须以 [type=<relation_type>] 开头，其中 <relation_type> 必须来自 [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]；
+  其后用中文解释关系证据与语义，避免空泛描述
+- relationship_strength: 1 到 10 的整数分值，表示关系强度
+Format each relationship as ("relationship"{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_description>{tuple_delimiter}<relationship_strength>)
+
+3. 返回单一列表，实体和关系统一使用 {record_delimiter} 分隔，并在结束时输出 {completion_delimiter}。
+
+4. 输出必须是中文说明；不要添加题外解释、推理过程、免责声明或额外 Markdown。
+
+5. 只抽稳定、可复用、可建图的课程知识；不要输出重复实体、非法类型、噪声关系或与课程问答无关的信息。
+
+6. 若证据不足以支撑实体或关系，请宁缺毋滥，直接跳过。
+
+-Quality Constraints-
+- 当前任务聚焦课程知识图谱抽取，不是通用信息抽取。
+- 实体类型必须来自课程 Schema，不要自造类型。
+- 关系说明必须以 [type=<relation_type>] 开头，关系类型只能来自课程 Schema。
+- 优先保留课程结构、概念/术语、方法/算法、实验、作业相关对象。
+- 对课程通知、图表碎片、页码、无关行政信息、空泛话语默认忽略。
+
+-Real Data-
+entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+relation_types: [contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]
+text: {input_text}
+output:

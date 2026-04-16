@@ -1,0 +1,41 @@
+{
+  "task": "candidate_prompt_generation_report",
+  "generated_at": "2026-04-16T16:44:16+08:00",
+  "schema_version": "v1",
+  "counts": {
+    "entity_type_count": 11,
+    "relation_type_count": 10,
+    "sample_count": 120,
+    "audit_sample_count": 20,
+    "fewshot_example_count": 3
+  },
+  "fallbacks": {
+    "default_prompt_missing": false,
+    "auto_tuned_missing": true,
+    "audit_gold_missing": false
+  },
+  "fewshot": {
+    "strategy": "audit_gold",
+    "source_sample_ids": [
+      "pts-0031-05cd31e343",
+      "pts-0108-5643e4f01a",
+      "pts-0066-80a157e83b"
+    ],
+    "example_ids": [
+      "audit-ext-0011-91e4733999",
+      "audit-ext-0001-0305d1ac25",
+      "audit-ext-0005-1ad586fd09"
+    ]
+  },
+  "candidate_names": [
+    "default",
+    "auto_tuned",
+    "schema_aware",
+    "schema_fewshot"
+  ],
+  "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+  "notes": [
+    "default 候选 Prompt 统一适配为课程 schema 的最小基线版本，但保留 GraphRAG tuple 输出风格。",
+    "schema_aware / schema_fewshot 通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。"
+  ]
+}
