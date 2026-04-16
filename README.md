@@ -172,9 +172,10 @@ python utils/main.py
 
 - 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--file-id` 或 `--file-name`，`graphrag_pipeline` 侧优先使用 `--pdf-file-id`。
 - `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
-- `graphrag_pipeline/utils/main.py` 默认读取仓库内 `output/`，但运行时配置不会自动与 `.env`、`settings.yaml` 同步，启动前仍需人工核对。
+- `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
+- 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 
 ## 文档地图
 

@@ -14,8 +14,8 @@
 
 - 属于主链路模块
 - 真实依赖基线是 `graphrag==3.0.9`
-- `utils/main.py` 仍保留部分旧版内部导入兼容逻辑
-- API 运行时配置和 GraphRAG CLI 配置目前分离，启动前需要人工核对
+- `utils/main.py` 已收口为纯 CLI 查询包装层
+- API 运行时配置会优先读取仓库内 `.env` / 当前环境变量，并把查询统一委托给 GraphRAG CLI
 
 ## 真实入口与关键文件
 
@@ -121,17 +121,18 @@ curl -X POST http://localhost:8012/v1/chat/completions \
 
 当前固定的是 `graphrag==3.0.9`。仓库内涉及 GraphRAG 版本判断时，统一以 `pyproject.toml` 为准。
 
-### 2. API 服务和 CLI 不是一套配置来源
+### 2. API 服务通过 CLI 执行查询
 
 - `graphrag index` / `graphrag query` 主要走 `settings.yaml` + `.env`
-- `python utils/main.py` 默认指向仓库内 `output/`，并可通过 `GRAPHRAG_OUTPUT_DIR` / `GRAPHRAG_LANCEDB_URI` 覆盖
+- `python utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认指向仓库内 `output/`
+- API 侧常用覆盖项包括 `GRAPHRAG_OUTPUT_DIR`、`GRAPHRAG_LANCEDB_URI`、`GRAPHRAG_API_HOST`、`GRAPHRAG_API_PORT`
 
-如果索引结果和 API 服务行为不一致，先检查这两套配置是否漂移。
+如果索引结果和 API 服务行为不一致，先检查 `.env` / 环境变量里的输出目录是否和当前索引产物一致。
 
-### 3. `utils/main.py` 有两条运行路径
+### 3. `utils/main.py` 当前只有一条运行路径
 
-- GraphRAG 内部 Python API 导入成功时，优先走内部对象
-- 导入失败时，回退到 `graphrag query --root . --method ...` 的 CLI 兼容模式
+- FastAPI 收到请求后，统一调用 `graphrag query --root . --method ...`
+- `/health` 中的 `compat_mode` 固定返回 `cli_query`
 
 ### 4. 服务依赖不只是 parquet
 
@@ -154,6 +155,12 @@ python -m pytest tests/
 
 ```bash
 python utils/apiTest.py
+```
+
+### 运行仓库级漂移审计
+
+```bash
+python ../scripts/audit_repo_drift.py --strict
 ```
 
 ### 验证输入同步

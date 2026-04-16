@@ -27,7 +27,7 @@
 ## 先记住这几个现实情况
 
 - `graphrag_pipeline/pyproject.toml` 当前固定的是 `graphrag==3.0.9`，仓库内涉及版本判断时统一以它为准。
-- `graphrag_pipeline/utils/main.py` 仍保留了 2.x 风格的内部 API 导入逻辑，但导入失败时会退回到 GraphRAG CLI 查询兼容模式。
+- `graphrag_pipeline/utils/main.py` 当前已经收口为纯 GraphRAG CLI 查询包装层，不再尝试 2.x 风格的内部 API。
 - `pdf_ingest` 导出时会同时生成标准化中间结果 `normalized_docs.json`，以及面向 GraphRAG 的 `section_docs.json` / `page_docs.json`。
 - `frontend/apps/admin-app/` 和 `backend/ckqa-back/` 目前都不是主业务链路，除非用户明确要求，否则优先排查两个 Python 模块。
 
@@ -104,9 +104,10 @@
 
 - GraphRAG 输入主流程已经是 `json`，不再是旧版 `txt` 主流程。
 - `fetch_from_minio.py` 会尽量把标准化字段提升到顶层，便于 GraphRAG metadata 收集。
-- `utils/main.py` 默认读取仓库内 `output/`，并支持环境变量覆盖；它仍不会自动和 `.env` / `settings.yaml` 同步。
+- `utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认读取仓库内 `output/`，并统一委托 `graphrag query` 执行查询。
 - `output/` 下的 parquet 与 `output/lancedb/` 都是 API 服务必需品。
 - 当前 API 模型名是 `graphrag-local-search:latest`、`graphrag-global-search:latest`、`full-model:latest`。
+- 修改入口文档、关键脚本或版本基线后，可运行 `python scripts/audit_repo_drift.py --strict` 做仓库级审计。
 
 ### 3. `frontend/apps/admin-app/`
 
