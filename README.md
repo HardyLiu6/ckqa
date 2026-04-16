@@ -29,7 +29,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 ## 本次审计结论
 
 - 当前唯一稳定的业务主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
-- `graphrag_pipeline/pyproject.toml` 实际固定的是 `graphrag==3.0.9`，但部分旧注释和字段仍保留 `2.7.0` 历史文案。
+- `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `frontend/apps/admin-app/` 当前代码仍接近 Vite/Vue 起步页，不应被视为正式管理台。
 - `backend/ckqa-back/` 当前只有启动类、默认配置和默认测试，不应被视为正式服务入口。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
@@ -172,7 +172,7 @@ python utils/main.py
 
 - 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--file-id` 或 `--file-name`，`graphrag_pipeline` 侧优先使用 `--pdf-file-id`。
 - `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
-- `graphrag_pipeline/utils/main.py` 的运行时配置不会自动与 `.env`、`settings.yaml` 同步，启动前必须人工核对。
+- `graphrag_pipeline/utils/main.py` 默认读取仓库内 `output/`，但运行时配置不会自动与 `.env`、`settings.yaml` 同步，启动前仍需人工核对。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 

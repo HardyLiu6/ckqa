@@ -1,11 +1,8 @@
 """
-GraphRAG API 测试脚本 (适配 GraphRAG 2.7.0)
+GraphRAG API 测试脚本
 
 该脚本用于测试 GraphRAG 知识图谱问答系统的不同搜索模式。
 支持全局搜索、本地搜索和综合搜索三种模式。
-
-日期: 2026-01-28
-作者: LiuJunDa
 """
 import os
 os.environ['no_proxy'] = 'localhost,127.0.0.1'
@@ -29,7 +26,8 @@ def check_health():
             data = response.json()
             print("✅ 服务状态:")
             print(f"   - 版本: {data.get('version')}")
-            print(f"   - GraphRAG: {data.get('graphrag_version')}")
+            print(f"   - GraphRAG 目标版本: {data.get('graphrag_version_target')}")
+            print(f"   - 兼容模式: {data.get('compat_mode')}")
             print(f"   - 本地搜索: {'就绪' if data.get('local_search_ready') else '未就绪'}")
             print(f"   - 全局搜索: {'就绪' if data.get('global_search_ready') else '未就绪'}")
             return True
@@ -90,7 +88,7 @@ def test_search(model: str, query: str, stream: bool = False):
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("GraphRAG API 测试 (v2.7.0)")
+    print("GraphRAG API 测试")
     print("=" * 60)
     
     # 1. 健康检查

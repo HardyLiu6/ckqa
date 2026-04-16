@@ -99,9 +99,9 @@ Environment and commands:
 
 Notes:
 
-- Some old comments/docs still mention GraphRAG `2.7.0`; trust `pyproject.toml`, which currently pins `3.0.9`.
+- Trust `pyproject.toml` as the GraphRAG version source of truth; it is currently pinned to `3.0.9`.
 - `settings.yaml` and `.env` are used by GraphRAG CLI.
-- `utils/main.py` also has hardcoded runtime config and may fall back to CLI query mode if GraphRAG internal imports are unavailable.
+- `utils/main.py` defaults to the repo-local `output/` directory, still keeps separate runtime config, and may fall back to CLI query mode if GraphRAG internal imports are unavailable.
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.
 

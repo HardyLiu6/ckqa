@@ -3,7 +3,7 @@ GraphRAG 三维知识图谱可视化模块
 ===================================================
 
 功能描述:
-    从 GraphRAG 2.x 处理系统的 Parquet 文件中读取知识图谱数据
+    从 GraphRAG 生成的 Parquet 文件中读取知识图谱数据
     并进行三维交互式可视化。
 
 支持的可视化:
@@ -17,7 +17,7 @@ GraphRAG 三维知识图谱可视化模块
 
 作者: LiuJunDa
 日期: 2026-01-27
-更新: 2026-02-04 (GraphRAG 2.x 兼容)
+更新: 2026-04-16
 """
 
 import os
@@ -35,6 +35,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.express as px
 
+from runtime_defaults import DEFAULT_OUTPUT_DIR
+
 # 日志配置
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +50,7 @@ def read_parquet_files(directory):
     """
     读取指定目录下的 Parquet 文件
     
-    GraphRAG 2.x 输出数据格式:
+    GraphRAG 常见输出数据格式:
         - entities.parquet: 帮助表（id, title, type, description, ...）
         - relationships.parquet: 关系表（source, target, id, weight, ...）
         - communities.parquet: 社区表（id, community, title, ...）
@@ -88,9 +90,9 @@ def clean_dataframe(df):
     """
     清理 DataFrame
     
-    为了增强匠强性，房底粗曝的一些担惧:
+    为了增强健壮性，主要做以下清理:
         - 刪除 source/target 列为空的记录
-        - 输入两列为字符串类型
+        - 把输入两列统一转为字符串类型
         - 移除空白值输入
     
     参数:
@@ -501,8 +503,8 @@ def main():
     
     parser.add_argument(
         '-d', '--directory',
-        default='/home/sunlight/Projects/graphrag-oneapi-exp/output',
-        help='GraphRAG 输出数据目录（默认: ./output）'
+        default=str(DEFAULT_OUTPUT_DIR),
+        help=f'GraphRAG 输出数据目录（默认: {DEFAULT_OUTPUT_DIR}）'
     )
     parser.add_argument(
         '-v', '--verbose',

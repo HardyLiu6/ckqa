@@ -14,7 +14,7 @@
 
 - 属于主链路模块
 - 真实依赖基线是 `graphrag==3.0.9`
-- `utils/main.py` 仍保留部分 2.x 时代的注释和内部导入兼容逻辑
+- `utils/main.py` 仍保留部分旧版内部导入兼容逻辑
 - API 运行时配置和 GraphRAG CLI 配置目前分离，启动前需要人工核对
 
 ## 真实入口与关键文件
@@ -119,12 +119,12 @@ curl -X POST http://localhost:8012/v1/chat/completions \
 
 ### 1. 版本真相以 `pyproject.toml` 为准
 
-当前固定的是 `graphrag==3.0.9`。`description` 字段、文件头注释以及部分旧说明里仍能看到 `2.7.0`，这些都属于历史残留。
+当前固定的是 `graphrag==3.0.9`。仓库内涉及 GraphRAG 版本判断时，统一以 `pyproject.toml` 为准。
 
 ### 2. API 服务和 CLI 不是一套配置来源
 
 - `graphrag index` / `graphrag query` 主要走 `settings.yaml` + `.env`
-- `python utils/main.py` 主要走文件顶部的硬编码常量
+- `python utils/main.py` 默认指向仓库内 `output/`，并可通过 `GRAPHRAG_OUTPUT_DIR` / `GRAPHRAG_LANCEDB_URI` 覆盖
 
 如果索引结果和 API 服务行为不一致，先检查这两套配置是否漂移。
 
@@ -177,7 +177,7 @@ python utils/neo4jTest.py --folder output
 ### 3D 知识图谱可视化
 
 ```bash
-python utils/graphrag3dknowledge.py --input output --port 8080
+python utils/graphrag3dknowledge.py --directory output --port 8080
 ```
 
 ### 网页抓取

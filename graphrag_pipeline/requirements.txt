@@ -1,5 +1,5 @@
 # =============================================================================
-# GraphRAG 2.7.0 Compatible Requirements
+# GraphRAG 3.0.9 Runtime Requirements
 # Python version required: >=3.10, <3.13
 # =============================================================================
 
@@ -17,7 +17,7 @@ numpy>=2.1.0,<3.0.0
 # LLM & Tokenization
 tiktoken>=0.8.0
 
-# Pydantic (GraphRAG 2.x 需要 Pydantic 2.x)
+# Pydantic (GraphRAG 当前运行栈使用 Pydantic 2.x)
 pydantic>=2.9.0
 pydantic-settings>=2.5.0
 
@@ -62,11 +62,11 @@ beautifulsoup4>=4.12.0
 html2text>=2024.2.26
 
 # =============================================================================
-# 以下是 GraphRAG 2.7.0 的主要间接依赖 (会自动安装，列出供参考)
+# 以下是当前 GraphRAG 运行栈的主要间接依赖 (会自动安装，列出供参考)
 # - graspologic: 图统计分析
 # - pyarrow>=17.0.0: Parquet 文件支持
 # - fnllm: LLM 调用封装
-# - litellm: 多 LLM 提供商支持 (2.7.0 默认)
+# - litellm: 多 LLM 提供商支持
 # - networkx: 图处理
 # - typer: CLI 支持
 # =============================================================================

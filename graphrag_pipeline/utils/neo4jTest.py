@@ -64,6 +64,8 @@ import pandas as pd
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable, AuthError
 
+from runtime_defaults import DEFAULT_OUTPUT_DIR
+
 
 # ============================================================================
 # 日志配置
@@ -80,7 +82,7 @@ logger = logging.getLogger(__name__)
 # 默认配置（可通过环境变量覆盖）
 # ============================================================================
 DEFAULT_CONFIG = {
-    "GRAPHRAG_FOLDER": os.getenv("GRAPHRAG_FOLDER", "/home/sunlight/Projects/graphrag-oneapi-exp/output"),
+    "GRAPHRAG_FOLDER": os.getenv("GRAPHRAG_FOLDER", str(DEFAULT_OUTPUT_DIR)),
     "NEO4J_URI": os.getenv("NEO4J_URI", "bolt://localhost:17687"),
     "NEO4J_USERNAME": os.getenv("NEO4J_USERNAME", "neo4j"),
     "NEO4J_PASSWORD": os.getenv("NEO4J_PASSWORD", "12345678"),

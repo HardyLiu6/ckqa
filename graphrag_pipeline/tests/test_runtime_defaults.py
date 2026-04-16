@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+运行时默认配置契约测试
+====================
+约束 graphrag_pipeline 的版本基线与仓库内默认路径，避免后续再次漂移。
+"""
+
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_MODULE_DIR = _PROJECT_ROOT / "utils"
+if str(_MODULE_DIR) not in sys.path:
+    sys.path.insert(0, str(_MODULE_DIR))
+
+from runtime_defaults import (
+    DEFAULT_OUTPUT_DIR,
+    PROJECT_ROOT,
+    PROJECT_VERSION,
+    TARGET_GRAPHRAG_VERSION,
+)
+
+
+class TestRuntimeDefaults(unittest.TestCase):
+    """运行时默认值应与仓库结构和 pyproject 保持一致。"""
+
+    def test_project_root_and_default_output_dir_follow_repo(self):
+        self.assertEqual(PROJECT_ROOT, _PROJECT_ROOT)
+        self.assertEqual(DEFAULT_OUTPUT_DIR, _PROJECT_ROOT / "output")
+
+    def test_pyproject_declares_current_project_and_graphrag_versions(self):
+        text = (_PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn(f'version = "{PROJECT_VERSION}"', text)
+        self.assertIn(f'"graphrag=={TARGET_GRAPHRAG_VERSION}"', text)
+        self.assertNotIn("2.7.0", text)
+
+    def test_core_files_do_not_reference_removed_graphrag_baseline_or_external_repo(self):
+        checked_files = [
+            _PROJECT_ROOT / "README.md",
+            _PROJECT_ROOT / "CLAUDE.md",
+            _PROJECT_ROOT / "requirements.txt",
+            _PROJECT_ROOT / "utils" / "main.py",
+            _PROJECT_ROOT / "utils" / "apiTest.py",
+            _PROJECT_ROOT / "utils" / "graphrag3dknowledge.py",
+            _PROJECT_ROOT / "utils" / "neo4jTest.py",
+        ]
+
+        for path in checked_files:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("2.7.0", text, msg=f"{path} 仍包含旧版本号")
+            self.assertNotIn(
+                "/home/sunlight/Projects/graphrag-oneapi-exp",
+                text,
+                msg=f"{path} 仍包含仓库外默认路径",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,12 +1,8 @@
 """
-GraphRAG FastAPI 服务器 (适配 GraphRAG 2.7.0)
+GraphRAG FastAPI 服务器
 
 该脚本实现了一个 FastAPI 服务器，提供知识图谱问答接口。
 支持本地搜索、全局搜索和综合搜索三种模式。
-
-日期: 2026-01-28
-作者: LiuJunDa
-版本: 2.0.1 (修复版 - 适配 GraphRAG 2.7.0)
 """
 
 import os
@@ -27,7 +23,15 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 import uvicorn
 
-# GraphRAG 内部导入（2.x 可用；3.x 可能变化）
+from runtime_defaults import (
+    DEFAULT_LANCEDB_URI,
+    DEFAULT_OUTPUT_DIR,
+    PROJECT_ROOT,
+    PROJECT_VERSION,
+    TARGET_GRAPHRAG_VERSION,
+)
+
+# GraphRAG 内部导入仍保留兼容逻辑，但当前版本不保证这些内部路径稳定。
 GRAPHRAG_INTERNALS_AVAILABLE = True
 GRAPHRAG_IMPORT_ERROR = None
 
@@ -69,22 +73,19 @@ if not GRAPHRAG_INTERNALS_AVAILABLE:
 
 
 # ==================== 配置区域 ====================
-# 请根据你的实际路径和 API 设置修改以下配置
-
-# GraphRAG 项目根目录
-GRAPHRAG_ROOT = "/home/sunlight/Projects/graphrag-oneapi-exp/output"
+# 优先使用仓库内 output/，必要时允许通过环境变量覆盖。
+GRAPHRAG_ROOT = Path(
+    os.getenv("GRAPHRAG_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
+).expanduser().resolve()
 
 # 索引输出目录（parquet 文件所在位置）
-# 注意：GraphRAG 2.x 版本输出目录是 output/
-# 请检查你的实际目录结构
-INPUT_DIR = f"{GRAPHRAG_ROOT}"
+INPUT_DIR = str(GRAPHRAG_ROOT)
 
 # LanceDB 向量数据库路径
-LANCEDB_URI = f"{GRAPHRAG_ROOT}/lancedb"
+LANCEDB_URI = os.getenv("GRAPHRAG_LANCEDB_URI", str(DEFAULT_LANCEDB_URI))
 
 # 数据表名称
-# GraphRAG 2.x 新版使用简化名称，旧版使用 create_final_* 前缀
-# 请根据你的 parquet 文件名调整
+# 当前常见输出使用简化名称，历史产物可能仍是 create_final_* 前缀。
 USE_NEW_TABLE_NAMES = True  # 设置为 True 如果你的文件名是简化格式
 
 if USE_NEW_TABLE_NAMES:
@@ -131,7 +132,7 @@ question_generator = None
 
 def get_project_root() -> Path:
     """返回 graphrag_pipeline 项目根目录。"""
-    return Path(__file__).resolve().parents[1]
+    return PROJECT_ROOT
 
 
 async def run_graphrag_query_cli(method: str, prompt: str) -> str:
@@ -227,7 +228,7 @@ async def setup_llm_and_embedder():
     """
     设置语言模型（LLM）和文本嵌入模型（Embedder）
     """
-    logger.info("正在设置 LLM 和嵌入器 (GraphRAG 2.7.0 API)")
+    logger.info("正在设置 LLM 和嵌入器 (GraphRAG internal API)")
     
     # 配置 Chat 模型
     chat_config = LanguageModelConfig(
@@ -524,7 +525,7 @@ async def lifespan(app: FastAPI):
         return
 
     try:
-        logger.info("正在初始化搜索引擎 (GraphRAG 2.7.0)...")
+        logger.info("正在初始化搜索引擎 (GraphRAG internal API)...")
         
         # 设置 LLM 和 Embedder
         chat_model, tokenizer, text_embedder = await setup_llm_and_embedder()
@@ -561,8 +562,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GraphRAG API Server",
-    description="基于 Microsoft GraphRAG 的知识图谱问答服务（支持 3.x CLI 兼容模式）",
-    version="2.0.1",
+    description=(
+        "基于 Microsoft GraphRAG 的知识图谱问答服务"
+        f"（当前依赖基线 {TARGET_GRAPHRAG_VERSION}，支持 CLI 兼容模式）"
+    ),
+    version=PROJECT_VERSION,
     lifespan=lifespan
 )
 
@@ -718,11 +722,12 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "version": "2.0.1",
-        "graphrag_version_target": "3.0.9",
+        "version": PROJECT_VERSION,
+        "graphrag_version_target": TARGET_GRAPHRAG_VERSION,
         "compat_mode": "internal_api" if GRAPHRAG_INTERNALS_AVAILABLE else "cli_query",
         "local_search_ready": (local_search_engine is not None) if GRAPHRAG_INTERNALS_AVAILABLE else True,
         "global_search_ready": (global_search_engine is not None) if GRAPHRAG_INTERNALS_AVAILABLE else True,
+        "output_dir": INPUT_DIR,
     }
 
 
@@ -733,7 +738,7 @@ async def root():
     """
     return {
         "message": "GraphRAG API Server",
-        "version": "2.0.1",
+        "version": PROJECT_VERSION,
         "docs": "/docs",
         "health": "/health"
     }
