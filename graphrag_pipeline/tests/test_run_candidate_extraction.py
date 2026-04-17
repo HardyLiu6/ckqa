@@ -25,8 +25,9 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from extraction_parser import parse_extraction_output
+from llm_client import LlmCompletionResult
 from prompt_loader import load_schema_catalog, resolve_samples_path
-from run_candidate_extraction import run_candidate_extraction
+from run_candidate_extraction import _build_parser, run_candidate_extraction
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -47,7 +48,8 @@ class FakeLlmClient:
         temperature: float,
         max_tokens: int | None,
         metadata: dict[str, Any],
-    ) -> str:
+        timeout_seconds: int | None = None,
+    ) -> Any:
         self.calls.append(
             {
                 "messages": messages,
@@ -55,16 +57,27 @@ class FakeLlmClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "metadata": metadata,
+                "timeout_seconds": timeout_seconds,
             }
         )
         key = (metadata["candidate"], metadata["sample_id"])
         response = self._responses[key]
+        if isinstance(response, list):
+            response = response.pop(0)
         if isinstance(response, Exception):
             raise response
+        if isinstance(response, LlmCompletionResult):
+            return response
         return str(response)
 
 
 class TestRunCandidateExtraction(unittest.TestCase):
+    def test_cli_defaults_enable_recommended_streaming_and_retry(self):
+        args = _build_parser().parse_args([])
+
+        self.assertEqual(args.stream_mode, "on")
+        self.assertTrue(args.retry_on_truncation)
+
     def _write_schema_files(self, root: Path) -> None:
         schema_dir = root / "config" / "schema"
         _write_json(
@@ -366,6 +379,65 @@ text: {input_text}
             self.assertIn("<|>", user_message)
             self.assertNotIn("{tuple_delimiter}", user_message)
             self.assertIn("进程是程序的一次执行过程", user_message)
+
+    def test_run_candidate_extraction_retries_on_truncated_json_with_budget_hint(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+
+            client = FakeLlmClient(
+                {
+                    (
+                        "default",
+                        "pts-001",
+                    ): [
+                        LlmCompletionResult(
+                            content='{"entities":[{"title":"进程","type":"Concept"}],"relationships":[',
+                            finish_reason="length",
+                            usage={"total_tokens": 2000},
+                            request_mode="sync",
+                        ),
+                        LlmCompletionResult(
+                            content='{"entities":[{"title":"进程","type":"Concept","description":"程序的一次执行过程","evidence":"进程是程序的一次执行过程"}],"relationships":[]}',
+                            finish_reason="stop",
+                            usage={"total_tokens": 2300},
+                            request_mode="sync",
+                        ),
+                    ]
+                }
+            )
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=["default"],
+                model="qwen-test",
+                limit=1,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1200,
+                retries=1,
+                overwrite=True,
+                llm_client=client,
+                retry_on_truncation=True,
+                retry_max_tokens=2400,
+                high_risk_timeout=240,
+                max_entities=3,
+                max_relationships=2,
+            )
+
+            self.assertEqual(summary["success"], 1)
+            self.assertEqual(len(client.calls), 2)
+            self.assertEqual(client.calls[0]["max_tokens"], 1200)
+            self.assertEqual(client.calls[1]["max_tokens"], 2400)
+            self.assertEqual(client.calls[0]["timeout_seconds"], 120)
+            self.assertEqual(client.calls[1]["timeout_seconds"], 240)
+
+            user_message = next(message["content"] for message in client.calls[0]["messages"] if message["role"] == "user")
+            self.assertIn("最多输出 3 个实体、2 条关系", user_message)
 
 
 if __name__ == "__main__":

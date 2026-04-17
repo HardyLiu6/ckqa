@@ -22,7 +22,7 @@ from typing import Any, Sequence
 
 from extraction_parser import parse_extraction_output
 from extraction_schema import StructuredExtractionResult
-from llm_client import build_llm_client
+from llm_client import LlmCompletionResult, build_llm_client
 from prompt_loader import (
     default_schema_paths,
     load_candidate_prompts,
@@ -53,6 +53,13 @@ def run_candidate_extraction(
     overwrite: bool,
     llm_client: Any | None = None,
     timeout_seconds: int = 120,
+    stream_mode: str = "on",
+    idle_timeout_seconds: int = 30,
+    retry_on_truncation: bool = True,
+    retry_max_tokens: int | None = None,
+    high_risk_timeout: int = 240,
+    max_entities: int | None = None,
+    max_relationships: int | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
     samples_path = resolve_samples_path(samples_file, root=root)
@@ -76,6 +83,8 @@ def run_candidate_extraction(
         model=model,
         timeout_seconds=timeout_seconds,
         retries=retries,
+        stream_mode=stream_mode,
+        idle_timeout_seconds=idle_timeout_seconds,
     )
     resolved_model = model or getattr(client, "model_name", "") or "unknown-model"
 
@@ -100,6 +109,12 @@ def run_candidate_extraction(
                     temperature=temperature,
                     max_tokens=max_tokens,
                     client=client,
+                    timeout_seconds=timeout_seconds,
+                    retry_on_truncation=retry_on_truncation,
+                    retry_max_tokens=retry_max_tokens,
+                    high_risk_timeout=high_risk_timeout,
+                    max_entities=max_entities,
+                    max_relationships=max_relationships,
                 ): sample
                 for sample in samples
             }
@@ -168,42 +183,105 @@ def _run_single_extraction(
     temperature: float,
     max_tokens: int | None,
     client: Any,
+    timeout_seconds: int,
+    retry_on_truncation: bool,
+    retry_max_tokens: int | None,
+    high_risk_timeout: int,
+    max_entities: int | None,
+    max_relationships: int | None,
 ) -> StructuredExtractionResult:
     sample_id = str(sample.get("sample_id") or "").strip()
     messages = render_extraction_messages(
         candidate=candidate,
         sample=sample,
         schema_catalog=schema_catalog,
+        max_entities=max_entities,
+        max_relationships=max_relationships,
     )
+    attempt_settings = [(max_tokens, timeout_seconds)]
+    if retry_on_truncation:
+        attempt_settings.append((retry_max_tokens or max_tokens, high_risk_timeout))
 
-    try:
-        raw_output = client.create_chat_completion(
-            messages=messages,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            metadata={
-                "candidate": candidate.name,
-                "sample_id": sample_id,
-                "prompt_path": str(candidate.prompt_path),
-            },
-        )
-    except Exception as exc:
-        return StructuredExtractionResult(
+    first_failure_result: StructuredExtractionResult | None = None
+
+    for attempt_index, (attempt_max_tokens, attempt_timeout) in enumerate(attempt_settings, start=1):
+        try:
+            raw_result = client.create_chat_completion(
+                messages=messages,
+                model=model_name,
+                temperature=temperature,
+                max_tokens=attempt_max_tokens,
+                metadata={
+                    "candidate": candidate.name,
+                    "sample_id": sample_id,
+                    "prompt_path": str(candidate.prompt_path),
+                },
+                timeout_seconds=attempt_timeout,
+            )
+        except Exception as exc:
+            if first_failure_result is not None:
+                return _merge_retry_error(
+                    first_failure_result,
+                    retry_error=str(exc),
+                    attempt_index=attempt_index,
+                    timeout_seconds=attempt_timeout,
+                    max_tokens=attempt_max_tokens,
+                )
+            return StructuredExtractionResult(
+                sample_id=sample_id,
+                candidate=candidate.name,
+                status="llm_error",
+                entities=[],
+                relationships=[],
+                raw_output="",
+                error=str(exc),
+                llm_debug={
+                    "attempt_index": attempt_index,
+                    "timeout_seconds": attempt_timeout,
+                    "max_tokens": attempt_max_tokens,
+                },
+            )
+
+        llm_result = _coerce_llm_result(raw_result)
+        parsed_result = parse_extraction_output(
+            llm_result.content,
             sample_id=sample_id,
             candidate=candidate.name,
-            status="llm_error",
-            entities=[],
-            relationships=[],
-            raw_output="",
-            error=str(exc),
+            schema_catalog=schema_catalog,
+        )
+        enriched_result = parsed_result.model_copy(
+            update={
+                "llm_debug": {
+                    "finish_reason": llm_result.finish_reason,
+                    "usage": llm_result.usage,
+                    "request_mode": llm_result.request_mode,
+                    "reasoning_seen": llm_result.reasoning_seen,
+                    "raw_chunks": llm_result.raw_chunks,
+                    "attempt_index": attempt_index,
+                    "timeout_seconds": attempt_timeout,
+                    "max_tokens": attempt_max_tokens,
+                }
+            }
         )
 
-    return parse_extraction_output(
-        raw_output,
+        if (
+            attempt_index == 1
+            and retry_on_truncation
+            and _should_retry_truncation(enriched_result, llm_result)
+        ):
+            first_failure_result = enriched_result
+            continue
+
+        return enriched_result
+
+    return first_failure_result or StructuredExtractionResult(
         sample_id=sample_id,
         candidate=candidate.name,
-        schema_catalog=schema_catalog,
+        status="parse_error",
+        entities=[],
+        relationships=[],
+        raw_output="",
+        error="抽取执行失败，但未返回可用结果",
     )
 
 
@@ -248,6 +326,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tokens", type=int, default=2000, help="LLM max_tokens")
     parser.add_argument("--retries", type=int, default=2, help="LLM 请求重试次数")
     parser.add_argument("--timeout", type=int, default=120, help="LLM 请求超时时间（秒）")
+    parser.add_argument(
+        "--stream-mode",
+        choices=["off", "on"],
+        default="on",
+        help="是否使用 SSE 流式调用 LLM；默认开启，可显式切回 off",
+    )
+    parser.add_argument("--idle-timeout", type=int, default=30, help="流式模式下的空闲超时（秒）")
+    parser.add_argument(
+        "--retry-on-truncation",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="遇到 length/truncated_json 时自动重试一次；默认开启，可用 --no-retry-on-truncation 关闭",
+    )
+    parser.add_argument("--retry-max-tokens", type=int, default=4000, help="自动重试时使用的 max_tokens")
+    parser.add_argument("--high-risk-timeout", type=int, default=240, help="高风险样本自动重试时使用的超时")
+    parser.add_argument("--max-entities", type=int, default=12, help="限制输出实体数量")
+    parser.add_argument("--max-relationships", type=int, default=12, help="限制输出关系数量")
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有结果文件")
     return parser
 
@@ -267,9 +362,46 @@ def main(argv: Sequence[str] | None = None) -> int:
         retries=args.retries,
         overwrite=args.overwrite,
         timeout_seconds=args.timeout,
+        stream_mode=args.stream_mode,
+        idle_timeout_seconds=args.idle_timeout,
+        retry_on_truncation=args.retry_on_truncation,
+        retry_max_tokens=args.retry_max_tokens,
+        high_risk_timeout=args.high_risk_timeout,
+        max_entities=args.max_entities,
+        max_relationships=args.max_relationships,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
+
+def _coerce_llm_result(raw_result: Any) -> LlmCompletionResult:
+    if isinstance(raw_result, LlmCompletionResult):
+        return raw_result
+    return LlmCompletionResult(
+        content=str(raw_result),
+        finish_reason=None,
+        usage=None,
+        request_mode="sync",
+    )
+
+
+def _should_retry_truncation(result: StructuredExtractionResult, llm_result: LlmCompletionResult) -> bool:
+    return llm_result.finish_reason == "length" or result.parser_error_code == "truncated_json"
+
+
+def _merge_retry_error(
+    result: StructuredExtractionResult,
+    *,
+    retry_error: str,
+    attempt_index: int,
+    timeout_seconds: int,
+    max_tokens: int | None,
+) -> StructuredExtractionResult:
+    debug_info = dict(result.llm_debug or {})
+    debug_info["retry_error"] = retry_error
+    debug_info["retry_attempt_index"] = attempt_index
+    debug_info["retry_timeout_seconds"] = timeout_seconds
+    debug_info["retry_max_tokens"] = max_tokens
+    return result.model_copy(update={"llm_debug": debug_info})
 
 
 if __name__ == "__main__":

@@ -24,6 +24,9 @@ from extraction_schema import (
 
 _CODE_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 _RELATION_TYPE_RE = re.compile(r"^\s*\[type=([A-Za-z0-9_:-]+)\]\s*", re.IGNORECASE)
+TRUNCATED_JSON = "truncated_json"
+INVALID_JSON = "invalid_json"
+EMPTY_OUTPUT = "empty_output"
 
 
 def parse_extraction_output(
@@ -69,7 +72,7 @@ def parse_extraction_output(
             schema_catalog=schema_catalog,
         )
 
-    error_message = json_errors[-1] if json_errors else "未识别到合法 JSON 或 tuple 抽取结果"
+    error_code, error_message = _classify_parse_error(raw_output, json_errors)
     return StructuredExtractionResult(
         sample_id=sample_id,
         candidate=candidate,
@@ -78,6 +81,7 @@ def parse_extraction_output(
         relationships=[],
         raw_output=raw_output,
         error=error_message,
+        parser_error_code=error_code,
     )
 
 
@@ -212,6 +216,29 @@ def _extract_payload_root(payload: Any) -> dict[str, Any] | None:
             if root is not None:
                 return root
     return None
+
+
+def _classify_parse_error(raw_output: str, json_errors: list[str]) -> tuple[str, str]:
+    stripped = (raw_output or "").strip()
+    if not stripped:
+        return EMPTY_OUTPUT, "模型输出为空"
+    if _looks_truncated_json(stripped):
+        detail = json_errors[-1] if json_errors else "未识别到完整 JSON 结束位置"
+        return TRUNCATED_JSON, f"JSON 输出疑似被截断：{detail}"
+    if json_errors:
+        return INVALID_JSON, json_errors[-1]
+    return INVALID_JSON, "未识别到合法 JSON 或 tuple 抽取结果"
+
+
+def _looks_truncated_json(text: str) -> bool:
+    repaired = _repair_json_text(text)
+    if not repaired:
+        return False
+    if repaired.count("{") > repaired.count("}"):
+        return True
+    if repaired.count("[") > repaired.count("]"):
+        return True
+    return repaired.rstrip().endswith((':', ',', '"'))
 
 
 def _parse_tuple_output(raw_output: str) -> dict[str, Any] | None:

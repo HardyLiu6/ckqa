@@ -68,6 +68,8 @@ def write_parse_errors(
             "candidate": result.candidate,
             "status": result.status,
             "error": result.error,
+            "parser_error_code": result.parser_error_code,
+            "llm_debug": result.llm_debug,
             "raw_output": result.raw_output,
         }
         for result in results
@@ -82,6 +84,8 @@ def _iter_raw_records(results: list[StructuredExtractionResult]) -> Iterable[dic
             "sample_id": result.sample_id,
             "candidate": result.candidate,
             "status": result.status,
+            "parser_error_code": result.parser_error_code,
+            "llm_debug": result.llm_debug,
             "raw_output": result.raw_output,
             "error": result.error,
         }

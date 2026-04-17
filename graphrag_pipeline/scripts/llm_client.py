@@ -14,7 +14,7 @@ from contextlib import closing
 from dataclasses import dataclass
 import ipaddress
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 from urllib.parse import urlparse
 
 import requests
@@ -33,6 +33,18 @@ class LlmClientError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class LlmCompletionResult:
+    """统一封装一次 LLM 完成结果，便于执行器做诊断与重试决策。"""
+
+    content: str
+    finish_reason: str | None
+    usage: dict[str, Any] | None
+    request_mode: str
+    reasoning_seen: bool = False
+    raw_chunks: int = 0
+
+
+@dataclass(frozen=True)
 class OpenAICompatibleLlmConfig:
     api_base: str
     api_key: str
@@ -40,6 +52,8 @@ class OpenAICompatibleLlmConfig:
     timeout_seconds: int = 120
     retries: int = 2
     enable_json_mode: bool = True
+    stream_mode: str = "on"
+    idle_timeout_seconds: int = 30
 
 
 class OpenAICompatibleLlmClient:
@@ -60,23 +74,28 @@ class OpenAICompatibleLlmClient:
         temperature: float,
         max_tokens: int | None,
         metadata: dict[str, Any],
-    ) -> str:
+        timeout_seconds: int | None = None,
+    ) -> LlmCompletionResult:
         request_model = model or self._config.model
         endpoint = _build_chat_completions_url(self._config.api_base)
+        use_stream = self._config.stream_mode == "on"
         payload = {
             "model": request_model,
             "messages": messages,
             "temperature": temperature,
-            "stream": False,
+            "stream": use_stream,
         }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
+        if use_stream:
+            payload["stream_options"] = {"include_usage": True}
 
         return self._post_with_retry(
             endpoint=endpoint,
             payload=payload,
             metadata=metadata,
             enable_json_mode=self._config.enable_json_mode,
+            timeout_seconds=timeout_seconds,
         )
 
     def _post_with_retry(
@@ -86,7 +105,8 @@ class OpenAICompatibleLlmClient:
         payload: dict[str, Any],
         metadata: dict[str, Any],
         enable_json_mode: bool,
-    ) -> str:
+        timeout_seconds: int | None,
+    ) -> LlmCompletionResult:
         headers = {"Content-Type": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
@@ -104,7 +124,12 @@ class OpenAICompatibleLlmClient:
                         endpoint,
                         headers=headers,
                         data=json.dumps(current_payload),
-                        timeout=self._config.timeout_seconds,
+                        timeout=_resolve_timeout(
+                            total_timeout_seconds=timeout_seconds or self._config.timeout_seconds,
+                            idle_timeout_seconds=self._config.idle_timeout_seconds,
+                            is_streaming=bool(current_payload.get("stream")),
+                        ),
+                        stream=bool(current_payload.get("stream")),
                     )
             except requests.RequestException as exc:
                 last_error = f"请求失败：{exc}"
@@ -113,31 +138,35 @@ class OpenAICompatibleLlmClient:
                 time.sleep(min(2 * attempt, 5))
                 continue
 
-            if response.status_code >= 400:
-                if response.status_code == 400 and "response_format" in current_payload:
-                    # 一些 OpenAI 兼容网关不支持 response_format，自动降级一次。
-                    current_payload = dict(payload)
+            with closing(response):
+                if response.status_code >= 400:
+                    if response.status_code == 400 and "response_format" in current_payload:
+                        # 一些 OpenAI 兼容网关不支持 response_format，自动降级一次。
+                        current_payload = dict(payload)
+                        continue
+                    last_error = f"HTTP {response.status_code}: {_truncate(response.text)}"
+                    if attempt >= attempts:
+                        break
+                    time.sleep(min(2 * attempt, 5))
                     continue
-                last_error = f"HTTP {response.status_code}: {_truncate(response.text)}"
-                if attempt >= attempts:
-                    break
-                time.sleep(min(2 * attempt, 5))
-                continue
 
-            try:
-                response_payload = response.json()
-            except ValueError as exc:
-                last_error = f"响应不是合法 JSON：{exc}"
-                if attempt >= attempts:
-                    break
-                time.sleep(min(2 * attempt, 5))
-                continue
+                try:
+                    if current_payload.get("stream"):
+                        result = _parse_stream_events(response.iter_lines(decode_unicode=False))
+                    else:
+                        response_payload = response.json()
+                        result = _parse_non_stream_response(response_payload, request_mode="sync")
+                except (ValueError, json.JSONDecodeError) as exc:
+                    last_error = f"响应不是合法 JSON：{exc}"
+                    if attempt >= attempts:
+                        break
+                    time.sleep(min(2 * attempt, 5))
+                    continue
 
-            content = _extract_message_content(response_payload)
-            if content:
-                return content
+            if result.content:
+                return result
 
-            last_error = f"响应中缺少 message.content，metadata={metadata}"
+            last_error = f"响应中缺少有效内容，metadata={metadata}"
             if attempt >= attempts:
                 break
             time.sleep(min(2 * attempt, 5))
@@ -151,6 +180,8 @@ def build_llm_client(
     model: str | None,
     timeout_seconds: int,
     retries: int,
+    stream_mode: str = "on",
+    idle_timeout_seconds: int = 30,
 ) -> OpenAICompatibleLlmClient:
     _load_project_dotenv_once(root)
     api_base = (os.environ.get("GRAPHRAG_API_BASE") or os.environ.get("OPENAI_API_BASE") or "").strip()
@@ -175,6 +206,8 @@ def build_llm_client(
             timeout_seconds=timeout_seconds,
             retries=retries,
             enable_json_mode=True,
+            stream_mode=stream_mode,
+            idle_timeout_seconds=idle_timeout_seconds,
         )
     )
 
@@ -236,6 +269,82 @@ def _extract_message_content(payload: dict[str, Any]) -> str:
                     parts.append(text)
         return "\n".join(part for part in parts if part.strip()).strip()
     return ""
+
+
+def _parse_non_stream_response(payload: dict[str, Any], *, request_mode: str) -> LlmCompletionResult:
+    choices = payload.get("choices")
+    finish_reason = None
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        raw_finish_reason = choices[0].get("finish_reason")
+        if isinstance(raw_finish_reason, str):
+            finish_reason = raw_finish_reason
+
+    return LlmCompletionResult(
+        content=_extract_message_content(payload),
+        finish_reason=finish_reason,
+        usage=payload.get("usage") if isinstance(payload.get("usage"), dict) else None,
+        request_mode=request_mode,
+    )
+
+
+def _parse_stream_events(lines: Iterable[str]) -> LlmCompletionResult:
+    content_parts: list[str] = []
+    finish_reason = None
+    usage = None
+    reasoning_seen = False
+    raw_chunks = 0
+
+    for raw_line in lines:
+        line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("data:"):
+            continue
+
+        payload_text = stripped[5:].strip()
+        if payload_text == "[DONE]":
+            break
+
+        raw_chunks += 1
+        event = json.loads(payload_text)
+        if isinstance(event.get("usage"), dict):
+            usage = event["usage"]
+
+        choices = event.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            continue
+
+        choice = choices[0]
+        raw_finish_reason = choice.get("finish_reason")
+        if isinstance(raw_finish_reason, str):
+            finish_reason = raw_finish_reason
+
+        delta = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+        if isinstance(delta.get("reasoning_content"), str) and delta.get("reasoning_content"):
+            reasoning_seen = True
+        if isinstance(delta.get("content"), str):
+            content_parts.append(delta["content"])
+
+    return LlmCompletionResult(
+        content="".join(content_parts).strip(),
+        finish_reason=finish_reason,
+        usage=usage,
+        request_mode="stream",
+        reasoning_seen=reasoning_seen,
+        raw_chunks=raw_chunks,
+    )
+
+
+def _resolve_timeout(
+    *,
+    total_timeout_seconds: int,
+    idle_timeout_seconds: int,
+    is_streaming: bool,
+) -> int | tuple[int, int]:
+    if not is_streaming:
+        return total_timeout_seconds
+    connect_timeout = max(1, min(total_timeout_seconds, 10))
+    read_timeout = max(1, idle_timeout_seconds)
+    return (connect_timeout, read_timeout)
 
 
 def _truncate(text: str, limit: int = 500) -> str:
