@@ -17,13 +17,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPTS_DIR = _REPO_ROOT / "scripts"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+import run_graphrag_prompt_tune as prompt_tune_module
 from run_graphrag_prompt_tune import (
     CommandExecutionResult,
     PromptTuneError,
@@ -114,11 +116,12 @@ class TestRunGraphRagPromptTune(unittest.TestCase):
             self._make_workspace(root)
 
             calls: list[list[str]] = []
+            primary_python = "/home/sunlight/miniconda3/bin/python"
             hinted_python = "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python"
 
             def fake_runner(command: list[str], cwd: Path, env: dict[str, str]) -> CommandExecutionResult:
                 calls.append(command)
-                if command[:4] == [sys.executable, "-m", "graphrag", "prompt-tune"]:
+                if command[:4] == [primary_python, "-m", "graphrag", "prompt-tune"]:
                     return CommandExecutionResult(
                         command=command,
                         cwd=str(cwd),
@@ -142,10 +145,11 @@ class TestRunGraphRagPromptTune(unittest.TestCase):
                     stderr="not found",
                 )
 
-            invocation, attempts = find_graphrag_invocation(
-                root=root,
-                runner=fake_runner,
-            )
+            with patch.object(prompt_tune_module.sys, "executable", primary_python):
+                invocation, attempts = find_graphrag_invocation(
+                    root=root,
+                    runner=fake_runner,
+                )
 
             self.assertEqual(invocation.name, "python_module_conda_env")
             self.assertEqual(invocation.command_prefix[0], hinted_python)

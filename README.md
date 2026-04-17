@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-04-16
+> 审计日期：2026-04-17
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，真正承担主业务链路的是两个 Python 模块：
@@ -75,6 +75,8 @@ ckqa/
 ├── AGENTS.md
 ├── README.md
 ├── docs/
+├── scripts/
+│   └── audit_repo_drift.py
 ├── pdf_ingest/
 │   ├── README.md
 │   ├── CLAUDE.md
@@ -85,6 +87,7 @@ ckqa/
 ├── graphrag_pipeline/
 │   ├── README.md
 │   ├── CLAUDE.md
+│   ├── scripts/
 │   ├── utils/
 │   ├── tests/
 │   ├── prompts/
@@ -113,6 +116,7 @@ ckqa/
 
 - 角色：GraphRAG 输入同步、索引、问答 API
 - 主入口：`utils/fetch_from_minio.py`、`utils/main.py`
+- 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`
 - 关键产物：`input/*.json`、`output/*.parquet`、`output/lancedb/`
 - 运行环境：`graphrag-oneapi`
 - 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
@@ -146,6 +150,8 @@ python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --pa
 python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section --with-page-docs
 ```
 
+当前共享开发环境里的 `courseKg` 已安装 `pytest`，进入模块目录后可直接执行 `python -m pytest tests/` 做快速验证；如果是新环境，仍建议按上面的开发依赖安装方式准备。
+
 ### 2. 同步到 GraphRAG 输入目录
 
 ```bash
@@ -155,6 +161,8 @@ pip install -e ".[all]"
 
 python utils/fetch_from_minio.py os --pdf-file-id 3 --clean
 ```
+
+当前共享开发环境里的 `graphrag-oneapi` 也已安装 `pytest`，可直接执行 `python -m pytest tests/`；如果是新环境，仅执行 `pip install -e ".[all]"` 还不够，需再补装 `pytest`。
 
 ### 3. 建索引
 
@@ -174,6 +182,8 @@ python utils/main.py
 - `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
 - `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
+- 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
+- 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 - 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 

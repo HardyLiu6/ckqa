@@ -41,6 +41,8 @@ conda activate courseKg
 pip install -e ".[dev]"
 ```
 
+当前共享开发环境里的 `courseKg` 已安装 `pytest`，所以仓库内默认可直接运行 `python -m pytest tests/`。如果是新环境，仍建议通过 `pip install -e ".[dev]"` 一次性补齐测试依赖。
+
 环境要求：
 
 - Python `>=3.10`
@@ -111,10 +113,18 @@ python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --n
 python -m pytest tests/
 ```
 
+如果只想快速验证某个文件，也可以直接执行 `python -m pytest tests/test_block_renderer.py`。
+
 ### 审计导出结果
 
 ```bash
 python scripts/pdf_processor/export_audit.py ../graphrag_pipeline/tmp_validate/os/normalized/normalized_docs.json
+```
+
+### 运行仓库级漂移审计
+
+```bash
+python ../scripts/audit_repo_drift.py --strict
 ```
 
 ### 手工验收说明

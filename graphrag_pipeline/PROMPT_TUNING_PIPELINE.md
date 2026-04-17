@@ -1,6 +1,6 @@
 # GraphRAG 自动化提示词调优流水线
 
-本文档描述 `graphrag_pipeline/` 内新增的“GraphRAG 自动化提示词调优流水线”基础结构。当前阶段只初始化目录与职责边界，不实现任何业务脚本。
+本文档描述 `graphrag_pipeline/` 内的“GraphRAG 自动化提示词调优流水线”现状与职责边界。当前已经有最小可运行脚本，后续再继续补齐更多自动评测能力。
 
 ## 作用
 
@@ -44,28 +44,26 @@ graphrag_pipeline/
 ├── results/extraction_eval/    # 抽取质量评测输出
 ├── results/qa_eval/            # 问答效果评测输出
 ├── results/reports/            # 汇总报告、对比结论、可读化产物
-└── scripts/                    # 未来用于编排调优流水线的脚本
+└── scripts/                    # 调优流水线脚本
 ```
 
-## 后续脚本职责建议
+## 当前已落地脚本
 
-当前 `scripts/` 目录只是占位，后续最适合逐步补齐以下脚本：
+当前 `scripts/` 目录已经包含以下最小可运行脚本：
 
-1. `prepare_samples`
-   - 从 `normalized_docs.json`、`section_docs.json` 或人工样本中整理调优输入。
-2. `build_prompt_candidates`
-   - 把当前生产 prompt 与候选修改版本规范化写入 `prompts/candidates/`。
-3. `run_extraction_eval`
-   - 对 `extract_graph`、`extract_claims`、`community_report_*` 等链路做结构化评测。
-4. `run_qa_eval`
-   - 对 local/global/full 三类问答模式做效果对比。
-5. `summarize_results`
-   - 聚合多轮实验结果，生成 `results/reports/` 下的汇总报告。
-6. `promote_prompt`
-   - 将通过评测的候选 prompt 提升到 `prompts/final/`，并为后续人工接入生产配置做准备。
+1. `build_prompt_tuning_samples.py`
+   - 从 `input/` 或导出目录整理 prompt tuning 样本。
+2. `build_audit_extraction_set.py`
+   - 从样本中抽取小规模、高价值 audit 校准集。
+3. `generate_candidate_prompts.py`
+   - 统一生成 `default`、`schema_aware`、`schema_fewshot`、`auto_tuned` 等候选 Prompt 与 manifest。
+4. `run_graphrag_prompt_tune.py`
+   - 封装 GraphRAG 官方 `prompt-tune`，整理输出到 `prompts/candidates/auto_tuned/`。
+
+这些脚本都放在 `graphrag_pipeline/scripts/`。仓库根目录 `scripts/` 只保留仓库级工具，不再放模块专属脚本。
 
 ## 当前约束
 
-1. 现阶段不改动 `settings.yaml`、现有生产 prompt 或 GraphRAG 主流程。
-2. 现阶段不新增任何业务执行逻辑，只保留结构与职责说明。
-3. 现有 `prompts/`、`reports/`、`utils/` 继续按原用途工作；新目录仅为后续自动化调优预留。
+1. 不改动 `settings.yaml`、现有生产 prompt 或 GraphRAG 主问答流程的既有行为。
+2. 当前脚本以“样本准备、候选生成、prompt-tune 封装”为主，尚未补齐完整自动评测闭环。
+3. 现有 `prompts/`、`results/`、`utils/` 继续按原用途工作；调优脚本只在对应子目录内产生产物。

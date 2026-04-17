@@ -34,7 +34,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_SUBDIR = Path("prompts") / "candidates" / "auto_tuned"
 DEFAULT_LOG_SUBPATH = Path("results") / "reports" / "prompt_tune_run.log"
 DEFAULT_REPORT_SUBPATH = Path("results") / "reports" / "prompt_tune_report.json"

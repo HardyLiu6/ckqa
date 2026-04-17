@@ -26,6 +26,10 @@
 | `.env` | GraphRAG CLI 读取的环境变量 |
 | `utils/fetch_from_minio.py` | 从 MinIO 下载并展平 GraphRAG 输入 |
 | `utils/main.py` | FastAPI 服务入口 |
+| `scripts/build_prompt_tuning_samples.py` | 从输入文档构建 prompt tuning 样本 |
+| `scripts/build_audit_extraction_set.py` | 从样本中构建小规模 audit 校准集 |
+| `scripts/generate_candidate_prompts.py` | 统一生成候选 Prompt 与 manifest |
+| `scripts/run_graphrag_prompt_tune.py` | 封装 GraphRAG 官方 prompt-tune 并整理 auto_tuned 候选 |
 | `tests/test_fetch_from_minio.py` | 输入同步脚本测试 |
 | `tests/test_build_audit_extraction_set.py` | 抽样审计构建脚本测试 |
 | `prompts/` | GraphRAG 提示词模板 |
@@ -37,6 +41,8 @@ cd graphrag_pipeline
 conda activate graphrag-oneapi
 pip install -e ".[all]"
 ```
+
+当前共享开发环境里的 `graphrag-oneapi` 已额外安装 `pytest`，因此仓库内默认可直接运行 `python -m pytest tests/`。如果是新环境，请在安装项目依赖后再补装 `pytest`。
 
 环境要求：
 
@@ -88,6 +94,17 @@ python utils/main.py
 ```
 
 默认端口为 `8012`。
+
+### 5. Prompt 调优辅助脚本
+
+```bash
+python scripts/build_prompt_tuning_samples.py
+python scripts/build_audit_extraction_set.py
+python scripts/generate_candidate_prompts.py --overwrite
+python scripts/run_graphrag_prompt_tune.py --dry_run
+```
+
+当前约定是：模块专属脚本放在 `graphrag_pipeline/scripts/`，仓库根目录 `scripts/` 只保留仓库级工具，例如漂移审计。
 
 ## API 说明
 
@@ -150,6 +167,8 @@ curl -X POST http://localhost:8012/v1/chat/completions \
 ```bash
 python -m pytest tests/
 ```
+
+如果只想快速验证单个脚本，可执行 `python -m pytest tests/test_fetch_from_minio.py`。
 
 ### 调用 API 测试脚本
 

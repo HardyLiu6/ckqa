@@ -68,6 +68,7 @@ Environment and commands:
 Notes:
 
 - Runtime config comes from `.env`, loaded by `Config.from_env()`.
+- The shared `courseKg` environment already has `pytest` installed, so repository-local verification can run the test command directly. For a fresh environment, `pip install -e ".[dev]"` is still the reproducible setup.
 - MySQL state flow matters: `pending -> processing -> done/failed`.
 - A course may contain multiple PDFs. When there is more than one file, prefer `--file-id` or `--file-name` for parse/status/download/export commands.
 - MinIO object paths are part of the real interface. Be careful when changing filenames or storage layout.
@@ -78,6 +79,10 @@ Notes:
 Important files:
 
 - `pyproject.toml`
+- `scripts/build_prompt_tuning_samples.py`
+- `scripts/build_audit_extraction_set.py`
+- `scripts/generate_candidate_prompts.py`
+- `scripts/run_graphrag_prompt_tune.py`
 - `utils/main.py`
 - `settings.yaml`
 - `.env`
@@ -89,6 +94,7 @@ Environment and commands:
 
 - Conda env: `graphrag-oneapi`
 - Install: `pip install -e ".[all]"`
+- Tests: `python -m pytest tests/`
 - Input sync: `python utils/fetch_from_minio.py <course_id> --clean`
 - Multi-PDF sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
 - Validation sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --json-file normalized_docs.json --clean`
@@ -100,7 +106,9 @@ Environment and commands:
 Notes:
 
 - Trust `pyproject.toml` as the GraphRAG version source of truth; it is currently pinned to `3.0.9`.
+- Repository-root `scripts/` should only keep repo-level tooling such as drift audit; GraphRAG-specific workflow scripts belong under `graphrag_pipeline/scripts/`.
 - `settings.yaml` and `.env` are used by GraphRAG CLI.
+- The shared `graphrag-oneapi` environment already has `pytest` installed, so tests can run directly. For a fresh environment, install project deps first and then add `pytest` separately because `pyproject.toml` does not currently declare a dev extra.
 - `utils/main.py` reads repo-local `.env` / environment variables, defaults to the repo-local `output/` directory, and always delegates search to `graphrag query` in CLI mode.
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.

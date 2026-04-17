@@ -69,6 +69,7 @@
 实现注意事项：
 
 - 运行配置主要来自 `pdf_ingest/.env`，由 `Config.from_env()` 自动查找加载。
+- 当前共享开发环境里的 `courseKg` 已安装 `pytest`，因此仓库内日常验证可直接运行测试；如果重建环境，仍建议使用 `pip install -e ".[dev]"` 保持可复现。
 - 解析状态依赖 MySQL：`pending -> processing -> done/failed`。
 - 同一课程可绑定多份 PDF；多文件课程下优先传 `--file-id` 或 `--file-name`。
 - `export-graphrag` 是对下游最重要的接口，改字段、命名或 MinIO 路径时必须检查 `graphrag_pipeline` 兼容性。
@@ -82,6 +83,10 @@
 关键文件：
 
 - `pyproject.toml`：依赖与版本真相，当前固定 `graphrag==3.0.9`
+- `scripts/build_prompt_tuning_samples.py`：构建 prompt tuning 样本
+- `scripts/build_audit_extraction_set.py`：构建 audit 校准集
+- `scripts/generate_candidate_prompts.py`：生成候选 Prompt 与 manifest
+- `scripts/run_graphrag_prompt_tune.py`：封装 GraphRAG 官方 prompt-tune
 - `settings.yaml`：GraphRAG CLI 的索引配置
 - `.env`：GraphRAG CLI 使用的环境变量
 - `utils/fetch_from_minio.py`：从 MinIO 拉取 `section_docs.json` / `page_docs.json` / `normalized_docs.json`
@@ -92,6 +97,7 @@
 
 - `conda activate graphrag-oneapi`
 - `pip install -e ".[all]"`
+- `python -m pytest tests/`
 - `python utils/fetch_from_minio.py <course_id> --clean`
 - `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
 - `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --json-file normalized_docs.json --clean`
@@ -103,7 +109,9 @@
 实现注意事项：
 
 - GraphRAG 输入主流程已经是 `json`，不再是旧版 `txt` 主流程。
+- 仓库根目录 `scripts/` 只保留仓库级工具；GraphRAG 模块专属脚本统一放在 `graphrag_pipeline/scripts/`。
 - `fetch_from_minio.py` 会尽量把标准化字段提升到顶层，便于 GraphRAG metadata 收集。
+- 当前共享开发环境里的 `graphrag-oneapi` 已安装 `pytest`，因此仓库内可直接跑测试；如果重建环境，请在安装项目依赖后额外补装 `pytest`。
 - `utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认读取仓库内 `output/`，并统一委托 `graphrag query` 执行查询。
 - `output/` 下的 parquet 与 `output/lancedb/` 都是 API 服务必需品。
 - 当前 API 模型名是 `graphrag-local-search:latest`、`graphrag-global-search:latest`、`full-model:latest`。
