@@ -1,0 +1,600 @@
+{
+  "task": "candidate_extraction",
+  "candidate": "schema_aware",
+  "model": "qwen3.6-plus",
+  "samples_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/prompt_tuning_samples.json",
+  "manifest_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+  "summary": {
+    "total": 5,
+    "success": 4,
+    "parse_error": 0,
+    "llm_error": 1
+  },
+  "results": [
+    {
+      "sample_id": "pts-0001-80bf172df2",
+      "candidate": "schema_aware",
+      "status": "success",
+      "entities": [
+        {
+          "id": "e1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "涵盖存储器管理等核心内容的操作系统课程。",
+          "evidence": "source_file: 计算机操作系统.pdf"
+        },
+        {
+          "id": "e2",
+          "title": "第四章 存储器管理",
+          "type": "Chapter",
+          "description": "课程中系统讲解存储器管理原理与技术的章节。",
+          "evidence": "chapter: 第四章 存储器管理"
+        },
+        {
+          "id": "e3",
+          "title": "4.1.3 高速缓存和磁盘缓存",
+          "type": "Section",
+          "description": "详细阐述高速缓存与磁盘缓存工作机制及层次结构的教学小节。",
+          "evidence": "heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存"
+        },
+        {
+          "id": "e4",
+          "title": "高速缓存",
+          "type": "Concept",
+          "description": "介于寄存器和主存之间的快速存储器，用于备份常用数据以减少CPU访问主存次数，提升程序执行速度。",
+          "evidence": "高速缓存是现代计算机结构中的一个重要部件，它是介于寄存器和存储器之间的存储器，主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数"
+        },
+        {
+          "id": "e5",
+          "title": "磁盘缓存",
+          "type": "Concept",
+          "description": "利用主存部分空间暂存频繁访问的磁盘数据，以缓解磁盘I/O与主存速度不匹配的机制。",
+          "evidence": "为了缓和两者之间在速度上的不匹配，而设置了磁盘缓存，主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。"
+        },
+        {
+          "id": "e6",
+          "title": "局部性原理",
+          "type": "Concept",
+          "description": "程序执行时呈现出的规律，即在较短时间内执行仅局限于某个部分，是缓存技术有效性的理论基础。",
+          "evidence": "将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理"
+        },
+        {
+          "id": "e7",
+          "title": "主存储器",
+          "type": "Term",
+          "description": "计算机系统中存放进程程序和数据的主要存储设备，CPU可直接访问。",
+          "evidence": "通常，进程的程序和数据存放在主存储器中"
+        },
+        {
+          "id": "e8",
+          "title": "辅存",
+          "type": "Term",
+          "description": "辅助存储设备（如硬盘、磁带），用于大容量持久化存储，访问速度低于主存。",
+          "evidence": "大容量的辅存常常使用磁盘，磁盘数据经常备份到磁带或可移动磁盘组上"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第四章 存储器管理",
+          "type": "contains",
+          "description": "课程包含该章节。",
+          "evidence": "chapter: 第四章 存储器管理"
+        },
+        {
+          "source": "第四章 存储器管理",
+          "target": "4.1.3 高速缓存和磁盘缓存",
+          "type": "contains",
+          "description": "章节包含该教学小节。",
+          "evidence": "heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存"
+        },
+        {
+          "source": "4.1.3 高速缓存和磁盘缓存",
+          "target": "高速缓存",
+          "type": "contains",
+          "description": "小节内容包含对高速缓存的讲解。",
+          "evidence": "4.1.3 高速缓存和磁盘缓存\n\n1. 高速缓存"
+        },
+        {
+          "source": "4.1.3 高速缓存和磁盘缓存",
+          "target": "磁盘缓存",
+          "type": "contains",
+          "description": "小节内容包含对磁盘缓存的讲解。",
+          "evidence": "2. 磁盘缓存"
+        },
+        {
+          "source": "高速缓存",
+          "target": "局部性原理",
+          "type": "depends_on",
+          "description": "高速缓存的数据放置策略与有效性依赖于程序执行的局部性原理。",
+          "evidence": "将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理"
+        },
+        {
+          "source": "磁盘缓存",
+          "target": "主存储器",
+          "type": "implemented_by",
+          "description": "磁盘缓存并非物理硬件，而是通过划分主存储器的部分存储空间来实现。",
+          "evidence": "它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。"
+        },
+        {
+          "source": "高速缓存",
+          "target": "主存储器",
+          "type": "related_to",
+          "description": "高速缓存用于备份主存中的常用数据，两者在存储层次中紧密关联。",
+          "evidence": "主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数"
+        },
+        {
+          "source": "磁盘缓存",
+          "target": "辅存",
+          "type": "applied_in",
+          "description": "磁盘缓存技术应用于辅存数据访问场景，以减少对慢速辅存的直接访问次数。",
+          "evidence": "主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"e1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"涵盖存储器管理等核心内容的操作系统课程。\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf\"\n    },\n    {\n      \"id\": \"e2\",\n      \"title\": \"第四章 存储器管理\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程中系统讲解存储器管理原理与技术的章节。\",\n      \"evidence\": \"chapter: 第四章 存储器管理\"\n    },\n    {\n      \"id\": \"e3\",\n      \"title\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"Section\",\n      \"description\": \"详细阐述高速缓存与磁盘缓存工作机制及层次结构的教学小节。\",\n      \"evidence\": \"heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存\"\n    },\n    {\n      \"id\": \"e4\",\n      \"title\": \"高速缓存\",\n      \"type\": \"Concept\",\n      \"description\": \"介于寄存器和主存之间的快速存储器，用于备份常用数据以减少CPU访问主存次数，提升程序执行速度。\",\n      \"evidence\": \"高速缓存是现代计算机结构中的一个重要部件，它是介于寄存器和存储器之间的存储器，主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数\"\n    },\n    {\n      \"id\": \"e5\",\n      \"title\": \"磁盘缓存\",\n      \"type\": \"Concept\",\n      \"description\": \"利用主存部分空间暂存频繁访问的磁盘数据，以缓解磁盘I/O与主存速度不匹配的机制。\",\n      \"evidence\": \"为了缓和两者之间在速度上的不匹配，而设置了磁盘缓存，主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。\"\n    },\n    {\n      \"id\": \"e6\",\n      \"title\": \"局部性原理\",\n      \"type\": \"Concept\",\n      \"description\": \"程序执行时呈现出的规律，即在较短时间内执行仅局限于某个部分，是缓存技术有效性的理论基础。\",\n      \"evidence\": \"将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理\"\n    },\n    {\n      \"id\": \"e7\",\n      \"title\": \"主存储器\",\n      \"type\": \"Term\",\n      \"description\": \"计算机系统中存放进程程序和数据的主要存储设备，CPU可直接访问。\",\n      \"evidence\": \"通常，进程的程序和数据存放在主存储器中\"\n    },\n    {\n      \"id\": \"e8\",\n      \"title\": \"辅存\",\n      \"type\": \"Term\",\n      \"description\": \"辅助存储设备（如硬盘、磁带），用于大容量持久化存储，访问速度低于主存。\",\n      \"evidence\": \"大容量的辅存常常使用磁盘，磁盘数据经常备份到磁带或可移动磁盘组上\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第四章 存储器管理\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含该章节。\",\n      \"evidence\": \"chapter: 第四章 存储器管理\"\n    },\n    {\n      \"source\": \"第四章 存储器管理\",\n      \"target\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含该教学小节。\",\n      \"evidence\": \"heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存\"\n    },\n    {\n      \"source\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"target\": \"高速缓存\",\n      \"type\": \"contains\",\n      \"description\": \"小节内容包含对高速缓存的讲解。\",\n      \"evidence\": \"4.1.3 高速缓存和磁盘缓存\\n\\n1. 高速缓存\"\n    },\n    {\n      \"source\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"target\": \"磁盘缓存\",\n      \"type\": \"contains\",\n      \"description\": \"小节内容包含对磁盘缓存的讲解。\",\n      \"evidence\": \"2. 磁盘缓存\"\n    },\n    {\n      \"source\": \"高速缓存\",\n      \"target\": \"局部性原理\",\n      \"type\": \"depends_on\",\n      \"description\": \"高速缓存的数据放置策略与有效性依赖于程序执行的局部性原理。\",\n      \"evidence\": \"将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理\"\n    },\n    {\n      \"source\": \"磁盘缓存\",\n      \"target\": \"主存储器\",\n      \"type\": \"implemented_by\",\n      \"description\": \"磁盘缓存并非物理硬件，而是通过划分主存储器的部分存储空间来实现。\",\n      \"evidence\": \"它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。\"\n    },\n    {\n      \"source\": \"高速缓存\",\n      \"target\": \"主存储器\",\n      \"type\": \"related_to\",\n      \"description\": \"高速缓存用于备份主存中的常用数据，两者在存储层次中紧密关联。\",\n      \"evidence\": \"主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数\"\n    },\n    {\n      \"source\": \"磁盘缓存\",\n      \"target\": \"辅存\",\n      \"type\": \"applied_in\",\n      \"description\": \"磁盘缓存技术应用于辅存数据访问场景，以减少对慢速辅存的直接访问次数。\",\n      \"evidence\": \"主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0002-19d20ff0e8",
+      "candidate": "schema_aware",
+      "status": "success",
+      "entities": [
+        {
+          "id": "entity-1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "课程主体，涵盖进程描述与控制等核心教学内容",
+          "evidence": "source_file: 计算机操作系统.pdf"
+        },
+        {
+          "id": "entity-2",
+          "title": "第二章 进程的描述与控制",
+          "type": "Chapter",
+          "description": "课程核心章节，系统讲解进程的基本概念、状态转换与控制机制",
+          "evidence": "chapter: 第二章 进程的描述与控制"
+        },
+        {
+          "id": "entity-3",
+          "title": "2.1.2 程序顺序执行",
+          "type": "Section",
+          "description": "讲解程序段及语句的顺序执行方式及其核心特征",
+          "evidence": "heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行"
+        },
+        {
+          "id": "entity-4",
+          "title": "前趋关系",
+          "type": "Concept",
+          "description": "程序段或语句之间存在的严格先后执行次序依赖",
+          "evidence": "上述的三个程序段间就存在着这样的前趋关系"
+        },
+        {
+          "id": "entity-5",
+          "title": "前趋图",
+          "type": "Concept",
+          "description": "用结点和有向箭头描述操作或语句先后次序的图形化表示工具",
+          "evidence": "其执行的顺序可用前趋图2-2(a)描述"
+        },
+        {
+          "id": "entity-6",
+          "title": "程序顺序执行时的特征",
+          "type": "KnowledgePoint",
+          "description": "程序在顺序执行模式下表现出的顺序性、封闭性与可再现性三大核心属性",
+          "evidence": "2. 程序顺序执行时的特征"
+        },
+        {
+          "id": "entity-7",
+          "title": "顺序性",
+          "type": "Concept",
+          "description": "处理机严格按程序规定次序执行，每一操作必须在下一个操作开始之前结束",
+          "evidence": "① 顺序性：指处理机严格地按照程序所规定的顺序执行"
+        },
+        {
+          "id": "entity-8",
+          "title": "封闭性",
+          "type": "Concept",
+          "description": "程序在封闭环境下独占全机资源运行，执行结果不受外界因素影响",
+          "evidence": "② 封闭性：指程序在封闭的环境下运行，即程序运行时独占全机资源"
+        },
+        {
+          "id": "entity-9",
+          "title": "可再现性",
+          "type": "Concept",
+          "description": "相同环境和初始条件下重复执行程序，总能获得完全相同的结果",
+          "evidence": "③可再现性：指只要程序执行时的环境和初始条件相同，当程序重复执行时...都可获得相同的结果"
+        },
+        {
+          "id": "entity-10",
+          "title": "程序段前趋表达式",
+          "type": "FormulaOrDefinition",
+          "description": "表示输入、计算、打印三个程序段先后次序的符号化表达",
+          "evidence": "\\mathrm{I_i}\\rightarrow \\mathrm{C_i}\\rightarrow \\mathrm{P_i}"
+        },
+        {
+          "id": "entity-11",
+          "title": "语句前趋表达式",
+          "type": "FormulaOrDefinition",
+          "description": "表示三条赋值语句执行先后依赖关系的符号化表达",
+          "evidence": "S_{1} \\rightarrow S_{2} \\rightarrow S_{3}"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第二章 进程的描述与控制",
+          "type": "contains",
+          "description": "课程包含该章节作为核心教学单元",
+          "evidence": "chapter: 第二章 进程的描述与控制"
+        },
+        {
+          "source": "第二章 进程的描述与控制",
+          "target": "2.1.2 程序顺序执行",
+          "type": "contains",
+          "description": "章节包含该小节内容",
+          "evidence": "heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行"
+        },
+        {
+          "source": "2.1.2 程序顺序执行",
+          "target": "前趋关系",
+          "type": "contains",
+          "description": "本节重点介绍程序段与语句间的前趋关系",
+          "evidence": "上述的三个程序段间就存在着这样的前趋关系"
+        },
+        {
+          "source": "2.1.2 程序顺序执行",
+          "target": "前趋图",
+          "type": "contains",
+          "description": "本节使用前趋图直观描述执行顺序",
+          "evidence": "其执行的顺序可用前趋图2-2(a)描述"
+        },
+        {
+          "source": "2.1.2 程序顺序执行",
+          "target": "程序顺序执行时的特征",
+          "type": "contains",
+          "description": "本节详细阐述顺序执行的三大特征",
+          "evidence": "2. 程序顺序执行时的特征"
+        },
+        {
+          "source": "程序顺序执行时的特征",
+          "target": "顺序性",
+          "type": "contains",
+          "description": "特征集合包含顺序性这一属性",
+          "evidence": "① 顺序性：指处理机严格地按照程序所规定的顺序执行"
+        },
+        {
+          "source": "程序顺序执行时的特征",
+          "target": "封闭性",
+          "type": "contains",
+          "description": "特征集合包含封闭性这一属性",
+          "evidence": "② 封闭性：指程序在封闭的环境下运行"
+        },
+        {
+          "source": "程序顺序执行时的特征",
+          "target": "可再现性",
+          "type": "contains",
+          "description": "特征集合包含可再现性这一属性",
+          "evidence": "③可再现性：指只要程序执行时的环境和初始条件相同"
+        },
+        {
+          "source": "前趋关系",
+          "target": "程序段前趋表达式",
+          "type": "defined_by",
+          "description": "前趋关系由该符号表达式具体界定",
+          "evidence": "存在着这样的前趋关系：  \\mathrm{I_i}\\rightarrow \\mathrm{C_i}\\rightarrow \\mathrm{P_i}"
+        },
+        {
+          "source": "前趋关系",
+          "target": "语句前趋表达式",
+          "type": "defined_by",
+          "description": "语句间的执行依赖关系由该表达式明确界定",
+          "evidence": "三条语句存在着这样的前趋关系：  S_{1} \\rightarrow S_{2} \\rightarrow S_{3}"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"entity-1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"课程主体，涵盖进程描述与控制等核心教学内容\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf\"\n    },\n    {\n      \"id\": \"entity-2\",\n      \"title\": \"第二章 进程的描述与控制\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程核心章节，系统讲解进程的基本概念、状态转换与控制机制\",\n      \"evidence\": \"chapter: 第二章 进程的描述与控制\"\n    },\n    {\n      \"id\": \"entity-3\",\n      \"title\": \"2.1.2 程序顺序执行\",\n      \"type\": \"Section\",\n      \"description\": \"讲解程序段及语句的顺序执行方式及其核心特征\",\n      \"evidence\": \"heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行\"\n    },\n    {\n      \"id\": \"entity-4\",\n      \"title\": \"前趋关系\",\n      \"type\": \"Concept\",\n      \"description\": \"程序段或语句之间存在的严格先后执行次序依赖\",\n      \"evidence\": \"上述的三个程序段间就存在着这样的前趋关系\"\n    },\n    {\n      \"id\": \"entity-5\",\n      \"title\": \"前趋图\",\n      \"type\": \"Concept\",\n      \"description\": \"用结点和有向箭头描述操作或语句先后次序的图形化表示工具\",\n      \"evidence\": \"其执行的顺序可用前趋图2-2(a)描述\"\n    },\n    {\n      \"id\": \"entity-6\",\n      \"title\": \"程序顺序执行时的特征\",\n      \"type\": \"KnowledgePoint\",\n      \"description\": \"程序在顺序执行模式下表现出的顺序性、封闭性与可再现性三大核心属性\",\n      \"evidence\": \"2. 程序顺序执行时的特征\"\n    },\n    {\n      \"id\": \"entity-7\",\n      \"title\": \"顺序性\",\n      \"type\": \"Concept\",\n      \"description\": \"处理机严格按程序规定次序执行，每一操作必须在下一个操作开始之前结束\",\n      \"evidence\": \"① 顺序性：指处理机严格地按照程序所规定的顺序执行\"\n    },\n    {\n      \"id\": \"entity-8\",\n      \"title\": \"封闭性\",\n      \"type\": \"Concept\",\n      \"description\": \"程序在封闭环境下独占全机资源运行，执行结果不受外界因素影响\",\n      \"evidence\": \"② 封闭性：指程序在封闭的环境下运行，即程序运行时独占全机资源\"\n    },\n    {\n      \"id\": \"entity-9\",\n      \"title\": \"可再现性\",\n      \"type\": \"Concept\",\n      \"description\": \"相同环境和初始条件下重复执行程序，总能获得完全相同的结果\",\n      \"evidence\": \"③可再现性：指只要程序执行时的环境和初始条件相同，当程序重复执行时...都可获得相同的结果\"\n    },\n    {\n      \"id\": \"entity-10\",\n      \"title\": \"程序段前趋表达式\",\n      \"type\": \"FormulaOrDefinition\",\n      \"description\": \"表示输入、计算、打印三个程序段先后次序的符号化表达\",\n      \"evidence\": \"\\\\mathrm{I_i}\\\\rightarrow \\\\mathrm{C_i}\\\\rightarrow \\\\mathrm{P_i}\"\n    },\n    {\n      \"id\": \"entity-11\",\n      \"title\": \"语句前趋表达式\",\n      \"type\": \"FormulaOrDefinition\",\n      \"description\": \"表示三条赋值语句执行先后依赖关系的符号化表达\",\n      \"evidence\": \"S_{1} \\\\rightarrow S_{2} \\\\rightarrow S_{3}\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第二章 进程的描述与控制\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含该章节作为核心教学单元\",\n      \"evidence\": \"chapter: 第二章 进程的描述与控制\"\n    },\n    {\n      \"source\": \"第二章 进程的描述与控制\",\n      \"target\": \"2.1.2 程序顺序执行\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含该小节内容\",\n      \"evidence\": \"heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行\"\n    },\n    {\n      \"source\": \"2.1.2 程序顺序执行\",\n      \"target\": \"前趋关系\",\n      \"type\": \"contains\",\n      \"description\": \"本节重点介绍程序段与语句间的前趋关系\",\n      \"evidence\": \"上述的三个程序段间就存在着这样的前趋关系\"\n    },\n    {\n      \"source\": \"2.1.2 程序顺序执行\",\n      \"target\": \"前趋图\",\n      \"type\": \"contains\",\n      \"description\": \"本节使用前趋图直观描述执行顺序\",\n      \"evidence\": \"其执行的顺序可用前趋图2-2(a)描述\"\n    },\n    {\n      \"source\": \"2.1.2 程序顺序执行\",\n      \"target\": \"程序顺序执行时的特征\",\n      \"type\": \"contains\",\n      \"description\": \"本节详细阐述顺序执行的三大特征\",\n      \"evidence\": \"2. 程序顺序执行时的特征\"\n    },\n    {\n      \"source\": \"程序顺序执行时的特征\",\n      \"target\": \"顺序性\",\n      \"type\": \"contains\",\n      \"description\": \"特征集合包含顺序性这一属性\",\n      \"evidence\": \"① 顺序性：指处理机严格地按照程序所规定的顺序执行\"\n    },\n    {\n      \"source\": \"程序顺序执行时的特征\",\n      \"target\": \"封闭性\",\n      \"type\": \"contains\",\n      \"description\": \"特征集合包含封闭性这一属性\",\n      \"evidence\": \"② 封闭性：指程序在封闭的环境下运行\"\n    },\n    {\n      \"source\": \"程序顺序执行时的特征\",\n      \"target\": \"可再现性\",\n      \"type\": \"contains\",\n      \"description\": \"特征集合包含可再现性这一属性\",\n      \"evidence\": \"③可再现性：指只要程序执行时的环境和初始条件相同\"\n    },\n    {\n      \"source\": \"前趋关系\",\n      \"target\": \"程序段前趋表达式\",\n      \"type\": \"defined_by\",\n      \"description\": \"前趋关系由该符号表达式具体界定\",\n      \"evidence\": \"存在着这样的前趋关系：  \\\\mathrm{I_i}\\\\rightarrow \\\\mathrm{C_i}\\\\rightarrow \\\\mathrm{P_i}\"\n    },\n    {\n      \"source\": \"前趋关系\",\n      \"target\": \"语句前趋表达式\",\n      \"type\": \"defined_by\",\n      \"description\": \"语句间的执行依赖关系由该表达式明确界定\",\n      \"evidence\": \"三条语句存在着这样的前趋关系：  S_{1} \\\\rightarrow S_{2} \\\\rightarrow S_{3}\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0003-517f1fbe66",
+      "candidate": "schema_aware",
+      "status": "success",
+      "entities": [
+        {
+          "id": "e1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "课程名称",
+          "evidence": "source_file: 计算机操作系统.pdf"
+        },
+        {
+          "id": "e2",
+          "title": "第六章 输入输出系统",
+          "type": "Chapter",
+          "description": "课程第六章",
+          "evidence": "chapter: 第六章 输入输出系统"
+        },
+        {
+          "id": "e3",
+          "title": "6.5 与设备无关的I/O软件",
+          "type": "Section",
+          "description": "第六章第五节",
+          "evidence": "section: 6.5 与设备无关的I/O软件"
+        },
+        {
+          "id": "e4",
+          "title": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "type": "Section",
+          "description": "6.5节下的第四小节",
+          "evidence": "heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现"
+        },
+        {
+          "id": "e5",
+          "title": "逻辑设备名",
+          "type": "Concept",
+          "description": "应用程序请求使用I/O设备时使用的设备名称，用于实现与设备的无关性",
+          "evidence": "当应用程序请求使用I/O设备时，应当用逻辑设备名。"
+        },
+        {
+          "id": "e6",
+          "title": "物理设备名",
+          "type": "Concept",
+          "description": "系统实际识别的硬件设备名称",
+          "evidence": "但系统只识别物理设备名"
+        },
+        {
+          "id": "e7",
+          "title": "逻辑设备表 LUT",
+          "type": "Concept",
+          "description": "用于将逻辑设备名映射为物理设备名的系统配置表",
+          "evidence": "在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。"
+        },
+        {
+          "id": "e8",
+          "title": "设备驱动程序入口地址",
+          "type": "Term",
+          "description": "逻辑设备表表目中记录的对应设备驱动程序的内存入口地址",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "id": "e9",
+          "title": "系统设备表",
+          "type": "Concept",
+          "description": "多用户系统中配置的设备表，逻辑设备表可包含指向它的指针",
+          "evidence": "由于通常在多用户系统中都配置了系统设备表，故此时的逻辑设备表可以采用图6-19(b)中的格式。"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第六章 输入输出系统",
+          "type": "contains",
+          "description": "课程包含第六章",
+          "evidence": "chapter: 第六章 输入输出系统"
+        },
+        {
+          "source": "第六章 输入输出系统",
+          "target": "6.5 与设备无关的I/O软件",
+          "type": "contains",
+          "description": "第六章包含6.5节",
+          "evidence": "section: 6.5 与设备无关的I/O软件"
+        },
+        {
+          "source": "6.5 与设备无关的I/O软件",
+          "target": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "type": "contains",
+          "description": "6.5节包含6.5.4小节",
+          "evidence": "heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现"
+        },
+        {
+          "source": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "target": "逻辑设备表 LUT",
+          "type": "contains",
+          "description": "该小节主要讲解逻辑设备表",
+          "evidence": "1. 逻辑设备表 LUT(Logical Unit Table)"
+        },
+        {
+          "source": "逻辑设备表 LUT",
+          "target": "逻辑设备名",
+          "type": "contains",
+          "description": "逻辑设备表包含逻辑设备名表项",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "source": "逻辑设备表 LUT",
+          "target": "物理设备名",
+          "type": "contains",
+          "description": "逻辑设备表包含物理设备名表项",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "source": "逻辑设备表 LUT",
+          "target": "设备驱动程序入口地址",
+          "type": "contains",
+          "description": "逻辑设备表包含设备驱动程序入口地址表项",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "source": "逻辑设备名",
+          "target": "物理设备名",
+          "type": "related_to",
+          "description": "逻辑设备名通过映射与物理设备名关联",
+          "evidence": "用于将逻辑设备名映射为物理设备名。"
+        },
+        {
+          "source": "逻辑设备表 LUT",
+          "target": "系统设备表",
+          "type": "related_to",
+          "description": "在多用户系统中，逻辑设备表可包含指向系统设备表的指针",
+          "evidence": "逻辑设备名=/dev/tty; 系统设备表指针=3"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"e1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"课程名称\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf\"\n    },\n    {\n      \"id\": \"e2\",\n      \"title\": \"第六章 输入输出系统\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程第六章\",\n      \"evidence\": \"chapter: 第六章 输入输出系统\"\n    },\n    {\n      \"id\": \"e3\",\n      \"title\": \"6.5 与设备无关的I/O软件\",\n      \"type\": \"Section\",\n      \"description\": \"第六章第五节\",\n      \"evidence\": \"section: 6.5 与设备无关的I/O软件\"\n    },\n    {\n      \"id\": \"e4\",\n      \"title\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"type\": \"Section\",\n      \"description\": \"6.5节下的第四小节\",\n      \"evidence\": \"heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现\"\n    },\n    {\n      \"id\": \"e5\",\n      \"title\": \"逻辑设备名\",\n      \"type\": \"Concept\",\n      \"description\": \"应用程序请求使用I/O设备时使用的设备名称，用于实现与设备的无关性\",\n      \"evidence\": \"当应用程序请求使用I/O设备时，应当用逻辑设备名。\"\n    },\n    {\n      \"id\": \"e6\",\n      \"title\": \"物理设备名\",\n      \"type\": \"Concept\",\n      \"description\": \"系统实际识别的硬件设备名称\",\n      \"evidence\": \"但系统只识别物理设备名\"\n    },\n    {\n      \"id\": \"e7\",\n      \"title\": \"逻辑设备表 LUT\",\n      \"type\": \"Concept\",\n      \"description\": \"用于将逻辑设备名映射为物理设备名的系统配置表\",\n      \"evidence\": \"在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。\"\n    },\n    {\n      \"id\": \"e8\",\n      \"title\": \"设备驱动程序入口地址\",\n      \"type\": \"Term\",\n      \"description\": \"逻辑设备表表目中记录的对应设备驱动程序的内存入口地址\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"id\": \"e9\",\n      \"title\": \"系统设备表\",\n      \"type\": \"Concept\",\n      \"description\": \"多用户系统中配置的设备表，逻辑设备表可包含指向它的指针\",\n      \"evidence\": \"由于通常在多用户系统中都配置了系统设备表，故此时的逻辑设备表可以采用图6-19(b)中的格式。\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第六章 输入输出系统\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第六章\",\n      \"evidence\": \"chapter: 第六章 输入输出系统\"\n    },\n    {\n      \"source\": \"第六章 输入输出系统\",\n      \"target\": \"6.5 与设备无关的I/O软件\",\n      \"type\": \"contains\",\n      \"description\": \"第六章包含6.5节\",\n      \"evidence\": \"section: 6.5 与设备无关的I/O软件\"\n    },\n    {\n      \"source\": \"6.5 与设备无关的I/O软件\",\n      \"target\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"type\": \"contains\",\n      \"description\": \"6.5节包含6.5.4小节\",\n      \"evidence\": \"heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现\"\n    },\n    {\n      \"source\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"target\": \"逻辑设备表 LUT\",\n      \"type\": \"contains\",\n      \"description\": \"该小节主要讲解逻辑设备表\",\n      \"evidence\": \"1. 逻辑设备表 LUT(Logical Unit Table)\"\n    },\n    {\n      \"source\": \"逻辑设备表 LUT\",\n      \"target\": \"逻辑设备名\",\n      \"type\": \"contains\",\n      \"description\": \"逻辑设备表包含逻辑设备名表项\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"source\": \"逻辑设备表 LUT\",\n      \"target\": \"物理设备名\",\n      \"type\": \"contains\",\n      \"description\": \"逻辑设备表包含物理设备名表项\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"source\": \"逻辑设备表 LUT\",\n      \"target\": \"设备驱动程序入口地址\",\n      \"type\": \"contains\",\n      \"description\": \"逻辑设备表包含设备驱动程序入口地址表项\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"source\": \"逻辑设备名\",\n      \"target\": \"物理设备名\",\n      \"type\": \"related_to\",\n      \"description\": \"逻辑设备名通过映射与物理设备名关联\",\n      \"evidence\": \"用于将逻辑设备名映射为物理设备名。\"\n    },\n    {\n      \"source\": \"逻辑设备表 LUT\",\n      \"target\": \"系统设备表\",\n      \"type\": \"related_to\",\n      \"description\": \"在多用户系统中，逻辑设备表可包含指向系统设备表的指针\",\n      \"evidence\": \"逻辑设备名=/dev/tty; 系统设备表指针=3\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0004-ac3447c62d",
+      "candidate": "schema_aware",
+      "status": "success",
+      "entities": [
+        {
+          "id": "entity-1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "完整课程实例，涵盖操作系统核心原理、接口与系统调用等内容。",
+          "evidence": "source_file: 计算机操作系统.pdf."
+        },
+        {
+          "id": "entity-2",
+          "title": "第九章 操作系统接口",
+          "type": "Chapter",
+          "description": "课程中的第九章，主要讲解操作系统提供的各类用户接口与系统调用机制。",
+          "evidence": "chapter: 第九章 操作系统接口."
+        },
+        {
+          "id": "entity-3",
+          "title": "习题",
+          "type": "Section",
+          "description": "第九章末尾的习题小节，用于巩固本章知识点。",
+          "evidence": "section: 习题."
+        },
+        {
+          "id": "entity-4",
+          "title": "操作系统接口习题",
+          "type": "Assignment",
+          "description": "针对第九章操作系统接口内容设计的课后习题集合，包含26道问答题。",
+          "evidence": "text:\n习题\n- 1. 操作系统用户接口中包括哪几种接口？"
+        },
+        {
+          "id": "entity-5",
+          "title": "操作系统用户接口",
+          "type": "Concept",
+          "description": "操作系统提供给用户与系统进行交互的界面与机制集合。",
+          "evidence": "1. 操作系统用户接口中包括哪几种接口？"
+        },
+        {
+          "id": "entity-6",
+          "title": "WIMP技术",
+          "type": "Concept",
+          "description": "图形用户界面中常用的窗口、图标、菜单、指针交互技术。",
+          "evidence": "2. 什么是WIMP技术？"
+        },
+        {
+          "id": "entity-7",
+          "title": "系统调用",
+          "type": "Concept",
+          "description": "操作系统内核提供给应用程序请求系统服务的编程接口。",
+          "evidence": "16. 试比较一般的过程调用与系统调用。"
+        },
+        {
+          "id": "entity-8",
+          "title": "过程调用",
+          "type": "Concept",
+          "description": "程序内部子程序或函数之间的常规调用机制。",
+          "evidence": "16. 试比较一般的过程调用与系统调用。"
+        },
+        {
+          "id": "entity-9",
+          "title": "trap.S",
+          "type": "Term",
+          "description": "UNIX系统中用于处理陷阱（trap）和系统调用入口的汇编语言程序。",
+          "evidence": "23.trap.S是什么程序？"
+        },
+        {
+          "id": "entity-10",
+          "title": "trap.C",
+          "type": "Term",
+          "description": "UNIX系统中用于处理陷阱后续逻辑的C语言程序。",
+          "evidence": "25. trap.C 是什么程序？"
+        },
+        {
+          "id": "entity-11",
+          "title": "UNIX系统",
+          "type": "ToolOrPlatform",
+          "description": "经典的多用户、多任务操作系统平台，提供丰富的命令行接口与系统调用。",
+          "evidence": "6. 为了将已存文件改名，应用什么 UNIX 命令？"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第九章 操作系统接口",
+          "type": "contains",
+          "description": "课程包含第九章操作系统接口。",
+          "evidence": "source_file: 计算机操作系统.pdf.\nchapter: 第九章 操作系统接口."
+        },
+        {
+          "source": "第九章 操作系统接口",
+          "target": "习题",
+          "type": "contains",
+          "description": "第九章包含习题小节。",
+          "evidence": "heading_path: 第九章 操作系统接口 > 习题."
+        },
+        {
+          "source": "习题",
+          "target": "操作系统接口习题",
+          "type": "contains",
+          "description": "习题小节包含具体的作业题组。",
+          "evidence": "section: 习题.\ntext:\n习题\n- 1. 操作系统用户接口中包括哪几种接口？"
+        },
+        {
+          "source": "操作系统用户接口",
+          "target": "操作系统接口习题",
+          "type": "evaluated_by",
+          "description": "操作系统用户接口概念通过课后习题进行考核与验证。",
+          "evidence": "1. 操作系统用户接口中包括哪几种接口？"
+        },
+        {
+          "source": "WIMP技术",
+          "target": "操作系统接口习题",
+          "type": "evaluated_by",
+          "description": "WIMP技术概念通过课后习题进行考核与验证。",
+          "evidence": "2. 什么是WIMP技术？"
+        },
+        {
+          "source": "系统调用",
+          "target": "操作系统接口习题",
+          "type": "evaluated_by",
+          "description": "系统调用概念通过课后习题进行考核与验证。",
+          "evidence": "16. 试比较一般的过程调用与系统调用。"
+        },
+        {
+          "source": "过程调用",
+          "target": "系统调用",
+          "type": "related_to",
+          "description": "过程调用与系统调用在机制与执行流程上存在对比与关联。",
+          "evidence": "16. 试比较一般的过程调用与系统调用。"
+        },
+        {
+          "source": "UNIX系统",
+          "target": "操作系统接口习题",
+          "type": "appears_in",
+          "description": "UNIX系统作为命令与接口示例出现在习题中。",
+          "evidence": "6. 为了将已存文件改名，应用什么 UNIX 命令？"
+        },
+        {
+          "source": "trap.S",
+          "target": "操作系统接口习题",
+          "type": "evaluated_by",
+          "description": "trap.S程序的功能与作用通过习题进行考核。",
+          "evidence": "23.trap.S是什么程序？"
+        },
+        {
+          "source": "trap.C",
+          "target": "操作系统接口习题",
+          "type": "evaluated_by",
+          "description": "trap.C程序的处理逻辑通过习题进行考核。",
+          "evidence": "25. trap.C 是什么程序？"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"entity-1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"完整课程实例，涵盖操作系统核心原理、接口与系统调用等内容。\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf.\"\n    },\n    {\n      \"id\": \"entity-2\",\n      \"title\": \"第九章 操作系统接口\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程中的第九章，主要讲解操作系统提供的各类用户接口与系统调用机制。\",\n      \"evidence\": \"chapter: 第九章 操作系统接口.\"\n    },\n    {\n      \"id\": \"entity-3\",\n      \"title\": \"习题\",\n      \"type\": \"Section\",\n      \"description\": \"第九章末尾的习题小节，用于巩固本章知识点。\",\n      \"evidence\": \"section: 习题.\"\n    },\n    {\n      \"id\": \"entity-4\",\n      \"title\": \"操作系统接口习题\",\n      \"type\": \"Assignment\",\n      \"description\": \"针对第九章操作系统接口内容设计的课后习题集合，包含26道问答题。\",\n      \"evidence\": \"text:\\n习题\\n- 1. 操作系统用户接口中包括哪几种接口？\"\n    },\n    {\n      \"id\": \"entity-5\",\n      \"title\": \"操作系统用户接口\",\n      \"type\": \"Concept\",\n      \"description\": \"操作系统提供给用户与系统进行交互的界面与机制集合。\",\n      \"evidence\": \"1. 操作系统用户接口中包括哪几种接口？\"\n    },\n    {\n      \"id\": \"entity-6\",\n      \"title\": \"WIMP技术\",\n      \"type\": \"Concept\",\n      \"description\": \"图形用户界面中常用的窗口、图标、菜单、指针交互技术。\",\n      \"evidence\": \"2. 什么是WIMP技术？\"\n    },\n    {\n      \"id\": \"entity-7\",\n      \"title\": \"系统调用\",\n      \"type\": \"Concept\",\n      \"description\": \"操作系统内核提供给应用程序请求系统服务的编程接口。\",\n      \"evidence\": \"16. 试比较一般的过程调用与系统调用。\"\n    },\n    {\n      \"id\": \"entity-8\",\n      \"title\": \"过程调用\",\n      \"type\": \"Concept\",\n      \"description\": \"程序内部子程序或函数之间的常规调用机制。\",\n      \"evidence\": \"16. 试比较一般的过程调用与系统调用。\"\n    },\n    {\n      \"id\": \"entity-9\",\n      \"title\": \"trap.S\",\n      \"type\": \"Term\",\n      \"description\": \"UNIX系统中用于处理陷阱（trap）和系统调用入口的汇编语言程序。\",\n      \"evidence\": \"23.trap.S是什么程序？\"\n    },\n    {\n      \"id\": \"entity-10\",\n      \"title\": \"trap.C\",\n      \"type\": \"Term\",\n      \"description\": \"UNIX系统中用于处理陷阱后续逻辑的C语言程序。\",\n      \"evidence\": \"25. trap.C 是什么程序？\"\n    },\n    {\n      \"id\": \"entity-11\",\n      \"title\": \"UNIX系统\",\n      \"type\": \"ToolOrPlatform\",\n      \"description\": \"经典的多用户、多任务操作系统平台，提供丰富的命令行接口与系统调用。\",\n      \"evidence\": \"6. 为了将已存文件改名，应用什么 UNIX 命令？\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第九章 操作系统接口\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第九章操作系统接口。\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf.\\nchapter: 第九章 操作系统接口.\"\n    },\n    {\n      \"source\": \"第九章 操作系统接口\",\n      \"target\": \"习题\",\n      \"type\": \"contains\",\n      \"description\": \"第九章包含习题小节。\",\n      \"evidence\": \"heading_path: 第九章 操作系统接口 > 习题.\"\n    },\n    {\n      \"source\": \"习题\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"contains\",\n      \"description\": \"习题小节包含具体的作业题组。\",\n      \"evidence\": \"section: 习题.\\ntext:\\n习题\\n- 1. 操作系统用户接口中包括哪几种接口？\"\n    },\n    {\n      \"source\": \"操作系统用户接口\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"evaluated_by\",\n      \"description\": \"操作系统用户接口概念通过课后习题进行考核与验证。\",\n      \"evidence\": \"1. 操作系统用户接口中包括哪几种接口？\"\n    },\n    {\n      \"source\": \"WIMP技术\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"evaluated_by\",\n      \"description\": \"WIMP技术概念通过课后习题进行考核与验证。\",\n      \"evidence\": \"2. 什么是WIMP技术？\"\n    },\n    {\n      \"source\": \"系统调用\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"evaluated_by\",\n      \"description\": \"系统调用概念通过课后习题进行考核与验证。\",\n      \"evidence\": \"16. 试比较一般的过程调用与系统调用。\"\n    },\n    {\n      \"source\": \"过程调用\",\n      \"target\": \"系统调用\",\n      \"type\": \"related_to\",\n      \"description\": \"过程调用与系统调用在机制与执行流程上存在对比与关联。\",\n      \"evidence\": \"16. 试比较一般的过程调用与系统调用。\"\n    },\n    {\n      \"source\": \"UNIX系统\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"appears_in\",\n      \"description\": \"UNIX系统作为命令与接口示例出现在习题中。\",\n      \"evidence\": \"6. 为了将已存文件改名，应用什么 UNIX 命令？\"\n    },\n    {\n      \"source\": \"trap.S\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"evaluated_by\",\n      \"description\": \"trap.S程序的功能与作用通过习题进行考核。\",\n      \"evidence\": \"23.trap.S是什么程序？\"\n    },\n    {\n      \"source\": \"trap.C\",\n      \"target\": \"操作系统接口习题\",\n      \"type\": \"evaluated_by\",\n      \"description\": \"trap.C程序的处理逻辑通过习题进行考核。\",\n      \"evidence\": \"25. trap.C 是什么程序？\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0005-a0753fd9ff",
+      "candidate": "schema_aware",
+      "status": "llm_error",
+      "entities": [],
+      "relationships": [],
+      "raw_output": "",
+      "error": "请求失败：HTTPConnectionPool(host='127.0.0.1', port=3000): Read timed out. (read timeout=120)"
+    }
+  ]
+}

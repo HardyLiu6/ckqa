@@ -1,0 +1,600 @@
+{
+  "task": "candidate_extraction",
+  "candidate": "default",
+  "model": "qwen3.6-plus",
+  "samples_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/prompt_tuning_samples.json",
+  "manifest_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+  "summary": {
+    "total": 5,
+    "success": 4,
+    "parse_error": 0,
+    "llm_error": 1
+  },
+  "results": [
+    {
+      "sample_id": "pts-0001-80bf172df2",
+      "candidate": "default",
+      "status": "success",
+      "entities": [
+        {
+          "id": "entity-1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "操作系统核心课程教材，涵盖存储器管理等核心主题",
+          "evidence": "source_file: 计算机操作系统.pdf."
+        },
+        {
+          "id": "entity-2",
+          "title": "第四章 存储器管理",
+          "type": "Chapter",
+          "description": "课程中系统讲解存储器管理机制与体系结构的章节",
+          "evidence": "chapter: 第四章 存储器管理."
+        },
+        {
+          "id": "entity-3",
+          "title": "4.1 存储器的层次结构",
+          "type": "Section",
+          "description": "存储器管理章节下的基础教学单元，介绍存储体系架构",
+          "evidence": "section: 4.1 存储器的层次结构."
+        },
+        {
+          "id": "entity-4",
+          "title": "4.1.3 高速缓存和磁盘缓存",
+          "type": "Section",
+          "description": "存储层次结构中的具体小节，详细讲解缓存技术原理与应用",
+          "evidence": "heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存."
+        },
+        {
+          "id": "entity-5",
+          "title": "高速缓存",
+          "type": "Concept",
+          "description": "介于寄存器和主存之间的高速存储部件，用于备份常用数据以提升CPU执行速度",
+          "evidence": "高速缓存是现代计算机结构中的一个重要部件，它是介于寄存器和存储器之间的存储器，主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数"
+        },
+        {
+          "id": "entity-6",
+          "title": "磁盘缓存",
+          "type": "Concept",
+          "description": "利用主存部分空间暂存频繁访问的磁盘数据，以缓解磁盘I/O与主存速度不匹配的机制",
+          "evidence": "主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。但磁盘缓存与高速缓存不同，它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。"
+        },
+        {
+          "id": "entity-7",
+          "title": "局部性原理",
+          "type": "Concept",
+          "description": "程序执行时呈现的规律，即短时间内执行仅局限于某部分，是缓存设计有效性的理论依据",
+          "evidence": "将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理"
+        },
+        {
+          "id": "entity-8",
+          "title": "主存储器",
+          "type": "Concept",
+          "description": "存放进程程序和数据的核心存储设备，速度介于高速缓存与辅存之间",
+          "evidence": "通常，进程的程序和数据存放在主存储器中"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第四章 存储器管理",
+          "type": "contains",
+          "description": "课程包含存储器管理章节",
+          "evidence": "chapter: 第四章 存储器管理."
+        },
+        {
+          "source": "第四章 存储器管理",
+          "target": "4.1 存储器的层次结构",
+          "type": "contains",
+          "description": "章节包含存储层次结构小节",
+          "evidence": "section: 4.1 存储器的层次结构."
+        },
+        {
+          "source": "4.1 存储器的层次结构",
+          "target": "4.1.3 高速缓存和磁盘缓存",
+          "type": "contains",
+          "description": "上级节包含下级节内容",
+          "evidence": "heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存."
+        },
+        {
+          "source": "高速缓存",
+          "target": "4.1.3 高速缓存和磁盘缓存",
+          "type": "appears_in",
+          "description": "高速缓存概念在该节中详细讲解",
+          "evidence": "4.1.3 高速缓存和磁盘缓存\n\n1. 高速缓存"
+        },
+        {
+          "source": "磁盘缓存",
+          "target": "4.1.3 高速缓存和磁盘缓存",
+          "type": "appears_in",
+          "description": "磁盘缓存概念在该节中详细讲解",
+          "evidence": "2. 磁盘缓存"
+        },
+        {
+          "source": "高速缓存",
+          "target": "局部性原理",
+          "type": "depends_on",
+          "description": "高速缓存的数据预取与替换策略有效性依赖于程序执行的局部性原理",
+          "evidence": "将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理"
+        },
+        {
+          "source": "磁盘缓存",
+          "target": "主存储器",
+          "type": "depends_on",
+          "description": "磁盘缓存并非独立硬件，其物理实现依赖于主存储器的部分空间",
+          "evidence": "它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。"
+        },
+        {
+          "source": "高速缓存",
+          "target": "主存储器",
+          "type": "related_to",
+          "description": "高速缓存作为主存的备份层，用于减少CPU对主存的直接访问次数",
+          "evidence": "主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"entity-1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"操作系统核心课程教材，涵盖存储器管理等核心主题\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf.\"\n    },\n    {\n      \"id\": \"entity-2\",\n      \"title\": \"第四章 存储器管理\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程中系统讲解存储器管理机制与体系结构的章节\",\n      \"evidence\": \"chapter: 第四章 存储器管理.\"\n    },\n    {\n      \"id\": \"entity-3\",\n      \"title\": \"4.1 存储器的层次结构\",\n      \"type\": \"Section\",\n      \"description\": \"存储器管理章节下的基础教学单元，介绍存储体系架构\",\n      \"evidence\": \"section: 4.1 存储器的层次结构.\"\n    },\n    {\n      \"id\": \"entity-4\",\n      \"title\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"Section\",\n      \"description\": \"存储层次结构中的具体小节，详细讲解缓存技术原理与应用\",\n      \"evidence\": \"heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存.\"\n    },\n    {\n      \"id\": \"entity-5\",\n      \"title\": \"高速缓存\",\n      \"type\": \"Concept\",\n      \"description\": \"介于寄存器和主存之间的高速存储部件，用于备份常用数据以提升CPU执行速度\",\n      \"evidence\": \"高速缓存是现代计算机结构中的一个重要部件，它是介于寄存器和存储器之间的存储器，主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数\"\n    },\n    {\n      \"id\": \"entity-6\",\n      \"title\": \"磁盘缓存\",\n      \"type\": \"Concept\",\n      \"description\": \"利用主存部分空间暂存频繁访问的磁盘数据，以缓解磁盘I/O与主存速度不匹配的机制\",\n      \"evidence\": \"主要用于暂时存放频繁使用的一部分磁盘数据和信息，以减少访问磁盘的次数。但磁盘缓存与高速缓存不同，它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。\"\n    },\n    {\n      \"id\": \"entity-7\",\n      \"title\": \"局部性原理\",\n      \"type\": \"Concept\",\n      \"description\": \"程序执行时呈现的规律，即短时间内执行仅局限于某部分，是缓存设计有效性的理论依据\",\n      \"evidence\": \"将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理\"\n    },\n    {\n      \"id\": \"entity-8\",\n      \"title\": \"主存储器\",\n      \"type\": \"Concept\",\n      \"description\": \"存放进程程序和数据的核心存储设备，速度介于高速缓存与辅存之间\",\n      \"evidence\": \"通常，进程的程序和数据存放在主存储器中\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第四章 存储器管理\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含存储器管理章节\",\n      \"evidence\": \"chapter: 第四章 存储器管理.\"\n    },\n    {\n      \"source\": \"第四章 存储器管理\",\n      \"target\": \"4.1 存储器的层次结构\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含存储层次结构小节\",\n      \"evidence\": \"section: 4.1 存储器的层次结构.\"\n    },\n    {\n      \"source\": \"4.1 存储器的层次结构\",\n      \"target\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"contains\",\n      \"description\": \"上级节包含下级节内容\",\n      \"evidence\": \"heading_path: 第四章 存储器管理 > 4.1 存储器的层次结构 > 4.1.3 高速缓存和磁盘缓存.\"\n    },\n    {\n      \"source\": \"高速缓存\",\n      \"target\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"appears_in\",\n      \"description\": \"高速缓存概念在该节中详细讲解\",\n      \"evidence\": \"4.1.3 高速缓存和磁盘缓存\\n\\n1. 高速缓存\"\n    },\n    {\n      \"source\": \"磁盘缓存\",\n      \"target\": \"4.1.3 高速缓存和磁盘缓存\",\n      \"type\": \"appears_in\",\n      \"description\": \"磁盘缓存概念在该节中详细讲解\",\n      \"evidence\": \"2. 磁盘缓存\"\n    },\n    {\n      \"source\": \"高速缓存\",\n      \"target\": \"局部性原理\",\n      \"type\": \"depends_on\",\n      \"description\": \"高速缓存的数据预取与替换策略有效性依赖于程序执行的局部性原理\",\n      \"evidence\": \"将一些常用数据放在高速缓存中是否有效，这将涉及到程序执行的局部性原理\"\n    },\n    {\n      \"source\": \"磁盘缓存\",\n      \"target\": \"主存储器\",\n      \"type\": \"depends_on\",\n      \"description\": \"磁盘缓存并非独立硬件，其物理实现依赖于主存储器的部分空间\",\n      \"evidence\": \"它本身并不是一种实际存在的存储器，而是利用主存中的部分存储空间暂时存放从磁盘中读出(或写入)的信息。\"\n    },\n    {\n      \"source\": \"高速缓存\",\n      \"target\": \"主存储器\",\n      \"type\": \"related_to\",\n      \"description\": \"高速缓存作为主存的备份层，用于减少CPU对主存的直接访问次数\",\n      \"evidence\": \"主要用于备份主存中较常用的数据，以减少处理机对主存储器的访问次数\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0002-19d20ff0e8",
+      "candidate": "default",
+      "status": "success",
+      "entities": [
+        {
+          "id": "e1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "本课程的完整名称，涵盖进程管理、内存管理、文件系统等核心操作系统理论与技术。",
+          "evidence": "source_file: 计算机操作系统.pdf"
+        },
+        {
+          "id": "e2",
+          "title": "第二章 进程的描述与控制",
+          "type": "Chapter",
+          "description": "课程的第二章，主要讲解进程的基本概念、状态转换、同步与通信以及调度机制。",
+          "evidence": "chapter: 第二章 进程的描述与控制"
+        },
+        {
+          "id": "e3",
+          "title": "2.1.2 程序顺序执行",
+          "type": "Section",
+          "description": "第二章第一节下的第二小节，专门探讨程序段按固定先后次序执行的机制及其特征。",
+          "evidence": "heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行"
+        },
+        {
+          "id": "e4",
+          "title": "程序顺序执行",
+          "type": "Concept",
+          "description": "指应用程序中的各个程序段或语句必须按照规定的先后次序依次执行，仅当前一操作完成后，后一操作才能开始。",
+          "evidence": "仅当前一程序段执行完后，才运行后一程序段。"
+        },
+        {
+          "id": "e5",
+          "title": "前趋图",
+          "type": "Concept",
+          "description": "用结点代表程序段操作，用有向箭头指示操作先后次序的图形化表示方法，用于描述程序执行的依赖关系。",
+          "evidence": "其执行的顺序可用前趋图2-2(a)描述。"
+        },
+        {
+          "id": "e6",
+          "title": "顺序性",
+          "type": "Concept",
+          "description": "程序顺序执行时的特征之一，指处理机严格按照程序规定的顺序执行，每一操作必须在下一操作开始前结束。",
+          "evidence": "① 顺序性：指处理机严格地按照程序所规定的顺序执行，即每一操作必须在下一个操作开始之前结束"
+        },
+        {
+          "id": "e7",
+          "title": "封闭性",
+          "type": "Concept",
+          "description": "程序顺序执行时的特征之一，指程序运行时独占全机资源，其执行结果不受外界因素影响。",
+          "evidence": "② 封闭性：指程序在封闭的环境下运行，即程序运行时独占全机资源，资源的状态(除初始状态外)只有本程序才能改变它"
+        },
+        {
+          "id": "e8",
+          "title": "可再现性",
+          "type": "Concept",
+          "description": "程序顺序执行时的特征之一，指在相同环境和初始条件下重复执行程序，无论执行过程是否停顿，都能获得相同结果。",
+          "evidence": "③可再现性：指只要程序执行时的环境和初始条件相同，当程序重复执行时，不论它是从头到尾不停顿地执行，还是“停停走走”地执行，都可获得相同的结果。"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统",
+          "target": "第二章 进程的描述与控制",
+          "type": "contains",
+          "description": "课程包含该章节内容。",
+          "evidence": "chapter: 第二章 进程的描述与控制"
+        },
+        {
+          "source": "第二章 进程的描述与控制",
+          "target": "2.1.2 程序顺序执行",
+          "type": "contains",
+          "description": "章节包含该小节内容。",
+          "evidence": "heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行"
+        },
+        {
+          "source": "2.1.2 程序顺序执行",
+          "target": "程序顺序执行",
+          "type": "contains",
+          "description": "小节主要讲解该核心概念。",
+          "evidence": "2.1.2 程序顺序执行\n\n1. 程序的顺序执行"
+        },
+        {
+          "source": "程序顺序执行",
+          "target": "前趋图",
+          "type": "related_to",
+          "description": "前趋图用于直观描述程序顺序执行中各操作间的先后依赖关系。",
+          "evidence": "其执行的顺序可用前趋图2-2(a)描述。"
+        },
+        {
+          "source": "程序顺序执行",
+          "target": "顺序性",
+          "type": "related_to",
+          "description": "顺序性是程序顺序执行的核心特征之一。",
+          "evidence": "程序顺序执行时，具有这样三个特征：① 顺序性"
+        },
+        {
+          "source": "程序顺序执行",
+          "target": "封闭性",
+          "type": "related_to",
+          "description": "封闭性是程序顺序执行的核心特征之一。",
+          "evidence": "程序顺序执行时，具有这样三个特征：...② 封闭性"
+        },
+        {
+          "source": "程序顺序执行",
+          "target": "可再现性",
+          "type": "related_to",
+          "description": "可再现性是程序顺序执行的核心特征之一。",
+          "evidence": "程序顺序执行时，具有这样三个特征：...③可再现性"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"e1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"本课程的完整名称，涵盖进程管理、内存管理、文件系统等核心操作系统理论与技术。\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf\"\n    },\n    {\n      \"id\": \"e2\",\n      \"title\": \"第二章 进程的描述与控制\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程的第二章，主要讲解进程的基本概念、状态转换、同步与通信以及调度机制。\",\n      \"evidence\": \"chapter: 第二章 进程的描述与控制\"\n    },\n    {\n      \"id\": \"e3\",\n      \"title\": \"2.1.2 程序顺序执行\",\n      \"type\": \"Section\",\n      \"description\": \"第二章第一节下的第二小节，专门探讨程序段按固定先后次序执行的机制及其特征。\",\n      \"evidence\": \"heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行\"\n    },\n    {\n      \"id\": \"e4\",\n      \"title\": \"程序顺序执行\",\n      \"type\": \"Concept\",\n      \"description\": \"指应用程序中的各个程序段或语句必须按照规定的先后次序依次执行，仅当前一操作完成后，后一操作才能开始。\",\n      \"evidence\": \"仅当前一程序段执行完后，才运行后一程序段。\"\n    },\n    {\n      \"id\": \"e5\",\n      \"title\": \"前趋图\",\n      \"type\": \"Concept\",\n      \"description\": \"用结点代表程序段操作，用有向箭头指示操作先后次序的图形化表示方法，用于描述程序执行的依赖关系。\",\n      \"evidence\": \"其执行的顺序可用前趋图2-2(a)描述。\"\n    },\n    {\n      \"id\": \"e6\",\n      \"title\": \"顺序性\",\n      \"type\": \"Concept\",\n      \"description\": \"程序顺序执行时的特征之一，指处理机严格按照程序规定的顺序执行，每一操作必须在下一操作开始前结束。\",\n      \"evidence\": \"① 顺序性：指处理机严格地按照程序所规定的顺序执行，即每一操作必须在下一个操作开始之前结束\"\n    },\n    {\n      \"id\": \"e7\",\n      \"title\": \"封闭性\",\n      \"type\": \"Concept\",\n      \"description\": \"程序顺序执行时的特征之一，指程序运行时独占全机资源，其执行结果不受外界因素影响。\",\n      \"evidence\": \"② 封闭性：指程序在封闭的环境下运行，即程序运行时独占全机资源，资源的状态(除初始状态外)只有本程序才能改变它\"\n    },\n    {\n      \"id\": \"e8\",\n      \"title\": \"可再现性\",\n      \"type\": \"Concept\",\n      \"description\": \"程序顺序执行时的特征之一，指在相同环境和初始条件下重复执行程序，无论执行过程是否停顿，都能获得相同结果。\",\n      \"evidence\": \"③可再现性：指只要程序执行时的环境和初始条件相同，当程序重复执行时，不论它是从头到尾不停顿地执行，还是“停停走走”地执行，都可获得相同的结果。\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统\",\n      \"target\": \"第二章 进程的描述与控制\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含该章节内容。\",\n      \"evidence\": \"chapter: 第二章 进程的描述与控制\"\n    },\n    {\n      \"source\": \"第二章 进程的描述与控制\",\n      \"target\": \"2.1.2 程序顺序执行\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含该小节内容。\",\n      \"evidence\": \"heading_path: 第二章 进程的描述与控制 > 2.1 前趋图和程序执行 > 2.1.2 程序顺序执行\"\n    },\n    {\n      \"source\": \"2.1.2 程序顺序执行\",\n      \"target\": \"程序顺序执行\",\n      \"type\": \"contains\",\n      \"description\": \"小节主要讲解该核心概念。\",\n      \"evidence\": \"2.1.2 程序顺序执行\\n\\n1. 程序的顺序执行\"\n    },\n    {\n      \"source\": \"程序顺序执行\",\n      \"target\": \"前趋图\",\n      \"type\": \"related_to\",\n      \"description\": \"前趋图用于直观描述程序顺序执行中各操作间的先后依赖关系。\",\n      \"evidence\": \"其执行的顺序可用前趋图2-2(a)描述。\"\n    },\n    {\n      \"source\": \"程序顺序执行\",\n      \"target\": \"顺序性\",\n      \"type\": \"related_to\",\n      \"description\": \"顺序性是程序顺序执行的核心特征之一。\",\n      \"evidence\": \"程序顺序执行时，具有这样三个特征：① 顺序性\"\n    },\n    {\n      \"source\": \"程序顺序执行\",\n      \"target\": \"封闭性\",\n      \"type\": \"related_to\",\n      \"description\": \"封闭性是程序顺序执行的核心特征之一。\",\n      \"evidence\": \"程序顺序执行时，具有这样三个特征：...② 封闭性\"\n    },\n    {\n      \"source\": \"程序顺序执行\",\n      \"target\": \"可再现性\",\n      \"type\": \"related_to\",\n      \"description\": \"可再现性是程序顺序执行的核心特征之一。\",\n      \"evidence\": \"程序顺序执行时，具有这样三个特征：...③可再现性\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0003-517f1fbe66",
+      "candidate": "default",
+      "status": "success",
+      "entities": [
+        {
+          "id": "entity-1",
+          "title": "计算机操作系统",
+          "type": "Course",
+          "description": "本课程的教材来源，涵盖操作系统核心原理与实现机制。",
+          "evidence": "source_file: 计算机操作系统.pdf"
+        },
+        {
+          "id": "entity-2",
+          "title": "第六章 输入输出系统",
+          "type": "Chapter",
+          "description": "课程教材的第六章，主要讲解输入输出系统的架构与软件层次。",
+          "evidence": "chapter: 第六章 输入输出系统"
+        },
+        {
+          "id": "entity-3",
+          "title": "6.5 与设备无关的I/O软件",
+          "type": "Section",
+          "description": "第六章下的第五节，探讨如何实现I/O操作与具体硬件设备的解耦。",
+          "evidence": "section: 6.5 与设备无关的I/O软件"
+        },
+        {
+          "id": "entity-4",
+          "title": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "type": "Section",
+          "description": "6.5节下的第四小节，详细讲解逻辑设备名向物理设备名转换的具体机制。",
+          "evidence": "heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现"
+        },
+        {
+          "id": "entity-5",
+          "title": "逻辑设备名到物理设备名映射",
+          "type": "KnowledgePoint",
+          "description": "操作系统I/O管理中的核心知识点，指将应用程序使用的逻辑设备标识转换为系统可识别的物理设备标识的过程。",
+          "evidence": "在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。"
+        },
+        {
+          "id": "entity-6",
+          "title": "逻辑设备表 (LUT)",
+          "type": "Term",
+          "description": "Logical Unit Table的缩写，是操作系统中用于记录逻辑设备名、物理设备名及驱动程序入口地址的数据结构。",
+          "evidence": "逻辑设备表 LUT(Logical Unit Table)"
+        },
+        {
+          "id": "entity-7",
+          "title": "逻辑设备名",
+          "type": "Concept",
+          "description": "应用程序在请求I/O设备时使用的抽象设备标识符，用于实现设备无关性。",
+          "evidence": "当应用程序请求使用I/O设备时，应当用逻辑设备名。"
+        },
+        {
+          "id": "entity-8",
+          "title": "物理设备名",
+          "type": "Concept",
+          "description": "操作系统底层实际识别和管理的硬件设备标识符。",
+          "evidence": "但系统只识别物理设备名"
+        },
+        {
+          "id": "entity-9",
+          "title": "系统设备表",
+          "type": "Concept",
+          "description": "多用户系统中配置的全局设备信息表，用于辅助逻辑设备表的映射。",
+          "evidence": "由于通常在多用户系统中都配置了系统设备表"
+        },
+        {
+          "id": "entity-10",
+          "title": "进程控制块 (PCB)",
+          "type": "Concept",
+          "description": "操作系统中用于描述和控制进程运行的数据结构，在多用户系统中可存放用户专属的逻辑设备表。",
+          "evidence": "并将该表放入进程的PCB中"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "第六章 输入输出系统",
+          "target": "6.5 与设备无关的I/O软件",
+          "type": "contains",
+          "description": "章节包含节级教学单元",
+          "evidence": "chapter: 第六章 输入输出系统. section: 6.5 与设备无关的I/O软件."
+        },
+        {
+          "source": "6.5 与设备无关的I/O软件",
+          "target": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "type": "contains",
+          "description": "节包含小节级教学单元",
+          "evidence": "heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现"
+        },
+        {
+          "source": "6.5.4 逻辑设备名到物理设备名映射的实现",
+          "target": "逻辑设备名到物理设备名映射",
+          "type": "contains",
+          "description": "小节内容围绕该核心知识点展开",
+          "evidence": "6.5.4 逻辑设备名到物理设备名映射的实现...用于将逻辑设备名映射为物理设备名。"
+        },
+        {
+          "source": "逻辑设备名到物理设备名映射",
+          "target": "逻辑设备表 (LUT)",
+          "type": "implemented_by",
+          "description": "该映射机制通过配置逻辑设备表来具体实现",
+          "evidence": "在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。"
+        },
+        {
+          "source": "逻辑设备表 (LUT)",
+          "target": "逻辑设备名",
+          "type": "contains",
+          "description": "LUT表目结构中包含逻辑设备名项",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "source": "逻辑设备表 (LUT)",
+          "target": "物理设备名",
+          "type": "contains",
+          "description": "LUT表目结构中包含物理设备名项",
+          "evidence": "在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址"
+        },
+        {
+          "source": "逻辑设备名",
+          "target": "物理设备名",
+          "type": "related_to",
+          "description": "两者通过映射表建立一一对应关系",
+          "evidence": "用于将逻辑设备名映射为物理设备名"
+        },
+        {
+          "source": "逻辑设备表 (LUT)",
+          "target": "进程控制块 (PCB)",
+          "type": "related_to",
+          "description": "在多用户系统中，用户专属的LUT被存放在对应进程的PCB中",
+          "evidence": "每当用户登录时，系统便为该用户建立一个进程，同时也为之建立一张LUT，并将该表放入进程的PCB中。"
+        },
+        {
+          "source": "逻辑设备表 (LUT)",
+          "target": "系统设备表",
+          "type": "related_to",
+          "description": "多用户环境下的LUT格式设计依赖于系统设备表的配置",
+          "evidence": "由于通常在多用户系统中都配置了系统设备表，故此时的逻辑设备表可以采用图6-19(b)中的格式。"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"entity-1\",\n      \"title\": \"计算机操作系统\",\n      \"type\": \"Course\",\n      \"description\": \"本课程的教材来源，涵盖操作系统核心原理与实现机制。\",\n      \"evidence\": \"source_file: 计算机操作系统.pdf\"\n    },\n    {\n      \"id\": \"entity-2\",\n      \"title\": \"第六章 输入输出系统\",\n      \"type\": \"Chapter\",\n      \"description\": \"课程教材的第六章，主要讲解输入输出系统的架构与软件层次。\",\n      \"evidence\": \"chapter: 第六章 输入输出系统\"\n    },\n    {\n      \"id\": \"entity-3\",\n      \"title\": \"6.5 与设备无关的I/O软件\",\n      \"type\": \"Section\",\n      \"description\": \"第六章下的第五节，探讨如何实现I/O操作与具体硬件设备的解耦。\",\n      \"evidence\": \"section: 6.5 与设备无关的I/O软件\"\n    },\n    {\n      \"id\": \"entity-4\",\n      \"title\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"type\": \"Section\",\n      \"description\": \"6.5节下的第四小节，详细讲解逻辑设备名向物理设备名转换的具体机制。\",\n      \"evidence\": \"heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现\"\n    },\n    {\n      \"id\": \"entity-5\",\n      \"title\": \"逻辑设备名到物理设备名映射\",\n      \"type\": \"KnowledgePoint\",\n      \"description\": \"操作系统I/O管理中的核心知识点，指将应用程序使用的逻辑设备标识转换为系统可识别的物理设备标识的过程。\",\n      \"evidence\": \"在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。\"\n    },\n    {\n      \"id\": \"entity-6\",\n      \"title\": \"逻辑设备表 (LUT)\",\n      \"type\": \"Term\",\n      \"description\": \"Logical Unit Table的缩写，是操作系统中用于记录逻辑设备名、物理设备名及驱动程序入口地址的数据结构。\",\n      \"evidence\": \"逻辑设备表 LUT(Logical Unit Table)\"\n    },\n    {\n      \"id\": \"entity-7\",\n      \"title\": \"逻辑设备名\",\n      \"type\": \"Concept\",\n      \"description\": \"应用程序在请求I/O设备时使用的抽象设备标识符，用于实现设备无关性。\",\n      \"evidence\": \"当应用程序请求使用I/O设备时，应当用逻辑设备名。\"\n    },\n    {\n      \"id\": \"entity-8\",\n      \"title\": \"物理设备名\",\n      \"type\": \"Concept\",\n      \"description\": \"操作系统底层实际识别和管理的硬件设备标识符。\",\n      \"evidence\": \"但系统只识别物理设备名\"\n    },\n    {\n      \"id\": \"entity-9\",\n      \"title\": \"系统设备表\",\n      \"type\": \"Concept\",\n      \"description\": \"多用户系统中配置的全局设备信息表，用于辅助逻辑设备表的映射。\",\n      \"evidence\": \"由于通常在多用户系统中都配置了系统设备表\"\n    },\n    {\n      \"id\": \"entity-10\",\n      \"title\": \"进程控制块 (PCB)\",\n      \"type\": \"Concept\",\n      \"description\": \"操作系统中用于描述和控制进程运行的数据结构，在多用户系统中可存放用户专属的逻辑设备表。\",\n      \"evidence\": \"并将该表放入进程的PCB中\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"第六章 输入输出系统\",\n      \"target\": \"6.5 与设备无关的I/O软件\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含节级教学单元\",\n      \"evidence\": \"chapter: 第六章 输入输出系统. section: 6.5 与设备无关的I/O软件.\"\n    },\n    {\n      \"source\": \"6.5 与设备无关的I/O软件\",\n      \"target\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"type\": \"contains\",\n      \"description\": \"节包含小节级教学单元\",\n      \"evidence\": \"heading_path: 第六章 输入输出系统 > 6.5 与设备无关的I/O软件 > 6.5.4 逻辑设备名到物理设备名映射的实现\"\n    },\n    {\n      \"source\": \"6.5.4 逻辑设备名到物理设备名映射的实现\",\n      \"target\": \"逻辑设备名到物理设备名映射\",\n      \"type\": \"contains\",\n      \"description\": \"小节内容围绕该核心知识点展开\",\n      \"evidence\": \"6.5.4 逻辑设备名到物理设备名映射的实现...用于将逻辑设备名映射为物理设备名。\"\n    },\n    {\n      \"source\": \"逻辑设备名到物理设备名映射\",\n      \"target\": \"逻辑设备表 (LUT)\",\n      \"type\": \"implemented_by\",\n      \"description\": \"该映射机制通过配置逻辑设备表来具体实现\",\n      \"evidence\": \"在系统中需要配置一张逻辑设备表，用于将逻辑设备名映射为物理设备名。\"\n    },\n    {\n      \"source\": \"逻辑设备表 (LUT)\",\n      \"target\": \"逻辑设备名\",\n      \"type\": \"contains\",\n      \"description\": \"LUT表目结构中包含逻辑设备名项\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"source\": \"逻辑设备表 (LUT)\",\n      \"target\": \"物理设备名\",\n      \"type\": \"contains\",\n      \"description\": \"LUT表目结构中包含物理设备名项\",\n      \"evidence\": \"在逻辑设备表的每个表目中包含了三项：逻辑设备名、物理设备名和设备驱动程序的入口地址\"\n    },\n    {\n      \"source\": \"逻辑设备名\",\n      \"target\": \"物理设备名\",\n      \"type\": \"related_to\",\n      \"description\": \"两者通过映射表建立一一对应关系\",\n      \"evidence\": \"用于将逻辑设备名映射为物理设备名\"\n    },\n    {\n      \"source\": \"逻辑设备表 (LUT)\",\n      \"target\": \"进程控制块 (PCB)\",\n      \"type\": \"related_to\",\n      \"description\": \"在多用户系统中，用户专属的LUT被存放在对应进程的PCB中\",\n      \"evidence\": \"每当用户登录时，系统便为该用户建立一个进程，同时也为之建立一张LUT，并将该表放入进程的PCB中。\"\n    },\n    {\n      \"source\": \"逻辑设备表 (LUT)\",\n      \"target\": \"系统设备表\",\n      \"type\": \"related_to\",\n      \"description\": \"多用户环境下的LUT格式设计依赖于系统设备表的配置\",\n      \"evidence\": \"由于通常在多用户系统中都配置了系统设备表，故此时的逻辑设备表可以采用图6-19(b)中的格式。\"\n    }\n  ]\n}",
+      "error": null
+    },
+    {
+      "sample_id": "pts-0004-ac3447c62d",
+      "candidate": "default",
+      "status": "llm_error",
+      "entities": [],
+      "relationships": [],
+      "raw_output": "",
+      "error": "请求失败：HTTPConnectionPool(host='127.0.0.1', port=3000): Read timed out. (read timeout=120)"
+    },
+    {
+      "sample_id": "pts-0005-a0753fd9ff",
+      "candidate": "default",
+      "status": "success",
+      "entities": [
+        {
+          "id": "e1",
+          "title": "计算机操作系统（第四版）",
+          "type": "Course",
+          "description": "本教材第四版，涵盖操作系统基础、进程管理、存储管理、I/O管理、文件系统、接口及现代OS发展等内容。",
+          "evidence": "计算机操作系统（第四版）"
+        },
+        {
+          "id": "e2",
+          "title": "操作系统引论",
+          "type": "Chapter",
+          "description": "第一章，介绍OS的发展、特征、功能及现代OS特征和功能。",
+          "evidence": "第一章为操作系统引论，介绍了OS的发展、特征、功能等，增加了对现代OS特征和功能的介绍"
+        },
+        {
+          "id": "e3",
+          "title": "进程和线程",
+          "type": "Chapter",
+          "description": "第二章内容，深入阐述进程和线程的基本概念。",
+          "evidence": "第二章和第三章深入阐述了进程和线程的基本概念"
+        },
+        {
+          "id": "e4",
+          "title": "同步与通信、调度和死锁",
+          "type": "Chapter",
+          "description": "第三章内容，涵盖进程同步通信、CPU调度及死锁处理机制。",
+          "evidence": "同步与通信、调度和死锁"
+        },
+        {
+          "id": "e5",
+          "title": "连续和离散存储器管理方式及虚拟存储器",
+          "type": "Chapter",
+          "description": "第四、五章内容，介绍内存管理的连续与离散方式及虚拟存储技术。",
+          "evidence": "第四章和第五章对连续和离散存储器管理方式及虚拟存储器进行了介绍"
+        },
+        {
+          "id": "e6",
+          "title": "I/O管理",
+          "type": "Chapter",
+          "description": "第六章内容，自下而上系统阐述I/O软件各层次。",
+          "evidence": "第六章为I/O管理，自下而上地对I/O软件的各层次作了较为系统的阐述"
+        },
+        {
+          "id": "e7",
+          "title": "文件系统和磁盘存储器管理",
+          "type": "Chapter",
+          "description": "第七、八章内容，介绍文件系统原理与磁盘存储管理机制。",
+          "evidence": "第七章和第八章介绍了文件系统和磁盘存储器管理"
+        },
+        {
+          "id": "e8",
+          "title": "操作系统接口",
+          "type": "Chapter",
+          "description": "第九章内容，详细介绍OS接口方式与实现方法。",
+          "evidence": "第九章是操作系统接口，对接口方式和实现方法做了详细的介绍"
+        },
+        {
+          "id": "e9",
+          "title": "多处理机OS、网络OS、多媒体OS及系统安全性",
+          "type": "Chapter",
+          "description": "第十至十二章内容，聚焦现代OS发展现状与前沿技术。",
+          "evidence": "从第十章开始到第十二章，其内容都是与目前OS发展现状紧密相关的，这几章介绍多处理机OS、网络OS、多媒体OS及系统安全性等方面的内容"
+        },
+        {
+          "id": "e10",
+          "title": "进程",
+          "type": "Concept",
+          "description": "操作系统中资源分配和独立运行的基本单位。",
+          "evidence": "进程和线程的基本概念"
+        },
+        {
+          "id": "e11",
+          "title": "线程",
+          "type": "Concept",
+          "description": "CPU调度和分派的基本单位，与进程共享资源。",
+          "evidence": "进程和线程的基本概念"
+        },
+        {
+          "id": "e12",
+          "title": "虚拟存储器",
+          "type": "Concept",
+          "description": "通过离散分配和请求调页技术实现逻辑上大于物理内存的存储管理机制。",
+          "evidence": "连续和离散存储器管理方式及虚拟存储器"
+        },
+        {
+          "id": "e13",
+          "title": "Intel x86系列CPU",
+          "type": "ToolOrPlatform",
+          "description": "教材中用于介绍多任务支持与存储管理支持的硬件平台背景。",
+          "evidence": "增加了Intel x86系列CPU对多任务支持的背景知识介绍"
+        }
+      ],
+      "relationships": [
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "操作系统引论",
+          "type": "contains",
+          "description": "课程包含第一章内容",
+          "evidence": "本版教材共分为12章。第一章为操作系统引论"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "进程和线程",
+          "type": "contains",
+          "description": "课程包含第二章内容",
+          "evidence": "第二章和第三章深入阐述了进程和线程的基本概念"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "同步与通信、调度和死锁",
+          "type": "contains",
+          "description": "课程包含第三章内容",
+          "evidence": "第二章和第三章深入阐述了...同步与通信、调度和死锁"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "连续和离散存储器管理方式及虚拟存储器",
+          "type": "contains",
+          "description": "课程包含第四、五章内容",
+          "evidence": "第四章和第五章对连续和离散存储器管理方式及虚拟存储器进行了介绍"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "I/O管理",
+          "type": "contains",
+          "description": "课程包含第六章内容",
+          "evidence": "第六章为I/O管理"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "文件系统和磁盘存储器管理",
+          "type": "contains",
+          "description": "课程包含第七、八章内容",
+          "evidence": "第七章和第八章介绍了文件系统和磁盘存储器管理"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "操作系统接口",
+          "type": "contains",
+          "description": "课程包含第九章内容",
+          "evidence": "第九章是操作系统接口"
+        },
+        {
+          "source": "计算机操作系统（第四版）",
+          "target": "多处理机OS、网络OS、多媒体OS及系统安全性",
+          "type": "contains",
+          "description": "课程包含第十至十二章内容",
+          "evidence": "从第十章开始到第十二章...介绍多处理机OS、网络OS、多媒体OS及系统安全性等方面的内容"
+        },
+        {
+          "source": "进程和线程",
+          "target": "进程",
+          "type": "contains",
+          "description": "章节包含进程概念",
+          "evidence": "深入阐述了进程和线程的基本概念"
+        },
+        {
+          "source": "进程和线程",
+          "target": "线程",
+          "type": "contains",
+          "description": "章节包含线程概念",
+          "evidence": "深入阐述了进程和线程的基本概念"
+        },
+        {
+          "source": "连续和离散存储器管理方式及虚拟存储器",
+          "target": "虚拟存储器",
+          "type": "contains",
+          "description": "章节包含虚拟存储器概念",
+          "evidence": "对连续和离散存储器管理方式及虚拟存储器进行了介绍"
+        },
+        {
+          "source": "Intel x86系列CPU",
+          "target": "进程和线程",
+          "type": "applied_in",
+          "description": "Intel x86系列CPU的多任务支持背景知识应用于进程与线程章节",
+          "evidence": "增加了Intel x86系列CPU对多任务支持的背景知识介绍"
+        },
+        {
+          "source": "Intel x86系列CPU",
+          "target": "连续和离散存储器管理方式及虚拟存储器",
+          "type": "applied_in",
+          "description": "Intel x86系列CPU的存储管理支持背景知识应用于存储器管理章节",
+          "evidence": "增加了Intel x86系列CPU对存储管理支持的背景知识介绍"
+        }
+      ],
+      "raw_output": "{\n  \"entities\": [\n    {\n      \"id\": \"e1\",\n      \"title\": \"计算机操作系统（第四版）\",\n      \"type\": \"Course\",\n      \"description\": \"本教材第四版，涵盖操作系统基础、进程管理、存储管理、I/O管理、文件系统、接口及现代OS发展等内容。\",\n      \"evidence\": \"计算机操作系统（第四版）\"\n    },\n    {\n      \"id\": \"e2\",\n      \"title\": \"操作系统引论\",\n      \"type\": \"Chapter\",\n      \"description\": \"第一章，介绍OS的发展、特征、功能及现代OS特征和功能。\",\n      \"evidence\": \"第一章为操作系统引论，介绍了OS的发展、特征、功能等，增加了对现代OS特征和功能的介绍\"\n    },\n    {\n      \"id\": \"e3\",\n      \"title\": \"进程和线程\",\n      \"type\": \"Chapter\",\n      \"description\": \"第二章内容，深入阐述进程和线程的基本概念。\",\n      \"evidence\": \"第二章和第三章深入阐述了进程和线程的基本概念\"\n    },\n    {\n      \"id\": \"e4\",\n      \"title\": \"同步与通信、调度和死锁\",\n      \"type\": \"Chapter\",\n      \"description\": \"第三章内容，涵盖进程同步通信、CPU调度及死锁处理机制。\",\n      \"evidence\": \"同步与通信、调度和死锁\"\n    },\n    {\n      \"id\": \"e5\",\n      \"title\": \"连续和离散存储器管理方式及虚拟存储器\",\n      \"type\": \"Chapter\",\n      \"description\": \"第四、五章内容，介绍内存管理的连续与离散方式及虚拟存储技术。\",\n      \"evidence\": \"第四章和第五章对连续和离散存储器管理方式及虚拟存储器进行了介绍\"\n    },\n    {\n      \"id\": \"e6\",\n      \"title\": \"I/O管理\",\n      \"type\": \"Chapter\",\n      \"description\": \"第六章内容，自下而上系统阐述I/O软件各层次。\",\n      \"evidence\": \"第六章为I/O管理，自下而上地对I/O软件的各层次作了较为系统的阐述\"\n    },\n    {\n      \"id\": \"e7\",\n      \"title\": \"文件系统和磁盘存储器管理\",\n      \"type\": \"Chapter\",\n      \"description\": \"第七、八章内容，介绍文件系统原理与磁盘存储管理机制。\",\n      \"evidence\": \"第七章和第八章介绍了文件系统和磁盘存储器管理\"\n    },\n    {\n      \"id\": \"e8\",\n      \"title\": \"操作系统接口\",\n      \"type\": \"Chapter\",\n      \"description\": \"第九章内容，详细介绍OS接口方式与实现方法。\",\n      \"evidence\": \"第九章是操作系统接口，对接口方式和实现方法做了详细的介绍\"\n    },\n    {\n      \"id\": \"e9\",\n      \"title\": \"多处理机OS、网络OS、多媒体OS及系统安全性\",\n      \"type\": \"Chapter\",\n      \"description\": \"第十至十二章内容，聚焦现代OS发展现状与前沿技术。\",\n      \"evidence\": \"从第十章开始到第十二章，其内容都是与目前OS发展现状紧密相关的，这几章介绍多处理机OS、网络OS、多媒体OS及系统安全性等方面的内容\"\n    },\n    {\n      \"id\": \"e10\",\n      \"title\": \"进程\",\n      \"type\": \"Concept\",\n      \"description\": \"操作系统中资源分配和独立运行的基本单位。\",\n      \"evidence\": \"进程和线程的基本概念\"\n    },\n    {\n      \"id\": \"e11\",\n      \"title\": \"线程\",\n      \"type\": \"Concept\",\n      \"description\": \"CPU调度和分派的基本单位，与进程共享资源。\",\n      \"evidence\": \"进程和线程的基本概念\"\n    },\n    {\n      \"id\": \"e12\",\n      \"title\": \"虚拟存储器\",\n      \"type\": \"Concept\",\n      \"description\": \"通过离散分配和请求调页技术实现逻辑上大于物理内存的存储管理机制。\",\n      \"evidence\": \"连续和离散存储器管理方式及虚拟存储器\"\n    },\n    {\n      \"id\": \"e13\",\n      \"title\": \"Intel x86系列CPU\",\n      \"type\": \"ToolOrPlatform\",\n      \"description\": \"教材中用于介绍多任务支持与存储管理支持的硬件平台背景。\",\n      \"evidence\": \"增加了Intel x86系列CPU对多任务支持的背景知识介绍\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"操作系统引论\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第一章内容\",\n      \"evidence\": \"本版教材共分为12章。第一章为操作系统引论\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"进程和线程\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第二章内容\",\n      \"evidence\": \"第二章和第三章深入阐述了进程和线程的基本概念\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"同步与通信、调度和死锁\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第三章内容\",\n      \"evidence\": \"第二章和第三章深入阐述了...同步与通信、调度和死锁\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"连续和离散存储器管理方式及虚拟存储器\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第四、五章内容\",\n      \"evidence\": \"第四章和第五章对连续和离散存储器管理方式及虚拟存储器进行了介绍\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"I/O管理\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第六章内容\",\n      \"evidence\": \"第六章为I/O管理\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"文件系统和磁盘存储器管理\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第七、八章内容\",\n      \"evidence\": \"第七章和第八章介绍了文件系统和磁盘存储器管理\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"操作系统接口\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第九章内容\",\n      \"evidence\": \"第九章是操作系统接口\"\n    },\n    {\n      \"source\": \"计算机操作系统（第四版）\",\n      \"target\": \"多处理机OS、网络OS、多媒体OS及系统安全性\",\n      \"type\": \"contains\",\n      \"description\": \"课程包含第十至十二章内容\",\n      \"evidence\": \"从第十章开始到第十二章...介绍多处理机OS、网络OS、多媒体OS及系统安全性等方面的内容\"\n    },\n    {\n      \"source\": \"进程和线程\",\n      \"target\": \"进程\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含进程概念\",\n      \"evidence\": \"深入阐述了进程和线程的基本概念\"\n    },\n    {\n      \"source\": \"进程和线程\",\n      \"target\": \"线程\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含线程概念\",\n      \"evidence\": \"深入阐述了进程和线程的基本概念\"\n    },\n    {\n      \"source\": \"连续和离散存储器管理方式及虚拟存储器\",\n      \"target\": \"虚拟存储器\",\n      \"type\": \"contains\",\n      \"description\": \"章节包含虚拟存储器概念\",\n      \"evidence\": \"对连续和离散存储器管理方式及虚拟存储器进行了介绍\"\n    },\n    {\n      \"source\": \"Intel x86系列CPU\",\n      \"target\": \"进程和线程\",\n      \"type\": \"applied_in\",\n      \"description\": \"Intel x86系列CPU的多任务支持背景知识应用于进程与线程章节\",\n      \"evidence\": \"增加了Intel x86系列CPU对多任务支持的背景知识介绍\"\n    },\n    {\n      \"source\": \"Intel x86系列CPU\",\n      \"target\": \"连续和离散存储器管理方式及虚拟存储器\",\n      \"type\": \"applied_in\",\n      \"description\": \"Intel x86系列CPU的存储管理支持背景知识应用于存储器管理章节\",\n      \"evidence\": \"增加了Intel x86系列CPU对存储管理支持的背景知识介绍\"\n    }\n  ]\n}",
+      "error": null
+    }
+  ]
+}
