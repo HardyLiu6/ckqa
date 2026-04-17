@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -118,6 +118,8 @@ class StructuredExtractionResult(BaseModel):
     relationships: list[ExtractionRelationship] = Field(default_factory=list)
     raw_output: str = ""
     error: str | None = None
+    parser_error_code: str | None = None
+    llm_debug: dict[str, Any] | None = None
 
     @field_validator("sample_id", "candidate", mode="before")
     @classmethod
@@ -134,5 +136,11 @@ class StructuredExtractionResult(BaseModel):
     @field_validator("error", mode="before")
     @classmethod
     def _normalize_optional_text(cls, value: object) -> str | None:
+        cleaned = _clean_text(value)
+        return cleaned or None
+
+    @field_validator("parser_error_code", mode="before")
+    @classmethod
+    def _normalize_error_code(cls, value: object) -> str | None:
         cleaned = _clean_text(value)
         return cleaned or None

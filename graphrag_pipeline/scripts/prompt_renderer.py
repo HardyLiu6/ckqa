@@ -27,6 +27,8 @@ def render_extraction_messages(
     candidate: CandidatePrompt,
     sample: dict[str, Any],
     schema_catalog: SchemaCatalog,
+    max_entities: int | None = None,
+    max_relationships: int | None = None,
 ) -> list[dict[str, str]]:
     """构造 OpenAI 兼容 chat.completions 所需消息。"""
 
@@ -37,6 +39,11 @@ def render_extraction_messages(
         "你是课程知识图谱抽取器。"
         "请优先遵循用户消息中的候选 Prompt 抽取策略，但最终只能输出一个合法 JSON 对象。"
         "不要输出 Markdown、解释、分析过程或额外前后缀。"
+    )
+
+    output_budget_hint = _build_output_budget_hint(
+        max_entities=max_entities,
+        max_relationships=max_relationships,
     )
 
     user_message = f"""你将收到一份候选 Prompt、课程抽取 schema 和一个课程样本文本。
@@ -51,6 +58,7 @@ def render_extraction_messages(
 7. 如果没有足够证据，可以返回空数组，但不要编造。
 8. 若候选 Prompt 中仍出现 tuple/record delimiter 说明，仅把它视为候选策略参考，不要真的输出 tuple。
 9. 只输出合法 JSON，不要输出 ```json code fence。
+10. {output_budget_hint}
 
 输出 JSON 结构示例：
 ```json
@@ -128,3 +136,12 @@ def _build_json_schema_example(schema_catalog: SchemaCatalog) -> str:
         ],
     }
     return json.dumps(example, ensure_ascii=False, indent=2)
+
+
+def _build_output_budget_hint(*, max_entities: int | None, max_relationships: int | None) -> str:
+    if max_entities and max_relationships:
+        return (
+            f"请只保留最核心的实体与关系，最多输出 {max_entities} 个实体、{max_relationships} 条关系。"
+            "优先课程主题、章节、知识点等稳定对象，忽略穷举型条目。"
+        )
+    return "请只保留最核心的实体与关系，避免为枚举型条目生成过多结果。"

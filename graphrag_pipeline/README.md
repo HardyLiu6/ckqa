@@ -30,6 +30,7 @@
 | `scripts/build_audit_extraction_set.py` | 从样本中构建小规模 audit 校准集 |
 | `scripts/generate_candidate_prompts.py` | 统一生成候选 Prompt 与 manifest |
 | `scripts/run_graphrag_prompt_tune.py` | 封装 GraphRAG 官方 prompt-tune 并整理 auto_tuned 候选 |
+| `scripts/run_candidate_extraction.py` | 批量执行候选 Prompt 抽取并输出统一结构化结果 |
 | `tests/test_fetch_from_minio.py` | 输入同步脚本测试 |
 | `tests/test_build_audit_extraction_set.py` | 抽样审计构建脚本测试 |
 | `prompts/` | GraphRAG 提示词模板 |
@@ -105,6 +106,38 @@ python scripts/run_graphrag_prompt_tune.py --dry_run
 ```
 
 当前约定是：模块专属脚本放在 `graphrag_pipeline/scripts/`，仓库根目录 `scripts/` 只保留仓库级工具，例如漂移审计。
+
+### 6. 候选 Prompt 抽取评测输入生成
+
+```bash
+python scripts/run_candidate_extraction.py --limit 5 --overwrite
+```
+
+当前默认已启用推荐配置：
+
+- `--stream-mode on`
+- `--retry-on-truncation`
+
+如果你想显式展开完整命令，可以写成：
+
+```bash
+python scripts/run_candidate_extraction.py \
+  --limit 5 \
+  --overwrite \
+  --stream-mode on \
+  --retry-on-truncation \
+  --retry-max-tokens 4000 \
+  --high-risk-timeout 240 \
+  --max-entities 12 \
+  --max-relationships 12
+```
+
+运行建议：
+
+- 使用 `one-api + 阿里百炼` 时，默认会启用流式与截断自动重试
+- 如需回退旧行为，可显式传 `--stream-mode off --no-retry-on-truncation`
+- `--max-entities` / `--max-relationships` 可限制高扇出样本的输出规模
+- 输出文件默认写入 `results/extraction_eval/`、`results/extraction_raw/`、`results/errors/`
 
 ## API 说明
 
