@@ -62,7 +62,11 @@ graphrag_pipeline/
 5. `score_extraction_results.py`
    - 读取 `results/extraction_eval/*.json`，对候选 Prompt 做规则化自动评测。
    - 计算 8 项硬指标 + 2 项 audit 软指标，输出 composite score、排序与 top-k。
-   - 产物：`results/reports/extraction_compare.csv` / `.md`、`results/reports/top_candidates.json`。
+   - 产物（per-run 布局 + 旧路径兼容）：
+     - `results/reports/extraction_scoring/runs/<run_id>/` 下 `extraction_compare.csv` / `.md`、`top_candidates.json`、`run_meta.json`
+     - `results/reports/extraction_scoring/history.csv`（append-only，跨 run 一行一候选）
+     - `results/reports/extraction_scoring/latest.json`（指向最新 `run_id`）
+     - `results/reports/extraction_compare.csv` / `.md`、`top_candidates.json`（兼容层，最新 run 的拷贝）
 
 这些脚本都放在 `graphrag_pipeline/scripts/`。仓库根目录 `scripts/` 只保留仓库级工具，不再放模块专属脚本。
 
