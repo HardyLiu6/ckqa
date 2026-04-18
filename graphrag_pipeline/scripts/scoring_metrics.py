@@ -180,3 +180,95 @@ def compute_output_stability(results: Sequence[StructuredExtractionResult]) -> f
     relation_counts = [len(item.relationships) for item in success_items]
     cv = _coefficient_of_variation(entity_counts) + _coefficient_of_variation(relation_counts)
     return max(0.0, 1.0 - min(1.0, cv))
+
+
+DEFAULT_WEIGHTS: dict[str, float] = {
+    "parse_success_rate": 0.20,
+    "schema_hit_rate": 0.10,
+    "entity_type_valid_rate": 0.15,
+    "relation_type_valid_rate": 0.15,
+    "endpoint_valid_rate": 0.15,
+    "duplicate_complement": 0.05,
+    "noise_complement": 0.05,
+    "output_stability": 0.05,
+    "audit_entity_recall": 0.05,
+    "audit_relation_recall": 0.05,
+}
+
+
+def aggregate_candidate_metrics(
+    results: Sequence[StructuredExtractionResult],
+    *,
+    entity_type_names: Iterable[str],
+    relation_type_names: Iterable[str],
+    relation_schema: dict,
+    audit_entity_recall: float | None,
+    audit_relation_recall: float | None,
+) -> dict[str, float | int | None]:
+    duplicate_rate = compute_duplicate_entity_rate(results)
+    noise_rate = compute_noise_entity_rate(results)
+    return {
+        "sample_count": len(results),
+        "success_count": sum(1 for r in results if r.status == "success"),
+        "parse_success_rate": compute_parse_success_rate(results),
+        "schema_hit_rate": compute_schema_hit_rate(
+            results, entity_type_names, relation_type_names
+        ),
+        "entity_type_valid_rate": compute_entity_type_valid_rate(
+            results, entity_type_names
+        ),
+        "relation_type_valid_rate": compute_relation_type_valid_rate(
+            results, relation_type_names
+        ),
+        "endpoint_valid_rate": compute_endpoint_valid_rate(results, relation_schema),
+        "duplicate_entity_rate": duplicate_rate,
+        "noise_entity_rate": noise_rate,
+        "duplicate_complement": 1.0 - duplicate_rate,
+        "noise_complement": 1.0 - noise_rate,
+        "output_stability": compute_output_stability(results),
+        "audit_entity_recall": audit_entity_recall,
+        "audit_relation_recall": audit_relation_recall,
+    }
+
+
+def compute_composite_score(
+    metrics: dict[str, float | None],
+    weights: dict[str, float],
+) -> float:
+    present_keys = [k for k in weights if metrics.get(k) is not None]
+    missing_keys = [k for k in weights if metrics.get(k) is None]
+    missing_total = sum(weights[k] for k in missing_keys)
+    present_total = sum(weights[k] for k in present_keys)
+    if present_total == 0:
+        return 0.0
+    bonus = missing_total / present_total
+    score = 0.0
+    for key in present_keys:
+        effective = weights[key] * (1.0 + bonus)
+        score += effective * float(metrics[key])
+    return score
+
+
+def rank_candidates(
+    metrics_by_candidate: dict[str, dict[str, float]],
+) -> list[dict]:
+    def sort_key(item: tuple[str, dict]):
+        name, metrics = item
+        return (
+            -float(metrics.get("composite_score", 0.0)),
+            -float(metrics.get("parse_success_rate", 0.0)),
+            -float(metrics.get("endpoint_valid_rate", 0.0)),
+            name,
+        )
+
+    ordered = sorted(metrics_by_candidate.items(), key=sort_key)
+    return [
+        {"rank": idx + 1, "candidate": name, **metrics}
+        for idx, (name, metrics) in enumerate(ordered)
+    ]
+
+
+def select_top_k(ranked: list[dict], *, k: int) -> list[dict]:
+    if k <= 0:
+        return []
+    return list(ranked[:k])

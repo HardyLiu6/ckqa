@@ -15,6 +15,9 @@ from extraction_schema import (
     StructuredExtractionResult,
 )
 from scoring_metrics import (
+    DEFAULT_WEIGHTS,
+    aggregate_candidate_metrics,
+    compute_composite_score,
     compute_duplicate_entity_rate,
     compute_endpoint_valid_rate,
     compute_entity_type_valid_rate,
@@ -23,6 +26,8 @@ from scoring_metrics import (
     compute_parse_success_rate,
     compute_relation_type_valid_rate,
     compute_schema_hit_rate,
+    rank_candidates,
+    select_top_k,
 )
 
 
@@ -310,6 +315,93 @@ class TestOutputStability(unittest.TestCase):
         ]
         self.assertLess(compute_output_stability(results), 1.0)
         self.assertGreaterEqual(compute_output_stability(results), 0.0)
+
+
+class TestAggregateAndRank(unittest.TestCase):
+    def test_composite_score_all_ones(self):
+        metrics = {name: 1.0 for name in [
+            "parse_success_rate", "schema_hit_rate",
+            "entity_type_valid_rate", "relation_type_valid_rate",
+            "endpoint_valid_rate", "duplicate_complement",
+            "noise_complement", "output_stability",
+            "audit_entity_recall", "audit_relation_recall",
+        ]}
+        self.assertAlmostEqual(compute_composite_score(metrics, DEFAULT_WEIGHTS), 1.0)
+
+    def test_composite_score_weights_missing_audit_redistributes(self):
+        metrics = {
+            "parse_success_rate": 1.0,
+            "schema_hit_rate": 1.0,
+            "entity_type_valid_rate": 1.0,
+            "relation_type_valid_rate": 1.0,
+            "endpoint_valid_rate": 1.0,
+            "duplicate_complement": 1.0,
+            "noise_complement": 1.0,
+            "output_stability": 1.0,
+            "audit_entity_recall": None,
+            "audit_relation_recall": None,
+        }
+        self.assertAlmostEqual(
+            compute_composite_score(metrics, DEFAULT_WEIGHTS), 1.0
+        )
+
+    def test_rank_candidates_sorts_by_score_desc(self):
+        summaries = {
+            "alpha": {"composite_score": 0.6, "parse_success_rate": 1.0,
+                      "endpoint_valid_rate": 0.9},
+            "beta":  {"composite_score": 0.8, "parse_success_rate": 0.9,
+                      "endpoint_valid_rate": 0.9},
+            "gamma": {"composite_score": 0.6, "parse_success_rate": 1.0,
+                      "endpoint_valid_rate": 0.95},
+        }
+        ranked = rank_candidates(summaries)
+        self.assertEqual([r["candidate"] for r in ranked], ["beta", "gamma", "alpha"])
+
+    def test_select_top_k_k_limits(self):
+        summaries = {
+            "a": {"composite_score": 0.1, "parse_success_rate": 0.0,
+                  "endpoint_valid_rate": 0.0},
+            "b": {"composite_score": 0.9, "parse_success_rate": 1.0,
+                  "endpoint_valid_rate": 1.0},
+        }
+        ranked = rank_candidates(summaries)
+        top = select_top_k(ranked, k=1)
+        self.assertEqual(len(top), 1)
+        self.assertEqual(top[0]["candidate"], "b")
+
+    def test_aggregate_candidate_metrics_returns_all_required_fields(self):
+        entity_type_names = ["Course", "Chapter"]
+        relation_schema = {
+            "contains": {"source_types": ["Course"], "target_types": ["Chapter"]}
+        }
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "OS", "type": "Course"},
+                    {"id": "e2", "title": "Ch1", "type": "Chapter"},
+                ],
+                [{"source": "OS", "target": "Ch1", "type": "contains"}],
+            )
+        ]
+        metrics = aggregate_candidate_metrics(
+            results,
+            entity_type_names=entity_type_names,
+            relation_type_names=list(relation_schema),
+            relation_schema=relation_schema,
+            audit_entity_recall=None,
+            audit_relation_recall=None,
+        )
+        expected_keys = {
+            "parse_success_rate", "schema_hit_rate", "entity_type_valid_rate",
+            "relation_type_valid_rate", "endpoint_valid_rate",
+            "duplicate_entity_rate", "noise_entity_rate", "output_stability",
+            "duplicate_complement", "noise_complement",
+            "audit_entity_recall", "audit_relation_recall",
+            "sample_count", "success_count",
+        }
+        self.assertTrue(expected_keys.issubset(metrics.keys()))
+        self.assertEqual(metrics["parse_success_rate"], 1.0)
+        self.assertEqual(metrics["endpoint_valid_rate"], 1.0)
 
 
 if __name__ == "__main__":
