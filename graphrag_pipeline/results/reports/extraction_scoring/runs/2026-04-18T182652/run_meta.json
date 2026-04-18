@@ -1,8 +1,8 @@
 {
   "task": "extraction_scoring_run",
-  "run_id": "2026-04-18T174815",
-  "timestamp": "2026-04-18T17:48:15",
-  "git_sha": "b426a2bc3ebfd3e213bf7202766d9ce306324679",
+  "run_id": "2026-04-18T182652",
+  "timestamp": "2026-04-18T18:26:52",
+  "git_sha": "e2aef128852fbb1aac40613fbd544437bb2da5ab",
   "top_k": 2,
   "total_candidates": 4,
   "top_candidates": [

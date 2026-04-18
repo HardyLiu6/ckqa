@@ -111,14 +111,6 @@ class TestEndToEnd(unittest.TestCase):
 
             self.assertEqual(summary["status"], "success")
 
-            # 旧产物仍然落到 results/reports/ 根目录（兼容层）
-            legacy_csv = root / "results" / "reports" / "extraction_compare.csv"
-            legacy_md = root / "results" / "reports" / "extraction_compare.md"
-            legacy_top = root / "results" / "reports" / "top_candidates.json"
-            self.assertTrue(legacy_csv.exists())
-            self.assertTrue(legacy_md.exists())
-            self.assertTrue(legacy_top.exists())
-
             # 新布局：extraction_scoring/runs/<run_id>/
             scoring_root = root / "results" / "reports" / "extraction_scoring"
             runs_dir = scoring_root / "runs"
@@ -130,6 +122,9 @@ class TestEndToEnd(unittest.TestCase):
             self.assertTrue((run_dir / "extraction_compare.md").exists())
             self.assertTrue((run_dir / "top_candidates.json").exists())
             self.assertTrue((run_dir / "run_meta.json").exists())
+
+            # summary 的 reports.csv 指向 run 目录下文件
+            self.assertEqual(summary["reports"]["csv"], str(run_dir / "extraction_compare.csv"))
 
             # history.csv：表头 + 每候选一行
             history_path = scoring_root / "history.csv"
