@@ -1,0 +1,36 @@
+{
+  "task": "extraction_scoring_run",
+  "run_id": "2026-04-18T174815",
+  "timestamp": "2026-04-18T17:48:15",
+  "git_sha": "b426a2bc3ebfd3e213bf7202766d9ce306324679",
+  "top_k": 2,
+  "total_candidates": 4,
+  "top_candidates": [
+    "auto_tuned",
+    "default"
+  ],
+  "weights": {
+    "parse_success_rate": 0.2,
+    "schema_hit_rate": 0.1,
+    "entity_type_valid_rate": 0.15,
+    "relation_type_valid_rate": 0.15,
+    "endpoint_valid_rate": 0.15,
+    "duplicate_complement": 0.05,
+    "noise_complement": 0.05,
+    "output_stability": 0.05,
+    "audit_entity_recall": 0.05,
+    "audit_relation_recall": 0.05
+  },
+  "inputs": {
+    "eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval",
+    "entity_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/entity_types.json",
+    "relation_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/relation_types.json",
+    "audit_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/eval/audit_extraction_set.json",
+    "eval_files": [
+      "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/auto_tuned.json",
+      "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/default.json",
+      "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/schema_aware.json",
+      "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/schema_fewshot.json"
+    ]
+  }
+}
