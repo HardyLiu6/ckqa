@@ -13,8 +13,11 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from scoring_report import (
+    append_history_csv,
     write_extraction_compare_csv,
     write_extraction_compare_markdown,
+    write_latest_pointer,
+    write_run_meta,
     write_top_candidates_json,
 )
 
@@ -83,6 +86,83 @@ class TestReportWriters(unittest.TestCase):
         self.assertEqual(data["top_candidates"][0]["candidate"], "beta")
         self.assertIn("weights", data)
         self.assertIn("inputs", data)
+
+
+class TestRunMetaAndHistory(unittest.TestCase):
+    def test_write_run_meta_contains_required_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "run_meta.json"
+            write_run_meta(
+                path,
+                run_id="2026-04-18T120000",
+                timestamp="2026-04-18T12:00:00",
+                git_sha="abc1234",
+                inputs={"eval_dir": "x"},
+                weights={"parse_success_rate": 1.0},
+                top_k=2,
+                top_candidates=["beta", "alpha"],
+                total_candidates=2,
+            )
+            data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data["run_id"], "2026-04-18T120000")
+        self.assertEqual(data["timestamp"], "2026-04-18T12:00:00")
+        self.assertEqual(data["git_sha"], "abc1234")
+        self.assertEqual(data["top_k"], 2)
+        self.assertEqual(data["top_candidates"], ["beta", "alpha"])
+        self.assertEqual(data["total_candidates"], 2)
+        self.assertIn("inputs", data)
+        self.assertIn("weights", data)
+
+    def test_append_history_csv_creates_header_on_first_write(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            append_history_csv(
+                path,
+                run_id="2026-04-18T120000",
+                timestamp="2026-04-18T12:00:00",
+                ranked=RANKED,
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        self.assertEqual(rows[0][:3], ["run_id", "timestamp", "rank"])
+        self.assertEqual(rows[1][0], "2026-04-18T120000")
+        self.assertEqual(rows[1][3], "beta")  # candidate 列
+        self.assertEqual(len(rows), 1 + len(RANKED))
+
+    def test_append_history_csv_appends_without_rewriting_header(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            append_history_csv(
+                path,
+                run_id="run-A",
+                timestamp="2026-04-18T12:00:00",
+                ranked=RANKED,
+            )
+            append_history_csv(
+                path,
+                run_id="run-B",
+                timestamp="2026-04-18T13:00:00",
+                ranked=RANKED,
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        self.assertEqual(rows[0][:1], ["run_id"])
+        self.assertEqual(len([r for r in rows if r[0] == "run-A"]), len(RANKED))
+        self.assertEqual(len([r for r in rows if r[0] == "run-B"]), len(RANKED))
+        # 只有一个表头行
+        self.assertEqual(len(rows), 1 + 2 * len(RANKED))
+
+    def test_write_latest_pointer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "latest.json"
+            write_latest_pointer(
+                path,
+                run_id="2026-04-18T120000",
+                run_dir="runs/2026-04-18T120000",
+            )
+            data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data["run_id"], "2026-04-18T120000")
+        self.assertEqual(data["run_dir"], "runs/2026-04-18T120000")
 
 
 if __name__ == "__main__":
