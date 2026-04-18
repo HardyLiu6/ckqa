@@ -59,6 +59,10 @@ graphrag_pipeline/
    - 统一生成 `default`、`schema_aware`、`schema_fewshot`、`auto_tuned` 等候选 Prompt 与 manifest。
 4. `run_graphrag_prompt_tune.py`
    - 封装 GraphRAG 官方 `prompt-tune`，整理输出到 `prompts/candidates/auto_tuned/`。
+5. `score_extraction_results.py`
+   - 读取 `results/extraction_eval/*.json`，对候选 Prompt 做规则化自动评测。
+   - 计算 8 项硬指标 + 2 项 audit 软指标，输出 composite score、排序与 top-k。
+   - 产物：`results/reports/extraction_compare.csv` / `.md`、`results/reports/top_candidates.json`。
 
 这些脚本都放在 `graphrag_pipeline/scripts/`。仓库根目录 `scripts/` 只保留仓库级工具，不再放模块专属脚本。
 
