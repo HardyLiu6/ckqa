@@ -6,7 +6,7 @@
 1. 发现 results/extraction_eval/*.json。
 2. 载入 entity/relation schema 与 audit 集（可选）。
 3. 对每个候选：parse 结果 → 聚合 10 项指标 → composite_score。
-4. 排序 + top-k → 写 per-run 布局 + 兼容旧路径。
+4. 排序 + top-k → 写 per-run 布局。
 
 输出布局：
   results/reports/extraction_scoring/
@@ -17,9 +17,6 @@
       run_meta.json
     history.csv        # append-only，跨 run 明细
     latest.json        # 指向最新 run_id
-  results/reports/extraction_compare.csv   # 兼容层：最新 run 的拷贝
-  results/reports/extraction_compare.md
-  results/reports/top_candidates.json
 """
 
 from __future__ import annotations
@@ -27,7 +24,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
@@ -249,17 +245,6 @@ def score_extraction_results(
         run_dir=str(run_dir.relative_to(scoring_root)),
     )
 
-    # 兼容层：把最新 run 的三份产物拷贝到 reports/ 根目录
-    legacy_csv = reports_dir / "extraction_compare.csv"
-    legacy_md = reports_dir / "extraction_compare.md"
-    legacy_top = reports_dir / "top_candidates.json"
-    for legacy_path in (legacy_csv, legacy_md, legacy_top):
-        if legacy_path.exists() and not overwrite:
-            raise FileExistsError(f"兼容产物已存在，若要覆盖请传 --overwrite：{legacy_path}")
-    shutil.copyfile(run_csv, legacy_csv)
-    shutil.copyfile(run_md, legacy_md)
-    shutil.copyfile(run_top, legacy_top)
-
     return {
         "status": "success",
         "root": str(root),
@@ -273,9 +258,9 @@ def score_extraction_results(
             "run_meta": str(run_meta_path),
             "history": str(history_path),
             "latest": str(latest_path),
-            "csv": str(legacy_csv),
-            "markdown": str(legacy_md),
-            "top_candidates_json": str(legacy_top),
+            "csv": str(run_csv),
+            "markdown": str(run_md),
+            "top_candidates_json": str(run_top),
         },
     }
 
