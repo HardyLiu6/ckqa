@@ -43,6 +43,7 @@ python scripts/build_prompt_tuning_samples.py
 python scripts/build_audit_extraction_set.py
 python scripts/generate_candidate_prompts.py --overwrite
 python scripts/run_graphrag_prompt_tune.py --dry_run
+python scripts/score_extraction_results.py --overwrite
 
 # Run tests
 python -m pytest tests/
