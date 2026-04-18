@@ -15,8 +15,10 @@ from extraction_schema import (
     StructuredExtractionResult,
 )
 from scoring_metrics import (
+    compute_duplicate_entity_rate,
     compute_endpoint_valid_rate,
     compute_entity_type_valid_rate,
+    compute_noise_entity_rate,
     compute_parse_success_rate,
     compute_relation_type_valid_rate,
     compute_schema_hit_rate,
@@ -194,6 +196,80 @@ class TestEndpointValidRate(unittest.TestCase):
             )
         ]
         self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+
+class TestDuplicateAndNoise(unittest.TestCase):
+    def test_duplicate_rate_counts_extras(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "进程", "type": "Concept"},
+                    {"id": "e2", "title": "进程", "type": "Concept"},
+                    {"id": "e3", "title": "进程 ", "type": "Concept"},
+                    {"id": "e4", "title": "线程", "type": "Concept"},
+                ],
+                [],
+            )
+        ]
+        self.assertEqual(compute_duplicate_entity_rate(results), 0.5)
+
+    def test_duplicate_rate_same_title_different_type_ok(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "PCB", "type": "Term"},
+                    {"id": "e2", "title": "PCB", "type": "Concept"},
+                ],
+                [],
+            )
+        ]
+        self.assertEqual(compute_duplicate_entity_rate(results), 0.0)
+
+    def test_duplicate_rate_per_sample_only(self):
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "进程", "type": "Concept"}], []
+            ),
+            _success_result(
+                [{"id": "e2", "title": "进程", "type": "Concept"}], []
+            ),
+        ]
+        self.assertEqual(compute_duplicate_entity_rate(results), 0.0)
+
+    def test_noise_rate_empty_title(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "   ", "type": "Term"},
+                    {"id": "e2", "title": "操作系统", "type": "Course"},
+                ],
+                [],
+            )
+        ]
+        self.assertEqual(compute_noise_entity_rate(results), 0.5)
+
+    def test_noise_rate_numeric_and_punct_and_stopword(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "123", "type": "Term"},
+                    {"id": "e2", "title": "。。。", "type": "Term"},
+                    {"id": "e3", "title": "本章", "type": "Concept"},
+                    {"id": "e4", "title": "图", "type": "Concept"},
+                    {"id": "e5", "title": "操作系统", "type": "Course"},
+                ],
+                [],
+            )
+        ]
+        self.assertAlmostEqual(compute_noise_entity_rate(results), 4 / 5)
+
+    def test_noise_rate_allows_english_abbrev_of_len_2(self):
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "OS", "type": "Course"}], []
+            )
+        ]
+        self.assertEqual(compute_noise_entity_rate(results), 0.0)
 
 
 if __name__ == "__main__":

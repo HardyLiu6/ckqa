@@ -110,3 +110,52 @@ def compute_endpoint_valid_rate(
             if src_type in source_types and tgt_type in target_types:
                 valid += 1
     return valid / total if total else 0.0
+
+
+NOISE_STOPWORDS = {"无", "本章", "本节", "如下", "图", "表", "见下图", "见图"}
+
+
+def compute_duplicate_entity_rate(
+    results: Sequence[StructuredExtractionResult],
+) -> float:
+    total = 0
+    dupes = 0
+    for item in _iter_success(results):
+        seen: set[tuple[str, str]] = set()
+        for ent in item.entities:
+            total += 1
+            key = (_normalize_title(ent.title), ent.type)
+            if key in seen:
+                dupes += 1
+            else:
+                seen.add(key)
+    return dupes / total if total else 0.0
+
+
+def _is_noise_entity(title: str) -> bool:
+    stripped = (title or "").strip()
+    if not stripped:
+        return True
+    if stripped in NOISE_STOPWORDS:
+        return True
+    normalized = _normalize_title(stripped)
+    if not normalized:
+        return True
+    if normalized.isdigit():
+        return True
+    if len(normalized) < 2 and not normalized.isascii():
+        return True
+    return False
+
+
+def compute_noise_entity_rate(
+    results: Sequence[StructuredExtractionResult],
+) -> float:
+    total = 0
+    noise = 0
+    for item in _iter_success(results):
+        for ent in item.entities:
+            total += 1
+            if _is_noise_entity(ent.title):
+                noise += 1
+    return noise / total if total else 0.0
