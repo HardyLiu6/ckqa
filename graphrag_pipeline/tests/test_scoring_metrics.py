@@ -15,6 +15,7 @@ from extraction_schema import (
     StructuredExtractionResult,
 )
 from scoring_metrics import (
+    compute_endpoint_valid_rate,
     compute_entity_type_valid_rate,
     compute_parse_success_rate,
     compute_relation_type_valid_rate,
@@ -131,6 +132,68 @@ class TestTypeValidity(unittest.TestCase):
             ),
             0.0,
         )
+
+
+RELATION_SCHEMA = {
+    "contains": {"source_types": ["Course", "Chapter"], "target_types": ["Chapter", "Concept"]},
+    "related_to": {"source_types": ["Concept"], "target_types": ["Concept"]},
+}
+
+
+class TestEndpointValidRate(unittest.TestCase):
+    def test_both_endpoints_match_schema(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "操作系统", "type": "Course"},
+                    {"id": "e2", "title": "第一章", "type": "Chapter"},
+                ],
+                [{"source": "操作系统", "target": "第一章", "type": "contains"}],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+    def test_endpoint_type_mismatch_rejected(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "进程", "type": "Concept"},
+                    {"id": "e2", "title": "第一章", "type": "Chapter"},
+                ],
+                [{"source": "进程", "target": "第一章", "type": "contains"}],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 0.0)
+
+    def test_unresolved_endpoint_rejected(self):
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "操作系统", "type": "Course"}],
+                [{"source": "操作系统", "target": "某个幻觉实体", "type": "contains"}],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 0.0)
+
+    def test_invalid_relation_type_excluded_from_denominator(self):
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "A", "type": "Concept"}],
+                [{"source": "A", "target": "A", "type": "totally_bogus"}],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 0.0)
+
+    def test_normalization_matches_titles(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": " 操作系统 ", "type": "Course"},
+                    {"id": "e2", "title": "第一章", "type": "Chapter"},
+                ],
+                [{"source": "操作系统", "target": " 第一章", "type": "contains"}],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
 
 
 if __name__ == "__main__":

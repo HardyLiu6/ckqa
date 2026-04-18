@@ -8,9 +8,21 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Iterable, Sequence
 
 from extraction_schema import StructuredExtractionResult
+
+
+_PUNCT_RE = re.compile(r"[\s\.,;:!?，。；：！？'\"\(\)\[\]\{\}（）【】《》]+")
+
+
+def _normalize_title(value: str) -> str:
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFKC", str(value)).strip().lower()
+    return _PUNCT_RE.sub("", text)
 
 
 def compute_parse_success_rate(results: Sequence[StructuredExtractionResult]) -> float:
@@ -72,3 +84,29 @@ def compute_schema_hit_rate(
         if entities_ok and relations_ok:
             hits += 1
     return hits / len(success_items)
+
+
+def compute_endpoint_valid_rate(
+    results: Sequence[StructuredExtractionResult],
+    relation_schema: dict,
+) -> float:
+    total = 0
+    valid = 0
+    for item in _iter_success(results):
+        title_to_type: dict[str, str] = {
+            _normalize_title(ent.title): ent.type for ent in item.entities
+        }
+        for rel in item.relationships:
+            constraints = relation_schema.get(rel.type)
+            if not constraints:
+                continue
+            total += 1
+            src_type = title_to_type.get(_normalize_title(rel.source))
+            tgt_type = title_to_type.get(_normalize_title(rel.target))
+            if src_type is None or tgt_type is None:
+                continue
+            source_types = set(constraints.get("source_types") or [])
+            target_types = set(constraints.get("target_types") or [])
+            if src_type in source_types and tgt_type in target_types:
+                valid += 1
+    return valid / total if total else 0.0
