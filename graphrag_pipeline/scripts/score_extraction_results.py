@@ -28,6 +28,7 @@ import argparse
 import datetime as dt
 import json
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -105,6 +106,26 @@ def _generate_run_id(now: dt.datetime | None = None) -> str:
 
     current = now or dt.datetime.now()
     return current.strftime("%Y-%m-%dT%H%M%S")
+
+
+def _detect_git_sha(root: Path) -> str | None:
+    """在 root 执行 git rev-parse；非仓库或命令缺失时返回 None。"""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    sha = completed.stdout.strip()
+    return sha or None
 
 
 def score_extraction_results(
@@ -209,7 +230,7 @@ def score_extraction_results(
         run_meta_path,
         run_id=effective_run_id,
         timestamp=timestamp,
-        git_sha=None,
+        git_sha=_detect_git_sha(root),
         inputs=inputs,
         weights=effective_weights,
         top_k=top_k,

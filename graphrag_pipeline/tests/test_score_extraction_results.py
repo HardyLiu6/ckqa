@@ -194,6 +194,34 @@ class TestEndToEnd(unittest.TestCase):
             self.assertEqual(summary_a["run_id"], "2026-04-18T120000")
             self.assertEqual(summary_b["run_id"], "2026-04-18T130000")
 
+    def test_run_meta_captures_git_sha_when_available(self):
+        # 仓库内执行时应采集 git HEAD SHA；不是 git 仓库时应落到 None，不抛错
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "results" / "extraction_eval").mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "results" / "extraction_eval" / "alpha.json").write_text(
+                json.dumps(_make_eval("alpha", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root, eval_dir=None, entity_schema_path=None,
+                relation_schema_path=None, audit_path=None, weights=None,
+                top_k=1, overwrite=True, run_id="2026-04-18T140000",
+            )
+            meta_path = Path(summary["reports"]["run_meta"])
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            # 非 git 根，git_sha 应为 None
+            self.assertIn("git_sha", meta)
+            self.assertIsNone(meta["git_sha"])
+
 
 if __name__ == "__main__":
     unittest.main()
