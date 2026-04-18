@@ -193,9 +193,9 @@ python utils/main.py
 
 - [AGENTS.md](AGENTS.md)
 - [docs/标准化导出验证说明.md](docs/标准化导出验证说明.md)
-- [docs/MIGRATION_GRAPHRAG_3_0_9.md](docs/MIGRATION_GRAPHRAG_3_0_9.md)
-- [docs/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md](docs/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md)
-- [docs/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md](docs/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md)
+- [docs/archive/MIGRATION_GRAPHRAG_3_0_9.md](docs/archive/MIGRATION_GRAPHRAG_3_0_9.md)（历史归档）
+- [docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md](docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md)（历史归档）
+- [docs/archive/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md](docs/archive/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md)（历史归档）
 
 ### 模块级
 

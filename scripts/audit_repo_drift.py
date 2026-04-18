@@ -36,7 +36,7 @@ ACTIVE_AUDIT_PATHS = (
     Path("graphrag_pipeline/utils/neo4jTest.py"),
     Path("graphrag_pipeline/utils/runtime_defaults.py"),
     Path("graphrag_pipeline/utils/api_runtime_config.py"),
-    Path("docs/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md"),
+    Path("docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md"),
     Path(".github/workflows/repo-drift-audit.yml"),
 )
 

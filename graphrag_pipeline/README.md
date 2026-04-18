@@ -250,5 +250,5 @@ python utils/spider.py --url https://example.com --output ./crawled_data --max-p
 - [CLAUDE.md](CLAUDE.md)
 - [PROMPT_TUNING_PIPELINE.md](PROMPT_TUNING_PIPELINE.md)
 - [../docs/标准化导出验证说明.md](../docs/标准化导出验证说明.md)
-- [../docs/MIGRATION_GRAPHRAG_3_0_9.md](../docs/MIGRATION_GRAPHRAG_3_0_9.md)
+- [../docs/archive/MIGRATION_GRAPHRAG_3_0_9.md](../docs/archive/MIGRATION_GRAPHRAG_3_0_9.md)（历史归档）
 - [../README.md](../README.md)

@@ -163,8 +163,8 @@ pdf_ingest/artifacts/*/
 pdf_ingest/output/
 temp_*/
 
-# CLAUDE.md
-CLAUDE.md
+# CLAUDE.md（仅忽略仓库根目录下的个人 CLAUDE.md，子模块 CLAUDE.md 仍纳入版本控制）
+/CLAUDE.md
 
 pdf_ingest/.temp/
 
