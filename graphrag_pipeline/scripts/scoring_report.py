@@ -105,3 +105,62 @@ def write_top_candidates_json(
         "all_candidates_ranked": list(ranked),
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def write_run_meta(
+    path: Path,
+    *,
+    run_id: str,
+    timestamp: str,
+    git_sha: str | None,
+    inputs: dict[str, Any],
+    weights: dict[str, float],
+    top_k: int,
+    top_candidates: list[str],
+    total_candidates: int,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "task": "extraction_scoring_run",
+        "run_id": run_id,
+        "timestamp": timestamp,
+        "git_sha": git_sha,
+        "top_k": top_k,
+        "total_candidates": total_candidates,
+        "top_candidates": list(top_candidates),
+        "weights": weights,
+        "inputs": inputs,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+HISTORY_COLUMNS: tuple[str, ...] = ("run_id", "timestamp", *CSV_COLUMNS)
+
+
+def append_history_csv(
+    path: Path,
+    *,
+    run_id: str,
+    timestamp: str,
+    ranked: list[dict],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not path.exists() or path.stat().st_size == 0
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        if write_header:
+            writer.writerow(list(HISTORY_COLUMNS))
+        for row in ranked:
+            record = [run_id, timestamp] + [_format_value(row.get(col)) for col in CSV_COLUMNS]
+            writer.writerow(record)
+
+
+def write_latest_pointer(
+    path: Path,
+    *,
+    run_id: str,
+    run_dir: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"run_id": run_id, "run_dir": run_dir}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -1,7 +1,10 @@
 # 步骤 8 规则化评测分析
 
 **生成时间：** 2026-04-18
-**输入产物：** [extraction_compare.csv](extraction_compare.csv) / [extraction_compare.md](extraction_compare.md) / [top_candidates.json](top_candidates.json)
+**对应 run：** `2026-04-18T174815`（见 [extraction_scoring/runs/2026-04-18T174815/](extraction_scoring/runs/2026-04-18T174815/)）
+**输入产物：** [extraction_compare.csv](extraction_compare.csv) / [extraction_compare.md](extraction_compare.md) / [top_candidates.json](top_candidates.json)（这三份是最新 run 的兼容拷贝）
+**跨 run 明细：** [extraction_scoring/history.csv](extraction_scoring/history.csv)
+**最新 run 指针：** [extraction_scoring/latest.json](extraction_scoring/latest.json)
 **评测脚本：** [score_extraction_results.py](../../scripts/score_extraction_results.py)
 
 ## 1. 评测规则

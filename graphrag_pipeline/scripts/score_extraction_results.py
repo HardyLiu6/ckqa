@@ -6,13 +6,29 @@
 1. 发现 results/extraction_eval/*.json。
 2. 载入 entity/relation schema 与 audit 集（可选）。
 3. 对每个候选：parse 结果 → 聚合 10 项指标 → composite_score。
-4. 排序 + top-k → 写 csv/md/json 报告。
+4. 排序 + top-k → 写 per-run 布局 + 兼容旧路径。
+
+输出布局：
+  results/reports/extraction_scoring/
+    runs/<run_id>/
+      extraction_compare.csv
+      extraction_compare.md
+      top_candidates.json
+      run_meta.json
+    history.csv        # append-only，跨 run 明细
+    latest.json        # 指向最新 run_id
+  results/reports/extraction_compare.csv   # 兼容层：最新 run 的拷贝
+  results/reports/extraction_compare.md
+  results/reports/top_candidates.json
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -34,8 +50,11 @@ from scoring_metrics import (
     select_top_k,
 )
 from scoring_report import (
+    append_history_csv,
     write_extraction_compare_csv,
     write_extraction_compare_markdown,
+    write_latest_pointer,
+    write_run_meta,
     write_top_candidates_json,
 )
 
@@ -47,6 +66,7 @@ DEFAULT_ENTITY_SCHEMA = "config/schema/entity_types.json"
 DEFAULT_RELATION_SCHEMA = "config/schema/relation_types.json"
 DEFAULT_AUDIT_PATH = "data/eval/audit_extraction_set.json"
 DEFAULT_REPORTS_DIR = "results/reports"
+SCORING_SUBDIR = "extraction_scoring"
 
 
 def _resolve(path: str | Path | None, *, root: Path, default: str | None) -> Path | None:
@@ -81,6 +101,33 @@ def _load_eval_file(path: Path) -> tuple[str, list[StructuredExtractionResult]]:
     return candidate, results
 
 
+def _generate_run_id(now: dt.datetime | None = None) -> str:
+    """生成 ISO 紧凑时间戳作为 run_id（便于排序、人读）。"""
+
+    current = now or dt.datetime.now()
+    return current.strftime("%Y-%m-%dT%H%M%S")
+
+
+def _detect_git_sha(root: Path) -> str | None:
+    """在 root 执行 git rev-parse；非仓库或命令缺失时返回 None。"""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    sha = completed.stdout.strip()
+    return sha or None
+
+
 def score_extraction_results(
     *,
     root: Path,
@@ -91,6 +138,7 @@ def score_extraction_results(
     weights: dict[str, float] | None,
     top_k: int,
     overwrite: bool,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     root = Path(root).resolve()
     eval_root = _resolve(eval_dir, root=root, default=DEFAULT_EVAL_DIR)
@@ -147,44 +195,87 @@ def score_extraction_results(
 
     ranked = rank_candidates(metrics_by_candidate)
     top = select_top_k(ranked, k=top_k)
+    now = dt.datetime.now()
+    effective_run_id = run_id or _generate_run_id(now)
+    timestamp = now.replace(microsecond=0).isoformat()
 
     reports_dir = root / DEFAULT_REPORTS_DIR
-    csv_path = reports_dir / "extraction_compare.csv"
-    md_path = reports_dir / "extraction_compare.md"
-    top_path = reports_dir / "top_candidates.json"
-    for path in (csv_path, md_path, top_path):
-        if path.exists() and not overwrite:
-            raise FileExistsError(f"目标产物已存在，若要覆盖请传 --overwrite：{path}")
+    scoring_root = reports_dir / SCORING_SUBDIR
+    run_dir = scoring_root / "runs" / effective_run_id
+    if run_dir.exists() and not overwrite:
+        raise FileExistsError(f"run 目录已存在，若要覆盖请传 --overwrite：{run_dir}")
 
-    write_extraction_compare_csv(csv_path, ranked)
+    run_csv = run_dir / "extraction_compare.csv"
+    run_md = run_dir / "extraction_compare.md"
+    run_top = run_dir / "top_candidates.json"
+    run_meta_path = run_dir / "run_meta.json"
+
+    inputs = {
+        "eval_dir": str(eval_root),
+        "entity_schema_path": str(entity_schema_file),
+        "relation_schema_path": str(relation_schema_file),
+        "audit_path": str(audit_file) if audit_file and audit_file.exists() else None,
+        "eval_files": [str(p) for p in eval_files],
+    }
+
+    write_extraction_compare_csv(run_csv, ranked)
     write_extraction_compare_markdown(
-        md_path, ranked, weights=effective_weights, top_k=top_k
+        run_md, ranked, weights=effective_weights, top_k=top_k
     )
     write_top_candidates_json(
-        top_path,
-        ranked=ranked,
-        k=top_k,
-        weights=effective_weights,
-        inputs={
-            "eval_dir": str(eval_root),
-            "entity_schema_path": str(entity_schema_file),
-            "relation_schema_path": str(relation_schema_file),
-            "audit_path": str(audit_file) if audit_file and audit_file.exists() else None,
-            "eval_files": [str(p) for p in eval_files],
-        },
+        run_top, ranked=ranked, k=top_k,
+        weights=effective_weights, inputs=inputs,
     )
+    write_run_meta(
+        run_meta_path,
+        run_id=effective_run_id,
+        timestamp=timestamp,
+        git_sha=_detect_git_sha(root),
+        inputs=inputs,
+        weights=effective_weights,
+        top_k=top_k,
+        top_candidates=[item["candidate"] for item in top],
+        total_candidates=len(ranked),
+    )
+
+    history_path = scoring_root / "history.csv"
+    append_history_csv(
+        history_path, run_id=effective_run_id, timestamp=timestamp, ranked=ranked
+    )
+    latest_path = scoring_root / "latest.json"
+    write_latest_pointer(
+        latest_path,
+        run_id=effective_run_id,
+        run_dir=str(run_dir.relative_to(scoring_root)),
+    )
+
+    # 兼容层：把最新 run 的三份产物拷贝到 reports/ 根目录
+    legacy_csv = reports_dir / "extraction_compare.csv"
+    legacy_md = reports_dir / "extraction_compare.md"
+    legacy_top = reports_dir / "top_candidates.json"
+    for legacy_path in (legacy_csv, legacy_md, legacy_top):
+        if legacy_path.exists() and not overwrite:
+            raise FileExistsError(f"兼容产物已存在，若要覆盖请传 --overwrite：{legacy_path}")
+    shutil.copyfile(run_csv, legacy_csv)
+    shutil.copyfile(run_md, legacy_md)
+    shutil.copyfile(run_top, legacy_top)
 
     return {
         "status": "success",
         "root": str(root),
+        "run_id": effective_run_id,
         "eval_files": [str(p) for p in eval_files],
         "total_candidates": len(ranked),
         "top_k": top_k,
         "top_candidates": [item["candidate"] for item in top],
         "reports": {
-            "csv": str(csv_path),
-            "markdown": str(md_path),
-            "top_candidates_json": str(top_path),
+            "run_dir": str(run_dir),
+            "run_meta": str(run_meta_path),
+            "history": str(history_path),
+            "latest": str(latest_path),
+            "csv": str(legacy_csv),
+            "markdown": str(legacy_md),
+            "top_candidates_json": str(legacy_top),
         },
     }
 
@@ -199,6 +290,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--audit", help="audit 集 JSON 路径；不传则软指标为 None")
     parser.add_argument("--weights", help="权重覆盖文件（JSON）")
     parser.add_argument("--top-k", type=int, default=2, help="保留前 K 名候选")
+    parser.add_argument("--run-id", help="自定义 run_id，默认按本地时间生成 ISO 紧凑时间戳")
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有报告产物")
     return parser
 
@@ -217,6 +309,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         weights=weights,
         top_k=args.top_k,
         overwrite=args.overwrite,
+        run_id=args.run_id,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
