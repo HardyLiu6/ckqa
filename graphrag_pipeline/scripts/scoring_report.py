@@ -19,6 +19,9 @@ CSV_COLUMNS: tuple[str, ...] = (
     "rank",
     "candidate",
     "composite_score",
+    "composite_hard",
+    "composite_soft",
+    "gate_passed",
     "parse_success_rate",
     "schema_hit_rate",
     "entity_type_valid_rate",
@@ -28,6 +31,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "noise_entity_rate",
     "output_stability",
     "audit_entity_recall",
+    "audit_entity_precision",
     "audit_relation_recall",
     "sample_count",
     "success_count",
@@ -74,9 +78,13 @@ def write_extraction_compare_markdown(
     lines.append(f"## Top Candidates (k={top_k})")
     lines.append("")
     for row in ranked[:top_k]:
+        gate = "pass" if row.get("gate_passed") else "fail"
         lines.append(
             f"- **{row['candidate']}**（rank={row.get('rank')}, "
-            f"composite_score={_format_value(row.get('composite_score'))}）"
+            f"composite_score={_format_value(row.get('composite_score'))}, "
+            f"gate={gate}, "
+            f"hard={_format_value(row.get('composite_hard'))}, "
+            f"soft={_format_value(row.get('composite_soft'))}）"
         )
     lines.append("")
     lines.append("## 权重")
@@ -144,14 +152,57 @@ def append_history_csv(
     timestamp: str,
     ranked: list[dict],
 ) -> None:
+    """追加 run 明细到 history.csv。
+
+    表头与 `HISTORY_COLUMNS` 不一致时做一次性迁移：按列名映射把旧行补到新 schema
+    （老 schema 没有的列填空字符串），再写回新表头 + 旧行 + 新行。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.exists() or path.stat().st_size == 0
-    with path.open("a", encoding="utf-8", newline="") as handle:
+    new_rows: list[list[str]] = []
+    for row in ranked:
+        record = [run_id, timestamp] + [_format_value(row.get(col)) for col in CSV_COLUMNS]
+        new_rows.append(record)
+
+    current_columns = list(HISTORY_COLUMNS)
+
+    existing_header: list[str] = []
+    existing_rows: list[list[str]] = []
+    if path.exists() and path.stat().st_size > 0:
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.reader(handle)
+            try:
+                existing_header = next(reader)
+            except StopIteration:
+                existing_header = []
+            existing_rows = list(reader)
+
+    if not existing_header:
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(current_columns)
+            for record in new_rows:
+                writer.writerow(record)
+        return
+
+    if existing_header == current_columns:
+        with path.open("a", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle)
+            for record in new_rows:
+                writer.writerow(record)
+        return
+
+    migrated_rows: list[list[str]] = []
+    for row in existing_rows:
+        if len(row) == len(current_columns):
+            mapping = dict(zip(current_columns, row))
+        else:
+            mapping = dict(zip(existing_header, row))
+        migrated_rows.append([mapping.get(col, "") for col in current_columns])
+
+    with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
-        if write_header:
-            writer.writerow(list(HISTORY_COLUMNS))
-        for row in ranked:
-            record = [run_id, timestamp] + [_format_value(row.get(col)) for col in CSV_COLUMNS]
+        writer.writerow(current_columns)
+        for record in migrated_rows + new_rows:
             writer.writerow(record)
 
 

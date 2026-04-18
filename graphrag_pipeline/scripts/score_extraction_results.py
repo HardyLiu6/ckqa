@@ -34,6 +34,7 @@ from extraction_schema import (
     StructuredExtractionResult,
 )
 from scoring_audit import (
+    compute_audit_entity_precision,
     compute_audit_entity_recall,
     compute_audit_relation_recall,
     load_audit_index,
@@ -175,6 +176,9 @@ def score_extraction_results(
         audit_ent = (
             compute_audit_entity_recall(results, audit_index) if audit_index else None
         )
+        audit_ent_prec = (
+            compute_audit_entity_precision(results, audit_index) if audit_index else None
+        )
         audit_rel = (
             compute_audit_relation_recall(results, audit_index) if audit_index else None
         )
@@ -185,6 +189,7 @@ def score_extraction_results(
             relation_schema=relation_type_block,
             audit_entity_recall=audit_ent,
             audit_relation_recall=audit_rel,
+            audit_entity_precision=audit_ent_prec,
         )
         metrics["composite_score"] = compute_composite_score(metrics, effective_weights)
         metrics_by_candidate[candidate] = metrics

@@ -191,9 +191,82 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "duplicate_complement": 0.05,
     "noise_complement": 0.05,
     "output_stability": 0.05,
-    "audit_entity_recall": 0.05,
-    "audit_relation_recall": 0.05,
+    "audit_entity_recall": 0.025,
+    "audit_entity_precision": 0.05,
+    "audit_relation_recall": 0.025,
 }
+
+
+HARD_METRIC_KEYS: tuple[str, ...] = (
+    "parse_success_rate",
+    "schema_hit_rate",
+    "entity_type_valid_rate",
+    "relation_type_valid_rate",
+    "endpoint_valid_rate",
+    "duplicate_complement",
+    "noise_complement",
+)
+
+SOFT_METRIC_KEYS: tuple[str, ...] = (
+    "output_stability",
+    "audit_entity_recall",
+    "audit_entity_precision",
+    "audit_relation_recall",
+)
+
+GATE_THRESHOLD: float = 0.95
+
+
+def _subset_composite(
+    metrics: dict[str, float | None],
+    weights: dict[str, float],
+    subset_keys: Iterable[str],
+) -> float:
+    """在指定子集键上计算加权平均得分，归一到 [0, 1]。
+
+    None 值按子集内剩余键摊回（同 compute_composite_score 的 bonus 规则）。
+    """
+    keys = [k for k in subset_keys if k in weights]
+    present_keys = [k for k in keys if metrics.get(k) is not None]
+    missing_keys = [k for k in keys if metrics.get(k) is None]
+    present_total = sum(weights[k] for k in present_keys)
+    missing_total = sum(weights[k] for k in missing_keys)
+    total = present_total + missing_total
+    if present_total == 0 or total == 0:
+        return 0.0
+    bonus = missing_total / present_total
+    score = 0.0
+    for key in present_keys:
+        score += weights[key] * (1.0 + bonus) * float(metrics[key])
+    return score / total
+
+
+def compute_composite_hard(
+    metrics: dict[str, float | None],
+    weights: dict[str, float],
+) -> float:
+    return _subset_composite(metrics, weights, HARD_METRIC_KEYS)
+
+
+def compute_composite_soft(
+    metrics: dict[str, float | None],
+    weights: dict[str, float],
+) -> float:
+    return _subset_composite(metrics, weights, SOFT_METRIC_KEYS)
+
+
+def compute_gate_passed(metrics: dict[str, float | None]) -> bool:
+    """所有硬指标非空且 >= GATE_THRESHOLD 才算过门槛。"""
+    for key in HARD_METRIC_KEYS:
+        value = metrics.get(key)
+        if value is None:
+            return False
+        try:
+            if float(value) < GATE_THRESHOLD:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
 
 
 def aggregate_candidate_metrics(
@@ -204,10 +277,13 @@ def aggregate_candidate_metrics(
     relation_schema: dict,
     audit_entity_recall: float | None,
     audit_relation_recall: float | None,
+    audit_entity_precision: float | None = None,
+    weights: dict[str, float] | None = None,
 ) -> dict[str, float | int | None]:
     duplicate_rate = compute_duplicate_entity_rate(results)
     noise_rate = compute_noise_entity_rate(results)
-    return {
+    effective_weights = weights if weights is not None else DEFAULT_WEIGHTS
+    base: dict[str, float | int | None] = {
         "sample_count": len(results),
         "success_count": sum(1 for r in results if r.status == "success"),
         "parse_success_rate": compute_parse_success_rate(results),
@@ -227,8 +303,13 @@ def aggregate_candidate_metrics(
         "noise_complement": 1.0 - noise_rate,
         "output_stability": compute_output_stability(results),
         "audit_entity_recall": audit_entity_recall,
+        "audit_entity_precision": audit_entity_precision,
         "audit_relation_recall": audit_relation_recall,
     }
+    base["composite_hard"] = compute_composite_hard(base, effective_weights)
+    base["composite_soft"] = compute_composite_soft(base, effective_weights)
+    base["gate_passed"] = compute_gate_passed(base)
+    return base
 
 
 def compute_composite_score(
@@ -255,6 +336,8 @@ def rank_candidates(
     def sort_key(item: tuple[str, dict]):
         name, metrics = item
         return (
+            not bool(metrics.get("gate_passed", False)),
+            -float(metrics.get("composite_soft", 0.0)),
             -float(metrics.get("composite_score", 0.0)),
             -float(metrics.get("parse_success_rate", 0.0)),
             -float(metrics.get("endpoint_valid_rate", 0.0)),

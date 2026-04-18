@@ -16,11 +16,17 @@ from extraction_schema import (
 )
 from scoring_metrics import (
     DEFAULT_WEIGHTS,
+    GATE_THRESHOLD,
+    HARD_METRIC_KEYS,
+    SOFT_METRIC_KEYS,
     aggregate_candidate_metrics,
+    compute_composite_hard,
     compute_composite_score,
+    compute_composite_soft,
     compute_duplicate_entity_rate,
     compute_endpoint_valid_rate,
     compute_entity_type_valid_rate,
+    compute_gate_passed,
     compute_noise_entity_rate,
     compute_output_stability,
     compute_parse_success_rate,
@@ -402,6 +408,157 @@ class TestAggregateAndRank(unittest.TestCase):
         self.assertTrue(expected_keys.issubset(metrics.keys()))
         self.assertEqual(metrics["parse_success_rate"], 1.0)
         self.assertEqual(metrics["endpoint_valid_rate"], 1.0)
+
+
+class TestCompositeHardSoftSplit(unittest.TestCase):
+    """Step 3: 硬指标和软指标分开计算，用于硬门槛 + 软指标排序。"""
+
+    def test_composite_hard_all_ones(self):
+        metrics = {k: 1.0 for k in HARD_METRIC_KEYS}
+        self.assertAlmostEqual(compute_composite_hard(metrics, DEFAULT_WEIGHTS), 1.0)
+
+    def test_composite_hard_all_half(self):
+        metrics = {k: 0.5 for k in HARD_METRIC_KEYS}
+        self.assertAlmostEqual(compute_composite_hard(metrics, DEFAULT_WEIGHTS), 0.5)
+
+    def test_composite_hard_ignores_soft_metrics(self):
+        # 软指标全为 0 不应该压低 composite_hard
+        metrics = {k: 1.0 for k in HARD_METRIC_KEYS}
+        for k in SOFT_METRIC_KEYS:
+            metrics[k] = 0.0
+        self.assertAlmostEqual(compute_composite_hard(metrics, DEFAULT_WEIGHTS), 1.0)
+
+    def test_composite_soft_all_ones(self):
+        metrics = {k: 1.0 for k in SOFT_METRIC_KEYS}
+        self.assertAlmostEqual(compute_composite_soft(metrics, DEFAULT_WEIGHTS), 1.0)
+
+    def test_composite_soft_with_missing_audit_redistributes(self):
+        metrics = {
+            "output_stability": 0.8,
+            "audit_entity_recall": None,
+            "audit_entity_precision": None,
+            "audit_relation_recall": None,
+        }
+        # 其他 None → 全部权重摊到 stability，结果 = 0.8
+        self.assertAlmostEqual(compute_composite_soft(metrics, DEFAULT_WEIGHTS), 0.8)
+
+    def test_composite_soft_empty_returns_zero(self):
+        metrics: dict[str, float | None] = {k: None for k in SOFT_METRIC_KEYS}
+        self.assertEqual(compute_composite_soft(metrics, DEFAULT_WEIGHTS), 0.0)
+
+
+class TestGatePassed(unittest.TestCase):
+    def test_gate_passed_all_above_threshold(self):
+        metrics = {k: 1.0 for k in HARD_METRIC_KEYS}
+        self.assertTrue(compute_gate_passed(metrics))
+
+    def test_gate_passed_exactly_at_threshold(self):
+        metrics = {k: GATE_THRESHOLD for k in HARD_METRIC_KEYS}
+        self.assertTrue(compute_gate_passed(metrics))
+
+    def test_gate_failed_when_any_hard_below_threshold(self):
+        metrics = {k: 1.0 for k in HARD_METRIC_KEYS}
+        metrics["endpoint_valid_rate"] = GATE_THRESHOLD - 0.01
+        self.assertFalse(compute_gate_passed(metrics))
+
+    def test_gate_failed_when_any_hard_missing(self):
+        metrics: dict[str, float | None] = {k: 1.0 for k in HARD_METRIC_KEYS}
+        metrics["duplicate_complement"] = None
+        self.assertFalse(compute_gate_passed(metrics))
+
+
+class TestAggregateCarriesGateAndComposites(unittest.TestCase):
+    def test_aggregate_includes_composite_hard_soft_gate(self):
+        entity_type_names = ["Course", "Chapter"]
+        relation_schema = {
+            "contains": {"source_types": ["Course"], "target_types": ["Chapter"]}
+        }
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "OS", "type": "Course"},
+                    {"id": "e2", "title": "Ch1", "type": "Chapter"},
+                ],
+                [{"source": "OS", "target": "Ch1", "type": "contains"}],
+            )
+        ]
+        metrics = aggregate_candidate_metrics(
+            results,
+            entity_type_names=entity_type_names,
+            relation_type_names=list(relation_schema),
+            relation_schema=relation_schema,
+            audit_entity_recall=None,
+            audit_relation_recall=None,
+        )
+        self.assertIn("composite_hard", metrics)
+        self.assertIn("composite_soft", metrics)
+        self.assertIn("gate_passed", metrics)
+        self.assertTrue(metrics["gate_passed"])
+        self.assertAlmostEqual(metrics["composite_hard"], 1.0)
+
+
+class TestRankWithGate(unittest.TestCase):
+    def test_gated_candidate_outranks_failed_even_with_lower_composite(self):
+        # A: gate 过 + composite/soft 偏低；B: gate 没过 + composite/soft 更高
+        summaries = {
+            "A_passed": {
+                "gate_passed": True,
+                "composite_score": 0.80,
+                "composite_soft": 0.30,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+            "B_failed": {
+                "gate_passed": False,
+                "composite_score": 0.85,
+                "composite_soft": 0.80,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+        }
+        ranked = rank_candidates(summaries)
+        self.assertEqual(ranked[0]["candidate"], "A_passed")
+        self.assertEqual(ranked[1]["candidate"], "B_failed")
+
+    def test_all_gated_ranked_by_composite_soft(self):
+        summaries = {
+            "x_lower_soft_higher_score": {
+                "gate_passed": True,
+                "composite_score": 0.95,
+                "composite_soft": 0.40,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+            "y_higher_soft_lower_score": {
+                "gate_passed": True,
+                "composite_score": 0.92,
+                "composite_soft": 0.60,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+        }
+        ranked = rank_candidates(summaries)
+        self.assertEqual(ranked[0]["candidate"], "y_higher_soft_lower_score")
+
+    def test_composite_score_breaks_ties_when_soft_equal(self):
+        summaries = {
+            "lower_score": {
+                "gate_passed": True,
+                "composite_score": 0.88,
+                "composite_soft": 0.50,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+            "higher_score": {
+                "gate_passed": True,
+                "composite_score": 0.92,
+                "composite_soft": 0.50,
+                "parse_success_rate": 1.0,
+                "endpoint_valid_rate": 1.0,
+            },
+        }
+        ranked = rank_candidates(summaries)
+        self.assertEqual(ranked[0]["candidate"], "higher_score")
 
 
 if __name__ == "__main__":

@@ -25,24 +25,30 @@ from scoring_report import (
 RANKED = [
     {
         "rank": 1, "candidate": "beta",
-        "composite_score": 0.82, "parse_success_rate": 1.0,
+        "composite_score": 0.82, "composite_hard": 0.95, "composite_soft": 0.60,
+        "gate_passed": True,
+        "parse_success_rate": 1.0,
         "schema_hit_rate": 0.8, "entity_type_valid_rate": 0.9,
         "relation_type_valid_rate": 0.9, "endpoint_valid_rate": 0.85,
         "duplicate_entity_rate": 0.05, "noise_entity_rate": 0.02,
         "duplicate_complement": 0.95, "noise_complement": 0.98,
         "output_stability": 0.9,
-        "audit_entity_recall": 0.7, "audit_relation_recall": 0.6,
+        "audit_entity_recall": 0.7, "audit_entity_precision": 0.65,
+        "audit_relation_recall": 0.6,
         "sample_count": 5, "success_count": 5,
     },
     {
         "rank": 2, "candidate": "alpha",
-        "composite_score": 0.60, "parse_success_rate": 0.8,
+        "composite_score": 0.60, "composite_hard": 0.70, "composite_soft": 0.38,
+        "gate_passed": False,
+        "parse_success_rate": 0.8,
         "schema_hit_rate": 0.6, "entity_type_valid_rate": 0.7,
         "relation_type_valid_rate": 0.7, "endpoint_valid_rate": 0.5,
         "duplicate_entity_rate": 0.1, "noise_entity_rate": 0.1,
         "duplicate_complement": 0.9, "noise_complement": 0.9,
         "output_stability": 0.7,
-        "audit_entity_recall": 0.4, "audit_relation_recall": 0.3,
+        "audit_entity_recall": 0.4, "audit_entity_precision": 0.35,
+        "audit_relation_recall": 0.3,
         "sample_count": 5, "success_count": 4,
     },
 ]
@@ -163,6 +169,154 @@ class TestRunMetaAndHistory(unittest.TestCase):
             data = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(data["run_id"], "2026-04-18T120000")
         self.assertEqual(data["run_dir"], "runs/2026-04-18T120000")
+
+
+class TestNewColumnsInReport(unittest.TestCase):
+    """Step 1 新增 audit_entity_precision 列应该出现在 CSV / history 里。"""
+
+    def test_csv_contains_audit_entity_precision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compare.csv"
+            write_extraction_compare_csv(path, RANKED)
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        header = rows[0]
+        self.assertIn("audit_entity_precision", header)
+        # 数据行的该列应当有 0.65 和 0.35
+        prec_idx = header.index("audit_entity_precision")
+        self.assertEqual(rows[1][prec_idx], "0.6500")
+        self.assertEqual(rows[2][prec_idx], "0.3500")
+
+    def test_history_contains_audit_entity_precision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            append_history_csv(
+                path,
+                run_id="run-A",
+                timestamp="2026-04-18T12:00:00",
+                ranked=RANKED,
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        header = rows[0]
+        self.assertIn("audit_entity_precision", header)
+
+
+class TestHistoryCsvMigration(unittest.TestCase):
+    """history.csv 已存在但表头是旧 schema 时，append_history_csv 应迁移表头并补空列。"""
+
+    def test_migrates_old_header_and_pads_missing_columns(self):
+        old_header = [
+            "run_id", "timestamp", "rank", "candidate", "composite_score",
+            "parse_success_rate", "schema_hit_rate", "entity_type_valid_rate",
+            "relation_type_valid_rate", "endpoint_valid_rate",
+            "duplicate_entity_rate", "noise_entity_rate", "output_stability",
+            "audit_entity_recall", "audit_relation_recall",
+            "sample_count", "success_count",
+        ]
+        old_row = [
+            "run-0", "2026-04-10T00:00:00", "1", "legacy", "0.7000",
+            "1.0000", "1.0000", "1.0000", "1.0000", "0.9000",
+            "0.0000", "0.0000", "0.8000",
+            "0.6000", "0.0000",
+            "5", "5",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            with path.open("w", encoding="utf-8", newline="") as fp:
+                writer = csv.writer(fp)
+                writer.writerow(old_header)
+                writer.writerow(old_row)
+            append_history_csv(
+                path, run_id="run-A", timestamp="2026-04-18T12:00:00", ranked=RANKED
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        self.assertIn("audit_entity_precision", rows[0])
+        prec_idx = rows[0].index("audit_entity_precision")
+        # 旧行在新列位置应为空
+        legacy_row = [r for r in rows[1:] if r[0] == "run-0"][0]
+        self.assertEqual(legacy_row[prec_idx], "")
+        # 旧行其他列内容保留
+        cand_idx = rows[0].index("candidate")
+        self.assertEqual(legacy_row[cand_idx], "legacy")
+        # 新行该列有值
+        new_rows = [r for r in rows[1:] if r[0] == "run-A"]
+        self.assertEqual(len(new_rows), len(RANKED))
+        self.assertEqual(new_rows[0][prec_idx], "0.6500")
+
+    def test_reshapes_corrupted_rows_written_before_header_migration(self):
+        """
+        历史遗留：Step 1 开发期间曾用新 CSV_COLUMNS 向 17 列 header 追加 18 列行，
+        出现列数错位。本测试验证 append_history_csv 能识别 "行的列数恰好等于当前 schema"
+        的情况并按当前 schema 解释。Step 3 之后当前 schema 超出 18 列，这个 elif 分支
+        失效，但行为不应 crash —— 能按旧 header zip 尽力映射即可。
+        """
+        old_header = [
+            "run_id", "timestamp", "rank", "candidate", "composite_score",
+            "parse_success_rate", "schema_hit_rate", "entity_type_valid_rate",
+            "relation_type_valid_rate", "endpoint_valid_rate",
+            "duplicate_entity_rate", "noise_entity_rate", "output_stability",
+            "audit_entity_recall", "audit_relation_recall",
+            "sample_count", "success_count",
+        ]
+        corrupted_row = [
+            "run-X", "2026-04-18T23:00:00", "1", "default", "0.9077",
+            "1.0000", "1.0000", "1.0000", "1.0000", "0.9070",
+            "0.0000", "0.0000", "0.6730",
+            "0.5357", "0.0000",
+            "5", "5",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            with path.open("w", encoding="utf-8", newline="") as fp:
+                writer = csv.writer(fp)
+                writer.writerow(old_header)
+                writer.writerow(corrupted_row)
+            append_history_csv(
+                path, run_id="run-A", timestamp="2026-04-18T23:30:00", ranked=RANKED
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        # 迁移后 header 必须包含当前 CSV_COLUMNS 全部列
+        for col in ("audit_entity_precision", "composite_hard", "composite_soft", "gate_passed"):
+            self.assertIn(col, rows[0])
+        # run-X 原有字段保留，新列填空
+        cand_idx = rows[0].index("candidate")
+        run_x_row = [r for r in rows[1:] if r[0] == "run-X"][0]
+        self.assertEqual(run_x_row[cand_idx], "default")
+        hard_idx = rows[0].index("composite_hard")
+        self.assertEqual(run_x_row[hard_idx], "")
+
+
+class TestStepThreeColumnsInReport(unittest.TestCase):
+    """Step 3 新增 composite_hard / composite_soft / gate_passed 列。"""
+
+    def test_csv_contains_gate_and_composite_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compare.csv"
+            write_extraction_compare_csv(path, RANKED)
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        header = rows[0]
+        for col in ("composite_hard", "composite_soft", "gate_passed"):
+            self.assertIn(col, header)
+        gate_idx = header.index("gate_passed")
+        self.assertEqual(rows[1][gate_idx], "True")
+        self.assertEqual(rows[2][gate_idx], "False")
+        hard_idx = header.index("composite_hard")
+        self.assertEqual(rows[1][hard_idx], "0.9500")
+
+    def test_markdown_top_section_shows_gate_and_hard_soft(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compare.md"
+            write_extraction_compare_markdown(
+                path, RANKED, weights={"parse_success_rate": 1.0}, top_k=1
+            )
+            content = path.read_text(encoding="utf-8")
+        self.assertIn("gate=", content)
+        self.assertIn("hard=", content)
+        self.assertIn("soft=", content)
 
 
 if __name__ == "__main__":
