@@ -110,21 +110,89 @@ class TestEndToEnd(unittest.TestCase):
             )
 
             self.assertEqual(summary["status"], "success")
-            csv_path = root / "results" / "reports" / "extraction_compare.csv"
-            md_path = root / "results" / "reports" / "extraction_compare.md"
-            top_path = root / "results" / "reports" / "top_candidates.json"
-            self.assertTrue(csv_path.exists())
-            self.assertTrue(md_path.exists())
-            self.assertTrue(top_path.exists())
 
-            with csv_path.open(encoding="utf-8") as fp:
+            # 旧产物仍然落到 results/reports/ 根目录（兼容层）
+            legacy_csv = root / "results" / "reports" / "extraction_compare.csv"
+            legacy_md = root / "results" / "reports" / "extraction_compare.md"
+            legacy_top = root / "results" / "reports" / "top_candidates.json"
+            self.assertTrue(legacy_csv.exists())
+            self.assertTrue(legacy_md.exists())
+            self.assertTrue(legacy_top.exists())
+
+            # 新布局：extraction_scoring/runs/<run_id>/
+            scoring_root = root / "results" / "reports" / "extraction_scoring"
+            runs_dir = scoring_root / "runs"
+            self.assertTrue(runs_dir.exists())
+            run_subdirs = list(runs_dir.iterdir())
+            self.assertEqual(len(run_subdirs), 1)
+            run_dir = run_subdirs[0]
+            self.assertTrue((run_dir / "extraction_compare.csv").exists())
+            self.assertTrue((run_dir / "extraction_compare.md").exists())
+            self.assertTrue((run_dir / "top_candidates.json").exists())
+            self.assertTrue((run_dir / "run_meta.json").exists())
+
+            # history.csv：表头 + 每候选一行
+            history_path = scoring_root / "history.csv"
+            self.assertTrue(history_path.exists())
+            with history_path.open(encoding="utf-8") as fp:
                 rows = list(csv.reader(fp))
-            self.assertEqual(rows[0][:2], ["rank", "candidate"])
-            self.assertEqual(len(rows), 3)
+            self.assertEqual(rows[0][:3], ["run_id", "timestamp", "rank"])
+            self.assertEqual(len(rows), 1 + 2)  # 2 candidates
 
-            top_payload = json.loads(top_path.read_text(encoding="utf-8"))
-            self.assertEqual(top_payload["k"], 1)
-            self.assertEqual(len(top_payload["top_candidates"]), 1)
+            # latest.json 指向刚才的 run
+            latest_path = scoring_root / "latest.json"
+            self.assertTrue(latest_path.exists())
+            latest = json.loads(latest_path.read_text(encoding="utf-8"))
+            self.assertEqual(latest["run_id"], run_dir.name)
+
+            # summary 中暴露 run_id 与新路径
+            self.assertIn("run_id", summary)
+            self.assertEqual(summary["run_id"], run_dir.name)
+            self.assertIn("run_dir", summary["reports"])
+
+    def test_second_run_appends_history_and_updates_latest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "results" / "extraction_eval").mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "results" / "extraction_eval" / "alpha.json").write_text(
+                json.dumps(_make_eval("alpha", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary_a = score_extraction_results(
+                root=root, eval_dir=None, entity_schema_path=None,
+                relation_schema_path=None, audit_path=None, weights=None,
+                top_k=1, overwrite=True, run_id="2026-04-18T120000",
+            )
+            summary_b = score_extraction_results(
+                root=root, eval_dir=None, entity_schema_path=None,
+                relation_schema_path=None, audit_path=None, weights=None,
+                top_k=1, overwrite=True, run_id="2026-04-18T130000",
+            )
+
+            scoring_root = root / "results" / "reports" / "extraction_scoring"
+            run_dirs = sorted((scoring_root / "runs").iterdir())
+            self.assertEqual(len(run_dirs), 2)
+            self.assertEqual([p.name for p in run_dirs],
+                             ["2026-04-18T120000", "2026-04-18T130000"])
+
+            history_path = scoring_root / "history.csv"
+            with history_path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+            self.assertEqual(len(rows), 1 + 2)  # 两次 run，各 1 candidate
+
+            latest = json.loads((scoring_root / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(latest["run_id"], "2026-04-18T130000")
+            self.assertEqual(summary_a["run_id"], "2026-04-18T120000")
+            self.assertEqual(summary_b["run_id"], "2026-04-18T130000")
 
 
 if __name__ == "__main__":
