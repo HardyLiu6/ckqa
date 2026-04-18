@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+import statistics
 import unicodedata
 from typing import Iterable, Sequence
 
@@ -159,3 +160,23 @@ def compute_noise_entity_rate(
             if _is_noise_entity(ent.title):
                 noise += 1
     return noise / total if total else 0.0
+
+
+def _coefficient_of_variation(values: Sequence[int]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = statistics.fmean(values)
+    if mean == 0:
+        return 0.0
+    stdev = statistics.pstdev(values)
+    return stdev / mean
+
+
+def compute_output_stability(results: Sequence[StructuredExtractionResult]) -> float:
+    success_items = [item for item in results if item.status == "success"]
+    if len(success_items) < 2:
+        return 1.0
+    entity_counts = [len(item.entities) for item in success_items]
+    relation_counts = [len(item.relationships) for item in success_items]
+    cv = _coefficient_of_variation(entity_counts) + _coefficient_of_variation(relation_counts)
+    return max(0.0, 1.0 - min(1.0, cv))

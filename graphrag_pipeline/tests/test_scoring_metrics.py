@@ -19,6 +19,7 @@ from scoring_metrics import (
     compute_endpoint_valid_rate,
     compute_entity_type_valid_rate,
     compute_noise_entity_rate,
+    compute_output_stability,
     compute_parse_success_rate,
     compute_relation_type_valid_rate,
     compute_schema_hit_rate,
@@ -270,6 +271,45 @@ class TestDuplicateAndNoise(unittest.TestCase):
             )
         ]
         self.assertEqual(compute_noise_entity_rate(results), 0.0)
+
+
+class TestOutputStability(unittest.TestCase):
+    def test_constant_counts_is_one(self):
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "A", "type": "Course"},
+                 {"id": "e2", "title": "B", "type": "Course"}],
+                [{"source": "A", "target": "B", "type": "contains"}],
+            ),
+            _success_result(
+                [{"id": "e3", "title": "C", "type": "Course"},
+                 {"id": "e4", "title": "D", "type": "Course"}],
+                [{"source": "C", "target": "D", "type": "contains"}],
+            ),
+        ]
+        self.assertEqual(compute_output_stability(results), 1.0)
+
+    def test_single_success_sample_returns_one(self):
+        results = [_success_result(
+            [{"id": "e1", "title": "A", "type": "Course"}], []
+        )]
+        self.assertEqual(compute_output_stability(results), 1.0)
+
+    def test_empty_returns_one(self):
+        self.assertEqual(compute_output_stability([]), 1.0)
+
+    def test_high_variance_lowers_score(self):
+        results = [
+            _success_result(
+                [{"id": f"e{i}", "title": f"T{i}", "type": "Course"} for i in range(10)],
+                [],
+            ),
+            _success_result(
+                [{"id": "e1", "title": "A", "type": "Course"}], []
+            ),
+        ]
+        self.assertLess(compute_output_stability(results), 1.0)
+        self.assertGreaterEqual(compute_output_stability(results), 0.0)
 
 
 if __name__ == "__main__":
