@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""audit 校准集对齐工具。
+"""audit 校准集对齐工具（严格版）。
 
-只负责：读取 audit 集，构建索引，计算实体/关系 recall 软指标。
-对齐策略：
-- 实体：归一化 title == 归一化 gold.name 或 gold.name 出现在归一化 title 中；
-  gold 归一化长度 < 4 时禁用子串包含，避免 "进程" / "文件" 等高碰撞词
-  把长得像但语义不同的派生实体（"进程控制块"）误判为命中。
-- 关系：gold (src_id, type, tgt_id) 先映射为 (src_name, type, tgt_name)，再检查
-  抽取结果里是否存在同 (归一化 src_name, type, 归一化 tgt_name) 的关系。
+只负责：读取 audit 集，构建索引，计算实体/关系软指标。
+
+对齐规则（2026-04-19 起）：
+- 实体：ext.title_norm == gold.name_norm 且 ext.type == gold.type（exact）；
+       若 exact 完全无匹配，再考虑 gold.alias 走严格 alias 匹配。
+- 同 sample 内 one-to-one 占用；当目标 ext 已被更早 gold 占用时返回
+  exact_occupied / alias_occupied，matched_ext_idx=None，不做子串回退。
+- 关系：gold 两端都拿到 matched_ext_idx 后，用 (src_idx, rtype, tgt_idx)
+  去 extraction 关系扇出得到的 idx triple 集里查命中；不再回退字符串。
 """
 
 from __future__ import annotations
@@ -16,10 +18,50 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Literal, Sequence
 
 from extraction_schema import StructuredExtractionResult
 from scoring_metrics import _normalize_title
+
+
+MatchMode = Literal[
+    "exact",
+    "alias",
+    "exact_occupied",
+    "alias_occupied",
+    "none",
+]
+
+
+@dataclass(frozen=True)
+class ExtCandidate:
+    idx: int
+    title_norm: str
+    type: str
+
+
+@dataclass(frozen=True)
+class GoldEntity:
+    gold_id: str
+    name_norm: str
+    alias_norms: tuple[str, ...]
+    type: str
+
+
+@dataclass(frozen=True)
+class AlignResult:
+    matched_ext_idx: int | None
+    match_mode: MatchMode
+
+
+def canonicalize_gold_aliases(aliases: Sequence[str]) -> tuple[str, ...]:
+    """按 _normalize_title 规范化并丢掉空串，保留原顺序。"""
+    result: list[str] = []
+    for a in aliases or ():
+        norm = _normalize_title(a)
+        if norm:
+            result.append(norm)
+    return tuple(result)
 
 
 @dataclass(frozen=True)

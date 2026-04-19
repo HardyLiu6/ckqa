@@ -469,5 +469,26 @@ class TestAuditRelationAlignment(unittest.TestCase):
         self.assertEqual(compute_audit_relation_recall(results, idx), 0.0)
 
 
+class TestCanonicalizeGoldAliases(unittest.TestCase):
+    def test_filters_empty_strings_and_preserves_order(self):
+        from scoring_audit import canonicalize_gold_aliases
+        self.assertEqual(
+            canonicalize_gold_aliases(["习题", "", "  ", "IPC"]),
+            ("习题", "ipc"),
+        )
+
+    def test_normalizes_via_shared_normalizer(self):
+        from scoring_audit import canonicalize_gold_aliases
+        # 包含半角空格与标点，应被 _normalize_title 清理
+        self.assertEqual(
+            canonicalize_gold_aliases(["WIMP 技术"]),
+            ("wimp技术",),
+        )
+
+    def test_empty_input_returns_empty_tuple(self):
+        from scoring_audit import canonicalize_gold_aliases
+        self.assertEqual(canonicalize_gold_aliases([]), ())
+
+
 if __name__ == "__main__":
     unittest.main()
