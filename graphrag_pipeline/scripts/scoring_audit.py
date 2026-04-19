@@ -193,30 +193,6 @@ def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
     return out
 
 
-SHORT_GOLD_GUARD_LEN = 4
-
-
-def _extracted_aligns_to_gold(ext_norm: str, gold_norm: str) -> bool:
-    """Extracted 归一化 title 是否能对齐到 gold 归一化名称。
-
-    精确相等恒成立；gold 归一化长度 >= SHORT_GOLD_GUARD_LEN 时还允许 gold 作为 ext 子串。
-    """
-    if not ext_norm or not gold_norm:
-        return False
-    if ext_norm == gold_norm:
-        return True
-    if len(gold_norm) < SHORT_GOLD_GUARD_LEN:
-        return False
-    return gold_norm in ext_norm
-
-
-def _entity_hit(gold_name: str, extracted_titles_norm: set[str]) -> bool:
-    g_norm = _normalize_title(gold_name)
-    if not g_norm:
-        return False
-    return any(_extracted_aligns_to_gold(t, g_norm) for t in extracted_titles_norm)
-
-
 def compute_audit_entity_recall(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
@@ -277,42 +253,6 @@ def compute_audit_entity_precision(
     if not precisions:
         return 0.0
     return sum(precisions) / len(precisions)
-
-
-def _align_gold_to_extracted(
-    gold_name: str,
-    extracted_titles_norm: Sequence[str],
-) -> str | None:
-    """确定性把 gold 映射到唯一的 extracted 归一化 title。
-
-    对齐规则：
-    1. 若 ext 中存在与 gold 归一化严格相等者，直接返回它。
-    2. 否则考虑子串候选：gold 作为 ext 子串（gold 长度 >= SHORT_GOLD_GUARD_LEN），
-       或 ext 作为 gold 子串（ext 长度 >= SHORT_GOLD_GUARD_LEN）。
-    3. 歧义时按 (ext 归一化长度升序, extracted 列表下标升序) 取第一个。
-
-    未找到返回 None。
-    """
-    g_norm = _normalize_title(gold_name)
-    if not g_norm:
-        return None
-    for t in extracted_titles_norm:
-        if t and t == g_norm:
-            return t
-    candidates: list[tuple[int, int, str]] = []
-    for idx, t in enumerate(extracted_titles_norm):
-        if not t:
-            continue
-        shorter = t if len(t) <= len(g_norm) else g_norm
-        longer = g_norm if shorter is t else t
-        if len(shorter) < SHORT_GOLD_GUARD_LEN:
-            continue
-        if shorter in longer:
-            candidates.append((len(t), idx, t))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda c: (c[0], c[1]))
-    return candidates[0][2]
 
 
 def compute_audit_relation_recall(
