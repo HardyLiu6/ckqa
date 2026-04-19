@@ -250,7 +250,12 @@ def compute_audit_entity_precision(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
 ) -> float:
-    """每个成功样本：extracted 里能对齐到某条 gold 的比例，按样本平均。"""
+    """每个成功样本：命中 gold 的 ext 去重后 / ext 总数，按样本平均。
+
+    零分母规则：
+      - 样本级：len(ext_candidates) == 0 时样本返回 0.0。
+      - 汇总级：无可用样本时整体返回 0.0。
+    """
     precisions: list[float] = []
     for item in results:
         if item.status != "success":
@@ -258,18 +263,17 @@ def compute_audit_entity_precision(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.gold_entities:
             continue
-        extracted_norms = [_normalize_title(e.title) for e in item.entities]
-        extracted_norms = [n for n in extracted_norms if n]
-        if not extracted_norms:
+        golds = _build_gold_entities(entry)
+        if not golds:
+            continue
+        cands = _build_ext_candidates(item)
+        if not cands:
             precisions.append(0.0)
             continue
-        gold_norms = [_normalize_title(g.get("name", "")) for g in entry.gold_entities]
-        gold_norms = [n for n in gold_norms if n]
-        aligned = sum(
-            1 for ext in extracted_norms
-            if any(_extracted_aligns_to_gold(ext, g) for g in gold_norms)
-        )
-        precisions.append(aligned / len(extracted_norms))
+        aligned = align_sample(golds, cands)
+        matched_ext = {r.matched_ext_idx for r in aligned.values()
+                       if r.matched_ext_idx is not None}
+        precisions.append(len(matched_ext) / len(cands))
     if not precisions:
         return 0.0
     return sum(precisions) / len(precisions)

@@ -224,32 +224,6 @@ class TestAuditEntityPrecision(unittest.TestCase):
         ]
         self.assertEqual(compute_audit_entity_precision(results, self.index), 0.5)
 
-    def test_precision_short_gold_symmetric_guard(self):
-        # gold 短词 "操作系统"(len=4 恰好不触发守卫)、再造一条短 gold 样本验证对称行为
-        payload = {
-            "audit_samples": [
-                {
-                    "source_sample_id": "s_short",
-                    "gold_entities": [
-                        {"entity_id": "g1", "name": "进程", "type": "Concept"},
-                    ],
-                    "gold_relations": [],
-                }
-            ]
-        }
-        p = Path(self.tmpdir.name) / "audit_short.json"
-        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        idx = load_audit_index(p)
-        # extracted = ["进程控制块"]：短 gold 要求精确相等，所以 extracted 对齐不到 gold
-        results = [
-            _success_result(
-                "s_short",
-                [{"id": "e1", "title": "进程控制块", "type": "Concept"}],
-                [],
-            )
-        ]
-        self.assertEqual(compute_audit_entity_precision(results, idx), 0.0)
-
     def test_precision_empty_extracted_returns_zero(self):
         results = [_success_result("s1", [], [])]
         self.assertEqual(compute_audit_entity_precision(results, self.index), 0.0)
@@ -695,6 +669,71 @@ class TestEntityRecallStrict(unittest.TestCase):
         idx = self._audit({"audit_samples": []})
         results = [_success_result("unrelated", [], [])]
         self.assertEqual(compute_audit_entity_recall(results, idx), 0.0)
+
+
+class TestEntityPrecisionStrict(unittest.TestCase):
+    def _audit(self, payload, name="audit.json"):
+        if not hasattr(self, "tmpdir"):
+            self.tmpdir = tempfile.TemporaryDirectory()
+        p = Path(self.tmpdir.name) / name
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return load_audit_index(p)
+
+    def tearDown(self):
+        if hasattr(self, "tmpdir"):
+            self.tmpdir.cleanup()
+            del self.tmpdir
+
+    def test_precision_requires_type_equality(self):
+        """判别性测试：gold 与 ext 名字相同但 type 不同，旧实现 precision=1.0、新实现 0.0。"""
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "进程", "type": "Concept"},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "进程", "type": "Term"}],
+            [],
+        )]
+        self.assertEqual(compute_audit_entity_precision(results, idx), 0.0)
+
+    def test_precision_counts_unique_matched_ext(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "进程", "type": "Concept"},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result(
+            "s1",
+            [
+                {"id": "e1", "title": "进程", "type": "Concept"},
+                {"id": "e2", "title": "噪声", "type": "Concept"},
+            ],
+            [],
+        )]
+        # 1 条命中 / 2 条总抽取 = 0.5
+        self.assertEqual(compute_audit_entity_precision(results, idx), 0.5)
+
+    def test_precision_empty_ext_returns_zero(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "进程", "type": "Concept"},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result("s1", [], [])]
+        self.assertEqual(compute_audit_entity_precision(results, idx), 0.0)
+
+    def test_precision_no_valid_samples_returns_zero(self):
+        idx = self._audit({"audit_samples": []})
+        results = [_success_result("unrelated", [], [])]
+        self.assertEqual(compute_audit_entity_precision(results, idx), 0.0)
 
 
 if __name__ == "__main__":
