@@ -221,6 +221,12 @@ def compute_audit_entity_recall(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
 ) -> float:
+    """每个成功样本：命中 gold 数 / gold 总数，按样本平均。
+
+    零分母规则：
+      - 样本级：len(gold_entities) == 0 时样本不计入。
+      - 汇总级：无可用样本时整体返回 0.0。
+    """
     recalls: list[float] = []
     for item in results:
         if item.status != "success":
@@ -228,9 +234,13 @@ def compute_audit_entity_recall(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.gold_entities:
             continue
-        extracted = {_normalize_title(e.title) for e in item.entities}
-        hits = sum(1 for g in entry.gold_entities if _entity_hit(g.get("name", ""), extracted))
-        recalls.append(hits / len(entry.gold_entities))
+        golds = _build_gold_entities(entry)
+        if not golds:
+            continue
+        cands = _build_ext_candidates(item)
+        aligned = align_sample(golds, cands)
+        hits = sum(1 for r in aligned.values() if r.matched_ext_idx is not None)
+        recalls.append(hits / len(golds))
     if not recalls:
         return 0.0
     return sum(recalls) / len(recalls)

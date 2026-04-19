@@ -142,7 +142,7 @@ SHORT_GOLD_PAYLOAD = {
 
 
 class TestShortGoldEntityGuard(unittest.TestCase):
-    """Gold 归一化长度 < 4 时，必须精确相等才算命中，避免子串假阳性。"""
+    """严格规则下短 gold 与长 gold 都只走 exact/alias；派生词不算对齐。"""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -156,7 +156,7 @@ class TestShortGoldEntityGuard(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_short_gold_not_matched_by_substring(self):
-        # gold="进程"、"文件"，extracted 只有更长的派生词 —— 旧规则会全命中，新规则应该都 miss
+        # gold="进程"、"文件"，extracted 只有更长的派生词 —— 严格规则下都不算命中
         results = [
             _success_result(
                 "s_short",
@@ -182,17 +182,6 @@ class TestShortGoldEntityGuard(unittest.TestCase):
         ]
         # 只有"进程"精确命中，"文件"没对齐
         self.assertEqual(compute_audit_entity_recall(results, self.index), 0.5)
-
-    def test_long_gold_keeps_substring_behavior(self):
-        # gold="第一章 引论"(len=5)，extracted="第一章 引论 概述"仍走子串命中
-        results = [
-            _success_result(
-                "s_long",
-                [{"id": "e1", "title": "第一章 引论 概述", "type": "Chapter"}],
-                [],
-            )
-        ]
-        self.assertEqual(compute_audit_entity_recall(results, self.index), 1.0)
 
 
 class TestAuditEntityPrecision(unittest.TestCase):
@@ -277,7 +266,7 @@ class TestAuditEntityPrecision(unittest.TestCase):
 
 
 class TestAuditRelationAlignment(unittest.TestCase):
-    """Step 2: compute_audit_relation_recall 通过实体先对齐（双向子串 + 确定性歧义解）容忍名称漂移。"""
+    """compute_audit_relation_recall：两端 gold 须严格对齐，且关系三元组按 idx 精确命中。"""
 
     def _write_audit(self, payload, name="audit.json"):
         path = Path(self.tmpdir.name) / name
@@ -289,56 +278,6 @@ class TestAuditRelationAlignment(unittest.TestCase):
 
     def tearDown(self):
         self.tmpdir.cleanup()
-
-    def test_relation_hit_via_shorter_extracted_alignment(self):
-        """gold tgt '第九章 操作系统接口习题' 漂移成 ext '操作系统接口习题' 时应通过反向子串对齐。"""
-        payload = {
-            "audit_samples": [{
-                "source_sample_id": "s1",
-                "gold_entities": [
-                    {"entity_id": "g-src", "name": "第九章 操作系统接口", "type": "Chapter"},
-                    {"entity_id": "g-tgt", "name": "第九章 操作系统接口习题", "type": "Assignment"},
-                ],
-                "gold_relations": [
-                    {"source_entity_id": "g-src", "target_entity_id": "g-tgt", "type": "contains"},
-                ],
-            }]
-        }
-        idx = self._write_audit(payload)
-        results = [_success_result(
-            "s1",
-            [
-                {"id": "e1", "title": "第九章 操作系统接口", "type": "Chapter"},
-                {"id": "e2", "title": "操作系统接口习题", "type": "Assignment"},
-            ],
-            [{"source": "第九章 操作系统接口", "target": "操作系统接口习题", "type": "contains"}],
-        )]
-        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
-
-    def test_relation_hit_via_longer_extracted_alignment(self):
-        """gold '操作系统接口' 漂移成 ext '操作系统接口 详解' 时走原有 gold→ext 子串对齐。"""
-        payload = {
-            "audit_samples": [{
-                "source_sample_id": "s1",
-                "gold_entities": [
-                    {"entity_id": "g1", "name": "第九章 操作系统接口", "type": "Chapter"},
-                    {"entity_id": "g2", "name": "操作系统接口", "type": "Section"},
-                ],
-                "gold_relations": [
-                    {"source_entity_id": "g1", "target_entity_id": "g2", "type": "contains"},
-                ],
-            }]
-        }
-        idx = self._write_audit(payload)
-        results = [_success_result(
-            "s1",
-            [
-                {"id": "e1", "title": "第九章 操作系统接口", "type": "Chapter"},
-                {"id": "e2", "title": "操作系统接口 详解", "type": "Section"},
-            ],
-            [{"source": "第九章 操作系统接口", "target": "操作系统接口 详解", "type": "contains"}],
-        )]
-        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
 
     def test_relation_miss_when_gold_entity_has_no_alignment(self):
         """gold 实体找不到对齐时，相关关系不计入命中。"""
@@ -362,63 +301,8 @@ class TestAuditRelationAlignment(unittest.TestCase):
         )]
         self.assertEqual(compute_audit_relation_recall(results, idx), 0.0)
 
-    def test_alignment_ambiguity_picks_shortest_then_earliest(self):
-        """gold 无精确 ext 相等、同时命中多个 ext 子串候选时：按 ext 归一化长度升序，再按下标升序。"""
-        payload = {
-            "audit_samples": [{
-                "source_sample_id": "s1",
-                "gold_entities": [
-                    {"entity_id": "g1", "name": "第一章", "type": "Chapter"},
-                    {"entity_id": "g2", "name": "操作系统接口", "type": "Section"},
-                ],
-                "gold_relations": [
-                    {"source_entity_id": "g1", "target_entity_id": "g2", "type": "contains"},
-                ],
-            }]
-        }
-        idx = self._write_audit(payload)
-        # g1 "第一章" 走 exact；g2 无精确 ext，ext 有两个 gold→ext 子串候选，长者在前
-        results = [_success_result(
-            "s1",
-            [
-                {"id": "e1", "title": "第一章", "type": "Chapter"},
-                {"id": "e2", "title": "操作系统接口 概述", "type": "Section"},
-                {"id": "e3", "title": "操作系统接口 短", "type": "Section"},
-            ],
-            # ext relation 的 target 使用"更短"的那条，验证 alignment 真的会挑短者
-            [{"source": "第一章", "target": "操作系统接口 短", "type": "contains"}],
-        )]
-        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
-
-    def test_ambiguity_ranking_follows_ext_order_when_same_length(self):
-        """两个 ext 候选归一化长度相同时：按 extracted 列表下标升序（下标小的先赢）。"""
-        payload = {
-            "audit_samples": [{
-                "source_sample_id": "s1",
-                "gold_entities": [
-                    {"entity_id": "g1", "name": "第一章", "type": "Chapter"},
-                    {"entity_id": "g2", "name": "操作系统接口", "type": "Section"},
-                ],
-                "gold_relations": [
-                    {"source_entity_id": "g1", "target_entity_id": "g2", "type": "contains"},
-                ],
-            }]
-        }
-        idx = self._write_audit(payload)
-        # 两个 ext 候选等长（"操作系统接口 A" 与 "操作系统接口 B" 归一化后都是 7），按下标取第一个
-        results = [_success_result(
-            "s1",
-            [
-                {"id": "e1", "title": "第一章", "type": "Chapter"},
-                {"id": "e2", "title": "操作系统接口 A", "type": "Section"},
-                {"id": "e3", "title": "操作系统接口 B", "type": "Section"},
-            ],
-            [{"source": "第一章", "target": "操作系统接口 A", "type": "contains"}],
-        )]
-        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
-
     def test_short_gold_does_not_align_via_substring(self):
-        """gold 归一化长度 < 4 时，对齐守卫仍然生效，派生词不算对齐。"""
+        """gold 归一化长度 < 4 时也必须走 exact/alias，派生词不算对齐。"""
         payload = {
             "audit_samples": [{
                 "source_sample_id": "s1",
@@ -735,6 +619,82 @@ class TestBuildAdapters(unittest.TestCase):
         )
         golds = _build_gold_entities(entry)
         self.assertEqual([g.gold_id for g in golds], ["ent-2"])
+
+
+class TestEntityRecallStrict(unittest.TestCase):
+    def _audit(self, payload, name="audit.json"):
+        if not hasattr(self, "tmpdir"):
+            self.tmpdir = tempfile.TemporaryDirectory()
+        p = Path(self.tmpdir.name) / name
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return load_audit_index(p)
+
+    def tearDown(self):
+        if hasattr(self, "tmpdir"):
+            self.tmpdir.cleanup()
+            del self.tmpdir
+
+    def test_recall_requires_type_equality(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "进程", "type": "Concept"},
+            ],
+            "gold_relations": [],
+        }]})
+        # ext 名对但 type 不对，recall 应为 0
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "进程", "type": "Term"}],
+            [],
+        )]
+        self.assertEqual(compute_audit_entity_recall(results, idx), 0.0)
+
+    def test_recall_uses_alias_when_exact_missing(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "第九章操作系统接口习题",
+                 "type": "Assignment", "alias": ["习题"]},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "习题", "type": "Assignment"}],
+            [],
+        )]
+        self.assertEqual(compute_audit_entity_recall(results, idx), 1.0)
+
+    def test_recall_long_gold_no_substring_fallback(self):
+        """长 gold 再也不走双向子串；ext 必须精确或 alias 命中。"""
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "第一章 引论", "type": "Chapter"},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "第一章 引论 概述", "type": "Chapter"}],
+            [],
+        )]
+        self.assertEqual(compute_audit_entity_recall(results, idx), 0.0)
+
+    def test_recall_empty_gold_sample_excluded(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [],
+            "gold_relations": [],
+        }]})
+        results = [_success_result("s1", [], [])]
+        self.assertEqual(compute_audit_entity_recall(results, idx), 0.0)
+
+    def test_recall_no_valid_samples_returns_zero(self):
+        idx = self._audit({"audit_samples": []})
+        results = [_success_result("unrelated", [], [])]
+        self.assertEqual(compute_audit_entity_recall(results, idx), 0.0)
 
 
 if __name__ == "__main__":
