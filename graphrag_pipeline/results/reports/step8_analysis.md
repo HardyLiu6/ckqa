@@ -114,3 +114,15 @@ audit 集有 20 条样本，eval 集仅 5 条，交集 = 2 条（`pts-0004-ac344
 ```
 
 每一步都能独立出 PR，互不阻塞。
+
+## 2026-04-19 aligner 严格化后基线
+
+- **新诊断报告：** `results/reports/extraction_scoring/diagnostics/2026-04-19T130500.md`
+- **新评测对比：** `results/reports/extraction_scoring/runs/2026-04-19T130658/extraction_compare.md`
+- **旧对照（子串对齐时代）：** `results/reports/extraction_scoring/diagnostics/2026-04-19T005540.md` + `runs/2026-04-19T000248/`
+- **口径变更：** 去子串化 + 类型相等 + one-to-one 占用；`audit_*` 三软指标按样本平均，零分母返回 0.0；诊断表新增 `match_mode (src / tgt)` 列与 `align_collision` verdict。
+- **观察到的变化：**
+  - B.1 汇总里 `triple_not_in_ext` 全部归零；`align_fail_tgt / align_fail_both` 大幅上升，如实反映"习题/前言"等实体根本没抽到。
+  - `audit_entity_recall` 从 ~0.54–0.66 下降到 0.12–0.20；`audit_entity_precision` 从 ~0.46–0.54 下降到 0.08–0.14；`audit_relation_recall` 仍为 0（strict 下更诚实，未掩盖 0 命中）。
+  - `gate_passed` 四个候选都保持 `False`（硬指标未动，audit 三指标属 soft），**无候选从 pass 退化到 fail**。
+  - composite 排序洗牌：旧 `schema_fewshot > schema_aware > default > auto_tuned`，新 `default > schema_aware > schema_fewshot > auto_tuned`。之前看似 "prompt 调优微胜" 的差异主要来自对齐器噪声。
