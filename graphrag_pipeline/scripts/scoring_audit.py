@@ -319,6 +319,18 @@ def compute_audit_relation_recall(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
 ) -> float:
+    """每个成功样本：命中 gold relation 数 / gold relation 总数，按样本平均。
+
+    命中判定（idx 驱动）：
+      1. 用 align_sample 得到 gold_id -> matched_ext_idx。
+      2. 把 extraction 关系按 rel.source / rel.target 的 title_norm 扇出到
+         (src_idx, rtype, tgt_idx) 三元组集合（不同 type 的 ext idx 独立）。
+      3. gold 两端 matched_ext_idx 齐全后，检查 (src, rtype, tgt) 是否在集合里。
+
+    零分母规则：
+      - 样本级：len(gold_relations) == 0 时样本不计入。
+      - 汇总级：无可用样本时整体返回 0.0。
+    """
     recalls: list[float] = []
     for item in results:
         if item.status != "success":
@@ -326,20 +338,25 @@ def compute_audit_relation_recall(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.gold_relations:
             continue
-        extracted_titles = [_normalize_title(e.title) for e in item.entities]
-        extracted_titles = [n for n in extracted_titles if n]
-        extracted_triples = {
-            (_normalize_title(r.source), r.type, _normalize_title(r.target))
-            for r in item.relationships
-        }
-        gold_id_to_aligned: dict[str, str | None] = {}
-        for g in entry.gold_entities:
-            gid = str(g.get("entity_id", "") or "")
-            if not gid:
-                continue
-            gold_id_to_aligned[gid] = _align_gold_to_extracted(
-                g.get("name", ""), extracted_titles
-            )
+        golds = _build_gold_entities(entry)
+        if not golds:
+            continue
+        cands = _build_ext_candidates(item)
+        aligned = align_sample(golds, cands)
+
+        # title_norm -> list[ext_idx]（跨 type 合并，关系本身不带端点 type）
+        title_to_idxs: dict[str, list[int]] = {}
+        for cand in cands:
+            title_to_idxs.setdefault(cand.title_norm, []).append(cand.idx)
+
+        extracted_triples: set[tuple[int, str, int]] = set()
+        for rel in item.relationships:
+            src_norm = _normalize_title(rel.source)
+            tgt_norm = _normalize_title(rel.target)
+            for s in title_to_idxs.get(src_norm, ()):
+                for t in title_to_idxs.get(tgt_norm, ()):
+                    extracted_triples.add((s, rel.type, t))
+
         hits = 0
         for g in entry.gold_relations:
             src_id = str(g.get("source_entity_id", "") or "")
@@ -347,11 +364,15 @@ def compute_audit_relation_recall(
             rtype = g.get("type", "")
             if not rtype:
                 continue
-            src_aligned = gold_id_to_aligned.get(src_id)
-            tgt_aligned = gold_id_to_aligned.get(tgt_id)
-            if not src_aligned or not tgt_aligned:
+            src_align = aligned.get(src_id)
+            tgt_align = aligned.get(tgt_id)
+            if src_align is None or tgt_align is None:
                 continue
-            if (src_aligned, rtype, tgt_aligned) in extracted_triples:
+            src = src_align.matched_ext_idx
+            tgt = tgt_align.matched_ext_idx
+            if src is None or tgt is None:
+                continue
+            if (src, rtype, tgt) in extracted_triples:
                 hits += 1
         recalls.append(hits / len(entry.gold_relations))
     if not recalls:

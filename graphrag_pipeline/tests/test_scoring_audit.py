@@ -736,5 +736,108 @@ class TestEntityPrecisionStrict(unittest.TestCase):
         self.assertEqual(compute_audit_entity_precision(results, idx), 0.0)
 
 
+class TestRelationRecallIdxDriven(unittest.TestCase):
+    def _audit(self, payload, name="audit.json"):
+        if not hasattr(self, "tmpdir"):
+            self.tmpdir = tempfile.TemporaryDirectory()
+        p = Path(self.tmpdir.name) / name
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return load_audit_index(p)
+
+    def tearDown(self):
+        if hasattr(self, "tmpdir"):
+            self.tmpdir.cleanup()
+            del self.tmpdir
+
+    def test_relation_hit_uses_idx_not_string(self):
+        """同 sample 内两个 ext 归一化同名但 type 不同，关系命中只能走对齐到的 idx。"""
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "系统调用", "type": "Concept"},
+                {"entity_id": "g2", "name": "习题", "type": "Assignment"},
+            ],
+            "gold_relations": [
+                {"source_entity_id": "g1", "target_entity_id": "g2",
+                 "type": "evaluated_by"},
+            ],
+        }]})
+        # 有两个 "系统调用"：Concept 与 Term；gold 指向 Concept。ext 关系按
+        # title 扇出到两个 idx，命中仅依赖 gold 对齐的那一个。
+        results = [_success_result(
+            "s1",
+            [
+                {"id": "e1", "title": "系统调用", "type": "Concept"},
+                {"id": "e2", "title": "系统调用", "type": "Term"},
+                {"id": "e3", "title": "习题", "type": "Assignment"},
+            ],
+            [{"source": "系统调用", "target": "习题", "type": "evaluated_by"}],
+        )]
+        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
+
+    def test_relation_hit_fanout_multiple_extraction_matches(self):
+        """extraction 端点名对应多个 ext 时，仍能命中 gold 对齐的那一个。"""
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "操作系统", "type": "Course"},
+                {"entity_id": "g2", "name": "第一章", "type": "Chapter"},
+            ],
+            "gold_relations": [
+                {"source_entity_id": "g1", "target_entity_id": "g2",
+                 "type": "contains"},
+            ],
+        }]})
+        results = [_success_result(
+            "s1",
+            [
+                {"id": "e1", "title": "操作系统", "type": "Course"},
+                {"id": "e2", "title": "第一章", "type": "Chapter"},
+                {"id": "e3", "title": "第一章", "type": "Section"},
+            ],
+            [{"source": "操作系统", "target": "第一章", "type": "contains"}],
+        )]
+        self.assertEqual(compute_audit_relation_recall(results, idx), 1.0)
+
+    def test_relation_miss_when_src_unaligned(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "未抽出的东西", "type": "Concept"},
+                {"entity_id": "g2", "name": "第一章", "type": "Chapter"},
+            ],
+            "gold_relations": [
+                {"source_entity_id": "g1", "target_entity_id": "g2",
+                 "type": "contains"},
+            ],
+        }]})
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "第一章", "type": "Chapter"}],
+            [{"source": "未抽出的东西", "target": "第一章", "type": "contains"}],
+        )]
+        self.assertEqual(compute_audit_relation_recall(results, idx), 0.0)
+
+    def test_relation_empty_gold_relations_returns_zero(self):
+        idx = self._audit({"audit_samples": [{
+            "source_sample_id": "s1",
+            "gold_entities": [
+                {"entity_id": "g1", "name": "操作系统", "type": "Course"},
+            ],
+            "gold_relations": [],
+        }]})
+        results = [_success_result(
+            "s1",
+            [{"id": "e1", "title": "操作系统", "type": "Course"}],
+            [],
+        )]
+        self.assertEqual(compute_audit_relation_recall(results, idx), 0.0)
+
+    def test_relation_no_valid_samples_returns_zero(self):
+        idx = self._audit({"audit_samples": []})
+        results = [_success_result("unrelated", [], [])]
+        self.assertEqual(compute_audit_relation_recall(results, idx), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
