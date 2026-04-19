@@ -490,5 +490,105 @@ class TestCanonicalizeGoldAliases(unittest.TestCase):
         self.assertEqual(canonicalize_gold_aliases([]), ())
 
 
+class TestAlignOne(unittest.TestCase):
+    def _gold(self, *, name_norm="a", aliases=(), type_="T"):
+        from scoring_audit import GoldEntity
+        return GoldEntity(gold_id="g", name_norm=name_norm,
+                          alias_norms=aliases, type=type_)
+
+    def _cand(self, idx, title_norm, type_):
+        from scoring_audit import ExtCandidate
+        return ExtCandidate(idx=idx, title_norm=title_norm, type=type_)
+
+    def test_exact_hit_with_matching_type(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="进程", type_="Concept")
+        cands = [self._cand(0, "进程", "Concept")]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertEqual(r.matched_ext_idx, 0)
+        self.assertEqual(r.match_mode, "exact")
+
+    def test_exact_miss_when_type_differs(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="进程", type_="Concept")
+        cands = [self._cand(0, "进程", "Term")]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "none")
+
+    def test_alias_hit_when_exact_fails(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="第九章操作系统接口习题",
+                          aliases=("习题",), type_="Assignment")
+        cands = [self._cand(0, "习题", "Assignment")]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertEqual(r.matched_ext_idx, 0)
+        self.assertEqual(r.match_mode, "alias")
+
+    def test_alias_requires_type_match(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="x", aliases=("习题",), type_="Assignment")
+        cands = [self._cand(0, "习题", "Section")]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "none")
+
+    def test_exact_occupied_swallows_alias_phase(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="进程", aliases=("其它别名",), type_="Concept")
+        cands = [
+            self._cand(0, "进程", "Concept"),
+            self._cand(1, "其它别名", "Concept"),
+        ]
+        r = _align_one(gold, cands, claimed={0})
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "exact_occupied")
+
+    def test_alias_occupied_when_no_exact_exists(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="没这个", aliases=("习题",), type_="Assignment")
+        cands = [self._cand(0, "习题", "Assignment")]
+        r = _align_one(gold, cands, claimed={0})
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "alias_occupied")
+
+    def test_candidate_iteration_uses_idx_asc_tie_break(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="进程", type_="Concept")
+        cands = [
+            self._cand(2, "进程", "Concept"),
+            self._cand(1, "进程", "Concept"),
+        ]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertEqual(r.matched_ext_idx, 1)
+        self.assertEqual(r.match_mode, "exact")
+
+    def test_empty_candidates_returns_none(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="进程", type_="Concept")
+        r = _align_one(gold, [], claimed=set())
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "none")
+
+    def test_empty_alias_list_is_skipped(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="不存在", aliases=(), type_="Concept")
+        cands = [self._cand(0, "进程", "Concept")]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertIsNone(r.matched_ext_idx)
+        self.assertEqual(r.match_mode, "none")
+
+    def test_alias_iteration_follows_input_order(self):
+        from scoring_audit import _align_one
+        gold = self._gold(name_norm="x", aliases=("a", "b"), type_="T")
+        cands = [
+            self._cand(0, "b", "T"),
+            self._cand(1, "a", "T"),
+        ]
+        r = _align_one(gold, cands, claimed=set())
+        self.assertEqual(r.matched_ext_idx, 1)  # "a" 先命中，idx=1
+        self.assertEqual(r.match_mode, "alias")
+
+
 if __name__ == "__main__":
     unittest.main()

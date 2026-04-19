@@ -85,6 +85,52 @@ def load_audit_index(path: Path) -> dict[str, AuditEntry]:
     return index
 
 
+def _align_one(
+    gold: GoldEntity,
+    candidates: Sequence[ExtCandidate],
+    claimed: set[int],
+) -> AlignResult:
+    """把一条 gold 对齐到 ext 候选。纯函数，只读 `claimed`。
+
+    规则：
+      Phase 1 exact：按 idx 升序扫，找第一条 title_norm == gold.name_norm
+                     且 type == gold.type 的未占用候选则命中；若存在匹配候选
+                     但全被占用，返回 exact_occupied 并吞掉 Phase 2。
+      Phase 2 alias：当且仅当 Phase 1 完全无匹配时执行；按 gold.alias_norms
+                     顺序扫，候选需同时 title_norm == alias 且 type == gold.type；
+                     若未占用则命中；若存在匹配候选但全被占用，返回 alias_occupied。
+      其余：none。
+    """
+    sorted_cands = sorted(candidates, key=lambda c: c.idx)
+
+    # Phase 1: exact
+    exact_unclaimed: int | None = None
+    exact_has_any = False
+    for cand in sorted_cands:
+        if cand.title_norm == gold.name_norm and cand.type == gold.type:
+            exact_has_any = True
+            if cand.idx not in claimed:
+                exact_unclaimed = cand.idx
+                break
+    if exact_unclaimed is not None:
+        return AlignResult(exact_unclaimed, "exact")
+    if exact_has_any:
+        return AlignResult(None, "exact_occupied")
+
+    # Phase 2: alias
+    alias_has_any = False
+    for alias in gold.alias_norms:
+        for cand in sorted_cands:
+            if cand.title_norm == alias and cand.type == gold.type:
+                alias_has_any = True
+                if cand.idx not in claimed:
+                    return AlignResult(cand.idx, "alias")
+    if alias_has_any:
+        return AlignResult(None, "alias_occupied")
+
+    return AlignResult(None, "none")
+
+
 SHORT_GOLD_GUARD_LEN = 4
 
 
