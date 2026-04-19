@@ -131,8 +131,118 @@ class TestDiagnoseStep8Smoke(unittest.TestCase):
         self.assertIn("| alpha |", content)
         # B.1 里至少出现一个 verdict 值（hit 或 align_fail_* 等）
         self.assertTrue(any(v in content for v in (
-            "align_fail_src", "align_fail_tgt", "triple_not_in_ext", "type_mismatch", "hit"
+            "align_fail_src", "align_fail_tgt", "triple_not_in_ext",
+            "type_mismatch", "hit", "align_collision"
         )))
+        self.assertIn("match_mode (src / tgt)", content)
+
+
+COLLISION_AUDIT_PAYLOAD = {
+    "audit_samples": [{
+        "source_sample_id": "s_coll",
+        "gold_entities": [
+            {"entity_id": "g-a", "name": "进程", "type": "Concept"},
+            {"entity_id": "g-b", "name": "进程", "type": "Concept"},
+            {"entity_id": "g-c", "name": "第一章", "type": "Chapter"},
+        ],
+        "gold_relations": [
+            {"source_entity_id": "g-a", "target_entity_id": "g-c",
+             "type": "contains"},
+            {"source_entity_id": "g-b", "target_entity_id": "g-c",
+             "type": "contains"},
+        ],
+    }]
+}
+
+
+def _eval_collision(candidate: str) -> dict:
+    """单一 '进程'/Concept ext，两条 gold 抢它；target 也只有一条 Chapter。"""
+    return {
+        "task": "candidate_extraction",
+        "candidate": candidate,
+        "results": [{
+            "sample_id": "s_coll",
+            "candidate": candidate,
+            "status": "success",
+            "entities": [
+                {"id": "e1", "title": "进程", "type": "Concept",
+                 "description": "", "evidence": ""},
+                {"id": "e2", "title": "第一章", "type": "Chapter",
+                 "description": "", "evidence": ""},
+            ],
+            "relationships": [
+                {"source": "进程", "target": "第一章", "type": "contains",
+                 "description": "", "evidence": ""},
+            ],
+            "raw_output": "",
+            "error": None,
+            "parser_error_code": None,
+            "llm_debug": None,
+        }],
+    }
+
+
+class TestDiagnoseMatchModeAndCollision(unittest.TestCase):
+    def _run(self, audit_payload, eval_payload):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps({"schema_version": "v1",
+                            "entity_types": {"Concept": {}, "Chapter": {}}}),
+                encoding="utf-8",
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps({
+                    "schema_version": "v1",
+                    "relation_types": {
+                        "contains": {
+                            "source_types": ["Concept"],
+                            "target_types": ["Chapter"],
+                        }
+                    },
+                }),
+                encoding="utf-8",
+            )
+            (root / "data" / "eval").mkdir(parents=True)
+            (root / "data" / "eval" / "audit_extraction_set.json").write_text(
+                json.dumps(audit_payload, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "results" / "extraction_eval").mkdir(parents=True)
+            (root / "results" / "extraction_eval" / "alpha.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False), encoding="utf-8"
+            )
+            summary = diagnose_step8(
+                root=root,
+                eval_dir=None,
+                relation_schema_path=None,
+                audit_path=None,
+                output_dir=None,
+                overwrite=False,
+            )
+            return Path(summary["output"]).read_text(encoding="utf-8")
+
+    def test_b1_summary_contains_align_collision_column(self):
+        content = self._run(COLLISION_AUDIT_PAYLOAD, _eval_collision("alpha"))
+        self.assertIn("align_collision", content)
+
+    def test_b2_detail_table_has_match_mode_column(self):
+        content = self._run(COLLISION_AUDIT_PAYLOAD, _eval_collision("alpha"))
+        self.assertIn("match_mode (src / tgt)", content)
+        self.assertIn("exact_occupied", content)
+
+    def test_collision_verdict_classification(self):
+        content = self._run(COLLISION_AUDIT_PAYLOAD, _eval_collision("alpha"))
+        # 一条 gold 命中，另一条被 exact_occupied 判定为 align_collision
+        self.assertIn("align_collision", content)
+
+    def test_match_mode_values_are_closed_set(self):
+        content = self._run(COLLISION_AUDIT_PAYLOAD, _eval_collision("alpha"))
+        b2_start = content.index("### B.2")
+        b2 = content[b2_start:]
+        forbidden = ("fuzzy", "partial", "substring")
+        for bad in forbidden:
+            self.assertNotIn(bad, b2)
 
 
 if __name__ == "__main__":
