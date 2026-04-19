@@ -156,6 +156,43 @@ def align_sample(
     return result
 
 
+def _build_ext_candidates(
+    item: StructuredExtractionResult,
+) -> list[ExtCandidate]:
+    """从 ExtractionEntity 列表构建 ExtCandidate 列表。
+
+    idx 对应 item.entities 的原始下标；title_norm 为空的条目被跳过但
+    其它条目的 idx 保持原位，保证与 extraction 关系引用的 title 可对齐。
+    """
+    out: list[ExtCandidate] = []
+    for idx, ent in enumerate(item.entities):
+        tn = _normalize_title(ent.title)
+        if not tn:
+            continue
+        out.append(ExtCandidate(idx=idx, title_norm=tn, type=ent.type))
+    return out
+
+
+def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
+    """从 AuditEntry.gold_entities 构建 GoldEntity 列表。
+
+    跳过 name 归一化后为空的条目；alias 缺失时视为空；alias 经
+    canonicalize_gold_aliases 过滤空串并规范化。
+    """
+    out: list[GoldEntity] = []
+    for g in entry.gold_entities:
+        name_norm = _normalize_title(g.get("name", ""))
+        if not name_norm:
+            continue
+        out.append(GoldEntity(
+            gold_id=str(g.get("entity_id", "") or ""),
+            name_norm=name_norm,
+            alias_norms=canonicalize_gold_aliases(g.get("alias") or ()),
+            type=str(g.get("type", "") or ""),
+        ))
+    return out
+
+
 SHORT_GOLD_GUARD_LEN = 4
 
 

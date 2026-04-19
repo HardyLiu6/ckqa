@@ -657,5 +657,85 @@ class TestAlignSample(unittest.TestCase):
         self.assertIsNone(result["g2"].matched_ext_idx)
 
 
+class TestBuildAdapters(unittest.TestCase):
+    def test_build_ext_candidates_preserves_order_and_idx(self):
+        from scoring_audit import _build_ext_candidates
+        result = _success_result(
+            "s1",
+            [
+                {"id": "e1", "title": "操作系统", "type": "Course"},
+                {"id": "e2", "title": "第一章 引论", "type": "Chapter"},
+                {"id": "e3", "title": "  进程  ", "type": "Concept"},
+            ],
+            [],
+        )
+        cands = _build_ext_candidates(result)
+        self.assertEqual([c.idx for c in cands], [0, 1, 2])
+        self.assertEqual([c.title_norm for c in cands],
+                         ["操作系统", "第一章引论", "进程"])
+        self.assertEqual([c.type for c in cands],
+                         ["Course", "Chapter", "Concept"])
+
+    def test_build_ext_candidates_skips_empty_titles(self):
+        from scoring_audit import _build_ext_candidates
+        result = _success_result(
+            "s1",
+            [
+                {"id": "e1", "title": "", "type": "Course"},
+                {"id": "e2", "title": "   ", "type": "Chapter"},
+                {"id": "e3", "title": "进程", "type": "Concept"},
+            ],
+            [],
+        )
+        cands = _build_ext_candidates(result)
+        # 空 title 被跳过，但保留的 idx 应对应原 entities 下标
+        self.assertEqual([c.idx for c in cands], [2])
+        self.assertEqual(cands[0].title_norm, "进程")
+
+    def test_build_gold_entities_normalizes_and_canonicalizes(self):
+        from scoring_audit import _build_gold_entities, AuditEntry
+        entry = AuditEntry(
+            gold_entities=[
+                {"entity_id": "ent-1", "name": "WIMP 技术",
+                 "type": "Concept", "alias": ["WIMP", ""]},
+                {"entity_id": "ent-2", "name": "第九章 操作系统接口习题",
+                 "type": "Assignment", "alias": ["习题"]},
+            ],
+            gold_relations=[],
+        )
+        golds = _build_gold_entities(entry)
+        self.assertEqual(golds[0].gold_id, "ent-1")
+        self.assertEqual(golds[0].name_norm, "wimp技术")
+        self.assertEqual(golds[0].alias_norms, ("wimp",))
+        self.assertEqual(golds[0].type, "Concept")
+        self.assertEqual(golds[1].gold_id, "ent-2")
+        self.assertEqual(golds[1].name_norm, "第九章操作系统接口习题")
+        self.assertEqual(golds[1].alias_norms, ("习题",))
+
+    def test_build_gold_entities_missing_alias_key(self):
+        """部分 audit 条目没有 alias 字段，应视为空别名。"""
+        from scoring_audit import _build_gold_entities, AuditEntry
+        entry = AuditEntry(
+            gold_entities=[
+                {"entity_id": "ent-1", "name": "进程", "type": "Concept"},
+            ],
+            gold_relations=[],
+        )
+        golds = _build_gold_entities(entry)
+        self.assertEqual(golds[0].alias_norms, ())
+
+    def test_build_gold_entities_skips_empty_name(self):
+        from scoring_audit import _build_gold_entities, AuditEntry
+        entry = AuditEntry(
+            gold_entities=[
+                {"entity_id": "ent-1", "name": "", "type": "Concept"},
+                {"entity_id": "ent-2", "name": "进程", "type": "Concept"},
+            ],
+            gold_relations=[],
+        )
+        golds = _build_gold_entities(entry)
+        self.assertEqual([g.gold_id for g in golds], ["ent-2"])
+
+
 if __name__ == "__main__":
     unittest.main()
