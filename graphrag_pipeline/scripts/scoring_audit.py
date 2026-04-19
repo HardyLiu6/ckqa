@@ -131,6 +131,31 @@ def _align_one(
     return AlignResult(None, "none")
 
 
+def align_sample(
+    gold_entities: Sequence[GoldEntity],
+    ext_candidates: Sequence[ExtCandidate],
+) -> dict[str, AlignResult]:
+    """把一个 sample 的 gold_entities 对齐到 ext_candidates。
+
+    规则：
+      - 对每条 gold，按优先级 exact → alias 搜索（见 _align_one）。
+      - ext_candidates 使用 ExtCandidate.idx 作为占用键；同一 sample 内 one-to-one。
+      - gold 遍历顺序固定为 gold_id 字典序（确定性 tie-break，评测稳定优先于召回最大）；
+        候选遍历顺序固定为 ExtCandidate.idx 升序。
+      - 无 ext_candidates 时所有 gold 返回 none。
+
+    返回：{gold_id: AlignResult}
+    """
+    claimed: set[int] = set()
+    result: dict[str, AlignResult] = {}
+    for gold in sorted(gold_entities, key=lambda g: g.gold_id):
+        aligned = _align_one(gold, ext_candidates, claimed)
+        if aligned.matched_ext_idx is not None:
+            claimed.add(aligned.matched_ext_idx)
+        result[gold.gold_id] = aligned
+    return result
+
+
 SHORT_GOLD_GUARD_LEN = 4
 
 

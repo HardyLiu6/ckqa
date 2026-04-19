@@ -590,5 +590,72 @@ class TestAlignOne(unittest.TestCase):
         self.assertEqual(r.match_mode, "alias")
 
 
+class TestAlignSample(unittest.TestCase):
+    def _gold(self, gid, name_norm, *, aliases=(), type_="T"):
+        from scoring_audit import GoldEntity
+        return GoldEntity(gold_id=gid, name_norm=name_norm,
+                          alias_norms=aliases, type=type_)
+
+    def _cand(self, idx, title_norm, type_):
+        from scoring_audit import ExtCandidate
+        return ExtCandidate(idx=idx, title_norm=title_norm, type=type_)
+
+    def test_gold_iteration_is_gold_id_asc(self):
+        """两条 gold 抢同一 ext，gold_id 字典序靠前者赢，另一条得 exact_occupied。"""
+        from scoring_audit import align_sample
+        g_z = self._gold("z", "进程", type_="Concept")
+        g_a = self._gold("a", "进程", type_="Concept")
+        cands = [self._cand(0, "进程", "Concept")]
+        result = align_sample([g_z, g_a], cands)
+        self.assertEqual(result["a"].matched_ext_idx, 0)
+        self.assertEqual(result["a"].match_mode, "exact")
+        self.assertIsNone(result["z"].matched_ext_idx)
+        self.assertEqual(result["z"].match_mode, "exact_occupied")
+
+    def test_one_to_one_claim_across_golds(self):
+        from scoring_audit import align_sample
+        g1 = self._gold("g1", "a", type_="T")
+        g2 = self._gold("g2", "b", type_="T")
+        cands = [
+            self._cand(0, "a", "T"),
+            self._cand(1, "b", "T"),
+        ]
+        result = align_sample([g1, g2], cands)
+        self.assertEqual(result["g1"].matched_ext_idx, 0)
+        self.assertEqual(result["g2"].matched_ext_idx, 1)
+        self.assertEqual(result["g1"].match_mode, "exact")
+        self.assertEqual(result["g2"].match_mode, "exact")
+
+    def test_chapter_vs_assignment_no_cross_type_capture(self):
+        """同前缀的 Chapter gold 与 Assignment gold 不应互相抢 ext。"""
+        from scoring_audit import align_sample
+        g_chap = self._gold("g1", "第九章操作系统接口", type_="Chapter")
+        g_asn = self._gold("g2", "第九章操作系统接口习题",
+                           aliases=("习题",), type_="Assignment")
+        cands = [
+            self._cand(0, "第九章操作系统接口", "Chapter"),
+        ]
+        result = align_sample([g_chap, g_asn], cands)
+        self.assertEqual(result["g1"].matched_ext_idx, 0)
+        self.assertEqual(result["g1"].match_mode, "exact")
+        self.assertIsNone(result["g2"].matched_ext_idx)
+        self.assertEqual(result["g2"].match_mode, "none")
+
+    def test_empty_gold_returns_empty_map(self):
+        from scoring_audit import align_sample
+        cands = [self._cand(0, "a", "T")]
+        self.assertEqual(align_sample([], cands), {})
+
+    def test_empty_candidates_all_none(self):
+        from scoring_audit import align_sample
+        g1 = self._gold("g1", "a")
+        g2 = self._gold("g2", "b")
+        result = align_sample([g1, g2], [])
+        self.assertEqual(result["g1"].match_mode, "none")
+        self.assertEqual(result["g2"].match_mode, "none")
+        self.assertIsNone(result["g1"].matched_ext_idx)
+        self.assertIsNone(result["g2"].matched_ext_idx)
+
+
 if __name__ == "__main__":
     unittest.main()
