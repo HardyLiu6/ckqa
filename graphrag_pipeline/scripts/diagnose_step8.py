@@ -6,7 +6,8 @@
 读完报告即可，不承担持续诊断基础设施职责。
 
 依赖 private 函数（工具脚本可接受）：
-- scoring_audit._align_gold_to_extracted（Step 2 的 1:1 实体对齐规则）
+- scoring_audit.align_sample（严格对齐，返回 AlignResult.match_mode ∈ 五值闭集）
+- scoring_audit._build_ext_candidates / _build_gold_entities（输入适配器）
 - scoring_metrics._normalize_title（title 归一化规则）
 """
 
@@ -24,7 +25,13 @@ from extraction_schema import (
     ExtractionRelationship,
     StructuredExtractionResult,
 )
-from scoring_audit import _align_gold_to_extracted, load_audit_index
+from scoring_audit import (
+    AlignResult,
+    _build_ext_candidates,
+    _build_gold_entities,
+    align_sample,
+    load_audit_index,
+)
 from scoring_metrics import _normalize_title
 
 
@@ -107,24 +114,40 @@ def diagnose_endpoint_for_results(results, relation_schema):
     return counts, patterns, examples
 
 
-def classify_audit_relation(gold_rel, id_to_name, extracted_titles_norm, triples_by_endpoints):
-    """按 6 类 verdict 判定 gold relation 命中情况。"""
+def classify_audit_relation(gold_rel, aligned, id_to_name, idx_triples):
+    """按 7 类 verdict 判定 gold relation 命中情况。
+
+    verdict 闭集：hit / type_mismatch / triple_not_in_ext /
+                  align_fail_src / align_fail_tgt / align_fail_both /
+                  align_collision（新增）。
+    """
     src_id = str(gold_rel.get("source_entity_id", "") or "")
     tgt_id = str(gold_rel.get("target_entity_id", "") or "")
     rtype = gold_rel.get("type", "")
     src_name = id_to_name.get(src_id, "")
     tgt_name = id_to_name.get(tgt_id, "")
-    aligned_src = _align_gold_to_extracted(src_name, extracted_titles_norm)
-    aligned_tgt = _align_gold_to_extracted(tgt_name, extracted_titles_norm)
-    ext_types: list[str] = []
-    if not aligned_src and not aligned_tgt:
+    src_align: AlignResult | None = aligned.get(src_id)
+    tgt_align: AlignResult | None = aligned.get(tgt_id)
+    src_mode = src_align.match_mode if src_align else "none"
+    tgt_mode = tgt_align.match_mode if tgt_align else "none"
+    src_idx = src_align.matched_ext_idx if src_align else None
+    tgt_idx = tgt_align.matched_ext_idx if tgt_align else None
+
+    occupied_modes = {"exact_occupied", "alias_occupied"}
+    if src_mode in occupied_modes or tgt_mode in occupied_modes:
+        verdict = "align_collision"
+        ext_types: list[str] = []
+    elif src_idx is None and tgt_idx is None:
         verdict = "align_fail_both"
-    elif not aligned_src:
+        ext_types = []
+    elif src_idx is None:
         verdict = "align_fail_src"
-    elif not aligned_tgt:
+        ext_types = []
+    elif tgt_idx is None:
         verdict = "align_fail_tgt"
+        ext_types = []
     else:
-        ext_types_set = triples_by_endpoints.get((aligned_src, aligned_tgt), set())
+        ext_types_set = idx_triples.get((src_idx, tgt_idx), set())
         ext_types = sorted(ext_types_set)
         if not ext_types_set:
             verdict = "triple_not_in_ext"
@@ -137,8 +160,10 @@ def classify_audit_relation(gold_rel, id_to_name, extracted_titles_norm, triples
         "gold_src": src_name,
         "gold_tgt": tgt_name,
         "gold_type": rtype,
-        "aligned_src": aligned_src,
-        "aligned_tgt": aligned_tgt,
+        "aligned_src_idx": src_idx,
+        "aligned_tgt_idx": tgt_idx,
+        "src_match_mode": src_mode,
+        "tgt_match_mode": tgt_mode,
         "ext_types": ext_types,
     }
 
@@ -152,21 +177,30 @@ def diagnose_audit_for_results(results, audit_index):
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.gold_relations:
             continue
+        golds = _build_gold_entities(entry)
+        if not golds:
+            continue
+        cands = _build_ext_candidates(item)
+        aligned = align_sample(golds, cands)
         id_to_name = {
             str(ge.get("entity_id", "") or ""): ge.get("name", "")
             for ge in entry.gold_entities
         }
-        extracted_titles = [
-            _normalize_title(e.title) for e in item.entities if _normalize_title(e.title)
-        ]
-        triples_by_endpoints: dict[tuple, set] = collections.defaultdict(set)
-        for r in item.relationships:
-            triples_by_endpoints[
-                (_normalize_title(r.source), _normalize_title(r.target))
-            ].add(r.type)
+
+        # title_norm -> list[ext_idx]，用于把 extraction 关系扇出成 idx triple
+        title_to_idxs: dict[str, list[int]] = {}
+        for cand in cands:
+            title_to_idxs.setdefault(cand.title_norm, []).append(cand.idx)
+        # (src_idx, tgt_idx) -> set of rel types
+        idx_triples: dict[tuple[int, int], set[str]] = collections.defaultdict(set)
+        for rel in item.relationships:
+            for s in title_to_idxs.get(_normalize_title(rel.source), ()):
+                for t in title_to_idxs.get(_normalize_title(rel.target), ()):
+                    idx_triples[(s, t)].add(rel.type)
+
         diagnoses: list[dict] = []
         for g in entry.gold_relations:
-            d = classify_audit_relation(g, id_to_name, extracted_titles, triples_by_endpoints)
+            d = classify_audit_relation(g, aligned, id_to_name, idx_triples)
             verdicts[d["verdict"]] += 1
             diagnoses.append(d)
         per_sample.append((item.sample_id, diagnoses))
@@ -175,7 +209,8 @@ def diagnose_audit_for_results(results, audit_index):
 
 CATEGORIES = ("valid", "invalid_type", "unresolved_src", "unresolved_tgt", "type_mismatch")
 VERDICT_KEYS = ("hit", "type_mismatch", "triple_not_in_ext",
-                "align_fail_src", "align_fail_tgt", "align_fail_both")
+                "align_fail_src", "align_fail_tgt", "align_fail_both",
+                "align_collision")
 
 
 def render_markdown(*, timestamp, inputs_summary, per_candidate_endpoint, per_candidate_audit):
@@ -235,13 +270,19 @@ def render_markdown(*, timestamp, inputs_summary, per_candidate_endpoint, per_ca
                 out.append("_（无 gold relation）_")
                 out.append("")
                 continue
-            out.append("| gold | aligned (src / tgt) | ext_types | verdict |")
-            out.append("|---|---|---|---|")
+            out.append("| gold | aligned_idx (src / tgt) | match_mode (src / tgt) | ext_types | verdict |")
+            out.append("|---|---|---|---|---|")
             for d in diagnoses:
                 gold = f"{d['gold_src']} --[{d['gold_type']}]--> {d['gold_tgt']}"
-                aligned = f"{d['aligned_src'] or '—'} / {d['aligned_tgt'] or '—'}"
+                src_idx = d['aligned_src_idx']
+                tgt_idx = d['aligned_tgt_idx']
+                aligned = (
+                    f"{src_idx if src_idx is not None else '—'} / "
+                    f"{tgt_idx if tgt_idx is not None else '—'}"
+                )
+                mode = f"{d['src_match_mode']} / {d['tgt_match_mode']}"
                 ext_types = ", ".join(d["ext_types"]) if d["ext_types"] else "—"
-                out.append(f"| {gold} | {aligned} | {ext_types} | {d['verdict']} |")
+                out.append(f"| {gold} | {aligned} | {mode} | {ext_types} | {d['verdict']} |")
             out.append("")
     return "\n".join(out) + "\n"
 
