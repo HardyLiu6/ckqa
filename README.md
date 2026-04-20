@@ -200,7 +200,7 @@ python utils/main.py
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
-- `frontend/apps/student-app/` 当前是导入型独立前端工程，目录内自带 `.git/` 与 `node_modules/`；做仓库级审计时应把它们视为外来元数据和生成物，而不是 CKQA 主线源码。
+- `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 - 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 

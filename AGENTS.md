@@ -22,7 +22,7 @@ This repository currently has five notable areas, with the two Python modules as
    - Dependency source of truth is `pyproject.toml`, currently pinned to Microsoft GraphRAG `3.0.9`.
    - Builds indexes and serves an OpenAI-compatible FastAPI endpoint.
 3. `frontend/apps/student-app/`
-   - Student-facing Vue 3 + Vite prototype imported into the repo.
+   - Student-facing Vue 3 + Vite prototype managed directly inside the CKQA root repository.
    - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
    - Still not part of the production workflow; many routes are placeholders and the API layer is not wired.
 4. `frontend/apps/admin-app/`
@@ -123,9 +123,10 @@ Notes:
 
 - Vue 3 + Vite standalone student-side prototype.
 - Preferred commands: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm preview`, `pnpm format`
+- `package.json` currently uses the repo-aligned package name `student-app`.
 - `package.json` currently declares Node `^20.19.0 || >=22.12.0`.
 - Treat `node_modules/` as generated dependencies, not source.
-- Treat the nested `.git/` directory as imported upstream metadata, not as the repository's main Git history.
+- Treat this directory as part of the main CKQA repository, not as a separate nested Git repository.
 - Current route tree is broader than the actual implemented views; many routes still have commented-out components.
 - `src/axios/index.js` is currently empty, so do not assume a working backend contract exists.
 
