@@ -13,7 +13,7 @@
       <nav class="nav-menu">
         <router-link to="/home" class="nav-item" :class="{ active: isActive('/home') }">首页</router-link>
         <router-link to="/course" class="nav-item" :class="{ active: isActive('/course') }">课程中心</router-link>
-        <router-link to="/qa" class="nav-item" :class="{ active: isActive('/community') }">学习社区</router-link>
+        <router-link to="/community" class="nav-item" :class="{ active: isActive('/community') }">学习社区</router-link>
         <router-link to="/knowledge" class="nav-item" :class="{ active: isActive('/knowledge') }">知识库</router-link>
       </nav>
 

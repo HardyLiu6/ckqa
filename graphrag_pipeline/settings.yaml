@@ -117,7 +117,7 @@ cluster_graph:
   max_cluster_size: 10
 
 extract_claims:
-  enabled: true
+  enabled: false
   completion_model_id: default_completion_model
   prompt: ${GRAPHRAG_CLAIM_EXTRACTION_PROMPT_FILE}
   description: "Any claims or facts that could be relevant to information discovery."

@@ -13,7 +13,7 @@
 - 技术栈：Vue 3、Vite、Element Plus、Pinia、Vue Router、Sass
 - 动效与体验依赖：AOS、GSAP、Lenis
 - 当前角色：学员端页面与交互原型，不是正式业务前端
-- 当前数据状态：以本地 store 和静态内容为主，`src/axios/index.js` 目前为空
+- 当前数据状态：以本地 store 和静态内容为主，但已补齐最小请求层；后续联调可直接复用 `src/axios/index.js`
 - 当前工程形态：已纳入 CKQA 根仓库直接管理，依赖锁文件以 `pnpm-lock.yaml` 为准，生成依赖和构建产物继续通过本目录 `.gitignore` 忽略
 
 这意味着它更适合做：
@@ -58,7 +58,7 @@
 - `/course/learn/:id`
 - `/course/my`
 
-同时还预留了 `knowledge`、`community`、`analysis`、`user`、`auth`、`error` 等路由段，但不少路由的 `component` 仍然被注释掉，只保留了菜单与 meta 信息。审计或演示时要把这些路由视为“占位结构”，不要误判为已经交付。
+同时还预留了 `knowledge`、`community`、`analysis`、`user`、`auth`、`error` 等路由段。当前这些未实现页面已经统一收口到一个显式状态页，会直接提示“未开放 / 建设中”，避免演示时误以为页面损坏或接口异常。
 
 ## 环境准备
 
@@ -70,9 +70,19 @@
 ```bash
 cd frontend/apps/student-app
 pnpm install
+cp .env.example .env
 ```
 
 如果你临时使用 `npm`，脚本本身也能执行，但默认仍建议跟随现有锁文件使用 `pnpm`。
+
+## 环境变量约定
+
+学生端当前只约定两个最小运行时变量：
+
+- `VITE_API_BASE_URL`：请求基础地址。可以是反向代理路径 `/api`，也可以直接写成完整地址，例如 `http://127.0.0.1:8012/v1`
+- `VITE_API_TIMEOUT`：请求超时时间，单位毫秒，默认 `10000`
+
+对应示例见 `.env.example`。当前 `src/axios/index.js` 会自动读取它们，并导出默认实例与 `get` / `post` / `put` / `patch` / `del` 这些最常用方法。
 
 ## 常用命令
 
@@ -82,6 +92,7 @@ pnpm dev
 pnpm build
 pnpm preview
 pnpm format
+node --test tests/*.test.js
 ```
 
 默认开发端口来自 `vite.config.js`：
@@ -95,6 +106,7 @@ http://0.0.0.0:8080
 - 页面视觉层已经明显超出 Vite 默认模板，适合继续往正式学员端演进
 - 路由、菜单、页面结构已经初步成型
 - Pinia store 以示例数据为主，适合前端原型联调前阶段
+- 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在
 - 尚未形成稳定 API 层，也没有和 `graphrag_pipeline` / `backend/ckqa-back` 建立正式契约
 
 ## 使用时要注意
@@ -107,6 +119,6 @@ http://0.0.0.0:8080
 ## 后续接入前建议先补齐什么
 
 1. 明确问答、课程、用户体系的接口契约。
-2. 为 `src/axios/index.js` 建立最小可用请求层。
-3. 清理“只有路由、没有页面实现”的占位路由，或者显式改成禁用入口。
-4. 在真正联调前补齐 API 契约、环境变量和请求失败处理策略。
+2. 在组件里逐步把示例数据切换到 `src/axios/index.js` 导出的请求方法。
+3. 为登录态、鉴权失败和接口错误补一层真实的业务跳转与提示。
+4. 在真正联调前补齐 API 契约、Mock 数据和请求失败恢复策略。

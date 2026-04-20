@@ -75,6 +75,22 @@ class TestRuntimeDefaults(unittest.TestCase):
         self.assertIn("call_args:", text)
         self.assertIn("encoding_format: float", text)
 
+    def test_extract_claims_is_disabled_by_default_for_standard_index(self):
+        text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("extract_claims:", text)
+        self.assertIn("enabled: false", text)
+
+    def test_extract_claims_prompt_uses_graphrag_3_0_9_literal_delimiters(self):
+        text = (_PROJECT_ROOT / "prompts" / "extract_claims.txt").read_text(encoding="utf-8")
+
+        self.assertIn("<|>", text)
+        self.assertIn("##", text)
+        self.assertIn("<|COMPLETE|>", text)
+        self.assertNotIn("{tuple_delimiter}", text)
+        self.assertNotIn("{record_delimiter}", text)
+        self.assertNotIn("{completion_delimiter}", text)
+
 
 if __name__ == "__main__":
     unittest.main()
