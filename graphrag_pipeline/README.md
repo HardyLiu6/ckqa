@@ -26,6 +26,7 @@
 | `.env` | GraphRAG CLI 读取的环境变量 |
 | `utils/fetch_from_minio.py` | 从 MinIO 下载并展平 GraphRAG 输入 |
 | `utils/main.py` | FastAPI 服务入口 |
+| `scripts/README.md` | `scripts/` 分层导航；说明兼容入口与实现目录 |
 | `scripts/build_prompt_tuning_samples.py` | 从输入文档构建 prompt tuning 样本 |
 | `scripts/build_audit_extraction_set.py` | 从样本中构建小规模 audit 校准集 |
 | `scripts/generate_candidate_prompts.py` | 统一生成候选 Prompt 与 manifest |
@@ -106,6 +107,13 @@ python scripts/run_graphrag_prompt_tune.py --dry_run
 ```
 
 当前约定是：模块专属脚本放在 `graphrag_pipeline/scripts/`，仓库根目录 `scripts/` 只保留仓库级工具，例如漂移审计。
+
+为方便审阅，`graphrag_pipeline/scripts/` 内部实现现在按工作流分到：
+
+- `scripts/prompt_tuning/`
+- `scripts/extraction_eval/`
+
+根目录同名脚本仍保留为兼容入口，所以现有 `python scripts/*.py` 命令默认不需要改。
 
 ### 6. 候选 Prompt 抽取评测输入生成
 

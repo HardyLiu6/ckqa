@@ -97,6 +97,7 @@ pdf_ingest 导出的 json
 ### Key Files
 
 - **`pyproject.toml`**：依赖与版本基线，优先信它。
+- **`scripts/README.md`**：`scripts/` 分层导航；说明兼容入口与实现目录。
 - **`scripts/build_prompt_tuning_samples.py`**：从输入构建 prompt tuning 样本。
 - **`scripts/build_audit_extraction_set.py`**：从样本构建 audit 校准集。
 - **`scripts/generate_candidate_prompts.py`**：生成候选 Prompt 与 manifest。
@@ -166,6 +167,7 @@ pip install -e ".[all]"    # 全部依赖
 
 - `utils/main.py` 会优先读取 `.env` / 当前环境变量，并通过 CLI 查询复用同一套 GraphRAG 执行路径。
 - 仓库根目录 `scripts/` 只保留仓库级工具；GraphRAG 调优与候选 Prompt 相关脚本统一维护在 `graphrag_pipeline/scripts/`。
+- `graphrag_pipeline/scripts/` 内部实现按 `prompt_tuning/` 与 `extraction_eval/` 分组；根目录同名脚本保留为兼容入口。
 - 仓库活跃入口文件与关键脚本可以用 `python ../scripts/audit_repo_drift.py --strict` 做快速审计。
 - `settings.yaml` 已经配置 `input.type: json` 与一组 metadata 字段。
 - `output/` 中的 parquet 与 `lancedb/` 需要同时保留，API 服务依赖二者并存。

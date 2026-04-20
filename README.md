@@ -117,6 +117,7 @@ ckqa/
 - 角色：GraphRAG 输入同步、索引、问答 API
 - 主入口：`utils/fetch_from_minio.py`、`utils/main.py`
 - 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`
+- 脚本分层：实现代码见 `graphrag_pipeline/scripts/README.md`，根目录同名脚本保留兼容入口
 - 关键产物：`input/*.json`、`output/*.parquet`、`output/lancedb/`
 - 运行环境：`graphrag-oneapi`
 - 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
