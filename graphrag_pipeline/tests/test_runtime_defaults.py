@@ -60,6 +60,21 @@ class TestRuntimeDefaults(unittest.TestCase):
                 msg=f"{path} 仍包含仓库外默认路径",
             )
 
+    def test_settings_prompt_paths_are_env_driven(self):
+        text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("prompt: ${GRAPHRAG_ENTITY_EXTRACTION_PROMPT_FILE}", text)
+        self.assertIn("prompt: ${GRAPHRAG_SUMMARIZE_DESCRIPTIONS_PROMPT_FILE}", text)
+        self.assertIn("prompt: ${GRAPHRAG_CLAIM_EXTRACTION_PROMPT_FILE}", text)
+        self.assertIn("graph_prompt: ${GRAPHRAG_COMMUNITY_REPORT_GRAPH_PROMPT_FILE}", text)
+        self.assertIn("text_prompt: ${GRAPHRAG_COMMUNITY_REPORT_TEXT_PROMPT_FILE}", text)
+
+    def test_settings_embedding_uses_float_encoding_for_oneapi_compat(self):
+        text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("call_args:", text)
+        self.assertIn("encoding_format: float", text)
+
 
 if __name__ == "__main__":
     unittest.main()

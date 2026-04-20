@@ -24,13 +24,15 @@
 
 ## 输出
 
-后续流水线的主要输出规划为：
+当前已经实际落地的主要输出包括：
 
-1. 候选 prompt 版本及其元信息
-2. 已验证的最终 prompt 集合
-3. 抽取评测结果
-4. QA 评测结果
-5. 汇总报告、对比报表与推荐结论
+1. `prompts/candidates/<candidate>/` 下的候选 Prompt 与说明文件
+2. `prompts/candidates/manifest.json` 中的候选元信息
+3. `prompts/final/<candidate>/` 下的最终固化 Prompt
+4. `prompts/final/active_prompt.json` 记录的当前激活结果
+5. `results/extraction_eval/`、`results/extraction_raw/`、`results/errors/` 下的抽取执行产物
+6. `results/reports/extraction_scoring/runs/<run_id>/` 下的对比报表、Top-K 结果与 run 元数据
+7. `results/reports/extraction_scoring/history.csv` 与 `latest.json` 这类跨 run 汇总索引
 
 ## 目录职责
 
@@ -40,16 +42,16 @@ graphrag_pipeline/
 ├── data/prompt_tuning_samples/ # 人工整理的调优样本
 ├── data/eval/                  # 抽取评测、QA 评测数据集
 ├── prompts/candidates/         # 候选 prompt 模板
-├── prompts/final/              # 经验证后准备固化的 prompt 模板
+├── prompts/final/              # 经验证后固化并激活的 prompt 模板
 ├── results/extraction_eval/    # 抽取质量评测输出
 ├── results/qa_eval/            # 问答效果评测输出
 ├── results/reports/            # 汇总报告、对比结论、可读化产物
-└── scripts/                    # 调优流水线脚本
+└── scripts/                    # 调优流水线脚本（根目录兼容入口 + 子目录实现）
 ```
 
 ## 当前已落地脚本
 
-当前 `scripts/` 目录已经包含以下最小可运行脚本：
+当前 `scripts/` 目录已经包含以下最小可运行脚本，其中真实实现主要收口在 `scripts/prompt_tuning/` 与 `scripts/extraction_eval/`，根目录同名脚本保留兼容入口：
 
 1. `build_prompt_tuning_samples.py`
    - 从 `input/` 或导出目录整理 prompt tuning 样本。
@@ -59,7 +61,11 @@ graphrag_pipeline/
    - 统一生成 `default`、`schema_aware`、`schema_fewshot`、`auto_tuned` 等候选 Prompt 与 manifest。
 4. `run_graphrag_prompt_tune.py`
    - 封装 GraphRAG 官方 `prompt-tune`，整理输出到 `prompts/candidates/auto_tuned/`。
-5. `score_extraction_results.py`
+5. `finalize_candidate_prompt.py`
+   - 把选定候选复制到 `prompts/final/<candidate>/`，并更新 `.env` 中当前活动 Prompt 路径。
+   - 写出 `prompts/final/active_prompt.json` 作为当前激活结果记录。
+   - 当候选目录缺少某些可选 Prompt 时，自动回退到 `prompts/` 下默认模板。
+6. `score_extraction_results.py`
    - 读取 `results/extraction_eval/*.json`，对候选 Prompt 做规则化自动评测。
    - 计算 8 项硬指标 + 2 项 audit 软指标，输出 composite score、排序与 top-k。
    - 产物全部落在 per-run 布局下：
@@ -71,6 +77,7 @@ graphrag_pipeline/
 
 ## 当前约束
 
-1. 不改动 `settings.yaml`、现有生产 prompt 或 GraphRAG 主问答流程的既有行为。
-2. 当前脚本以“样本准备、候选生成、prompt-tune 封装”为主，尚未补齐完整自动评测闭环。
-3. 现有 `prompts/`、`results/`、`utils/` 继续按原用途工作；调优脚本只在对应子目录内产生产物。
+1. 当前活动 Prompt 由 `.env` 和 `prompts/final/active_prompt.json` 协同记录；若候选已确认，需要显式执行 `python scripts/finalize_candidate_prompt.py --candidate <name>` 才会影响后续 `graphrag index`。
+2. `finalize_candidate_prompt.py` 默认优先固化候选目录中现有的 Prompt 文件；候选缺失时，只对可选项回退到默认模板，不会替你补齐不存在的主候选。
+3. 当前脚本已经覆盖“样本准备、候选生成、prompt-tune 封装、最终 Prompt 固化、抽取执行、规则化评测”主链路，但 QA 自动评测仍然相对薄弱。
+4. 现有 `prompts/`、`results/`、`utils/` 继续按原用途工作；调优脚本只在对应子目录内产生产物。

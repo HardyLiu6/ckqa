@@ -10,7 +10,7 @@ This file applies to the whole repository.
 
 ## Project Layout
 
-This repository currently has four notable areas, with the two Python modules as the main workflow:
+This repository currently has five notable areas, with the two Python modules as the main workflow:
 
 1. `pdf_ingest/`
    - Main PDF processing pipeline.
@@ -21,10 +21,14 @@ This repository currently has four notable areas, with the two Python modules as
    - Main knowledge graph Q&A pipeline.
    - Dependency source of truth is `pyproject.toml`, currently pinned to Microsoft GraphRAG `3.0.9`.
    - Builds indexes and serves an OpenAI-compatible FastAPI endpoint.
-3. `frontend/apps/admin-app/`
+3. `frontend/apps/student-app/`
+   - Student-facing Vue 3 + Vite prototype imported into the repo.
+   - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
+   - Still not part of the production workflow; many routes are placeholders and the API layer is not wired.
+4. `frontend/apps/admin-app/`
    - Small Vue 3 + Vite admin frontend prototype.
    - Secondary unless the task explicitly targets frontend work.
-4. `backend/ckqa-back/`
+5. `backend/ckqa-back/`
    - Small Spring Boot skeleton project.
    - Not the primary implementation focus unless the task explicitly targets Java backend work.
 
@@ -41,6 +45,7 @@ Read these when needed for more detail:
 - `docs/标准化导出验证说明.md`
 - `pdf_ingest/docs/MinerU PDF Parser.md`
 - `graphrag_pipeline/README.md`
+- `frontend/apps/student-app/README.md`
 
 If docs and code differ, trust the code and call out the mismatch.
 
@@ -113,6 +118,16 @@ Notes:
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.
 - When updating active guidance files or runtime defaults, run `python scripts/audit_repo_drift.py --strict`.
+
+### `frontend/apps/student-app/`
+
+- Vue 3 + Vite standalone student-side prototype.
+- Preferred commands: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm preview`, `pnpm format`
+- `package.json` currently declares Node `^20.19.0 || >=22.12.0`.
+- Treat `node_modules/` as generated dependencies, not source.
+- Treat the nested `.git/` directory as imported upstream metadata, not as the repository's main Git history.
+- Current route tree is broader than the actual implemented views; many routes still have commented-out components.
+- `src/axios/index.js` is currently empty, so do not assume a working backend contract exists.
 
 ### `frontend/apps/admin-app/`
 

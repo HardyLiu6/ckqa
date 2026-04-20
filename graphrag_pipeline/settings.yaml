@@ -21,6 +21,8 @@ embedding_models:
     auth_method: api_key
     api_key: ${GRAPHRAG_EMBEDDING_API_KEY}
     api_base: ${GRAPHRAG_API_BASE}
+    call_args:
+      encoding_format: float
     retry:
       type: exponential_backoff
 
@@ -98,13 +100,13 @@ embed_text:
 
 extract_graph:
   completion_model_id: default_completion_model
-  prompt: "prompts/extract_graph.txt"
+  prompt: ${GRAPHRAG_ENTITY_EXTRACTION_PROMPT_FILE}
   entity_types: [organization,person,geo,event]
   max_gleanings: 1
 
 summarize_descriptions:
   completion_model_id: default_completion_model
-  prompt: "prompts/summarize_descriptions.txt"
+  prompt: ${GRAPHRAG_SUMMARIZE_DESCRIPTIONS_PROMPT_FILE}
   max_length: 500
 
 extract_graph_nlp:
@@ -117,14 +119,14 @@ cluster_graph:
 extract_claims:
   enabled: true
   completion_model_id: default_completion_model
-  prompt: "prompts/extract_claims.txt"
+  prompt: ${GRAPHRAG_CLAIM_EXTRACTION_PROMPT_FILE}
   description: "Any claims or facts that could be relevant to information discovery."
   max_gleanings: 1
 
 community_reports:
   completion_model_id: default_completion_model
-  graph_prompt: "prompts/community_report_graph.txt"
-  text_prompt: "prompts/community_report_text.txt"
+  graph_prompt: ${GRAPHRAG_COMMUNITY_REPORT_GRAPH_PROMPT_FILE}
+  text_prompt: ${GRAPHRAG_COMMUNITY_REPORT_TEXT_PROMPT_FILE}
   max_length: 2000
   max_input_length: 8000
 

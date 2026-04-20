@@ -43,6 +43,7 @@ python scripts/build_prompt_tuning_samples.py
 python scripts/build_audit_extraction_set.py
 python scripts/generate_candidate_prompts.py --overwrite
 python scripts/run_graphrag_prompt_tune.py --dry_run
+python scripts/finalize_candidate_prompt.py --candidate auto_tuned
 python scripts/score_extraction_results.py --overwrite
 
 # Run tests
@@ -102,6 +103,7 @@ pdf_ingest 导出的 json
 - **`scripts/build_audit_extraction_set.py`**：从样本构建 audit 校准集。
 - **`scripts/generate_candidate_prompts.py`**：生成候选 Prompt 与 manifest。
 - **`scripts/run_graphrag_prompt_tune.py`**：统一封装 GraphRAG 官方 prompt-tune。
+- **`scripts/finalize_candidate_prompt.py`**：把候选 Prompt 固化到 `prompts/final/`，并更新 `.env` 中当前活动 Prompt 路径。
 - **`utils/main.py`**：主 FastAPI 服务。默认读取仓库内 `output/`，统一通过 GraphRAG CLI 执行查询。
 - **`settings.yaml`**：GraphRAG CLI 索引配置，使用 `.env` 变量。
 - **`.env`**：GraphRAG CLI 所需的模型、目录和凭据变量。
@@ -118,6 +120,7 @@ pdf_ingest 导出的 json
 1. **`settings.yaml` + `.env`**
    - 供 `graphrag index` / `graphrag query` 等 CLI 使用。
    - `settings.yaml` 通过 `${GRAPHRAG_*}` 读取环境变量。
+   - 索引阶段的抽取 / 摘要 / community report Prompt 也通过 `.env` 驱动，可先运行 `python scripts/finalize_candidate_prompt.py --candidate <name>` 切换当前活动 Prompt。
 2. **`utils/main.py` 运行时配置**
    - 供 API 服务设置输出目录与监听地址。
    - 会优先读取仓库内 `.env` / 当前环境变量。
@@ -170,4 +173,5 @@ pip install -e ".[all]"    # 全部依赖
 - `graphrag_pipeline/scripts/` 内部实现按 `prompt_tuning/` 与 `extraction_eval/` 分组；根目录同名脚本保留为兼容入口。
 - 仓库活跃入口文件与关键脚本可以用 `python ../scripts/audit_repo_drift.py --strict` 做快速审计。
 - `settings.yaml` 已经配置 `input.type: json` 与一组 metadata 字段。
+- 若已经完成提示词调优并选定候选 Prompt，先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再执行 `graphrag index --root .`。
 - `output/` 中的 parquet 与 `lancedb/` 需要同时保留，API 服务依赖二者并存。

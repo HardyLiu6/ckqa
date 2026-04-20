@@ -1,0 +1,24 @@
+{
+  "task": "prompt_candidate_finalization",
+  "status": "success",
+  "finalized_at": "2026-04-20T15:54:06+08:00",
+  "candidate_name": "auto_tuned",
+  "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+  "candidate_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned",
+  "final_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/final/auto_tuned",
+  "env_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/.env",
+  "copied_files": [
+    "README.md",
+    "community_report_graph.txt",
+    "extract_graph.txt",
+    "prompt.txt",
+    "summarize_descriptions.txt"
+  ],
+  "active_prompt_paths": {
+    "extract_graph.txt": "prompts/final/auto_tuned/extract_graph.txt",
+    "summarize_descriptions.txt": "prompts/final/auto_tuned/summarize_descriptions.txt",
+    "extract_claims.txt": "prompts/extract_claims.txt",
+    "community_report_graph.txt": "prompts/final/auto_tuned/community_report_graph.txt",
+    "community_report_text.txt": "prompts/community_report_text.txt"
+  }
+}

@@ -31,6 +31,7 @@
 | `scripts/build_audit_extraction_set.py` | 从样本中构建小规模 audit 校准集 |
 | `scripts/generate_candidate_prompts.py` | 统一生成候选 Prompt 与 manifest |
 | `scripts/run_graphrag_prompt_tune.py` | 封装 GraphRAG 官方 prompt-tune 并整理 auto_tuned 候选 |
+| `scripts/finalize_candidate_prompt.py` | 把候选 Prompt 固化到 `prompts/final/` 并激活为当前索引 Prompt |
 | `scripts/run_candidate_extraction.py` | 批量执行候选 Prompt 抽取并输出统一结构化结果 |
 | `tests/test_fetch_from_minio.py` | 输入同步脚本测试 |
 | `tests/test_build_audit_extraction_set.py` | 抽样审计构建脚本测试 |
@@ -70,7 +71,20 @@ python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file normalized_docs.
 - 兼容历史 `*.jsonl` 文件并自动转为 JSON 数组
 - 会尽量把 `course_id`、`source_file`、`document_type`、`heading_path_text`、`page_start`、`page_end`、`section_level` 等 metadata 提升到顶层
 
-### 2. 建索引
+### 2. 激活当前索引使用的 Prompt
+
+```bash
+python scripts/finalize_candidate_prompt.py --candidate auto_tuned
+```
+
+脚本当前行为：
+
+- 把候选 Prompt 复制到 `prompts/final/<candidate>/`
+- 更新 `.env` 中当前活动 Prompt 路径
+- 写出 `prompts/final/active_prompt.json` 记录当前激活结果
+- 候选目录缺失某些可选 Prompt 时，自动回退到 `prompts/` 下默认模板
+
+### 3. 建索引
 
 ```bash
 graphrag index --root .
@@ -81,15 +95,16 @@ graphrag index --root .
 - `input.type: json`
 - `text_column: text`
 - `title_column: title`
+- 索引阶段 Prompt 路径由 `.env` 中的 `GRAPHRAG_*_PROMPT_FILE` 控制
 
-### 3. 命令行查询
+### 4. 命令行查询
 
 ```bash
 graphrag query --root . --method local --query "问题"
 graphrag query --root . --method global --query "问题"
 ```
 
-### 4. 启动 API
+### 5. 启动 API
 
 ```bash
 python utils/main.py
@@ -97,13 +112,14 @@ python utils/main.py
 
 默认端口为 `8012`。
 
-### 5. Prompt 调优辅助脚本
+### 6. Prompt 调优辅助脚本
 
 ```bash
 python scripts/build_prompt_tuning_samples.py
 python scripts/build_audit_extraction_set.py
 python scripts/generate_candidate_prompts.py --overwrite
 python scripts/run_graphrag_prompt_tune.py --dry_run
+python scripts/finalize_candidate_prompt.py --candidate auto_tuned
 ```
 
 当前约定是：模块专属脚本放在 `graphrag_pipeline/scripts/`，仓库根目录 `scripts/` 只保留仓库级工具，例如漂移审计。
@@ -115,7 +131,7 @@ python scripts/run_graphrag_prompt_tune.py --dry_run
 
 根目录同名脚本仍保留为兼容入口，所以现有 `python scripts/*.py` 命令默认不需要改。
 
-### 6. 候选 Prompt 抽取评测输入生成
+### 7. 候选 Prompt 抽取评测输入生成
 
 ```bash
 python scripts/run_candidate_extraction.py --limit 5 --overwrite
@@ -183,6 +199,7 @@ curl -X POST http://localhost:8012/v1/chat/completions \
 
 - `graphrag index` / `graphrag query` 主要走 `settings.yaml` + `.env`
 - `python utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认指向仓库内 `output/`
+- 当前活动 Prompt 由 `.env` 中的 `GRAPHRAG_ACTIVE_PROMPT_CANDIDATE` 与各个 `GRAPHRAG_*_PROMPT_FILE` 共同决定
 - API 侧常用覆盖项包括 `GRAPHRAG_OUTPUT_DIR`、`GRAPHRAG_LANCEDB_URI`、`GRAPHRAG_API_HOST`、`GRAPHRAG_API_PORT`
 
 如果索引结果和 API 服务行为不一致，先检查 `.env` / 环境变量里的输出目录是否和当前索引产物一致。

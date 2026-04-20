@@ -3,6 +3,7 @@
 `graphrag_pipeline/scripts/` 现在按工作流分成两组实现目录，方便审阅：
 
 - `prompt_tuning/`：Prompt 调优样本、audit 集、候选 Prompt 生成、官方 `prompt-tune` 封装。
+- `prompt_tuning/` 还包含候选 Prompt 最终固化脚本，用于把选中的候选写入 `prompts/final/` 并更新 `.env`。
 - `extraction_eval/`：候选 Prompt 抽取执行、结构化解析、规则化评测与诊断。
 
 兼容性约定：

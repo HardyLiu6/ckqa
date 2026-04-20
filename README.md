@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-04-17
+> 审计日期：2026-04-20
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，真正承担主业务链路的是两个 Python 模块：
@@ -12,7 +12,8 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 其余目录目前仍属于配套原型或预留骨架：
 
-- `frontend/apps/admin-app/`：Vue 3 + Vite 前端原型，尚未接入主链路。
+- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
+- `frontend/apps/admin-app/`：管理端前端原型，仍接近 Vite/Vue 起步页。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 骨架工程，尚未承接正式业务接口。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
@@ -23,6 +24,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | --- | --- | --- | --- |
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，界面更完整但未接主链路 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端前端原型 | 独立原型，未接主链路 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 后端骨架 | 最小可启动骨架 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
@@ -30,6 +32,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 - 当前唯一稳定的业务主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
+- `frontend/apps/student-app/` 已经是一个比 `admin-app` 更完整的学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，但当前仍未接入稳定 API，`src/axios/index.js` 为空。
 - `frontend/apps/admin-app/` 当前代码仍接近 Vite/Vue 起步页，不应被视为正式管理台。
 - `backend/ckqa-back/` 当前只有启动类、默认配置和默认测试，不应被视为正式服务入口。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
@@ -65,6 +68,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 - [pdf_ingest/docs/MinerU PDF Parser.md](<pdf_ingest/docs/MinerU PDF Parser.md>)
 - [pdf_ingest/docs/课程文本规范与预处理流程.md](pdf_ingest/docs/课程文本规范与预处理流程.md)
 - [graphrag_pipeline/PROMPT_TUNING_PIPELINE.md](graphrag_pipeline/PROMPT_TUNING_PIPELINE.md)
+- [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 - [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 
@@ -96,6 +100,9 @@ ckqa/
 ├── frontend/apps/admin-app/
 │   ├── README.md
 │   └── src/
+├── frontend/apps/student-app/
+│   ├── README.md
+│   └── src/
 └── backend/ckqa-back/
     ├── README.md
     ├── pom.xml
@@ -116,11 +123,18 @@ ckqa/
 
 - 角色：GraphRAG 输入同步、索引、问答 API
 - 主入口：`utils/fetch_from_minio.py`、`utils/main.py`
-- 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`
+- 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`、`scripts/finalize_candidate_prompt.py`
 - 脚本分层：实现代码见 `graphrag_pipeline/scripts/README.md`，根目录同名脚本保留兼容入口
 - 关键产物：`input/*.json`、`output/*.parquet`、`output/lancedb/`
 - 运行环境：`graphrag-oneapi`
 - 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
+
+### `frontend/apps/student-app/`
+
+- 角色：学员端前端原型
+- 主入口：`src/main.js`、`src/router/index.js`
+- 当前状态：页面、路由和交互原型比 `admin-app` 更完整，但多数数据仍来自本地 store，未与主链路建立稳定契约
+- 文档入口：[frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 
 ### `frontend/apps/admin-app/`
 
@@ -182,9 +196,11 @@ python utils/main.py
 - 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--file-id` 或 `--file-name`，`graphrag_pipeline` 侧优先使用 `--pdf-file-id`。
 - `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
 - `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
+- `graphrag_pipeline` 当前活动 Prompt 由 `.env` 与 `prompts/final/active_prompt.json` 协同记录；如果切换了候选 Prompt，需要先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再重建索引。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
+- `frontend/apps/student-app/` 当前是导入型独立前端工程，目录内自带 `.git/` 与 `node_modules/`；做仓库级审计时应把它们视为外来元数据和生成物，而不是 CKQA 主线源码。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 - 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 
@@ -204,5 +220,6 @@ python utils/main.py
 - [pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md)
 - [graphrag_pipeline/README.md](graphrag_pipeline/README.md)
 - [graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)
+- [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 - [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
