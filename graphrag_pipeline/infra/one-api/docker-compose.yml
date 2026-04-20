@@ -1,0 +1,14 @@
+services:
+  one-api:
+    image: justsong/one-api:latest
+    container_name: one-api
+    restart: unless-stopped
+
+    ports:
+      - "3301:3000"   # Host 3301 -> Container 3000 (原 3000 被占用)
+
+    environment:
+      - TZ=Asia/Shanghai
+
+    volumes:
+      - ./one-api/data:/data
