@@ -251,6 +251,189 @@ CREATE TABLE `course_membership_events` (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程成员关系事件表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for knowledge_bases
+-- ----------------------------
+DROP TABLE IF EXISTS `knowledge_bases`;
+CREATE TABLE `knowledge_bases` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID',
+  `kb_code` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '知识库编码',
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '知识库名称',
+  `status` enum('draft','active','archived') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'draft' COMMENT '知识库状态',
+  `active_index_run_id` bigint NULL DEFAULT NULL COMMENT '当前激活索引运行ID',
+  `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '知识库说明',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_course_kb_code`(`course_id` ASC, `kb_code` ASC) USING BTREE,
+  CONSTRAINT `fk_knowledge_bases_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程知识库表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for kb_documents
+-- ----------------------------
+DROP TABLE IF EXISTS `kb_documents`;
+CREATE TABLE `kb_documents` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库ID',
+  `source_type` enum('parse_result','normalized_doc','section_doc','page_doc','manual') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文档来源类型',
+  `source_ref_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '来源记录ID',
+  `document_key` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文档键',
+  `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '文档标题',
+  `storage_uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '对象存储路径',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_kb_document_key`(`knowledge_base_id` ASC, `document_key` ASC) USING BTREE,
+  CONSTRAINT `fk_kb_documents_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '知识库文档映射表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for index_runs
+-- ----------------------------
+DROP TABLE IF EXISTS `index_runs`;
+CREATE TABLE `index_runs` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库ID',
+  `engine` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '索引引擎',
+  `index_version` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '索引版本',
+  `status` enum('pending','running','success','failed','archived') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '运行状态',
+  `started_at` timestamp NULL DEFAULT NULL COMMENT '开始时间',
+  `finished_at` timestamp NULL DEFAULT NULL COMMENT '结束时间',
+  `run_metadata` json DEFAULT NULL COMMENT '运行元数据',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_kb_index_version`(`knowledge_base_id` ASC, `index_version` ASC) USING BTREE,
+  CONSTRAINT `fk_index_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '索引运行表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for index_artifacts
+-- ----------------------------
+DROP TABLE IF EXISTS `index_artifacts`;
+CREATE TABLE `index_artifacts` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `index_run_id` bigint NOT NULL COMMENT '索引运行ID',
+  `artifact_type` enum('graphrag_output','parquet','lancedb','report','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '产物类型',
+  `storage_uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '产物路径',
+  `file_size` bigint NULL DEFAULT 0 COMMENT '文件大小',
+  `checksum` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '校验值',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_index_artifacts_run_type`(`index_run_id` ASC, `artifact_type` ASC) USING BTREE,
+  CONSTRAINT `fk_index_artifacts_run` FOREIGN KEY (`index_run_id`) REFERENCES `index_runs` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '索引产物表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for qa_sessions
+-- ----------------------------
+DROP TABLE IF EXISTS `qa_sessions`;
+CREATE TABLE `qa_sessions` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `session_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '会话编码',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
+  `course_membership_id` bigint NULL DEFAULT NULL COMMENT '课程成员ID',
+  `knowledge_base_id` bigint NULL DEFAULT NULL COMMENT '知识库ID',
+  `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '会话标题',
+  `status` enum('active','archived','deleted') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '会话状态',
+  `last_message_at` timestamp NULL DEFAULT NULL COMMENT '最后消息时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_session_code`(`session_code` ASC) USING BTREE,
+  INDEX `idx_sessions_user_created`(`user_id` ASC, `created_at` ASC) USING BTREE,
+  CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_sessions_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_sessions_membership` FOREIGN KEY (`course_membership_id`) REFERENCES `course_memberships` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_sessions_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答会话表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for qa_messages
+-- ----------------------------
+DROP TABLE IF EXISTS `qa_messages`;
+CREATE TABLE `qa_messages` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `session_id` bigint NOT NULL COMMENT '会话ID',
+  `role` enum('system','user','assistant','tool') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '消息角色',
+  `sequence_no` int NOT NULL COMMENT '消息序号',
+  `content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '消息原始内容',
+  `content_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '可检索文本',
+  `token_count` int NULL DEFAULT NULL COMMENT 'Token数',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_session_sequence`(`session_id` ASC, `sequence_no` ASC) USING BTREE,
+  CONSTRAINT `fk_messages_session` FOREIGN KEY (`session_id`) REFERENCES `qa_sessions` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答消息表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for qa_retrieval_logs
+-- ----------------------------
+DROP TABLE IF EXISTS `qa_retrieval_logs`;
+CREATE TABLE `qa_retrieval_logs` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `session_id` bigint NOT NULL COMMENT '会话ID',
+  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
+  `index_run_id` bigint NULL DEFAULT NULL COMMENT '索引运行ID',
+  `query_mode` enum('local','global','full') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
+  `query_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询文本',
+  `retrieval_status` enum('success','partial','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '检索状态',
+  `error_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '错误信息',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_retrieval_course_created`(`course_id` ASC, `created_at` ASC) USING BTREE,
+  CONSTRAINT `fk_retrieval_logs_session` FOREIGN KEY (`session_id`) REFERENCES `qa_sessions` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_retrieval_logs_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_retrieval_logs_index_run` FOREIGN KEY (`index_run_id`) REFERENCES `index_runs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答检索日志表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for qa_retrieval_hits
+-- ----------------------------
+DROP TABLE IF EXISTS `qa_retrieval_hits`;
+CREATE TABLE `qa_retrieval_hits` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `retrieval_log_id` bigint NOT NULL COMMENT '检索日志ID',
+  `document_key` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '命中文档键',
+  `chunk_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '命中块ID',
+  `rank_position` int NOT NULL COMMENT '排序位置',
+  `score` decimal(12, 6) NULL DEFAULT NULL COMMENT '召回分数',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_hits_log_rank`(`retrieval_log_id` ASC, `rank_position` ASC) USING BTREE,
+  CONSTRAINT `fk_retrieval_hits_log` FOREIGN KEY (`retrieval_log_id`) REFERENCES `qa_retrieval_logs` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答命中文档表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for authorization_audit_logs
+-- ----------------------------
+DROP TABLE IF EXISTS `authorization_audit_logs`;
+CREATE TABLE `authorization_audit_logs` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `actor_user_id` bigint NOT NULL COMMENT '执行判定的用户ID',
+  `target_course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '目标课程ID',
+  `target_session_id` bigint NULL DEFAULT NULL COMMENT '目标会话ID',
+  `course_membership_id` bigint NULL DEFAULT NULL COMMENT '命中的课程成员关系ID',
+  `action` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '动作',
+  `decision` enum('allow','deny') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '判定结果',
+  `decision_reason` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '判定原因',
+  `extra_metadata` json DEFAULT NULL COMMENT '补充元数据',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_auth_audit_actor_created`(`actor_user_id` ASC, `created_at` ASC) USING BTREE,
+  CONSTRAINT `fk_auth_audit_actor` FOREIGN KEY (`actor_user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_auth_audit_course` FOREIGN KEY (`target_course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_auth_audit_session` FOREIGN KEY (`target_session_id`) REFERENCES `qa_sessions` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_auth_audit_membership` FOREIGN KEY (`course_membership_id`) REFERENCES `course_memberships` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '授权判定审计表' ROW_FORMAT = Dynamic;
+
+ALTER TABLE `knowledge_bases`
+  ADD CONSTRAINT `fk_knowledge_bases_active_index_run`
+  FOREIGN KEY (`active_index_run_id`) REFERENCES `index_runs` (`id`)
+  ON DELETE SET NULL
+  ON UPDATE RESTRICT;
+
+-- ----------------------------
 -- View structure for v_course_parse_overview
 -- ----------------------------
 DROP VIEW IF EXISTS `v_course_parse_overview`;
