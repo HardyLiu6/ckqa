@@ -52,6 +52,27 @@ pip install -e ".[dev]"
 
 运行时配置来自 `.env`，通过 `Config.from_env()` 加载。
 
+## 数据库初始化
+
+首次创建或重建本地数据库时，可直接执行：
+
+```bash
+cd pdf_ingest
+mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/ocqa.sql
+```
+
+初始化完成后，建议先检查核心种子数据和关键表是否存在：
+
+```sql
+SELECT role_code, role_name FROM roles ORDER BY id;
+SELECT permission_code FROM permissions ORDER BY id;
+SHOW TABLES LIKE 'course_memberships';
+SHOW TABLES LIKE 'knowledge_bases';
+SHOW TABLES LIKE 'qa_sessions';
+```
+
+当前这套 schema 只负责数据库结构和基础种子，不代表运行态 API 已经接入这些表。
+
 ## 常用命令
 
 ### 上传 PDF
