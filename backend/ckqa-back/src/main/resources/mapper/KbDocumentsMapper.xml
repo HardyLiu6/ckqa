@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.KbDocumentsMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.KbDocuments">
+        <id column="id" property="id" />
+        <result column="knowledge_base_id" property="knowledgeBaseId" />
+        <result column="source_type" property="sourceType" />
+        <result column="source_ref_id" property="sourceRefId" />
+        <result column="document_key" property="documentKey" />
+        <result column="title" property="title" />
+        <result column="storage_uri" property="storageUri" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, knowledge_base_id, source_type, source_ref_id, document_key, title, storage_uri, created_at
+    </sql>
+
+</mapper>

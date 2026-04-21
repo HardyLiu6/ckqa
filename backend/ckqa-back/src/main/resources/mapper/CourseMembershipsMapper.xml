@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.CourseMembershipsMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.CourseMemberships">
+        <id column="id" property="id" />
+        <result column="user_id" property="userId" />
+        <result column="course_id" property="courseId" />
+        <result column="membership_role" property="membershipRole" />
+        <result column="status" property="status" />
+        <result column="access_source" property="accessSource" />
+        <result column="source_ref_type" property="sourceRefType" />
+        <result column="source_ref_id" property="sourceRefId" />
+        <result column="joined_at" property="joinedAt" />
+        <result column="expires_at" property="expiresAt" />
+        <result column="effective_from" property="effectiveFrom" />
+        <result column="effective_to" property="effectiveTo" />
+        <result column="granted_by_user_id" property="grantedByUserId" />
+        <result column="revoked_by_user_id" property="revokedByUserId" />
+        <result column="change_reason" property="changeReason" />
+        <result column="extra_metadata" property="extraMetadata" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, user_id, course_id, membership_role, status, access_source, source_ref_type, source_ref_id, joined_at, expires_at, effective_from, effective_to, granted_by_user_id, revoked_by_user_id, change_reason, extra_metadata, created_at, updated_at
+    </sql>
+
+</mapper>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.CourseMembershipEventsMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.CourseMembershipEvents">
+        <id column="id" property="id" />
+        <result column="course_membership_id" property="courseMembershipId" />
+        <result column="event_type" property="eventType" />
+        <result column="old_status" property="oldStatus" />
+        <result column="new_status" property="newStatus" />
+        <result column="operator_user_id" property="operatorUserId" />
+        <result column="change_reason" property="changeReason" />
+        <result column="event_payload" property="eventPayload" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, course_membership_id, event_type, old_status, new_status, operator_user_id, change_reason, event_payload, created_at
+    </sql>
+
+</mapper>

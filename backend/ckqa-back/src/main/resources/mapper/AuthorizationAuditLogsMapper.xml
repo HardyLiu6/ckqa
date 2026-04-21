@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.AuthorizationAuditLogsMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.AuthorizationAuditLogs">
+        <id column="id" property="id" />
+        <result column="actor_user_id" property="actorUserId" />
+        <result column="target_course_id" property="targetCourseId" />
+        <result column="target_session_id" property="targetSessionId" />
+        <result column="course_membership_id" property="courseMembershipId" />
+        <result column="action" property="action" />
+        <result column="decision" property="decision" />
+        <result column="decision_reason" property="decisionReason" />
+        <result column="extra_metadata" property="extraMetadata" />
+        <result column="created_at" property="createdAt" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, actor_user_id, target_course_id, target_session_id, course_membership_id, action, decision, decision_reason, extra_metadata, created_at
+    </sql>
+
+</mapper>
