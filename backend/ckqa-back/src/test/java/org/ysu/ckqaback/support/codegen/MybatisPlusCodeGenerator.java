@@ -1,4 +1,4 @@
-package org.ysu.ckqaback.codegen;
+package org.ysu.ckqaback.support.codegen;
 
 import com.baomidou.mybatisplus.generator.FastAutoGenerator;
 import com.baomidou.mybatisplus.generator.config.OutputFile;

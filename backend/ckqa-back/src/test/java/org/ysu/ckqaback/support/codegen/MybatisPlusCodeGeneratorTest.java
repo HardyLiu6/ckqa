@@ -1,4 +1,4 @@
-package org.ysu.ckqaback.codegen;
+package org.ysu.ckqaback.support.codegen;
 
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +11,7 @@ class MybatisPlusCodeGeneratorTest {
         MybatisPlusCodeGenerator.GeneratorOptions options =
                 MybatisPlusCodeGenerator.GeneratorOptions.parse(new String[0]);
 
-        assertThat(options.tables()).contains("courses", "qa_messages", "authorization_audit_logs");
+        assertThat(options.tables()).contains("users", "roles", "authorization_audit_logs");
         assertThat(options.overwrite()).isFalse();
     }
 

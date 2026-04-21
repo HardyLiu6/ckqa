@@ -1,11 +1,11 @@
 # ckqa-back
 
-`backend/ckqa-back/` 是 CKQA 仓库中的 Java 后端工程，基于 Spring Boot 4.0.5 与 Java 21。当前它仍不是 CKQA 的主业务入口，但已经完成了 MyBatis-Plus 接入、MySQL 配置和基于 `ocqa` 库表的标准代码生成基线。
+`backend/ckqa-back/` 是 CKQA 仓库中的 Java 后端工程，基于 Spring Boot 4.0.5 与 Java 21。当前它仍不是 CKQA 的主业务入口，但已经完成了 MyBatis-Plus 接入、MySQL 配置、全表代码生成基线，以及统一的 `/api/v1` API 规范。
 
 ## 当前状态
 
 - 技术栈：Spring Boot 4.0.5、Java 21、MyBatis-Plus 3.5.16、Maven Wrapper
-- 当前能力：支持通过环境变量连接 MySQL，支持全表生成 `entity/mapper/service/controller`
+- 当前能力：支持通过环境变量连接 MySQL，支持全表生成 `entity/mapper/service/controller`，并已落地统一返回体、异常处理、参数校验与 `users` 示例接口
 - 当前角色：后端接口层开发基线，尚未承接正式业务接口实现
 
 如果你当前目标是跑通 CKQA 主链路，请优先查看：
@@ -21,7 +21,10 @@
 | `pom.xml` | Maven 依赖与 Java 版本配置 |
 | `src/main/java/org/ysu/ckqaback/CkqaBackApplication.java` | Spring Boot 启动类 |
 | `src/main/java/org/ysu/ckqaback/config/MybatisPlusConfig.java` | MyBatis-Plus 分页插件与基础配置 |
-| `src/main/java/org/ysu/ckqaback/codegen/MybatisPlusCodeGenerator.java` | 基于真实 MySQL 库表的代码生成入口 |
+| `src/main/java/org/ysu/ckqaback/api/` | 统一 API 路由常量、响应码枚举、返回体与分页结构 |
+| `src/main/java/org/ysu/ckqaback/exception/` | 统一业务异常与全局异常处理 |
+| `src/main/java/org/ysu/ckqaback/user/dto/` | `users` 示例接口的请求/响应 DTO |
+| `src/test/java/org/ysu/ckqaback/support/codegen/MybatisPlusCodeGenerator.java` | 基于真实 MySQL 库表的代码生成入口，仅用于开发期生成代码 |
 | `src/main/resources/application.properties` | 数据源与 MyBatis-Plus 运行配置 |
 | `.env.example` | 运行应用与生成代码所需的环境变量示例 |
 
@@ -57,16 +60,18 @@ export MYSQL_PASSWORD=你的密码
 ### 生成全表标准代码
 
 ```bash
-./mvnw -q -DskipTests compile exec:java \
-  -Dexec.mainClass=org.ysu.ckqaback.codegen.MybatisPlusCodeGenerator \
+./mvnw -q -DskipTests test-compile exec:java \
+  -Dexec.classpathScope=test \
+  -Dexec.mainClass=org.ysu.ckqaback.support.codegen.MybatisPlusCodeGenerator \
   -Dexec.args="--overwrite=true"
 ```
 
 如果只想重生部分表，可以传入 `--tables=`：
 
 ```bash
-./mvnw -q -DskipTests compile exec:java \
-  -Dexec.mainClass=org.ysu.ckqaback.codegen.MybatisPlusCodeGenerator \
+./mvnw -q -DskipTests test-compile exec:java \
+  -Dexec.classpathScope=test \
+  -Dexec.mainClass=org.ysu.ckqaback.support.codegen.MybatisPlusCodeGenerator \
   -Dexec.args="--tables=users,roles --overwrite=true"
 ```
 
@@ -74,6 +79,31 @@ export MYSQL_PASSWORD=你的密码
 
 ```bash
 ./mvnw spring-boot:run
+```
+
+### 当前 API 风格
+
+所有控制器路径统一为：
+
+```text
+/api/v1/<resource>
+```
+
+例如：
+
+- `GET /api/v1/users/{id}`：查询单个用户
+- `GET /api/v1/users?page=1&size=10&username=tom&status=active`：分页查询用户
+- `POST /api/v1/users`：创建用户
+
+成功响应默认采用：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {},
+  "timestamp": "2026-04-21T11:00:00"
+}
 ```
 
 ### 运行测试
@@ -96,16 +126,25 @@ export MYSQL_PASSWORD=你的密码
 - `spring-boot-starter-data-redis`
 - `mybatis-plus-spring-boot4-starter`
 - `mybatis-plus-jsqlparser`
-- `mybatis-plus-generator`
 - `mysql-connector-j`
 - `lombok`
+
+开发期测试侧额外使用：
+
+- `mybatis-plus-generator`
+- `freemarker`
 
 并已落地：
 
 - MyBatis-Plus `@MapperScan` 与分页插件配置
 - 基于环境变量的 MySQL 数据源配置
 - 21 张表对应的 `entity/mapper/service/serviceImpl/controller/xml` 生成结果
-- 基础测试与可重复执行的代码生成入口
+- 基础测试与可重复执行的测试侧代码生成入口
+- 统一的 `/api/v1` 路由常量
+- 统一业务响应码枚举 `ApiResultCode`
+- 统一返回体与统一错误结构
+- 全局异常处理与 `jakarta.validation` 参数校验
+- `users` 模块的可调用示例接口
 
 ## 现阶段要避免的误判
 
@@ -117,7 +156,7 @@ export MYSQL_PASSWORD=你的密码
 
 建议先按最小复杂度补齐这些内容：
 
-1. 定义真正的业务 API，而不是直接暴露生成出来的空控制器。
+1. 以 `users` 为模板，逐步把其他空控制器补成真正可用的业务接口。
 2. 为 JSON 字段、枚举字段和审计字段补充更明确的建模与转换策略。
-3. 补充统一响应结构、异常处理和参数校验。
+3. 增加统一响应码枚举、日志追踪与鉴权能力。
 4. 明确它与 `graphrag_pipeline`、`pdf_ingest` 的接口边界。

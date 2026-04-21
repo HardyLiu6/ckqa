@@ -148,8 +148,8 @@ src/main/java/org/ysu/ckqaback/
 
 ```json
 {
-  "code": 0,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {},
   "timestamp": "2026-04-21T11:00:00"
 }
@@ -157,7 +157,7 @@ src/main/java/org/ysu/ckqaback/
 
 字段含义：
 
-- `code`：业务状态码，`0` 表示成功
+- `code`：业务状态码，`200` 表示成功
 - `message`：人类可读消息
 - `data`：业务数据
 - `timestamp`：服务端响应时间

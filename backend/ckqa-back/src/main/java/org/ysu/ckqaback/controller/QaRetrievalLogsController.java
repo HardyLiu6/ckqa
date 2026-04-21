@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.controller;
 
+import org.ysu.ckqaback.api.ApiPaths;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -12,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @since 2026-04-21
  */
 @RestController
-@RequestMapping("/qaRetrievalLogs")
+@RequestMapping(ApiPaths.QA_RETRIEVAL_LOGS)
 public class QaRetrievalLogsController {
 
 }

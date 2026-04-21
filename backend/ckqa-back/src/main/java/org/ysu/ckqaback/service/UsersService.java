@@ -1,7 +1,9 @@
 package org.ysu.ckqaback.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.ysu.ckqaback.entity.Users;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.ysu.ckqaback.user.dto.UserCreateRequest;
 
 /**
  * <p>
@@ -13,4 +15,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface UsersService extends IService<Users> {
 
+    Users getRequiredById(Long id);
+
+    IPage<Users> pageUsers(Long page, Long size, String username, String status);
+
+    Users createUser(UserCreateRequest request);
 }
