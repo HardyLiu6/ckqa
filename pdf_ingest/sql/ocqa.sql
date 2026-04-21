@@ -427,6 +427,39 @@ CREATE TABLE `authorization_audit_logs` (
   CONSTRAINT `fk_auth_audit_membership` FOREIGN KEY (`course_membership_id`) REFERENCES `course_memberships` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '授权判定审计表' ROW_FORMAT = Dynamic;
 
+INSERT INTO `roles` (`role_code`, `role_name`, `description`)
+VALUES
+  ('user', '普通用户', '默认平台用户'),
+  ('admin', '平台管理员', '拥有跨课程访问能力')
+ON DUPLICATE KEY UPDATE `role_name` = VALUES(`role_name`), `description` = VALUES(`description`);
+
+INSERT INTO `permissions` (`permission_code`, `permission_name`, `description`)
+VALUES
+  ('course.query', '课程问答访问', '允许访问课程问答'),
+  ('course.manage_members', '课程成员管理', '允许维护课程成员关系'),
+  ('kb.manage_index', '知识库索引管理', '允许维护知识库和索引版本'),
+  ('system.admin_override', '管理员越权访问', '允许管理员绕过课程成员限制')
+ON DUPLICATE KEY UPDATE `permission_name` = VALUES(`permission_name`), `description` = VALUES(`description`);
+
+INSERT INTO `role_permissions` (`role_id`, `permission_id`)
+SELECT r.id, p.id
+FROM `roles` r
+JOIN `permissions` p ON p.permission_code = 'course.query'
+WHERE r.role_code = 'user'
+ON DUPLICATE KEY UPDATE `permission_id` = VALUES(`permission_id`);
+
+INSERT INTO `role_permissions` (`role_id`, `permission_id`)
+SELECT r.id, p.id
+FROM `roles` r
+JOIN `permissions` p ON p.permission_code IN (
+  'course.query',
+  'course.manage_members',
+  'kb.manage_index',
+  'system.admin_override'
+)
+WHERE r.role_code = 'admin'
+ON DUPLICATE KEY UPDATE `permission_id` = VALUES(`permission_id`);
+
 ALTER TABLE `knowledge_bases`
   ADD CONSTRAINT `fk_knowledge_bases_active_index_run`
   FOREIGN KEY (`active_index_run_id`) REFERENCES `index_runs` (`id`)
