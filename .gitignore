@@ -117,6 +117,7 @@ environment-minimal.yml
 *.swp
 *.swo
 *~
+.worktrees/
 
 # =========================
 # Logs
@@ -167,4 +168,3 @@ temp_*/
 /CLAUDE.md
 
 pdf_ingest/.temp/
-
