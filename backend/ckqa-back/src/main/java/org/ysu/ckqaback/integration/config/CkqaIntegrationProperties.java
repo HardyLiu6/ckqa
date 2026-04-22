@@ -14,6 +14,7 @@ public class CkqaIntegrationProperties {
 
     private final PythonProcessProperties pdfIngest = new PythonProcessProperties();
     private final GraphRagProperties graphrag = new GraphRagProperties();
+    private final PollingProperties polling = new PollingProperties();
     private final TimeoutProperties timeout = new TimeoutProperties();
 
     @Getter
@@ -31,6 +32,12 @@ public class CkqaIntegrationProperties {
 
     @Getter
     @Setter
+    public static class PollingProperties {
+        private long queryTaskIntervalSeconds = 5L;
+    }
+
+    @Getter
+    @Setter
     public static class TimeoutProperties {
         private long parseSeconds = 900L;
         private long exportSeconds = 300L;
@@ -38,5 +45,6 @@ public class CkqaIntegrationProperties {
         private long indexSeconds = 1800L;
         private long querySeconds = 120L;
         private long indexStaleSeconds = 2400L;
+        private long queryTaskStaleSeconds = 30L;
     }
 }
