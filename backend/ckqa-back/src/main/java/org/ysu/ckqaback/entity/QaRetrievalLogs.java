@@ -40,6 +40,48 @@ public class QaRetrievalLogs implements Serializable {
     private Long sessionId;
 
     /**
+     * 用户消息ID
+     */
+    @TableField("user_message_id")
+    private Long userMessageId;
+
+    /**
+     * 助手消息ID
+     */
+    @TableField("assistant_message_id")
+    private Long assistantMessageId;
+
+    /**
+     * 任务序号
+     */
+    @TableField("task_seq")
+    private Integer taskSeq;
+
+    /**
+     * 任务状态
+     */
+    @TableField("task_status")
+    private String taskStatus;
+
+    /**
+     * 编排阶段
+     */
+    @TableField("progress_stage")
+    private String progressStage;
+
+    /**
+     * Python 侧任务ID
+     */
+    @TableField("python_task_id")
+    private String pythonTaskId;
+
+    /**
+     * 最近日志 tail
+     */
+    @TableField("latest_logs")
+    private String latestLogs;
+
+    /**
      * 课程ID
      */
     @TableField("course_id")
@@ -74,6 +116,24 @@ public class QaRetrievalLogs implements Serializable {
      */
     @TableField("error_message")
     private String errorMessage;
+
+    /**
+     * 开始时间
+     */
+    @TableField("started_at")
+    private LocalDateTime startedAt;
+
+    /**
+     * 最近心跳时间
+     */
+    @TableField("last_heartbeat_at")
+    private LocalDateTime lastHeartbeatAt;
+
+    /**
+     * 完成时间
+     */
+    @TableField("finished_at")
+    private LocalDateTime finishedAt;
 
     /**
      * 创建时间

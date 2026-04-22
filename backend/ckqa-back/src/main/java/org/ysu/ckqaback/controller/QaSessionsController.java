@@ -15,8 +15,9 @@ import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
-import org.ysu.ckqaback.qa.dto.QaRoundResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
+import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,7 +45,7 @@ public class QaSessionsController {
     }
 
     @PostMapping("/{id}/messages")
-    public ApiResponse<QaRoundResponse> sendMessage(
+    public ApiResponse<QaTaskSubmissionResponse> sendMessage(
             @PathVariable @Positive(message = "id必须大于0") Long id,
             @Valid @RequestBody CreateQaMessageRequest request
     ) {
@@ -59,5 +60,13 @@ public class QaSessionsController {
     @GetMapping("/{id}/messages")
     public ApiResponse<List<QaMessageResponse>> listMessages(@PathVariable @Positive(message = "id必须大于0") Long id) {
         return ApiResponseUtils.success(qaWorkflowService.listMessages(id));
+    }
+
+    @GetMapping("/{sessionId}/tasks/{taskId}")
+    public ApiResponse<QaTaskDetailResponse> getTaskDetail(
+            @PathVariable @Positive(message = "sessionId必须大于0") Long sessionId,
+            @PathVariable @Positive(message = "taskId必须大于0") Long taskId
+    ) {
+        return ApiResponseUtils.success(qaWorkflowService.getTaskDetail(sessionId, taskId));
     }
 }

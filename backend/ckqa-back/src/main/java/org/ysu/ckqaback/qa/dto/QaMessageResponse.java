@@ -17,6 +17,8 @@ public class QaMessageResponse {
     private final Integer sequenceNo;
     private final String content;
     private final LocalDateTime createdAt;
+    private final String taskStatus;
+    private final String progressStage;
 
     private QaMessageResponse(
             Long id,
@@ -24,7 +26,9 @@ public class QaMessageResponse {
             String role,
             Integer sequenceNo,
             String content,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String taskStatus,
+            String progressStage
     ) {
         this.id = id;
         this.sessionId = sessionId;
@@ -32,6 +36,8 @@ public class QaMessageResponse {
         this.sequenceNo = sequenceNo;
         this.content = content;
         this.createdAt = createdAt;
+        this.taskStatus = taskStatus;
+        this.progressStage = progressStage;
     }
 
     public static QaMessageResponse of(
@@ -40,9 +46,11 @@ public class QaMessageResponse {
             String role,
             Integer sequenceNo,
             String content,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String taskStatus,
+            String progressStage
     ) {
-        return new QaMessageResponse(id, sessionId, role, sequenceNo, content, createdAt);
+        return new QaMessageResponse(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage);
     }
 
     public static QaMessageResponse fromEntity(QaMessages message) {
@@ -52,7 +60,9 @@ public class QaMessageResponse {
                 message.getRole(),
                 message.getSequenceNo(),
                 message.getContent(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                null,
+                null
         );
     }
 }
