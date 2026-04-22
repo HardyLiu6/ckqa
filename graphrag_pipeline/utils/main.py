@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from api_runtime_config import load_api_runtime_config
 from runtime_defaults import PROJECT_ROOT, PROJECT_VERSION, TARGET_GRAPHRAG_VERSION
+from query_task_manager import QueryTaskManager
 
 
 logging.basicConfig(
@@ -109,6 +110,13 @@ def _build_query_cmd(method: str, prompt: str) -> list[str]:
         )
     cmd.append(prompt)
     return cmd
+
+
+QUERY_TASK_MANAGER = QueryTaskManager(
+    command_factory=_build_query_cmd,
+    env_factory=_build_query_env,
+    cwd=GRAPHRAG_ROOT,
+)
 
 
 async def run_graphrag_query_cli(method: str, prompt: str) -> str:
