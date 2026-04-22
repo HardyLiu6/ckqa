@@ -1,10 +1,19 @@
 package org.ysu.ckqaback.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.mapper.QaSessionsMapper;
+import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.service.QaSessionsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.util.UUID;
 
 /**
  * <p>
@@ -17,4 +26,41 @@ import org.springframework.stereotype.Service;
 @Service
 public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessions> implements QaSessionsService {
 
+    @Override
+    public QaSessions getRequiredById(Long id) {
+        QaSessions session = getById(id);
+        if (session == null) {
+            throw new BusinessException(ApiResultCode.QA_SESSION_NOT_FOUND, HttpStatus.NOT_FOUND);
+        }
+        return session;
+    }
+
+    @Override
+    public QaSessions createSession(CreateQaSessionRequest request) {
+        QaSessions session = new QaSessions();
+        session.setSessionCode(generateSessionCode());
+        session.setUserId(request.getUserId());
+        session.setCourseId(StringUtils.hasText(request.getCourseId()) ? request.getCourseId() : null);
+        session.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        session.setTitle(StringUtils.hasText(request.getTitle()) ? request.getTitle() : "新建问答会话");
+        session.setStatus("active");
+        save(session);
+        return session;
+    }
+
+    @Override
+    public void touchLastMessageAt(Long id) {
+        LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(QaSessions::getId, id)
+                .setSql("last_message_at = NOW()");
+        baseMapper.update(null, wrapper);
+    }
+
+    private String generateSessionCode() {
+        String code;
+        do {
+            code = "qa-" + UUID.randomUUID().toString().replace("-", "");
+        } while (exists(new LambdaQueryWrapper<QaSessions>().eq(QaSessions::getSessionCode, code)));
+        return code;
+    }
 }

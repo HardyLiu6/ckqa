@@ -13,4 +13,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface ParseResultsService extends IService<ParseResults> {
 
+    java.util.List<ParseResults> listByPdfFileId(Long pdfFileId);
+
+    java.util.List<ParseResults> listGraphRagOutputs(Long pdfFileId);
+
+    boolean hasCompleteGraphRagExport(Long pdfFileId, String mode, boolean withPageDocs);
 }

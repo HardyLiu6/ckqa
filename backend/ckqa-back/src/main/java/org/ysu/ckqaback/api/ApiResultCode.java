@@ -41,6 +41,26 @@ public enum ApiResultCode {
     USER_NOT_FOUND(4044, "用户不存在"),
 
     /**
+     * PDF 文件不存在。
+     */
+    PDF_FILE_NOT_FOUND(4045, "PDF文件不存在"),
+
+    /**
+     * 知识库不存在。
+     */
+    KNOWLEDGE_BASE_NOT_FOUND(4046, "知识库不存在"),
+
+    /**
+     * 索引任务不存在。
+     */
+    INDEX_RUN_NOT_FOUND(4047, "索引任务不存在"),
+
+    /**
+     * 问答会话不存在。
+     */
+    QA_SESSION_NOT_FOUND(4048, "问答会话不存在"),
+
+    /**
      * userCode 已存在。
      */
     USER_CODE_EXISTS(4091, "userCode已存在"),
@@ -48,7 +68,42 @@ public enum ApiResultCode {
     /**
      * username 已存在。
      */
-    USERNAME_EXISTS(4092, "username已存在");
+    USERNAME_EXISTS(4092, "username已存在"),
+
+    /**
+     * PDF 当前状态不允许再次触发解析。
+     */
+    PDF_PARSE_STATE_CONFLICT(4093, "PDF当前状态不允许再次触发解析"),
+
+    /**
+     * 当前已有导出任务在执行。
+     */
+    PDF_EXPORT_LOCKED(4094, "当前已有导出任务在执行"),
+
+    /**
+     * 当前知识库已有索引任务在运行。
+     */
+    INDEX_RUN_ALREADY_RUNNING(4095, "当前知识库已有索引任务在运行"),
+
+    /**
+     * 问答会话已关闭。
+     */
+    QA_SESSION_NOT_ACTIVE(4096, "问答会话已关闭"),
+
+    /**
+     * 知识库当前没有可用索引。
+     */
+    KNOWLEDGE_BASE_NOT_READY(4097, "知识库当前没有可用索引"),
+
+    /**
+     * PDF 解析执行失败。
+     */
+    PDF_PARSE_EXECUTION_FAILED(5003, "PDF解析执行失败"),
+
+    /**
+     * 索引任务执行失败。
+     */
+    INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败");
 
     /**
      * 业务响应码。

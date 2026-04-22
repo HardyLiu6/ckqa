@@ -13,4 +13,14 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface QaRetrievalLogsService extends IService<QaRetrievalLogs> {
 
+    QaRetrievalLogs createSuccessLog(Long sessionId, String courseId, Long indexRunId, String mode, String queryText);
+
+    QaRetrievalLogs createFailureLog(
+            Long sessionId,
+            String courseId,
+            Long indexRunId,
+            String mode,
+            String queryText,
+            String errorMessage
+    );
 }

@@ -1,61 +1,148 @@
 # ckqa-back
 
-`backend/ckqa-back/` 是 CKQA 仓库中的 Java 后端工程，基于 Spring Boot 4.0.5 与 Java 21。当前它仍不是 CKQA 的主业务入口，但已经完成了 MyBatis-Plus 接入、MySQL 配置、全表代码生成基线，以及统一的 `/api/v1` API 规范。
+`backend/ckqa-back/` 是 CKQA 仓库中的 Java 后端一期编排入口，基于 Spring Boot 4.0.5、Java 21 与 MyBatis-Plus 3.5.16。
 
-## 当前状态
+当前目标不是重写 `pdf_ingest/` 或 `graphrag_pipeline/`，而是在不破坏现有 Python 主链路的前提下，提供统一的 `/api/v1` 业务入口，先打通：
 
-- 技术栈：Spring Boot 4.0.5、Java 21、MyBatis-Plus 3.5.16、Maven Wrapper
-- 当前能力：支持通过环境变量连接 MySQL，支持全表生成 `entity/mapper/service/controller`，并已落地统一返回体、异常处理、参数校验与 `users` 示例接口
-- 当前角色：后端接口层开发基线，尚未承接正式业务接口实现
+1. PDF 解析触发
+2. GraphRAG 输入导出
+3. 索引构建与陈旧任务恢复
+4. GraphRAG 问答代理
+5. 课程入口与系统健康检查
 
-如果你当前目标是跑通 CKQA 主链路，请优先查看：
+如果你需要了解整个仓库的主链路，请同时查看：
 
 - [../../README.md](../../README.md)
 - [../../pdf_ingest/README.md](../../pdf_ingest/README.md)
 - [../../graphrag_pipeline/README.md](../../graphrag_pipeline/README.md)
 
-## 真实入口与关键文件
+## 一期编排接口
 
-| 文件 | 作用 |
-| --- | --- |
-| `pom.xml` | Maven 依赖与 Java 版本配置 |
-| `src/main/java/org/ysu/ckqaback/CkqaBackApplication.java` | Spring Boot 启动类 |
-| `src/main/java/org/ysu/ckqaback/config/MybatisPlusConfig.java` | MyBatis-Plus 分页插件与基础配置 |
-| `src/main/java/org/ysu/ckqaback/api/` | 统一 API 路由常量、响应码枚举、返回体与分页结构 |
-| `src/main/java/org/ysu/ckqaback/exception/` | 统一业务异常与全局异常处理 |
-| `src/main/java/org/ysu/ckqaback/user/dto/` | `users` 示例接口的请求/响应 DTO |
-| `src/test/java/org/ysu/ckqaback/support/codegen/MybatisPlusCodeGenerator.java` | 基于真实 MySQL 库表的代码生成入口，仅用于开发期生成代码 |
-| `src/main/resources/application.properties` | 数据源与 MyBatis-Plus 运行配置 |
-| `.env.example` | 运行应用与生成代码所需的环境变量示例 |
+当前已经落地的核心接口如下：
 
-## 环境准备
+- `GET /api/v1/system/health`
+- `GET /api/v1/courses/{courseId}/pdf-files`
+- `GET /api/v1/courses/{courseId}/knowledge-bases`
+- `GET /api/v1/pdf-files/{id}`
+- `GET /api/v1/pdf-files/{id}/results`
+- `POST /api/v1/pdf-files/{id}/parse`
+- `POST /api/v1/pdf-files/{id}/export-graphrag`
+- `POST /api/v1/knowledge-bases/{id}/index-runs`
+- `GET /api/v1/knowledge-bases/{id}/index-runs`
+- `GET /api/v1/index-runs/{id}`
+- `POST /api/v1/qa-sessions`
+- `GET /api/v1/qa-sessions/{id}`
+- `GET /api/v1/qa-sessions/{id}/messages`
+- `POST /api/v1/qa-sessions/{id}/messages`
 
-```bash
-cd backend/ckqa-back
-java -version
-./mvnw -version
+统一响应格式示例：
+
+```json
+{
+  "code": 200,
+  "message": "操作成功",
+  "data": {},
+  "timestamp": "2026-04-21T21:00:00"
+}
 ```
 
-建议环境：
+## 目录说明
 
-- Java 21
-- 本机可执行 `./mvnw`
+| 路径 | 作用 |
+| --- | --- |
+| `src/main/java/org/ysu/ckqaback/api/` | 路由常量、统一响应体、业务响应码 |
+| `src/main/java/org/ysu/ckqaback/exception/` | 业务异常与全局异常处理 |
+| `src/main/java/org/ysu/ckqaback/integration/` | Python CLI 调用、GraphRAG HTTP 调用、数据库命名锁、运行配置 |
+| `src/main/java/org/ysu/ckqaback/pdf/` | PDF 查询、解析触发、GraphRAG 导出工作流与 DTO |
+| `src/main/java/org/ysu/ckqaback/index/` | 索引任务创建、陈旧任务恢复、索引响应 DTO |
+| `src/main/java/org/ysu/ckqaback/course/` | 课程下 PDF / 知识库入口查询 |
+| `src/main/java/org/ysu/ckqaback/qa/` | 问答会话、消息、GraphRAG 代理工作流与 DTO |
+| `src/main/java/org/ysu/ckqaback/system/` | 系统健康检查接口与状态 DTO |
+| `src/test/java/org/ysu/ckqaback/` | 单元测试与 WebMvc 测试 |
+| `src/main/resources/application.properties` | MySQL、MyBatis-Plus 与一期集成配置 |
+| `.env.example` | 本地运行所需环境变量示例 |
 
-## 环境变量
+## 外部依赖配置
 
-运行应用或执行代码生成前，请先准备以下环境变量：
+运行应用前，请先准备 MySQL 与 Python 集成配置：
 
 ```bash
 export MYSQL_HOST=localhost
 export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
-export MYSQL_PASSWORD=你的密码
+export MYSQL_PASSWORD=your-password
+
+export PDF_INGEST_PYTHON=/path/to/courseKg/bin/python
+export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
+
+export GRAPHRAG_PYTHON=/path/to/graphrag-oneapi/bin/python
+export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
+export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+
+export PARSE_TIMEOUT_SECONDS=900
+export EXPORT_TIMEOUT_SECONDS=300
+export FETCH_TIMEOUT_SECONDS=300
+export INDEX_TIMEOUT_SECONDS=1800
+export QUERY_TIMEOUT_SECONDS=120
+export INDEX_STALE_SECONDS=2400
 ```
 
-也可以参考本目录下的 `.env.example` 手动配置到 IDE 运行参数中。
+这些变量也已经在 `.env.example` 中给出示例。
+
+## 启动顺序
+
+一期联调推荐按下面顺序启动：
+
+1. 启动 MySQL
+2. 启动 `graphrag_pipeline/utils/main.py`
+3. 根据需要确认 `pdf_ingest/` 和 `graphrag_pipeline/` 根目录、Python 解释器路径已配置
+4. 启动 `backend/ckqa-back`
+
+启动 Java 后端：
+
+```bash
+cd backend/ckqa-back
+./mvnw spring-boot:run
+```
+
+## 健康检查说明
+
+`GET /api/v1/system/health` 当前会返回细分子项，而不是单一布尔值，重点包括：
+
+- `mysql`
+- `pdf-ingest-root`
+- `graphrag-root`
+- `graphrag-output`
+- `graphrag-api`
+- `graphrag-ready`
+
+其中：
+
+- `reachable` 表示依赖可连通或路径存在
+- `ready` 表示依赖具备处理真实业务的前提条件
+
+例如 `graphrag-output` 会检查 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 是否存在。
 
 ## 常用命令
+
+### 启动应用
+
+```bash
+./mvnw spring-boot:run
+```
+
+### 运行测试
+
+```bash
+./mvnw test
+```
+
+### 仅编译
+
+```bash
+./mvnw -DskipTests compile
+```
 
 ### 生成全表标准代码
 
@@ -66,97 +153,36 @@ export MYSQL_PASSWORD=你的密码
   -Dexec.args="--overwrite=true"
 ```
 
-如果只想重生部分表，可以传入 `--tables=`：
+## 最小联调顺序
+
+建议按下面顺序验证一期闭环：
+
+1. `GET /api/v1/system/health`
+2. `GET /api/v1/courses/{courseId}/pdf-files`
+3. `POST /api/v1/pdf-files/{id}/parse`
+4. `POST /api/v1/pdf-files/{id}/export-graphrag`
+5. `POST /api/v1/knowledge-bases/{id}/index-runs`
+6. `POST /api/v1/qa-sessions`
+7. `POST /api/v1/qa-sessions/{id}/messages`
+
+## 回归验证
+
+当前后端回归至少执行以下命令：
 
 ```bash
-./mvnw -q -DskipTests test-compile exec:java \
-  -Dexec.classpathScope=test \
-  -Dexec.mainClass=org.ysu.ckqaback.support.codegen.MybatisPlusCodeGenerator \
-  -Dexec.args="--tables=users,roles --overwrite=true"
+./mvnw -q test
+./mvnw -q -DskipTests compile
 ```
 
-### 启动应用
+如果需要做应用级启动验证，再额外执行：
 
 ```bash
-./mvnw spring-boot:run
+./mvnw -q spring-boot:run
 ```
 
-### 当前 API 风格
+## 当前已知边界
 
-所有控制器路径统一为：
-
-```text
-/api/v1/<resource>
-```
-
-例如：
-
-- `GET /api/v1/users/{id}`：查询单个用户
-- `GET /api/v1/users?page=1&size=10&username=tom&status=active`：分页查询用户
-- `POST /api/v1/users`：创建用户
-
-成功响应默认采用：
-
-```json
-{
-  "code": 200,
-  "message": "操作成功",
-  "data": {},
-  "timestamp": "2026-04-21T11:00:00"
-}
-```
-
-### 运行测试
-
-```bash
-./mvnw test
-```
-
-### 构建可执行包
-
-```bash
-./mvnw clean package
-```
-
-## 当前依赖概况
-
-`pom.xml` 里已经引入了：
-
-- `spring-boot-starter-webmvc`
-- `spring-boot-starter-data-redis`
-- `mybatis-plus-spring-boot4-starter`
-- `mybatis-plus-jsqlparser`
-- `mysql-connector-j`
-- `lombok`
-
-开发期测试侧额外使用：
-
-- `mybatis-plus-generator`
-- `freemarker`
-
-并已落地：
-
-- MyBatis-Plus `@MapperScan` 与分页插件配置
-- 基于环境变量的 MySQL 数据源配置
-- 21 张表对应的 `entity/mapper/service/serviceImpl/controller/xml` 生成结果
-- 基础测试与可重复执行的测试侧代码生成入口
-- 统一的 `/api/v1` 路由常量
-- 统一业务响应码枚举 `ApiResultCode`
-- 统一返回体与统一错误结构
-- 全局异常处理与 `jakarta.validation` 参数校验
-- `users` 模块的可调用示例接口
-
-## 现阶段要避免的误判
-
-- 不要把它当成已经接管 CKQA 的统一 API 网关
-- 不要把自动生成的 Controller 当成已经完成业务语义设计的正式接口
-- 不要假设它已经接好了 GraphRAG 调用链或完整权限体系
-
-## 如果后续要把它做成正式后端
-
-建议先按最小复杂度补齐这些内容：
-
-1. 以 `users` 为模板，逐步把其他空控制器补成真正可用的业务接口。
-2. 为 JSON 字段、枚举字段和审计字段补充更明确的建模与转换策略。
-3. 增加统一响应码枚举、日志追踪与鉴权能力。
-4. 明确它与 `graphrag_pipeline`、`pdf_ingest` 的接口边界。
+- `parse` 与 `index` 仍是同步长任务，一期主要靠命令超时与陈旧任务恢复兜底
+- `qa_retrieval_hits` 尚未落地
+- `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活
+- Java 侧还没有承接上传链路，仍以已有 `pdf_files` 记录为起点

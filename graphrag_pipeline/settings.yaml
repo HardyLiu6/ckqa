@@ -90,7 +90,7 @@ cache:
     
 vector_store:
   type: lancedb
-  db_uri: output/lancedb
+  db_uri: ${GRAPHRAG_STORAGE_DIR}/lancedb
 
 ### Workflow settings ###
 
@@ -148,6 +148,8 @@ global_search:
   map_prompt: "prompts/global_search_map_system_prompt.txt"
   reduce_prompt: "prompts/global_search_reduce_system_prompt.txt"
   knowledge_prompt: "prompts/global_search_knowledge_system_prompt.txt"
+  dynamic_search_use_summary: true
+  dynamic_search_max_level: 1
 
 drift_search:
   completion_model_id: default_completion_model

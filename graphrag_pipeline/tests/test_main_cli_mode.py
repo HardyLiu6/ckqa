@@ -33,6 +33,22 @@ class TestMainCliMode(unittest.TestCase):
 
         self.assertIn('"compat_mode": "cli_query"', text)
 
+    def test_main_source_uses_positional_query_argument_for_graphrag_3(self):
+        text = (_PROJECT_ROOT / "utils" / "main.py").read_text(encoding="utf-8")
+
+        self.assertIn('"query"', text)
+        self.assertNotIn('"--query"', text)
+
+    def test_main_source_applies_global_search_runtime_strategy_and_loopback_no_proxy(self):
+        text = (_PROJECT_ROOT / "utils" / "main.py").read_text(encoding="utf-8")
+
+        self.assertIn('"--community-level"', text)
+        self.assertIn('"--response-type"', text)
+        self.assertIn('"--dynamic-community-selection"', text)
+        self.assertIn('"--no-dynamic-community-selection"', text)
+        self.assertIn('env["NO_PROXY"]', text)
+        self.assertIn('env["no_proxy"]', text)
+
 
 if __name__ == "__main__":
     unittest.main()

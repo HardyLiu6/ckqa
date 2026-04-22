@@ -17,4 +17,41 @@ import org.springframework.stereotype.Service;
 @Service
 public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMapper, QaRetrievalLogs> implements QaRetrievalLogsService {
 
+    @Override
+    public QaRetrievalLogs createSuccessLog(Long sessionId, String courseId, Long indexRunId, String mode, String queryText) {
+        return createLog(sessionId, courseId, indexRunId, mode, queryText, "success", null);
+    }
+
+    @Override
+    public QaRetrievalLogs createFailureLog(
+            Long sessionId,
+            String courseId,
+            Long indexRunId,
+            String mode,
+            String queryText,
+            String errorMessage
+    ) {
+        return createLog(sessionId, courseId, indexRunId, mode, queryText, "failed", errorMessage);
+    }
+
+    private QaRetrievalLogs createLog(
+            Long sessionId,
+            String courseId,
+            Long indexRunId,
+            String mode,
+            String queryText,
+            String retrievalStatus,
+            String errorMessage
+    ) {
+        QaRetrievalLogs log = new QaRetrievalLogs();
+        log.setSessionId(sessionId);
+        log.setCourseId(courseId);
+        log.setIndexRunId(indexRunId);
+        log.setQueryMode(mode);
+        log.setQueryText(queryText);
+        log.setRetrievalStatus(retrievalStatus);
+        log.setErrorMessage(errorMessage);
+        save(log);
+        return log;
+    }
 }

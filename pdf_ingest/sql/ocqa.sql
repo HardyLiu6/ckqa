@@ -303,6 +303,8 @@ CREATE TABLE `index_runs` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_kb_index_version`(`knowledge_base_id` ASC, `index_version` ASC) USING BTREE,
+  INDEX `idx_index_runs_kb_status`(`knowledge_base_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_index_runs_status_started`(`status` ASC, `started_at` ASC) USING BTREE,
   CONSTRAINT `fk_index_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '索引运行表' ROW_FORMAT = Dynamic;
 

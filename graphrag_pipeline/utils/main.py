@@ -8,6 +8,7 @@ GraphRAG FastAPI 服务器
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -15,6 +16,7 @@ import re
 import time
 import uuid
 from typing import Dict, List, Optional, Union
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -40,17 +42,49 @@ INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
 
 
+def _should_bypass_env_proxy(api_base: str | None) -> bool:
+    """仅在模型网关位于本机回环地址时绕过环境代理。"""
+    hostname = (urlparse(api_base or "").hostname or "").strip()
+    if not hostname:
+        return False
+    if hostname.casefold() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _merge_no_proxy_hosts(current_value: str | None, extra_hosts: list[str]) -> str:
+    merged: list[str] = []
+    for raw_item in (current_value or "").split(","):
+        item = raw_item.strip()
+        if item and item not in merged:
+            merged.append(item)
+    for host in extra_hosts:
+        if host not in merged:
+            merged.append(host)
+    return ",".join(merged)
+
+
 def _build_query_env() -> dict[str, str]:
     """为 graphrag CLI 查询构建稳定的运行环境。"""
     env = os.environ.copy()
     env["GRAPHRAG_OUTPUT_DIR"] = str(OUTPUT_DIR)
     env["GRAPHRAG_STORAGE_DIR"] = str(OUTPUT_DIR)
     env["GRAPHRAG_LANCEDB_URI"] = LANCEDB_URI
+    if _should_bypass_env_proxy(env.get("GRAPHRAG_API_BASE")):
+        no_proxy = _merge_no_proxy_hosts(
+            env.get("NO_PROXY") or env.get("no_proxy"),
+            ["127.0.0.1", "localhost", "::1"],
+        )
+        env["NO_PROXY"] = no_proxy
+        env["no_proxy"] = no_proxy
     return env
 
 
-async def run_graphrag_query_cli(method: str, prompt: str) -> str:
-    """通过 graphrag CLI 执行查询。"""
+def _build_query_cmd(method: str, prompt: str) -> list[str]:
+    """按查询模式构造 graphrag CLI 参数。"""
     cmd = [
         "graphrag",
         "query",
@@ -58,9 +92,28 @@ async def run_graphrag_query_cli(method: str, prompt: str) -> str:
         ".",
         "--method",
         method,
-        "--query",
-        prompt,
     ]
+    if method == "global":
+        cmd.extend(
+            [
+                "--community-level",
+                str(APP_CONFIG.global_search_community_level),
+                "--response-type",
+                APP_CONFIG.global_search_response_type,
+            ]
+        )
+        cmd.append(
+            "--dynamic-community-selection"
+            if APP_CONFIG.global_search_dynamic_selection
+            else "--no-dynamic-community-selection"
+        )
+    cmd.append(prompt)
+    return cmd
+
+
+async def run_graphrag_query_cli(method: str, prompt: str) -> str:
+    """通过 graphrag CLI 执行查询。"""
+    cmd = _build_query_cmd(method, prompt)
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -308,8 +361,14 @@ async def root():
 
 if __name__ == "__main__":
     logger.info(
-        "在 %s:%s 启动 GraphRAG API 服务器（CLI 查询模式）",
+        (
+            "在 %s:%s 启动 GraphRAG API 服务器（CLI 查询模式，"
+            "global: community_level=%s, dynamic_selection=%s, response_type=%s）"
+        ),
         APP_CONFIG.api_host,
         APP_CONFIG.api_port,
+        APP_CONFIG.global_search_community_level,
+        APP_CONFIG.global_search_dynamic_selection,
+        APP_CONFIG.global_search_response_type,
     )
     uvicorn.run(app, host=APP_CONFIG.api_host, port=APP_CONFIG.api_port)

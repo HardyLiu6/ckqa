@@ -13,4 +13,11 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface PdfFilesService extends IService<PdfFiles> {
 
+    PdfFiles getRequiredById(Long id);
+
+    boolean claimParseStart(Long id);
+
+    boolean markParseFailedIfStillProcessing(Long id, String errorMessage);
+
+    java.util.List<PdfFiles> listByCourseId(String courseId);
 }
