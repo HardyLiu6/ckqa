@@ -8,7 +8,7 @@
 - 把输入写入 `input/`
 - 运行 `graphrag index --root .`
 - 读取 `output/*.parquet` 与 `output/lancedb/`
-- 对外暴露 `/v1/chat/completions`、`/v1/models`、`/health`
+- 对外暴露 `/v1/chat/completions`、`/v1/models`、`/v1/query-tasks`、`/health`
 
 ## 当前状态
 
@@ -169,7 +169,28 @@ python scripts/run_candidate_extraction.py \
 
 - `GET /health`
 - `GET /v1/models`
+- `POST /v1/query-tasks`
+- `GET /v1/query-tasks/{taskId}`
 - `POST /v1/chat/completions`
+
+### 内部任务接口
+
+提交异步查询任务：
+
+```bash
+curl -X POST http://127.0.0.1:8012/v1/query-tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "global",
+    "prompt": "请概括这套图谱的主题"
+  }'
+```
+
+查询异步任务状态：
+
+```bash
+curl http://127.0.0.1:8012/v1/query-tasks/qt_20260422_000001_001
+```
 
 ### 当前模型名
 

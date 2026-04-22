@@ -34,6 +34,7 @@
 - `GET /api/v1/qa-sessions/{id}`
 - `GET /api/v1/qa-sessions/{id}/messages`
 - `POST /api/v1/qa-sessions/{id}/messages`
+- `GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}`
 
 统一响应格式示例：
 
@@ -85,6 +86,8 @@ export EXPORT_TIMEOUT_SECONDS=300
 export FETCH_TIMEOUT_SECONDS=300
 export INDEX_TIMEOUT_SECONDS=1800
 export QUERY_TIMEOUT_SECONDS=120
+export QUERY_TASK_POLLING_INTERVAL_SECONDS=5
+export QUERY_TASK_STALE_SECONDS=30
 export INDEX_STALE_SECONDS=2400
 ```
 
@@ -132,6 +135,26 @@ cd backend/ckqa-back
 ./mvnw spring-boot:run
 ```
 
+### 异步问答任务
+
+提交问题：
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"global","content":"请概括这套图谱的主题"}'
+```
+
+轮询任务：
+
+```bash
+TASK_ID=$(curl -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"global","content":"请概括这套图谱的主题"}' | jq -r '.data.taskId')
+
+curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
+```
+
 ### 运行测试
 
 ```bash
@@ -164,6 +187,7 @@ cd backend/ckqa-back
 5. `POST /api/v1/knowledge-bases/{id}/index-runs`
 6. `POST /api/v1/qa-sessions`
 7. `POST /api/v1/qa-sessions/{id}/messages`
+8. `GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}`
 
 ## 回归验证
 
@@ -183,6 +207,8 @@ cd backend/ckqa-back
 ## 当前已知边界
 
 - `parse` 与 `index` 仍是同步长任务，一期主要靠命令超时与陈旧任务恢复兜底
+- 问答链路已改成异步任务模式，修的是“超时语义”，不是 `global` 查询速度
+- Python 任务快照目前仍是进程内内存态，Python 服务重启会导致 Java 把对应任务标记为 `failed`
 - `qa_retrieval_hits` 尚未落地
 - `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活
 - Java 侧还没有承接上传链路，仍以已有 `pdf_files` 记录为起点
