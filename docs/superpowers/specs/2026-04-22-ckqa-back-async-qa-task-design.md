@@ -99,6 +99,16 @@ Graphrag 内部输出全部进入 `latestLogs`，不继续扩张 `progressStage`
 
 上游 Python 任务 ID 字段命名采用 `python_task_id`，不使用 `engine_task_id`，避免未来引擎切换时语义模糊。
 
+### 4.8 对外 `taskId` 使用数据库主键
+
+Java 对外暴露的 `taskId` 统一使用 `qa_retrieval_logs.id`。
+
+原因：
+
+- 当前仓库已有大量数值型资源 ID 约定，沿用主键最小改动
+- `python_task_id` 只作为 Java 与 Python 之间的上游任务关联键，不直接暴露给前端
+- 这样轮询路径中的 `{taskId}` 语义明确，对应数据库中的任务记录主键
+
 ## 5. 总体方案
 
 整体链路拆成两段：
@@ -162,6 +172,7 @@ Graphrag 内部输出全部进入 `latestLogs`，不继续扩张 `progressStage`
 
 - 该接口不再同步返回 `assistantMessage`
 - 前端必须改用任务轮询模式获取最终答案
+- 响应中的 `taskId` 即 `qa_retrieval_logs.id`
 
 #### 6.1.2 查询任务详情
 
@@ -304,6 +315,12 @@ Graphrag 内部输出全部进入 `latestLogs`，不继续扩张 `progressStage`
 
 现有 [qa_retrieval_logs](/home/sunlight/Projects/ckqa/.worktrees/ckqa-back-phase1/pdf_ingest/sql/ocqa.sql:375) 扩展为“任务 + 检索日志”双语义载体。
 
+主键与对外 ID 约定：
+
+- 表主键 `id` 继续保留
+- API 对外的 `taskId` 直接使用该 `id`
+- `python_task_id` 仅用于关联 Python 侧任务快照
+
 新增字段建议如下：
 
 - `user_message_id bigint not null`
@@ -340,6 +357,7 @@ Graphrag 内部输出全部进入 `latestLogs`，不继续扩张 `progressStage`
 
 - 同一 `user_message_id` 允许多条 task 记录
 - 通过 `task_seq` 区分第几次任务
+- `task_seq` 从 `1` 开始，首个任务固定为 `1`
 
 ### 8.3 索引建议
 
@@ -416,6 +434,12 @@ Java 不再在请求线程里等待 GraphRAG 结果，而是在后台执行：
 
 首版可直接使用 Spring 本地线程池，不引入消息队列。
 
+Java 轮询 Python 任务状态采用固定间隔，建议新增配置项：
+
+- `ckqa.integration.polling.query-task-interval-seconds=${QUERY_TASK_POLLING_INTERVAL_SECONDS:5}`
+
+默认值建议 5 秒，与 Python 心跳节奏保持同量级，避免实现时出现“各写各的”轮询策略。
+
 ### 10.3 `stale` 判定
 
 `stale` 判定放在 Java 侧，依据为：
@@ -425,9 +449,28 @@ Java 不再在请求线程里等待 GraphRAG 结果，而是在后台执行：
 
 配置项采用现有集成配置风格，建议新增：
 
-- `ckqa.integration.timeout.query-task-stale-seconds=${QUERY_TASK_STALE_SECONDS:600}`
+- `ckqa.integration.timeout.query-task-stale-seconds=${QUERY_TASK_STALE_SECONDS:30}`
 
-默认值建议 600 秒，即 10 分钟。
+默认值建议 30 秒，依据如下：
+
+- Python 默认每 5 秒主动刷新一次心跳
+- Java 默认每 5 秒轮询一次上游任务状态
+- 30 秒相当于允许连续错过多次心跳与轮询后再判 `stale`
+
+该值表达的是“心跳超时阈值”，不是“任务允许运行时长上限”。即使 `global` 查询持续运行数分钟，只要 Python 侧持续刷新心跳，任务仍应保持 `running`，不应转为 `stale`。
+
+### 10.4 Python 重启或任务快照丢失的降级行为
+
+由于 v1 的 Python 任务状态保存在进程内存中，Python 服务重启后，Java 后续轮询可能拿到 404 或上游异常。
+
+v1 必须采用明确降级策略：
+
+- 如果 Java 已经拿到 `python_task_id`，但后续轮询持续收到“任务不存在”或上游异常
+- 且无法恢复对应任务快照
+- 则应将本地任务状态更新为 `failed`
+- 同时写入明确 `errorMessage`，说明“Python 任务快照丢失或服务已重启”
+
+不允许因为 Python 重启而让任务永久停留在 `running`。
 
 ## 11. 冗余改动清理范围
 
@@ -484,6 +527,8 @@ Java 不再在请求线程里等待 GraphRAG 结果，而是在后台执行：
 - Java 与 Python 双层任务状态存在短暂不一致窗口
 - Python 任务状态目前为进程内内存态，Python 服务重启会丢失快照
 - `latestLogs` 仅保留 tail，不能替代完整诊断日志
+
+针对第二点，v1 的处理原则已在 10.4 明确：Java 检测到上游任务快照丢失时，应将任务置为 `failed`，而不是无限期保留为 `running`。
 
 ### 13.2 后续建议
 
