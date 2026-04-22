@@ -61,18 +61,6 @@ def _parse_int(raw_value: str | None, default: int) -> int:
     return int(raw_value)
 
 
-def _parse_bool(raw_value: str | None, default: bool) -> bool:
-    if raw_value is None or not raw_value.strip():
-        return default
-
-    normalized = raw_value.strip().casefold()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(f"无法解析布尔环境变量值: {raw_value!r}")
-
-
 @dataclass(frozen=True)
 class ApiRuntimeConfig:
     """GraphRAG API 运行时配置快照。"""
@@ -81,9 +69,6 @@ class ApiRuntimeConfig:
     lancedb_uri: str
     api_host: str
     api_port: int
-    global_search_community_level: int
-    global_search_dynamic_selection: bool
-    global_search_response_type: str
 
     @property
     def input_dir(self) -> str:
@@ -120,15 +105,4 @@ def load_api_runtime_config(
         lancedb_uri=lancedb_uri,
         api_host=(env.get("GRAPHRAG_API_HOST") or "0.0.0.0").strip(),
         api_port=_parse_int(env.get("GRAPHRAG_API_PORT") or env.get("PORT"), 8012),
-        global_search_community_level=_parse_int(
-            env.get("GRAPHRAG_GLOBAL_SEARCH_COMMUNITY_LEVEL"),
-            0,
-        ),
-        global_search_dynamic_selection=_parse_bool(
-            env.get("GRAPHRAG_GLOBAL_SEARCH_DYNAMIC_SELECTION"),
-            True,
-        ),
-        global_search_response_type=(
-            env.get("GRAPHRAG_GLOBAL_SEARCH_RESPONSE_TYPE") or "Single Paragraph"
-        ).strip(),
     )

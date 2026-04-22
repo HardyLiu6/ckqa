@@ -86,30 +86,15 @@ def _build_query_env() -> dict[str, str]:
 
 def _build_query_cmd(method: str, prompt: str) -> list[str]:
     """按查询模式构造 graphrag CLI 参数。"""
-    cmd = [
+    return [
         "graphrag",
         "query",
         "--root",
         ".",
         "--method",
         method,
+        prompt,
     ]
-    if method == "global":
-        cmd.extend(
-            [
-                "--community-level",
-                str(APP_CONFIG.global_search_community_level),
-                "--response-type",
-                APP_CONFIG.global_search_response_type,
-            ]
-        )
-        cmd.append(
-            "--dynamic-community-selection"
-            if APP_CONFIG.global_search_dynamic_selection
-            else "--no-dynamic-community-selection"
-        )
-    cmd.append(prompt)
-    return cmd
 
 
 QUERY_TASK_MANAGER = QueryTaskManager(
@@ -164,6 +149,11 @@ class ChatCompletionRequest(BaseModel):
     user: Optional[str] = None
 
 
+class QueryTaskCreateRequest(BaseModel):
+    mode: str = Field(default="local")
+    prompt: str
+
+
 class ChatCompletionResponseChoice(BaseModel):
     index: int
     message: Message
@@ -203,22 +193,193 @@ def format_response(response: str) -> str:
     return "\n\n".join(formatted_paragraphs)
 
 
-app = FastAPI(
-    title="GraphRAG API Server",
-    description=(
-        "基于 Microsoft GraphRAG 的知识图谱问答服务"
-        f"（当前依赖基线 {TARGET_GRAPHRAG_VERSION}，采用 CLI 查询模式）"
-    ),
-    version=PROJECT_VERSION,
-)
+def _serialize_task_snapshot(snapshot) -> dict[str, object]:
+    """将任务快照转成稳定的 JSON 返回结构。"""
+    return {
+        "pythonTaskId": snapshot.python_task_id,
+        "taskStatus": snapshot.task_status,
+        "progressStage": snapshot.progress_stage,
+        "processAlive": snapshot.process_alive,
+        "createdAt": snapshot.created_at.isoformat(),
+        "startedAt": snapshot.started_at.isoformat() if snapshot.started_at else None,
+        "lastHeartbeatAt": (
+            snapshot.last_heartbeat_at.isoformat() if snapshot.last_heartbeat_at else None
+        ),
+        "finishedAt": snapshot.finished_at.isoformat() if snapshot.finished_at else None,
+        "latestLogs": list(snapshot.latest_logs or []),
+        "resultText": snapshot.result_text,
+        "errorMessage": snapshot.error_message,
+        "returnCode": snapshot.return_code,
+    }
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
+    """创建 FastAPI 应用，允许测试注入任务管理器。"""
+    active_task_manager = task_manager or QUERY_TASK_MANAGER
+
+    app = FastAPI(
+        title="GraphRAG API Server",
+        description=(
+            "基于 Microsoft GraphRAG 的知识图谱问答服务"
+            f"（当前依赖基线 {TARGET_GRAPHRAG_VERSION}，采用 CLI 查询模式）"
+        ),
+        version=PROJECT_VERSION,
+    )
+
+    app.state.query_task_manager = active_task_manager
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.post("/v1/query-tasks")
+    async def submit_query_task(request: QueryTaskCreateRequest):
+        """提交一个异步查询任务。"""
+        snapshot = await active_task_manager.create_task(request.mode, request.prompt)
+        return JSONResponse(
+            content={
+                "pythonTaskId": snapshot.python_task_id,
+                "taskStatus": snapshot.task_status,
+                "progressStage": snapshot.progress_stage,
+                "createdAt": snapshot.created_at.isoformat(),
+            }
+        )
+
+    @app.get("/v1/query-tasks/{taskId}")
+    async def get_query_task(taskId: str):
+        """查询异步任务状态。"""
+        snapshot = active_task_manager.get_snapshot(taskId)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Query task not found")
+        return JSONResponse(content=_serialize_task_snapshot(snapshot))
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(request: ChatCompletionRequest):
+        """OpenAI 兼容的聊天完成接口。"""
+        try:
+            logger.info("收到请求，模型: %s", request.model)
+            prompt = request.messages[-1].content
+            logger.info("处理提示: %s...", prompt[:100])
+
+            formatted_response = await _resolve_query_response(request.model, prompt)
+            logger.info("搜索完成，响应长度: %s", len(formatted_response))
+
+            if request.stream:
+
+                async def generate_stream():
+                    chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
+                    lines = formatted_response.split("\n")
+                    for line in lines:
+                        chunk = {
+                            "id": chunk_id,
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": request.model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": line + "\n"},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                        await asyncio.sleep(0.05)
+
+                    final_chunk = {
+                        "id": chunk_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": request.model,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": "stop",
+                            }
+                        ],
+                    }
+                    yield f"data: {json.dumps(final_chunk)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+                return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+            response = ChatCompletionResponse(
+                model=request.model,
+                choices=[
+                    ChatCompletionResponseChoice(
+                        index=0,
+                        message=Message(role="assistant", content=formatted_response),
+                        finish_reason="stop",
+                    )
+                ],
+                usage=Usage(
+                    prompt_tokens=len(prompt.split()),
+                    completion_tokens=len(formatted_response.split()),
+                    total_tokens=len(prompt.split()) + len(formatted_response.split()),
+                ),
+            )
+            return JSONResponse(content=response.model_dump())
+        except Exception as exc:
+            logger.error("处理请求时出错: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+    @app.get("/v1/models")
+    async def list_models():
+        """获取可用模型列表。"""
+        current_time = int(time.time())
+        models = [
+            {
+                "id": "graphrag-local-search:latest",
+                "object": "model",
+                "created": current_time - 100000,
+                "owned_by": "graphrag",
+            },
+            {
+                "id": "graphrag-global-search:latest",
+                "object": "model",
+                "created": current_time - 95000,
+                "owned_by": "graphrag",
+            },
+            {
+                "id": "full-model:latest",
+                "object": "model",
+                "created": current_time - 80000,
+                "owned_by": "combined",
+            },
+        ]
+        return JSONResponse(content={"object": "list", "data": models})
+
+    @app.get("/health")
+    async def health_check():
+        """健康检查接口。"""
+        return {
+            "status": "healthy",
+            "version": PROJECT_VERSION,
+            "graphrag_version_target": TARGET_GRAPHRAG_VERSION,
+            "compat_mode": "cli_query",
+            "local_search_ready": True,
+            "global_search_ready": True,
+            "output_dir": INPUT_DIR,
+            "lancedb_uri": LANCEDB_URI,
+        }
+
+    @app.get("/")
+    async def root():
+        """根路径。"""
+        return {
+            "message": "GraphRAG API Server",
+            "version": PROJECT_VERSION,
+            "docs": "/docs",
+            "health": "/health",
+        }
+
+    return app
 
 
 async def full_model_search(prompt: str) -> str:
@@ -242,141 +403,9 @@ async def _resolve_query_response(model: str, prompt: str) -> str:
     return format_response(await run_graphrag_query_cli("local", prompt))
 
 
-@app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
-    """OpenAI 兼容的聊天完成接口。"""
-    try:
-        logger.info("收到请求，模型: %s", request.model)
-        prompt = request.messages[-1].content
-        logger.info("处理提示: %s...", prompt[:100])
-
-        formatted_response = await _resolve_query_response(request.model, prompt)
-        logger.info("搜索完成，响应长度: %s", len(formatted_response))
-
-        if request.stream:
-
-            async def generate_stream():
-                chunk_id = f"chatcmpl-{uuid.uuid4().hex}"
-                lines = formatted_response.split("\n")
-                for line in lines:
-                    chunk = {
-                        "id": chunk_id,
-                        "object": "chat.completion.chunk",
-                        "created": int(time.time()),
-                        "model": request.model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": line + "\n"},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield f"data: {json.dumps(chunk)}\n\n"
-                    await asyncio.sleep(0.05)
-
-                final_chunk = {
-                    "id": chunk_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": request.model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                }
-                yield f"data: {json.dumps(final_chunk)}\n\n"
-                yield "data: [DONE]\n\n"
-
-            return StreamingResponse(generate_stream(), media_type="text/event-stream")
-
-        response = ChatCompletionResponse(
-            model=request.model,
-            choices=[
-                ChatCompletionResponseChoice(
-                    index=0,
-                    message=Message(role="assistant", content=formatted_response),
-                    finish_reason="stop",
-                )
-            ],
-            usage=Usage(
-                prompt_tokens=len(prompt.split()),
-                completion_tokens=len(formatted_response.split()),
-                total_tokens=len(prompt.split()) + len(formatted_response.split()),
-            ),
-        )
-        return JSONResponse(content=response.model_dump())
-    except Exception as exc:
-        logger.error("处理请求时出错: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get("/v1/models")
-async def list_models():
-    """获取可用模型列表。"""
-    current_time = int(time.time())
-    models = [
-        {
-            "id": "graphrag-local-search:latest",
-            "object": "model",
-            "created": current_time - 100000,
-            "owned_by": "graphrag",
-        },
-        {
-            "id": "graphrag-global-search:latest",
-            "object": "model",
-            "created": current_time - 95000,
-            "owned_by": "graphrag",
-        },
-        {
-            "id": "full-model:latest",
-            "object": "model",
-            "created": current_time - 80000,
-            "owned_by": "combined",
-        },
-    ]
-    return JSONResponse(content={"object": "list", "data": models})
-
-
-@app.get("/health")
-async def health_check():
-    """健康检查接口。"""
-    return {
-        "status": "healthy",
-        "version": PROJECT_VERSION,
-        "graphrag_version_target": TARGET_GRAPHRAG_VERSION,
-        "compat_mode": "cli_query",
-        "local_search_ready": True,
-        "global_search_ready": True,
-        "output_dir": INPUT_DIR,
-        "lancedb_uri": LANCEDB_URI,
-    }
-
-
-@app.get("/")
-async def root():
-    """根路径。"""
-    return {
-        "message": "GraphRAG API Server",
-        "version": PROJECT_VERSION,
-        "docs": "/docs",
-        "health": "/health",
-    }
+app = create_app()
 
 
 if __name__ == "__main__":
-    logger.info(
-        (
-            "在 %s:%s 启动 GraphRAG API 服务器（CLI 查询模式，"
-            "global: community_level=%s, dynamic_selection=%s, response_type=%s）"
-        ),
-        APP_CONFIG.api_host,
-        APP_CONFIG.api_port,
-        APP_CONFIG.global_search_community_level,
-        APP_CONFIG.global_search_dynamic_selection,
-        APP_CONFIG.global_search_response_type,
-    )
+    logger.info("在 %s:%s 启动 GraphRAG API 服务器（CLI 查询模式）", APP_CONFIG.api_host, APP_CONFIG.api_port)
     uvicorn.run(app, host=APP_CONFIG.api_host, port=APP_CONFIG.api_port)

@@ -31,9 +31,6 @@ class TestApiRuntimeConfig(unittest.TestCase):
                 "GRAPHRAG_LANCEDB_URI": "custom-output/custom-lancedb",
                 "GRAPHRAG_API_HOST": "127.0.0.1",
                 "GRAPHRAG_API_PORT": "18012",
-                "GRAPHRAG_GLOBAL_SEARCH_COMMUNITY_LEVEL": "1",
-                "GRAPHRAG_GLOBAL_SEARCH_DYNAMIC_SELECTION": "false",
-                "GRAPHRAG_GLOBAL_SEARCH_RESPONSE_TYPE": "Single Sentence",
             },
             load_dotenv_file=False,
         )
@@ -45,18 +42,18 @@ class TestApiRuntimeConfig(unittest.TestCase):
         )
         self.assertEqual(config.api_host, "127.0.0.1")
         self.assertEqual(config.api_port, 18012)
-        self.assertEqual(config.global_search_community_level, 1)
-        self.assertFalse(config.global_search_dynamic_selection)
-        self.assertEqual(config.global_search_response_type, "Single Sentence")
+        self.assertFalse(hasattr(config, "global_search_community_level"))
+        self.assertFalse(hasattr(config, "global_search_dynamic_selection"))
+        self.assertFalse(hasattr(config, "global_search_response_type"))
 
     def test_defaults_are_safe_and_do_not_expose_internal_api_fields(self):
         config = load_api_runtime_config({}, load_dotenv_file=False)
 
         self.assertEqual(config.api_host, "0.0.0.0")
         self.assertEqual(config.api_port, 8012)
-        self.assertEqual(config.global_search_community_level, 0)
-        self.assertTrue(config.global_search_dynamic_selection)
-        self.assertEqual(config.global_search_response_type, "Single Paragraph")
+        self.assertFalse(hasattr(config, "global_search_community_level"))
+        self.assertFalse(hasattr(config, "global_search_dynamic_selection"))
+        self.assertFalse(hasattr(config, "global_search_response_type"))
         self.assertFalse(hasattr(config, "chat_api_key"))
         self.assertFalse(hasattr(config, "embedding_api_key"))
 
