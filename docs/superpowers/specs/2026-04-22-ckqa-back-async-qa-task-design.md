@@ -366,6 +366,11 @@ Java 对外暴露的 `taskId` 统一使用 `qa_retrieval_logs.id`。
 - `idx_retrieval_logs_task_status_heartbeat (task_status, last_heartbeat_at)`
 - `uk_retrieval_logs_python_task_id (python_task_id)`，仅在非空时唯一
 
+补充说明：
+
+- 该唯一约束当前依赖 MySQL 对 `NULL` 的唯一索引语义，即允许多条 `NULL` 共存
+- 如果未来迁移到 PostgreSQL 或其他数据库，需要重新确认该约束在目标数据库中的行为是否一致
+
 ## 9. Python 任务管理设计
 
 ### 9.1 任务管理器职责
