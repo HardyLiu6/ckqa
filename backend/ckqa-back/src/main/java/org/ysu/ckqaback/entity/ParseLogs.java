@@ -34,10 +34,10 @@ public class ParseLogs implements Serializable {
     private Long id;
 
     /**
-     * 关联的PDF文件ID
+     * 关联的课程资料ID
      */
-    @TableField("pdf_file_id")
-    private Long pdfFileId;
+    @TableField("course_material_id")
+    private Long courseMaterialId;
 
     /**
      * 日志级别
