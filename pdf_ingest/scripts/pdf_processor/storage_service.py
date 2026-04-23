@@ -112,6 +112,34 @@ class MinIOService:
             "md5": file_md5,
             "size": file_size
         }
+
+    def upload_material_object(
+        self, file_path: str, file_md5: str, file_name: str
+    ) -> dict:
+        """
+        按资料对象维度上传 PDF。
+
+        对象键只由内容 MD5 和原始后缀决定，便于多个课程复用同一份物理文件。
+        """
+        suffix = Path(file_name).suffix.lower() or ".pdf"
+        object_key = f"materials/{file_md5}{suffix}"
+        file_size = os.path.getsize(file_path)
+
+        with open(file_path, "rb") as f:
+            self.client.put_object(
+                bucket_name=self.config.bucket_pdf,
+                object_name=object_key,
+                data=f,
+                length=file_size,
+                content_type="application/pdf"
+            )
+
+        return {
+            "bucket": self.config.bucket_pdf,
+            "object_key": object_key,
+            "md5": file_md5,
+            "size": file_size
+        }
     
     def upload_pdf_stream(
         self, course_id: str, stream: BinaryIO, file_size: int, file_name: str
@@ -169,6 +197,16 @@ class MinIOService:
             file_path=local_path
         )
         
+        return local_path
+
+    def download_pdf_object(self, bucket: str, object_key: str, local_path: str) -> str:
+        """按 bucket + object_key 下载 PDF 资料对象。"""
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        self.client.fget_object(
+            bucket_name=bucket,
+            object_name=object_key,
+            file_path=local_path
+        )
         return local_path
     
     def get_pdf_stream(self, course_id: str, file_name: str) -> Any:
