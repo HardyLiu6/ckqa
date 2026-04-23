@@ -365,7 +365,8 @@ def fetch_and_prepare(
         formatted_candidates = "\n  - ".join(candidate_keys)
         print(
             f"[错误] MinIO 中未找到 GraphRAG 输入候选文件:\n  - {formatted_candidates}\n"
-            f"请先在 pdf_ingest 中运行 export-graphrag 命令。",
+            "请先在 pdf_ingest 中运行 export-graphrag 命令；"
+            "多资料场景请优先使用 --material-id，历史兼容可使用 --pdf-file-id。",
             file=sys.stderr,
         )
         return {"status": "not_found", "course_id": course_id, "candidate_keys": candidate_keys}

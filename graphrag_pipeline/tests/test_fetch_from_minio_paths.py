@@ -39,3 +39,15 @@ def test_build_candidate_object_keys_keeps_legacy_pdf_namespace():
     )
 
     assert keys == ["os/graphrag/pdf_7/section_docs.json"]
+
+
+def test_build_candidate_object_keys_without_id_uses_course_prefix():
+    keys = build_candidate_object_keys(
+        course_id="os",
+        graphrag_prefix="graphrag",
+        filename="section_docs.json",
+        pdf_file_id=None,
+        material_id=None,
+    )
+
+    assert keys == ["os/graphrag/section_docs.json"]
