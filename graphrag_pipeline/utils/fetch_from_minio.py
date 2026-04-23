@@ -196,6 +196,24 @@ def _download_object(client: Minio, bucket: str, object_key: str, local_path: Pa
         raise
 
 
+def build_candidate_object_keys(
+    course_id: str,
+    graphrag_prefix: str,
+    filename: str,
+    pdf_file_id: int | None = None,
+    material_id: int | None = None,
+) -> list[str]:
+    """构造 GraphRAG 输入文件在 MinIO 中的候选 object key。"""
+    if material_id is not None:
+        return [
+            f"{course_id}/{graphrag_prefix}/material_{material_id}/{filename}",
+            f"{course_id}/{graphrag_prefix}/pdf_{material_id}/{filename}",
+        ]
+    if pdf_file_id is not None:
+        return [f"{course_id}/{graphrag_prefix}/pdf_{pdf_file_id}/{filename}"]
+    return [f"{course_id}/{graphrag_prefix}/{filename}"]
+
+
 def _find_unique_namespaced_key(
     client: Minio,
     bucket: str,
@@ -204,7 +222,7 @@ def _find_unique_namespaced_key(
     filename: str,
 ) -> tuple[str | None, bool]:
     """
-    在 `course_id/graphrag/pdf_*/` 下寻找唯一匹配文件。
+    在 `course_id/graphrag/material_*/` 或 `pdf_*/` 下寻找唯一匹配文件。
 
     Returns:
         (object_key, ambiguous)
@@ -217,7 +235,7 @@ def _find_unique_namespaced_key(
             continue
         if not object_name.endswith(f"/{filename}"):
             continue
-        if "/pdf_" not in object_name:
+        if "/material_" not in object_name and "/pdf_" not in object_name:
             continue
         matches.append(object_name)
 
@@ -235,6 +253,7 @@ def fetch_and_prepare(
     graphrag_prefix: str = "graphrag",
     json_filename: str = "section_docs.json",
     pdf_file_id: int | None = None,
+    material_id: int | None = None,
 ) -> dict:
     """
     从 MinIO 下载 GraphRAG 输入文件，并在必要时兼容转换历史 JSONL。
@@ -245,6 +264,8 @@ def fetch_and_prepare(
         clean: 是否清空旧的 .json 输入文件
         graphrag_prefix: MinIO 中的前缀路径
         json_filename: GraphRAG 输入文件名
+        pdf_file_id: 历史 PDF 文件 ID，用于读取 pdf_{id} namespace
+        material_id: 课程资料 ID，优先读取 material_{id} namespace
 
     Returns:
         {status, course_id, documents_count, output_file, input_dir}
@@ -265,78 +286,89 @@ def fetch_and_prepare(
         preferred_filename = output_filename
         legacy_filename = f"{json_filename}.jsonl"
 
-    if pdf_file_id is not None:
-        subdir = f"{graphrag_prefix}/pdf_{pdf_file_id}"
-        preferred_key = f"{course_id}/{subdir}/{preferred_filename}"
-        legacy_key = f"{course_id}/{subdir}/{legacy_filename}"
-    else:
-        preferred_key = f"{course_id}/{graphrag_prefix}/{preferred_filename}"
-        legacy_key = f"{course_id}/{graphrag_prefix}/{legacy_filename}"
+    preferred_keys = build_candidate_object_keys(
+        course_id=course_id,
+        graphrag_prefix=graphrag_prefix,
+        filename=preferred_filename,
+        pdf_file_id=pdf_file_id,
+        material_id=material_id,
+    )
+    legacy_keys = build_candidate_object_keys(
+        course_id=course_id,
+        graphrag_prefix=graphrag_prefix,
+        filename=legacy_filename,
+        pdf_file_id=pdf_file_id,
+        material_id=material_id,
+    )
+    candidate_keys = preferred_keys + legacy_keys
 
-    print(f"[MinIO] 优先下载 {bucket}/{preferred_key} ...")
+    print(f"[MinIO] 优先下载 {bucket}/{preferred_keys[0]} ...")
 
     # 1) 下载源文件到临时目录
     tmp_dir = Path(tempfile.mkdtemp(prefix=f"graphrag_fetch_{course_id}_"))
     tmp_input = tmp_dir / preferred_filename
 
     source_format = None
-    if _download_object(client, bucket, preferred_key, tmp_input):
-        source_format = "json"
-        print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
-    else:
-        if pdf_file_id is None:
+
+    for preferred_key in preferred_keys:
+        tmp_input = tmp_dir / preferred_filename
+        if _download_object(client, bucket, preferred_key, tmp_input):
+            source_format = "json"
+            print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+            break
+
+    if source_format is None and pdf_file_id is None and material_id is None:
+        namespaced_key, ambiguous = _find_unique_namespaced_key(
+            client, bucket, course_id, graphrag_prefix, preferred_filename
+        )
+        if ambiguous:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            print(
+                f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 或 --material-id 指定。",
+                file=sys.stderr,
+            )
+            return {"status": "ambiguous", "course_id": course_id}
+        if namespaced_key:
+            tmp_input = tmp_dir / preferred_filename
+            if _download_object(client, bucket, namespaced_key, tmp_input):
+                source_format = "json"
+                print(f"[MinIO] 在 namespaced 路径找到文件: {namespaced_key}")
+                print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+
+    if source_format is None:
+        tmp_input = tmp_dir / legacy_filename
+        print(f"[MinIO] 未找到 preferred JSON，尝试兼容历史 JSONL 文件 ...")
+        for legacy_key in legacy_keys:
+            if _download_object(client, bucket, legacy_key, tmp_input):
+                source_format = "jsonl"
+                print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
+                break
+
+        if source_format is None and pdf_file_id is None and material_id is None:
             namespaced_key, ambiguous = _find_unique_namespaced_key(
-                client, bucket, course_id, graphrag_prefix, preferred_filename
+                client, bucket, course_id, graphrag_prefix, legacy_filename
             )
             if ambiguous:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
                 print(
-                    f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 指定。",
+                    f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 或 --material-id 指定。",
                     file=sys.stderr,
                 )
                 return {"status": "ambiguous", "course_id": course_id}
-            if namespaced_key:
-                tmp_input = tmp_dir / preferred_filename
-                if _download_object(client, bucket, namespaced_key, tmp_input):
-                    source_format = "json"
-                    print(
-                        f"[MinIO] 在 namespaced 路径找到文件: {namespaced_key}"
-                    )
-                    print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
-
-        if source_format is None:
-            tmp_input = tmp_dir / legacy_filename
-            print(f"[MinIO] 未找到 {preferred_key}，尝试兼容历史文件 {legacy_key} ...")
-            if _download_object(client, bucket, legacy_key, tmp_input):
+            if namespaced_key and _download_object(client, bucket, namespaced_key, tmp_input):
                 source_format = "jsonl"
+                print(f"[MinIO] 在 namespaced 路径找到历史文件: {namespaced_key}")
                 print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
-            else:
-                if pdf_file_id is None:
-                    namespaced_key, ambiguous = _find_unique_namespaced_key(
-                        client, bucket, course_id, graphrag_prefix, legacy_filename
-                    )
-                    if ambiguous:
-                        shutil.rmtree(tmp_dir, ignore_errors=True)
-                        print(
-                            f"[错误] 课程 {course_id} 下存在多份 GraphRAG 输入，请使用 --pdf-file-id 指定。",
-                            file=sys.stderr,
-                        )
-                        return {"status": "ambiguous", "course_id": course_id}
-                    if namespaced_key and _download_object(client, bucket, namespaced_key, tmp_input):
-                        source_format = "jsonl"
-                        print(
-                            f"[MinIO] 在 namespaced 路径找到历史文件: {namespaced_key}"
-                        )
-                        print(f"[MinIO] 下载完成: {tmp_input} ({tmp_input.stat().st_size} bytes)")
 
-            if source_format is None:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-                print(
-                    f"[错误] MinIO 中未找到 {preferred_key} 或 {legacy_key}。"
-                    f"请先在 pdf_ingest 中运行 export-graphrag 命令。",
-                    file=sys.stderr,
-                )
-                return {"status": "not_found", "course_id": course_id}
+    if source_format is None:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        formatted_candidates = "\n  - ".join(candidate_keys)
+        print(
+            f"[错误] MinIO 中未找到 GraphRAG 输入候选文件:\n  - {formatted_candidates}\n"
+            f"请先在 pdf_ingest 中运行 export-graphrag 命令。",
+            file=sys.stderr,
+        )
+        return {"status": "not_found", "course_id": course_id, "candidate_keys": candidate_keys}
 
     if source_format is None:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -443,6 +475,7 @@ def main() -> int:
   python utils/fetch_from_minio.py os --clean
   python utils/fetch_from_minio.py os --input-dir ./my_input
   python utils/fetch_from_minio.py os --pdf-file-id 12
+  python utils/fetch_from_minio.py os --material-id 12
   python utils/fetch_from_minio.py os --json-file page_docs.json
   python utils/fetch_from_minio.py os --json-file page_docs.jsonl
         """,
@@ -467,6 +500,12 @@ def main() -> int:
         type=int,
         default=None,
         help="指定课程下某一份 PDF 的 file_id；多 PDF 场景下建议显式传入",
+    )
+    parser.add_argument(
+        "--material-id",
+        type=int,
+        default=None,
+        help="指定课程资料 ID；优先读取 material_{id}，失败后兼容历史 pdf_{id}",
     )
     parser.add_argument(
         "--json-file",
@@ -505,6 +544,7 @@ def main() -> int:
         clean=args.clean,
         json_filename=args.json_filename,
         pdf_file_id=args.pdf_file_id,
+        material_id=args.material_id,
     )
 
     if result["status"] in {"not_found", "ambiguous"}:
