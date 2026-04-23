@@ -19,6 +19,13 @@ class TestOCQADocsContract(unittest.TestCase):
         self.assertIn("SELECT role_code, role_name FROM roles ORDER BY id;", text)
         self.assertIn("SHOW TABLES LIKE 'course_memberships';", text)
 
+    def test_readme_documents_reusable_course_material_contract(self):
+        text = README_PATH.read_text(encoding="utf-8")
+        self.assertIn("material_objects", text)
+        self.assertIn("course_materials", text)
+        self.assertIn("同一份资料可以被多门课程复用", text)
+        self.assertNotIn("同一份 PDF 不能同时归属多个课程", text)
+
     def test_spec_mentions_db_only_boundary(self):
         text = SPEC_PATH.read_text(encoding="utf-8")
         self.assertIn("当前实施边界说明", text)

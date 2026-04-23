@@ -38,17 +38,61 @@ CREATE TABLE `courses`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for material_objects
+-- ----------------------------
+DROP TABLE IF EXISTS `material_objects`;
+CREATE TABLE `material_objects` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `original_file_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '原始文件名',
+  `file_md5` char(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文件MD5哈希值',
+  `file_size` bigint NOT NULL COMMENT '文件大小（字节）',
+  `mime_type` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'application/pdf' COMMENT 'MIME类型',
+  `minio_bucket` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MinIO存储桶名称',
+  `minio_object_key` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MinIO对象键（路径）',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_material_objects_md5`(`file_md5` ASC) USING BTREE,
+  INDEX `idx_material_objects_created_at`(`created_at` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '资料对象表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for course_materials
+-- ----------------------------
+DROP TABLE IF EXISTS `course_materials`;
+CREATE TABLE `course_materials` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID',
+  `material_object_id` bigint NOT NULL COMMENT '资料对象ID',
+  `display_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程内展示名称',
+  `material_type` enum('textbook','handout','slides','lab_guide','exam','reference','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'textbook' COMMENT '资料类型',
+  `parse_status` enum('pending','processing','done','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '解析状态',
+  `parse_started_at` timestamp NULL DEFAULT NULL COMMENT '解析开始时间',
+  `parse_finished_at` timestamp NULL DEFAULT NULL COMMENT '解析完成时间',
+  `parse_error_msg` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '解析错误信息',
+  `mineru_batch_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'MinerU批次ID',
+  `upload_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_course_material_object`(`course_id` ASC, `material_object_id` ASC) USING BTREE,
+  UNIQUE INDEX `uk_course_material_display_name`(`course_id` ASC, `display_name` ASC) USING BTREE,
+  INDEX `idx_course_materials_course_status`(`course_id` ASC, `parse_status` ASC) USING BTREE,
+  INDEX `idx_course_materials_upload_time`(`upload_time` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程资料关系表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Table structure for parse_logs
 -- ----------------------------
 DROP TABLE IF EXISTS `parse_logs`;
 CREATE TABLE `parse_logs`  (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `pdf_file_id` bigint NOT NULL COMMENT '关联的PDF文件ID',
+  `course_material_id` bigint NOT NULL COMMENT '关联的课程资料ID',
   `log_level` enum('info','warning','error') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'info' COMMENT '日志级别',
   `log_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '日志内容',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_pdf_file_id`(`pdf_file_id` ASC) USING BTREE,
+  INDEX `idx_course_material_id`(`course_material_id` ASC) USING BTREE,
   INDEX `idx_log_level`(`log_level` ASC) USING BTREE,
   INDEX `idx_created_at`(`created_at` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '解析日志表' ROW_FORMAT = Dynamic;
@@ -59,7 +103,7 @@ CREATE TABLE `parse_logs`  (
 DROP TABLE IF EXISTS `parse_results`;
 CREATE TABLE `parse_results`  (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `pdf_file_id` bigint NOT NULL COMMENT '关联的PDF文件ID',
+  `course_material_id` bigint NOT NULL COMMENT '关联的课程资料ID',
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID',
   `result_type` enum('content_list_json','model_json','layout_json','markdown','image','origin_pdf','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '结果类型',
   `file_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文件名',
@@ -68,38 +112,10 @@ CREATE TABLE `parse_results`  (
   `file_size` bigint NULL DEFAULT 0 COMMENT '文件大小（字节）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_pdf_file_id`(`pdf_file_id` ASC) USING BTREE,
+  INDEX `idx_course_material_id`(`course_material_id` ASC) USING BTREE,
   INDEX `idx_course_id`(`course_id` ASC) USING BTREE,
   INDEX `idx_result_type`(`result_type` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 406 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '解析结果表' ROW_FORMAT = Dynamic;
-
--- ----------------------------
--- Table structure for pdf_files
--- ----------------------------
-DROP TABLE IF EXISTS `pdf_files`;
-CREATE TABLE `pdf_files`  (
-  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID',
-  `file_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '原始文件名',
-  `file_md5` char(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文件MD5哈希值',
-  `file_size` bigint NOT NULL COMMENT '文件大小（字节）',
-  `minio_bucket` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MinIO存储桶名称',
-  `minio_object_key` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MinIO对象键（路径）',
-  `upload_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
-  `parse_status` enum('pending','processing','done','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'pending' COMMENT '解析状态',
-  `parse_started_at` timestamp NULL DEFAULT NULL COMMENT '解析开始时间',
-  `parse_finished_at` timestamp NULL DEFAULT NULL COMMENT '解析完成时间',
-  `parse_error_msg` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '解析错误信息',
-  `mineru_batch_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'MinerU批次ID',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_file_md5`(`file_md5` ASC) USING BTREE COMMENT 'MD5唯一索引，防止重复上传',
-  UNIQUE INDEX `uk_course_file`(`course_id` ASC, `file_name` ASC) USING BTREE COMMENT '同一课程下文件名唯一',
-  INDEX `idx_course_id`(`course_id` ASC) USING BTREE,
-  INDEX `idx_parse_status`(`parse_status` ASC) USING BTREE,
-  INDEX `idx_upload_time`(`upload_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'PDF文件表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for users
@@ -492,6 +508,6 @@ ALTER TABLE `knowledge_bases`
 -- View structure for v_course_parse_overview
 -- ----------------------------
 DROP VIEW IF EXISTS `v_course_parse_overview`;
-CREATE ALGORITHM = UNDEFINED SQL SECURITY DEFINER VIEW `v_course_parse_overview` AS select `c`.`course_id` AS `course_id`,`c`.`course_name` AS `course_name`,`pf`.`id` AS `pdf_file_id`,`pf`.`file_name` AS `file_name`,`pf`.`file_md5` AS `file_md5`,`pf`.`file_size` AS `file_size`,`pf`.`parse_status` AS `parse_status`,`pf`.`upload_time` AS `upload_time`,`pf`.`parse_started_at` AS `parse_started_at`,`pf`.`parse_finished_at` AS `parse_finished_at`,timestampdiff(SECOND,`pf`.`parse_started_at`,`pf`.`parse_finished_at`) AS `parse_duration_seconds`,(select count(0) from `parse_results` `pr` where (`pr`.`pdf_file_id` = `pf`.`id`)) AS `result_file_count` from (`courses` `c` left join `pdf_files` `pf` on((`c`.`course_id` = `pf`.`course_id`)));
+CREATE ALGORITHM = UNDEFINED SQL SECURITY DEFINER VIEW `v_course_parse_overview` AS select `c`.`course_id` AS `course_id`,`c`.`course_name` AS `course_name`,`cm`.`id` AS `course_material_id`,`cm`.`id` AS `pdf_file_id`,`cm`.`display_name` AS `display_name`,`cm`.`display_name` AS `file_name`,`mo`.`file_md5` AS `file_md5`,`mo`.`file_size` AS `file_size`,`cm`.`material_type` AS `material_type`,`cm`.`parse_status` AS `parse_status`,`cm`.`upload_time` AS `upload_time`,`cm`.`parse_started_at` AS `parse_started_at`,`cm`.`parse_finished_at` AS `parse_finished_at`,timestampdiff(SECOND,`cm`.`parse_started_at`,`cm`.`parse_finished_at`) AS `parse_duration_seconds`,(select count(0) from `parse_results` `pr` where (`pr`.`course_material_id` = `cm`.`id`)) AS `result_file_count` from ((`courses` `c` left join `course_materials` `cm` on((`c`.`course_id` = `cm`.`course_id`))) left join `material_objects` `mo` on((`cm`.`material_object_id` = `mo`.`id`)));
 
 SET FOREIGN_KEY_CHECKS = 1;
