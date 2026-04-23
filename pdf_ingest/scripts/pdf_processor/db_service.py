@@ -148,6 +148,7 @@ class DatabaseService:
         return f"""
             SELECT
                 cm.*,
+                cm.id AS course_material_id,
                 cm.id AS pdf_file_id,
                 cm.display_name AS file_name,
                 mo.original_file_name,
@@ -223,20 +224,39 @@ class DatabaseService:
         material_type: str = "textbook",
     ) -> int:
         """
-        创建或复用课程资料关系。
+        创建课程资料关系。
 
-        关系由 service 层维护，不依赖数据库级外键。
+        关系由 service 层维护，不依赖数据库级外键；重复关系返回已有 ID，
+        同课程同展示名但不同资料对象交给调用方 force 流程处理。
         """
         self.create_course(course_id)
 
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO course_materials
-                    (course_id, material_object_id, display_name, material_type)
-                VALUES (%s, %s, %s, %s)
-            """, (course_id, material_object_id, display_name, material_type))
-            return cursor.lastrowid
+            try:
+                cursor.execute("""
+                    INSERT INTO course_materials
+                        (course_id, material_object_id, display_name, material_type)
+                    VALUES (%s, %s, %s, %s)
+                """, (course_id, material_object_id, display_name, material_type))
+                return cursor.lastrowid
+            except pymysql.err.IntegrityError as exc:
+                conn.rollback()
+                existing_relation = self.get_course_material_by_object(
+                    course_id, material_object_id
+                )
+                if existing_relation is not None:
+                    return int(existing_relation["id"])
+
+                same_name_material = self.get_course_material_by_course(
+                    course_id, display_name
+                )
+                if same_name_material is not None:
+                    raise ValueError(
+                        f"课程 {course_id} 已存在同名资料 {display_name}，"
+                        "请使用 force 流程替换该课程资料关系"
+                    ) from exc
+                raise
 
     def get_course_material_by_id(self, course_material_id: int) -> Optional[Dict]:
         """根据关系 ID 获取课程资料，兼容返回历史 PDF 字段名。"""
@@ -322,33 +342,31 @@ class DatabaseService:
                         file_size: int, minio_bucket: str, 
                         minio_object_key: str) -> int:
         """
-        创建PDF文件记录
+        兼容旧命名：创建课程资料关系。
         
         Returns:
-            文件记录ID
+            课程资料关系ID
         """
-        # 确保课程存在
-        self.create_course(course_id)
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO pdf_files 
-                    (course_id, file_name, file_md5, file_size, minio_bucket, minio_object_key)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (course_id, file_name, file_md5, file_size, minio_bucket, minio_object_key))
-            return cursor.lastrowid
+        material_object_id = self.create_material_object(
+            original_file_name=file_name,
+            file_md5=file_md5,
+            file_size=file_size,
+            minio_bucket=minio_bucket,
+            minio_object_key=minio_object_key,
+        )
+        return self.create_course_material(
+            course_id=course_id,
+            material_object_id=material_object_id,
+            display_name=file_name,
+        )
     
     def get_pdf_file_by_id(self, file_id: int) -> Optional[Dict]:
         """根据ID获取PDF文件记录"""
         return self.get_course_material_by_id(file_id)
     
     def get_pdf_file_by_md5(self, file_md5: str) -> Optional[Dict]:
-        """根据MD5获取PDF文件记录"""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM pdf_files WHERE file_md5 = %s", (file_md5,))
-            return cursor.fetchone()
+        """兼容旧命名：根据 MD5 获取资料物理对象。"""
+        return self.get_material_object_by_md5(file_md5)
 
     def get_pdf_files_by_course(self, course_id: str) -> List[Dict]:
         """获取课程下的所有PDF文件记录，按最新上传排序。"""
