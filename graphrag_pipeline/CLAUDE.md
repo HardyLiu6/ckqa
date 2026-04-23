@@ -86,7 +86,8 @@ pdf_ingest 导出的 json
 4. **Search routing**: API 请求中的 `model` 用来选择搜索模式：
    - `graphrag-local-search:latest`
    - `graphrag-global-search:latest`
-   - `full-model:latest`
+   - `graphrag-drift-search:latest`
+   - `graphrag-basic-search:latest`
 
 ### Compatibility Reality
 

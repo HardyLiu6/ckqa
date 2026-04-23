@@ -86,12 +86,35 @@ export EXPORT_TIMEOUT_SECONDS=300
 export FETCH_TIMEOUT_SECONDS=300
 export INDEX_TIMEOUT_SECONDS=1800
 export QUERY_TIMEOUT_SECONDS=120
-export QUERY_TASK_POLLING_INTERVAL_SECONDS=5
-export QUERY_TASK_STALE_SECONDS=30
+export QUERY_TASK_POLLING_INTERVAL_SECONDS=10
+export QUERY_TASK_STALE_SECONDS=300
+export QUERY_TASK_POLLING_INTERVAL_SECONDS_LOCAL=10
+export QUERY_TASK_POLLING_INTERVAL_SECONDS_GLOBAL=30
+export QUERY_TASK_POLLING_INTERVAL_SECONDS_DRIFT=30
+export QUERY_TASK_STALE_SECONDS_LOCAL=300
+export QUERY_TASK_STALE_SECONDS_GLOBAL=1800
+export QUERY_TASK_STALE_SECONDS_DRIFT=1800
 export INDEX_STALE_SECONDS=2400
 ```
 
 这些变量也已经在 `.env.example` 中给出示例。
+
+问答异步任务支持按 `mode` 覆盖前端轮询建议和 stale 阈值：
+
+- 默认值：`QUERY_TASK_POLLING_INTERVAL_SECONDS` / `QUERY_TASK_STALE_SECONDS`
+- 可选覆盖：`QUERY_TASK_POLLING_INTERVAL_SECONDS_LOCAL|GLOBAL|BASIC|DRIFT`
+- 可选覆盖：`QUERY_TASK_STALE_SECONDS_LOCAL|GLOBAL|BASIC|DRIFT`
+- 可选文案：`QUERY_TASK_TIMEOUT_MESSAGE_LOCAL|GLOBAL|BASIC|DRIFT`
+
+2026-04-23 使用 main 分支现有图谱单轮实测同一问题：
+
+| mode | 实测耗时 | 默认前端轮询建议 | 默认 stale 阈值 |
+| --- | ---: | ---: | ---: |
+| `local` | 约 110 秒 | 10 秒 | 300 秒 |
+| `global` | 约 800 秒 | 30 秒 | 1800 秒 |
+| `drift` | 约 725 秒 | 30 秒 | 1800 秒 |
+
+这里的 stale 阈值是“心跳长期未更新”的回收阈值，不是强制总耗时上限；只要 Python 任务仍持续刷新心跳，长查询会继续等待终态。
 
 ## 启动顺序
 
@@ -145,6 +168,15 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
   -d '{"mode":"global","content":"请概括这套图谱的主题"}'
 ```
 
+当前异步问答支持的 `mode`：
+
+- `local`
+- `global`
+- `drift`
+- `basic`
+
+`full` 当前已归档为后续扩展模式，不在 Java 编排链路内公开支持。
+
 轮询任务：
 
 ```bash
@@ -154,6 +186,13 @@ TASK_ID=$(curl -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
 
 curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
 ```
+
+任务时间字段约定：
+
+- Java DTO 统一按 `Asia/Shanghai` 的 `LocalDateTime` 解析 Python 返回的任务时间
+- `createdAt`、`startedAt`、`lastHeartbeatAt`、`finishedAt` 都是不带偏移量的本地时间字符串，例如 `2026-04-22T20:20:34`
+- `recommendedPollingIntervalSeconds`、`staleTimeoutSeconds`、`timeoutMessage` 会随 `mode` 返回，前端可以直接用它们调整轮询节奏和超时提示
+- Java 应用启动时会自动回收超过对应 mode stale 阈值的历史 `pending` / `running` 问答任务，避免 `qa_retrieval_logs` 长期停在活动态
 
 ### 运行测试
 
@@ -207,7 +246,7 @@ curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
 ## 当前已知边界
 
 - `parse` 与 `index` 仍是同步长任务，一期主要靠命令超时与陈旧任务恢复兜底
-- 问答链路已改成异步任务模式，修的是“超时语义”，不是 `global` 查询速度
+- 问答链路已改成异步任务模式，修的是“超时语义”，不是 `global` / `drift` 查询速度
 - Python 任务快照目前仍是进程内内存态，Python 服务重启会导致 Java 把对应任务标记为 `failed`
 - `qa_retrieval_hits` 尚未落地
 - `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活

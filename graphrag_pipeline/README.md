@@ -100,8 +100,10 @@ graphrag index --root .
 ### 4. 命令行查询
 
 ```bash
-graphrag query --root . --method local --query "问题"
-graphrag query --root . --method global --query "问题"
+graphrag query --root . --method local "问题"
+graphrag query --root . --method global "问题"
+graphrag query --root . --method drift "问题"
+graphrag query --root . --method basic "问题"
 ```
 
 ### 5. 启动 API
@@ -192,11 +194,21 @@ curl -X POST http://127.0.0.1:8012/v1/query-tasks \
 curl http://127.0.0.1:8012/v1/query-tasks/qt_20260422_000001_001
 ```
 
+时间字段约定：
+
+- Python 内部仍使用 UTC aware 时间跟踪任务生命周期
+- 对外 JSON 中的 `createdAt`、`startedAt`、`lastHeartbeatAt`、`finishedAt` 统一序列化为 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串，例如 `2026-04-22T20:20:34`
+- Python 侧只负责托管真实 `graphrag query` 子进程并刷新心跳；按 `mode` 区分的前端轮询建议、stale 阈值和超时文案由 Java 后端返回给业务前端
+- 2026-04-23 使用 main 分支现有图谱单轮实测：`local` 约 110 秒、`global` 约 800 秒、`drift` 约 725 秒；这些数值用于 Java 后端默认轮询/stale 策略，不代表 GraphRAG CLI 的固定上限
+
 ### 当前模型名
 
 - `graphrag-local-search:latest`
 - `graphrag-global-search:latest`
-- `full-model:latest`
+- `graphrag-drift-search:latest`
+- `graphrag-basic-search:latest`
+
+`full-model:latest` 当前已归档为后续扩展模式，不再作为公开支持模型对外宣称。
 
 ### 请求示例
 

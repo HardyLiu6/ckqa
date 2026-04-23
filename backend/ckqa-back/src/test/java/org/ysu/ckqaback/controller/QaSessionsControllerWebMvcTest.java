@@ -80,7 +80,11 @@ class QaSessionsControllerWebMvcTest {
                 "pending",
                 "queued",
                 null,
-                LocalDateTime.of(2026, 4, 22, 15, 20, 31)
+                LocalDateTime.of(2026, 4, 22, 15, 20, 31),
+                "drift",
+                15L,
+                1800L,
+                "drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"
         );
         given(qaWorkflowService.sendMessage(eq(5L), any())).willReturn(response);
 
@@ -88,14 +92,32 @@ class QaSessionsControllerWebMvcTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "mode": "global",
+                                  "mode": "drift",
                                   "content": "请概括这套图谱的主题"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.taskId").value(9001))
+                .andExpect(jsonPath("$.data.mode").value("drift"))
                 .andExpect(jsonPath("$.data.taskStatus").value("pending"))
+                .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(15))
+                .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(1800))
+                .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"))
                 .andExpect(jsonPath("$.data.assistantMessage").doesNotExist());
+    }
+
+    @Test
+    void shouldRejectArchivedFullMode() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                                {
+                                  "mode": "full",
+                                  "content": "请概括这套图谱的主题"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("参数校验失败"));
     }
 
     @Test
@@ -114,13 +136,18 @@ class QaSessionsControllerWebMvcTest {
                 LocalDateTime.of(2026, 4, 22, 15, 21, 5),
                 LocalDateTime.of(2026, 4, 22, 15, 22, 0),
                 QaMessageResponse.of(102L, 5L, "assistant", 2, "图谱主题集中在操作系统概念网络", LocalDateTime.of(2026, 4, 22, 15, 22), null, null),
-                null
+                null,
+                5L,
+                30L,
+                "任务心跳超时"
         );
         given(qaWorkflowService.getTaskDetail(5L, 9001L)).willReturn(response);
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.taskStatus").value("success"))
+                .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(5))
+                .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(30))
                 .andExpect(jsonPath("$.data.latestLogs[0]").value("started graphrag query --method global"));
     }
 

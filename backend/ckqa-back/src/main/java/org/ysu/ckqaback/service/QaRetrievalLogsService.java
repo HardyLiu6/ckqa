@@ -6,6 +6,8 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
 
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
+import java.util.function.Function;
 
 /**
  * <p>
@@ -35,6 +37,11 @@ public interface QaRetrievalLogsService extends IService<QaRetrievalLogs> {
     void markSuccess(Long taskId, Long assistantMessageId, String latestLogs, String retrievalStatus);
 
     void markFailed(Long taskId, String taskStatus, String errorMessage, String latestLogs);
+
+    List<QaRetrievalLogs> recoverStaleActiveTasks(
+            Function<String, Duration> staleThresholdResolver,
+            Function<String, String> timeoutMessageResolver
+    );
 
     Map<Long, QaRetrievalLogs> findLatestByUserMessageIds(List<Long> userMessageIds);
 }

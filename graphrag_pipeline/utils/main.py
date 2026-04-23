@@ -15,8 +15,9 @@ import os
 import re
 import time
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -41,6 +42,13 @@ GRAPHRAG_ROOT = PROJECT_ROOT
 OUTPUT_DIR = APP_CONFIG.output_dir
 INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
+API_TIME_ZONE = ZoneInfo("Asia/Shanghai")
+SUPPORTED_QUERY_MODELS: dict[str, str] = {
+    "graphrag-local-search:latest": "local",
+    "graphrag-global-search:latest": "global",
+    "graphrag-drift-search:latest": "drift",
+    "graphrag-basic-search:latest": "basic",
+}
 
 
 def _should_bypass_env_proxy(api_base: str | None) -> bool:
@@ -150,7 +158,7 @@ class ChatCompletionRequest(BaseModel):
 
 
 class QueryTaskCreateRequest(BaseModel):
-    mode: str = Field(default="local")
+    mode: Literal["local", "global", "drift", "basic"] = Field(default="local")
     prompt: str
 
 
@@ -193,6 +201,15 @@ def format_response(response: str) -> str:
     return "\n\n".join(formatted_paragraphs)
 
 
+def _serialize_api_local_datetime(value) -> str | None:
+    """将内部 UTC aware 时间转成上海时间的无偏移 LocalDateTime 字符串。"""
+    if value is None:
+        return None
+    if getattr(value, "tzinfo", None) is None:
+        return value.isoformat(timespec="seconds")
+    return value.astimezone(API_TIME_ZONE).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
 def _serialize_task_snapshot(snapshot) -> dict[str, object]:
     """将任务快照转成稳定的 JSON 返回结构。"""
     return {
@@ -200,12 +217,10 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "taskStatus": snapshot.task_status,
         "progressStage": snapshot.progress_stage,
         "processAlive": snapshot.process_alive,
-        "createdAt": snapshot.created_at.isoformat(),
-        "startedAt": snapshot.started_at.isoformat() if snapshot.started_at else None,
-        "lastHeartbeatAt": (
-            snapshot.last_heartbeat_at.isoformat() if snapshot.last_heartbeat_at else None
-        ),
-        "finishedAt": snapshot.finished_at.isoformat() if snapshot.finished_at else None,
+        "createdAt": _serialize_api_local_datetime(snapshot.created_at),
+        "startedAt": _serialize_api_local_datetime(snapshot.started_at),
+        "lastHeartbeatAt": _serialize_api_local_datetime(snapshot.last_heartbeat_at),
+        "finishedAt": _serialize_api_local_datetime(snapshot.finished_at),
         "latestLogs": list(snapshot.latest_logs or []),
         "resultText": snapshot.result_text,
         "errorMessage": snapshot.error_message,
@@ -245,7 +260,7 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                 "pythonTaskId": snapshot.python_task_id,
                 "taskStatus": snapshot.task_status,
                 "progressStage": snapshot.progress_stage,
-                "createdAt": snapshot.created_at.isoformat(),
+                "createdAt": _serialize_api_local_datetime(snapshot.created_at),
             }
         )
 
@@ -324,6 +339,11 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                 ),
             )
             return JSONResponse(content=response.model_dump())
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            logger.warning("收到不支持的模型请求: %s", exc)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             logger.error("处理请求时出错: %s", exc)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -347,10 +367,16 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                 "owned_by": "graphrag",
             },
             {
-                "id": "full-model:latest",
+                "id": "graphrag-drift-search:latest",
                 "object": "model",
-                "created": current_time - 80000,
-                "owned_by": "combined",
+                "created": current_time - 90000,
+                "owned_by": "graphrag",
+            },
+            {
+                "id": "graphrag-basic-search:latest",
+                "object": "model",
+                "created": current_time - 85000,
+                "owned_by": "graphrag",
             },
         ]
         return JSONResponse(content={"object": "list", "data": models})
@@ -365,6 +391,8 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             "compat_mode": "cli_query",
             "local_search_ready": True,
             "global_search_ready": True,
+            "drift_search_ready": True,
+            "basic_search_ready": True,
             "output_dir": INPUT_DIR,
             "lancedb_uri": LANCEDB_URI,
         }
@@ -382,25 +410,14 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
     return app
 
 
-async def full_model_search(prompt: str) -> str:
-    """组合本地检索与全局检索结果。"""
-    local_text = format_response(await run_graphrag_query_cli("local", prompt))
-    global_text = format_response(await run_graphrag_query_cli("global", prompt))
-
-    formatted_result = "# 综合搜索结果:\n\n"
-    formatted_result += "## 本地检索结果:\n"
-    formatted_result += local_text + "\n\n"
-    formatted_result += "## 全局检索结果:\n"
-    formatted_result += global_text + "\n\n"
-    return formatted_result
-
-
 async def _resolve_query_response(model: str, prompt: str) -> str:
     if model == "full-model:latest":
-        return await full_model_search(prompt)
-    if model == "graphrag-global-search:latest":
-        return format_response(await run_graphrag_query_cli("global", prompt))
-    return format_response(await run_graphrag_query_cli("local", prompt))
+        raise ValueError("模型 full-model:latest 已归档为后续扩展模式，当前请使用 local、global、drift 或 basic")
+
+    method = SUPPORTED_QUERY_MODELS.get(model)
+    if method is None:
+        raise ValueError(f"不支持的模型: {model}")
+    return format_response(await run_graphrag_query_cli(method, prompt))
 
 
 app = create_app()

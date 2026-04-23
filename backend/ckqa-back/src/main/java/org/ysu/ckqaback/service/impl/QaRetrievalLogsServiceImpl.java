@@ -13,10 +13,13 @@ import org.ysu.ckqaback.mapper.QaRetrievalLogsMapper;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * <p>
@@ -28,6 +31,8 @@ import java.util.Map;
  */
 @Service
 public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMapper, QaRetrievalLogs> implements QaRetrievalLogsService {
+
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Override
     public QaRetrievalLogs createPendingTask(
@@ -48,6 +53,7 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
         task.setIndexRunId(indexRunId);
         task.setQueryMode(mode);
         task.setQueryText(queryText);
+        task.setCreatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         save(task);
         return task;
     }
@@ -98,7 +104,7 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .set(QaRetrievalLogs::getRetrievalStatus, retrievalStatus)
                 .set(QaRetrievalLogs::getLatestLogs, latestLogs)
                 .set(QaRetrievalLogs::getErrorMessage, null)
-                .set(QaRetrievalLogs::getFinishedAt, LocalDateTime.now());
+                .set(QaRetrievalLogs::getFinishedAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, updateWrapper);
     }
 
@@ -111,8 +117,34 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .set(QaRetrievalLogs::getRetrievalStatus, "failed")
                 .set(QaRetrievalLogs::getErrorMessage, shortenMessage(errorMessage))
                 .set(QaRetrievalLogs::getLatestLogs, latestLogs)
-                .set(QaRetrievalLogs::getFinishedAt, LocalDateTime.now());
+                .set(QaRetrievalLogs::getFinishedAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, updateWrapper);
+    }
+
+    @Override
+    public List<QaRetrievalLogs> recoverStaleActiveTasks(
+            Function<String, Duration> staleThresholdResolver,
+            Function<String, String> timeoutMessageResolver
+    ) {
+        LambdaQueryWrapper<QaRetrievalLogs> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.in(QaRetrievalLogs::getTaskStatus, List.of("pending", "running"))
+                .orderByAsc(QaRetrievalLogs::getLastHeartbeatAt)
+                .orderByAsc(QaRetrievalLogs::getCreatedAt);
+
+        LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
+        List<QaRetrievalLogs> staleTasks = list(queryWrapper).stream()
+                .filter(task -> isStaleActiveTask(task, staleThresholdResolver.apply(task.getQueryMode()), now))
+                .toList();
+
+        for (QaRetrievalLogs task : staleTasks) {
+            markFailed(
+                    task.getId(),
+                    "stale",
+                    timeoutMessageResolver.apply(task.getQueryMode()),
+                    task.getLatestLogs()
+            );
+        }
+        return staleTasks;
     }
 
     @Override
@@ -143,6 +175,24 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .last("LIMIT 1");
         QaRetrievalLogs latestTask = getOne(queryWrapper, false);
         return latestTask == null || latestTask.getTaskSeq() == null ? 1 : latestTask.getTaskSeq() + 1;
+    }
+
+    private boolean isStaleActiveTask(QaRetrievalLogs task, Duration staleThreshold, LocalDateTime now) {
+        if (!"pending".equals(task.getTaskStatus()) && !"running".equals(task.getTaskStatus())) {
+            return false;
+        }
+
+        LocalDateTime referenceTime = task.getLastHeartbeatAt();
+        if (referenceTime == null) {
+            referenceTime = task.getStartedAt();
+        }
+        if (referenceTime == null) {
+            referenceTime = task.getCreatedAt();
+        }
+        if (referenceTime == null) {
+            return true;
+        }
+        return Duration.between(referenceTime, now).compareTo(staleThreshold) > 0;
     }
 
     private String joinLatestLogs(List<String> latestLogs) {

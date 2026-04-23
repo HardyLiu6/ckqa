@@ -7,6 +7,8 @@ import org.ysu.ckqaback.service.QaMessagesService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -19,6 +21,8 @@ import java.util.List;
  */
 @Service
 public class QaMessagesServiceImpl extends ServiceImpl<QaMessagesMapper, QaMessages> implements QaMessagesService {
+
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Override
     public QaMessages appendUserMessage(Long sessionId, String content) {
@@ -45,6 +49,7 @@ public class QaMessagesServiceImpl extends ServiceImpl<QaMessagesMapper, QaMessa
         message.setSequenceNo(nextSequenceNo(sessionId));
         message.setContent(content);
         message.setContentText(content);
+        message.setCreatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         save(message);
         return message;
     }

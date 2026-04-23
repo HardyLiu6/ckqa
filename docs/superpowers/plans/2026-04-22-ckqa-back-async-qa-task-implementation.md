@@ -115,7 +115,7 @@ cd /home/sunlight/Projects/ckqa/.worktrees/ckqa-back-phase1
 - Create: `graphrag_pipeline/tests/test_query_task_manager.py`
 - Modify: `graphrag_pipeline/utils/main.py`
 
-- [ ] **Step 1: 先写失败测试，固定任务管理器的核心语义**
+- [x] **Step 1: 先写失败测试，固定任务管理器的核心语义**
 
 ```python
 #!/usr/bin/env python3
@@ -193,13 +193,13 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: 运行测试确认它先失败**
+- [x] **Step 2: 运行测试确认它先失败**
 
 Run: `cd graphrag_pipeline && python -m pytest tests/test_query_task_manager.py -q`
 
 Expected: FAIL，报 `ModuleNotFoundError: No module named 'query_task_manager'`，或者 `QueryTaskManager` / `create_task` / `get_snapshot` 未定义。
 
-- [ ] **Step 3: 写最小实现，让 Python 侧先具备真实子进程托管能力**
+- [x] **Step 3: 写最小实现，让 Python 侧先具备真实子进程托管能力**
 
 ```python
 from __future__ import annotations
@@ -356,7 +356,7 @@ class QueryTaskManager:
             )
 ```
 
-- [ ] **Step 4: 重新运行测试，确认心跳、日志 tail、成功/失败状态都已跑通**
+- [x] **Step 4: 重新运行测试，确认心跳、日志 tail、成功/失败状态都已跑通**
 
 Run: `cd graphrag_pipeline && python -m pytest tests/test_query_task_manager.py -q`
 
@@ -380,7 +380,7 @@ git commit -m "feat: add graphrag query task manager"
 - Modify: `graphrag_pipeline/tests/test_api_runtime_config.py`
 - Modify: `graphrag_pipeline/tests/test_runtime_defaults.py`
 
-- [ ] **Step 1: 先用 API 测试和配置测试把边界固定住**
+- [x] **Step 1: 先用 API 测试和配置测试把边界固定住**
 
 ```python
 #!/usr/bin/env python3
@@ -482,13 +482,13 @@ self.assertNotIn('"--dynamic-community-selection"', text)
 self.assertIn('env["NO_PROXY"]', text)
 ```
 
-- [ ] **Step 2: 运行目标测试，确认新接口和配置收敛还没实现**
+- [x] **Step 2: 运行目标测试，确认新接口和配置收敛还没实现**
 
 Run: `cd graphrag_pipeline && python -m pytest tests/test_query_task_api.py tests/test_api_runtime_config.py tests/test_main_cli_mode.py tests/test_runtime_defaults.py -q`
 
 Expected: FAIL，原因包括 `create_app` 不存在、`/v1/query-tasks` 未注册，以及旧测试仍然要求 `global_search_*` 字段存在。
 
-- [ ] **Step 3: 在 FastAPI 层接出新接口，并删掉错误方向的 global 运行时调参**
+- [x] **Step 3: 在 FastAPI 层接出新接口，并删掉错误方向的 global 运行时调参**
 
 ```python
 @dataclass(frozen=True)
@@ -569,7 +569,7 @@ dynamic_search_max_level: 1
 
 `test_main_cli_mode.py` 里的目标变成“保留位置参数 + 保留 `NO_PROXY` 保护 + 不再拼接 global strategy 参数”。
 
-- [ ] **Step 4: 重新跑 Python 任务接口与配置测试**
+- [x] **Step 4: 重新跑 Python 任务接口与配置测试**
 
 Run: `cd graphrag_pipeline && python -m pytest tests/test_query_task_manager.py tests/test_query_task_api.py tests/test_api_runtime_config.py tests/test_main_cli_mode.py tests/test_runtime_defaults.py -q`
 
@@ -592,7 +592,7 @@ git commit -m "feat: add graphrag query task api"
 - Modify: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/integration/config/CkqaIntegrationProperties.java`
 - Modify: `backend/ckqa-back/src/main/resources/application.properties`
 
-- [ ] **Step 1: 先写 Java 客户端测试，固定 Python 任务接口契约**
+- [x] **Step 1: 先写 Java 客户端测试，固定 Python 任务接口契约**
 
 ```java
 package org.ysu.ckqaback.integration.graphrag;
@@ -653,13 +653,13 @@ class GraphRagTaskClientTest {
 }
 ```
 
-- [ ] **Step 2: 先跑测试，确认新的任务客户端还不存在**
+- [x] **Step 2: 先跑测试，确认新的任务客户端还不存在**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=GraphRagTaskClientTest test`
 
 Expected: FAIL，因为 `GraphRagTaskClient`、`GraphRagTaskCreateResult`、`GraphRagTaskSnapshot` 还不存在。
 
-- [ ] **Step 3: 实现 Java 任务客户端，并把轮询间隔 / stale 阈值配置补齐**
+- [x] **Step 3: 实现 Java 任务客户端，并把轮询间隔 / stale 阈值配置补齐**
 
 ```java
 public record GraphRagTaskCreateResult(
@@ -754,11 +754,18 @@ public class CkqaIntegrationProperties {
         private long fetchSeconds = 300L;
         private long indexSeconds = 1800L;
         private long indexStaleSeconds = 2400L;
-        private long queryTaskStaleSeconds = 30L;
+        private long queryTaskStaleSeconds = 300L;
+        private Map<String, Long> queryTaskModeStaleSeconds = new LinkedHashMap<>(
+            Map.of("local", 300L, "basic", 300L, "global", 1800L, "drift", 1800L)
+        );
+        private Map<String, String> queryTaskModeTimeoutMessages = new LinkedHashMap<>();
     }
 
     public static class PollingProperties {
-        private long queryTaskIntervalSeconds = 5L;
+        private long queryTaskIntervalSeconds = 10L;
+        private Map<String, Long> queryTaskModeIntervalSeconds = new LinkedHashMap<>(
+            Map.of("local", 10L, "basic", 10L, "global", 30L, "drift", 30L)
+        );
     }
 }
 ```
@@ -766,11 +773,13 @@ public class CkqaIntegrationProperties {
 `application.properties` 增加：
 
 ```properties
-ckqa.integration.polling.query-task-interval-seconds=${QUERY_TASK_POLLING_INTERVAL_SECONDS:5}
-ckqa.integration.timeout.query-task-stale-seconds=${QUERY_TASK_STALE_SECONDS:30}
+ckqa.integration.polling.query-task-interval-seconds=${QUERY_TASK_POLLING_INTERVAL_SECONDS:10}
+ckqa.integration.polling.query-task-mode-interval-seconds.drift=${QUERY_TASK_POLLING_INTERVAL_SECONDS_DRIFT:30}
+ckqa.integration.timeout.query-task-stale-seconds=${QUERY_TASK_STALE_SECONDS:300}
+ckqa.integration.timeout.query-task-mode-stale-seconds.drift=${QUERY_TASK_STALE_SECONDS_DRIFT:1800}
 ```
 
-- [ ] **Step 4: 跑 Java 客户端测试，确认 Python 任务接口的读写契约已经稳定**
+- [x] **Step 4: 跑 Java 客户端测试，确认 Python 任务接口的读写契约已经稳定**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=GraphRagTaskClientTest test`
 
@@ -802,7 +811,7 @@ git commit -m "feat: add java graphrag task client"
 - Delete: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/integration/graphrag/GraphRagChatResult.java`
 - Delete: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/qa/dto/QaRoundResponse.java`
 
-- [ ] **Step 1: 先用 worker 测试和 workflow 测试钉住异步受理语义**
+- [x] **Step 1: 先用 worker 测试和 workflow 测试钉住异步受理语义**
 
 ```java
 package org.ysu.ckqaback.qa;
@@ -980,13 +989,13 @@ then(qaTaskWorker).should().dispatch(5L, 9001L);
 then(qaMessagesService).should(never()).appendAssistantMessage(anyLong(), anyString());
 ```
 
-- [ ] **Step 2: 运行目标测试，确认 Java 侧还停留在同步问答语义**
+- [x] **Step 2: 运行目标测试，确认 Java 侧还停留在同步问答语义**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=QaWorkflowServiceTest,QaTaskWorkerTest test`
 
 Expected: FAIL，因为当前 `QaWorkflowService.sendMessage()` 仍然同步调用 `GraphRagQueryClient.query()`，`QaTaskWorker`、新 DTO 和新持久化方法都还不存在。
 
-- [ ] **Step 3: 扩表、改实体、加 worker，并把 `sendMessage` 改成“先落任务、后后台执行”**
+- [x] **Step 3: 扩表、改实体、加 worker，并把 `sendMessage` 改成“先落任务、后后台执行”**
 
 `ocqa.sql` 的核心改动直接写成增量式结构：
 
@@ -1231,7 +1240,7 @@ public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageReque
 }
 ```
 
-- [ ] **Step 4: 重新跑 worker 与 workflow 测试，确认 Java 侧已经变成异步受理**
+- [x] **Step 4: 重新跑 worker 与 workflow 测试，确认 Java 侧已经变成异步受理**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=QaWorkflowServiceTest,QaTaskWorkerTest test`
 
@@ -1253,7 +1262,7 @@ git commit -m "feat: add async qa task workflow"
 - Modify: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/qa/QaWorkflowService.java`
 - Modify: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/qa/dto/QaMessageResponse.java`
 
-- [ ] **Step 1: 用 WebMvc 测试把最终对外契约固定住**
+- [x] **Step 1: 用 WebMvc 测试把最终对外契约固定住**
 
 ```java
 @Test
@@ -1323,13 +1332,13 @@ void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() throws Exception {
 }
 ```
 
-- [ ] **Step 2: 运行 WebMvc 测试，确认控制器契约还没完成**
+- [x] **Step 2: 运行 WebMvc 测试，确认控制器契约还没完成**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=QaSessionsControllerWebMvcTest test`
 
 Expected: FAIL，因为控制器还没有 `GET /qa-sessions/{sessionId}/tasks/{taskId}`，提交接口返回体也还是旧的同步结构。
 
-- [ ] **Step 3: 改控制器和查询逻辑，让前端能轮询任务详情并在消息列表看到最小摘要**
+- [x] **Step 3: 改控制器和查询逻辑，让前端能轮询任务详情并在消息列表看到最小摘要**
 
 ```java
 @PostMapping("/{id}/messages")
@@ -1455,7 +1464,7 @@ public QaTaskDetailResponse getTaskDetail(Long sessionId, Long taskId) {
 }
 ```
 
-- [ ] **Step 4: 再跑一遍 WebMvc 测试，确认外部 API 契约和 spec 对齐**
+- [x] **Step 4: 再跑一遍 WebMvc 测试，确认外部 API 契约和 spec 对齐**
 
 Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=QaSessionsControllerWebMvcTest test`
 
@@ -1475,7 +1484,7 @@ git commit -m "feat: expose async qa task endpoints"
 - Modify: `backend/ckqa-back/README.md`
 - Modify: `graphrag_pipeline/README.md`
 
-- [ ] **Step 1: 先补最小文档断言，避免配置项和接口用法再次漂移**
+- [x] **Step 1: 先补最小文档断言，避免配置项和接口用法再次漂移**
 
 在 `backend/ckqa-back/README.md` 里新增这段最小运行说明：
 
@@ -1496,8 +1505,14 @@ curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
 在 `backend/ckqa-back/.env.example` 里补：
 
 ```properties
-QUERY_TASK_POLLING_INTERVAL_SECONDS=5
-QUERY_TASK_STALE_SECONDS=30
+QUERY_TASK_POLLING_INTERVAL_SECONDS=10
+QUERY_TASK_STALE_SECONDS=300
+QUERY_TASK_POLLING_INTERVAL_SECONDS_LOCAL=10
+QUERY_TASK_POLLING_INTERVAL_SECONDS_GLOBAL=30
+QUERY_TASK_POLLING_INTERVAL_SECONDS_DRIFT=30
+QUERY_TASK_STALE_SECONDS_LOCAL=300
+QUERY_TASK_STALE_SECONDS_GLOBAL=1800
+QUERY_TASK_STALE_SECONDS_DRIFT=1800
 ```
 
 在 `graphrag_pipeline/README.md` 里补：
@@ -1509,7 +1524,7 @@ QUERY_TASK_STALE_SECONDS=30
 - `GET /v1/query-tasks/{taskId}`
 ```
 
-- [ ] **Step 2: 跑完整的 Python 和 Java 目标测试集**
+- [x] **Step 2: 跑完整的 Python 和 Java 目标测试集**
 
 Run: `cd graphrag_pipeline && python -m pytest tests/test_query_task_manager.py tests/test_query_task_api.py tests/test_api_runtime_config.py tests/test_main_cli_mode.py tests/test_runtime_defaults.py -q`
 
@@ -1519,7 +1534,7 @@ Run: `cd backend/ckqa-back && ./mvnw -q -Dtest=GraphRagTaskClientTest,QaWorkflow
 
 Expected: PASS。
 
-- [ ] **Step 3: 做一次真实 API 冒烟闭环，但不要重建索引**
+- [x] **Step 3: 做一次真实 API 冒烟闭环，但不要重建索引**
 
 先确保数据库 schema 已按 `ocqa.sql` 的新增列同步到现有 MySQL。这里不要直接重跑整份初始化脚本覆盖老库，而是把本次涉及的 `ALTER TABLE qa_retrieval_logs ...` 增量语句手工执行到现有数据库。
 
@@ -1576,7 +1591,7 @@ curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/messages
 - `role=user` 的消息有 `taskStatus` / `progressStage`
 - `role=assistant` 的这两个字段为 `null`
 
-- [ ] **Step 4: 提交文档与验证收尾**
+- [x] **Step 4: 提交文档与验证收尾**
 
 ```bash
 git add backend/ckqa-back/.env.example backend/ckqa-back/README.md graphrag_pipeline/README.md
@@ -1589,9 +1604,16 @@ git commit -m "docs: document async qa task flow"
 
 ```text
 1. Python 任务快照仍然是进程内内存态，Python 重启会导致 Java 侧把任务标记为 failed。
-2. 这次修的是超时语义，不是 global 查询速度；慢但持续有心跳属于正常运行。
+2. 这次修的是超时语义，不是 global / drift 查询速度；慢但持续有心跳属于正常运行。
 3. Java 侧只轮询 Python 任务状态，不负责重建索引；现有知识图谱与 Neo4j 数据可继续复用。
 ```
+
+## 2026-04-23 遗留问题修补记录
+
+- [x] `drift` 模式已单独配置前端轮询建议和 stale 阈值，接口响应会返回 `recommendedPollingIntervalSeconds`、`staleTimeoutSeconds`、`timeoutMessage`。
+- [x] Java 启动阶段新增 QA stale recover，会回收超过对应 mode 阈值的历史 `pending` / `running` 任务，避免 `qa_retrieval_logs` 长期停在活动态。
+- [x] 审阅时同步补齐 `QaRetrievalLogsMapper.xml` 的异步任务字段映射，避免 XML resultMap 与实体/表结构漂移。
+- [x] 2026-04-23 使用 main 分支现有图谱实测：`local` 约 110 秒，`global` 约 800 秒，`drift` 约 725 秒；默认策略调整为 `local/basic` 10 秒轮询 + 300 秒 stale，`global/drift` 30 秒轮询 + 1800 秒 stale。
 
 ## 自检清单
 

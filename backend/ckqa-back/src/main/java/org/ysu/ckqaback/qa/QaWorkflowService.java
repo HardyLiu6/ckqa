@@ -10,6 +10,8 @@ import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
@@ -39,6 +41,7 @@ public class QaWorkflowService {
     private final KnowledgeBasesService knowledgeBasesService;
     private final UsersService usersService;
     private final QaTaskWorker qaTaskWorker;
+    private final CkqaIntegrationProperties properties;
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
         usersService.getRequiredById(request.getUserId());
@@ -73,6 +76,7 @@ public class QaWorkflowService {
                 request.getContent()
         );
         qaTaskWorker.dispatch(sessionId, task.getId());
+        QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(request.getMode());
 
         return QaTaskSubmissionResponse.of(
                 QaMessageResponse.fromEntity(userMessage),
@@ -80,7 +84,11 @@ public class QaWorkflowService {
                 task.getTaskStatus(),
                 task.getProgressStage(),
                 null,
-                task.getCreatedAt()
+                task.getCreatedAt(),
+                taskPolicy.mode(),
+                taskPolicy.recommendedPollingIntervalSeconds(),
+                taskPolicy.staleTimeoutSeconds(),
+                taskPolicy.timeoutMessage()
         );
     }
 
@@ -127,6 +135,7 @@ public class QaWorkflowService {
         List<String> latestLogs = StringUtils.hasText(task.getLatestLogs())
                 ? Arrays.stream(task.getLatestLogs().split("\\R")).toList()
                 : List.of();
+        QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(task.getQueryMode());
 
         return QaTaskDetailResponse.of(
                 task.getId(),
@@ -142,7 +151,10 @@ public class QaWorkflowService {
                 task.getLastHeartbeatAt(),
                 task.getFinishedAt(),
                 assistantMessage,
-                task.getErrorMessage()
+                task.getErrorMessage(),
+                taskPolicy.recommendedPollingIntervalSeconds(),
+                taskPolicy.staleTimeoutSeconds(),
+                taskPolicy.timeoutMessage()
         );
     }
 }

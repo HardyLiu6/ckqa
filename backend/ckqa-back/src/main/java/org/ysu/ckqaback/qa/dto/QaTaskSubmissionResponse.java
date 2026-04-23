@@ -16,6 +16,10 @@ public class QaTaskSubmissionResponse {
     private final String progressStage;
     private final String retrievalStatus;
     private final LocalDateTime createdAt;
+    private final String mode;
+    private final Long recommendedPollingIntervalSeconds;
+    private final Long staleTimeoutSeconds;
+    private final String timeoutMessage;
 
     private QaTaskSubmissionResponse(
             QaMessageResponse userMessage,
@@ -23,7 +27,11 @@ public class QaTaskSubmissionResponse {
             String taskStatus,
             String progressStage,
             String retrievalStatus,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String mode,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage
     ) {
         this.userMessage = userMessage;
         this.taskId = taskId;
@@ -31,6 +39,10 @@ public class QaTaskSubmissionResponse {
         this.progressStage = progressStage;
         this.retrievalStatus = retrievalStatus;
         this.createdAt = createdAt;
+        this.mode = mode;
+        this.recommendedPollingIntervalSeconds = recommendedPollingIntervalSeconds;
+        this.staleTimeoutSeconds = staleTimeoutSeconds;
+        this.timeoutMessage = timeoutMessage;
     }
 
     public static QaTaskSubmissionResponse of(
@@ -39,8 +51,23 @@ public class QaTaskSubmissionResponse {
             String taskStatus,
             String progressStage,
             String retrievalStatus,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String mode,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage
     ) {
-        return new QaTaskSubmissionResponse(userMessage, taskId, taskStatus, progressStage, retrievalStatus, createdAt);
+        return new QaTaskSubmissionResponse(
+                userMessage,
+                taskId,
+                taskStatus,
+                progressStage,
+                retrievalStatus,
+                createdAt,
+                mode,
+                recommendedPollingIntervalSeconds,
+                staleTimeoutSeconds,
+                timeoutMessage
+        );
     }
 }

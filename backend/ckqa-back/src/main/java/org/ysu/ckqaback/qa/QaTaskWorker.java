@@ -14,10 +14,13 @@ import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionsService;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * 问答异步任务后台 worker。
@@ -25,13 +28,17 @@ import java.util.Optional;
 @Service
 public class QaTaskWorker {
 
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+
     private final TaskExecutor qaTaskExecutor;
     private final GraphRagTaskClient graphRagTaskClient;
     private final QaRetrievalLogsService qaRetrievalLogsService;
     private final QaMessagesService qaMessagesService;
     private final QaSessionsService qaSessionsService;
-    private final Duration pollInterval;
-    private final Duration staleThreshold;
+    private final Function<String, Duration> pollIntervalResolver;
+    private final Function<String, Duration> staleThresholdResolver;
+    private final Function<String, String> timeoutMessageResolver;
+    private final Clock clock;
 
     @Autowired
     public QaTaskWorker(
@@ -48,8 +55,10 @@ public class QaTaskWorker {
                 qaRetrievalLogsService,
                 qaMessagesService,
                 qaSessionsService,
-                Duration.ofSeconds(properties.getPolling().getQueryTaskIntervalSeconds()),
-                Duration.ofSeconds(properties.getTimeout().getQueryTaskStaleSeconds())
+                mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).recommendedPollingIntervalSeconds()),
+                mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).staleTimeoutSeconds()),
+                mode -> properties.resolveQueryTaskModePolicy(mode).timeoutMessage(),
+                Clock.system(SHANGHAI_ZONE)
         );
     }
 
@@ -60,15 +69,42 @@ public class QaTaskWorker {
             QaMessagesService qaMessagesService,
             QaSessionsService qaSessionsService,
             Duration pollInterval,
-            Duration staleThreshold
+            Duration staleThreshold,
+            Clock clock
+    ) {
+        this(
+                qaTaskExecutor,
+                graphRagTaskClient,
+                qaRetrievalLogsService,
+                qaMessagesService,
+                qaSessionsService,
+                mode -> pollInterval,
+                mode -> staleThreshold,
+                mode -> "任务心跳超时",
+                clock
+        );
+    }
+
+    QaTaskWorker(
+            TaskExecutor qaTaskExecutor,
+            GraphRagTaskClient graphRagTaskClient,
+            QaRetrievalLogsService qaRetrievalLogsService,
+            QaMessagesService qaMessagesService,
+            QaSessionsService qaSessionsService,
+            Function<String, Duration> pollIntervalResolver,
+            Function<String, Duration> staleThresholdResolver,
+            Function<String, String> timeoutMessageResolver,
+            Clock clock
     ) {
         this.qaTaskExecutor = qaTaskExecutor;
         this.graphRagTaskClient = graphRagTaskClient;
         this.qaRetrievalLogsService = qaRetrievalLogsService;
         this.qaMessagesService = qaMessagesService;
         this.qaSessionsService = qaSessionsService;
-        this.pollInterval = pollInterval;
-        this.staleThreshold = staleThreshold;
+        this.pollIntervalResolver = pollIntervalResolver;
+        this.staleThresholdResolver = staleThresholdResolver;
+        this.timeoutMessageResolver = timeoutMessageResolver;
+        this.clock = clock;
     }
 
     public void dispatch(Long sessionId, Long taskId) {
@@ -77,6 +113,9 @@ public class QaTaskWorker {
 
     public void processTask(Long sessionId, Long taskId) {
         QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
+        Duration taskPollInterval = pollIntervalResolver.apply(task.getQueryMode());
+        Duration taskStaleThreshold = staleThresholdResolver.apply(task.getQueryMode());
+        String timeoutMessage = timeoutMessageResolver.apply(task.getQueryMode());
         GraphRagTaskSnapshot latestSnapshot = null;
         try {
             GraphRagTaskCreateResult created = graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText());
@@ -115,14 +154,15 @@ public class QaTaskWorker {
                     return;
                 }
 
-                if (snapshot.lastHeartbeatAt() != null
-                        && Duration.between(snapshot.lastHeartbeatAt(), LocalDateTime.now()).compareTo(staleThreshold) > 0) {
-                    qaRetrievalLogsService.markFailed(taskId, "stale", "任务心跳超时", joinLatestLogs(snapshot.latestLogs()));
+                LocalDateTime heartbeatAt = snapshot.lastHeartbeatAt() == null ? snapshot.startedAt() : snapshot.lastHeartbeatAt();
+                if (heartbeatAt != null
+                        && Duration.between(heartbeatAt, LocalDateTime.now(clock)).compareTo(taskStaleThreshold) > 0) {
+                    qaRetrievalLogsService.markFailed(taskId, "stale", timeoutMessage, joinLatestLogs(snapshot.latestLogs()));
                     return;
                 }
 
                 try {
-                    Thread.sleep(pollInterval.toMillis());
+                    Thread.sleep(taskPollInterval.toMillis());
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     qaRetrievalLogsService.markFailed(taskId, "failed", "Java 后台任务被中断", joinLatestLogs(snapshot.latestLogs()));

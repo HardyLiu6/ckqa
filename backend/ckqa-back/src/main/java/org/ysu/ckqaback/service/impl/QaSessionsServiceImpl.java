@@ -13,6 +13,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -26,6 +28,8 @@ import java.util.UUID;
 @Service
 public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessions> implements QaSessionsService {
 
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+
     @Override
     public QaSessions getRequiredById(Long id) {
         QaSessions session = getById(id);
@@ -37,6 +41,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
 
     @Override
     public QaSessions createSession(CreateQaSessionRequest request) {
+        LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
         QaSessions session = new QaSessions();
         session.setSessionCode(generateSessionCode());
         session.setUserId(request.getUserId());
@@ -44,6 +49,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
         session.setKnowledgeBaseId(request.getKnowledgeBaseId());
         session.setTitle(StringUtils.hasText(request.getTitle()) ? request.getTitle() : "新建问答会话");
         session.setStatus("active");
+        session.setCreatedAt(now);
         save(session);
         return session;
     }
@@ -52,7 +58,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
     public void touchLastMessageAt(Long id) {
         LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(QaSessions::getId, id)
-                .setSql("last_message_at = NOW()");
+                .set(QaSessions::getLastMessageAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, wrapper);
     }
 

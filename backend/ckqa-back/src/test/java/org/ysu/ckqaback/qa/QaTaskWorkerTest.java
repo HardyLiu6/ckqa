@@ -11,8 +11,11 @@ import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionsService;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,8 +24,11 @@ import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 class QaTaskWorkerTest {
+
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Test
     void shouldPersistAssistantMessageWhenPythonTaskSucceeds() {
@@ -39,7 +45,8 @@ class QaTaskWorkerTest {
                 messagesService,
                 sessionsService,
                 Duration.ofSeconds(5),
-                Duration.ofSeconds(30)
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
         );
 
         QaRetrievalLogs task = new QaRetrievalLogs();
@@ -93,7 +100,8 @@ class QaTaskWorkerTest {
                 messagesService,
                 sessionsService,
                 Duration.ofSeconds(5),
-                Duration.ofSeconds(30)
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
         );
 
         QaRetrievalLogs task = new QaRetrievalLogs();
@@ -127,7 +135,8 @@ class QaTaskWorkerTest {
                 messagesService,
                 sessionsService,
                 Duration.ofSeconds(5),
-                Duration.ofSeconds(30)
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:31Z"), SHANGHAI_ZONE)
         );
 
         QaRetrievalLogs task = new QaRetrievalLogs();
@@ -145,17 +154,86 @@ class QaTaskWorkerTest {
                         "running",
                         "running",
                         true,
-                        LocalDateTime.now().minusSeconds(31),
+                        LocalDateTime.of(2026, 4, 22, 20, 0, 0),
                         List.of("process alive"),
                         null,
                         null,
                         null,
-                        LocalDateTime.now().minusMinutes(1),
+                        LocalDateTime.of(2026, 4, 22, 19, 59, 0),
                         null
                 )));
 
         worker.processTask(5L, 9001L);
 
         then(retrievalLogsService).should().markFailed(9001L, "stale", "任务心跳超时", "process alive");
+    }
+
+    @Test
+    void shouldUseModeSpecificStaleThresholdForDriftTask() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                mode -> Duration.ZERO,
+                mode -> "drift".equals(mode) ? Duration.ofSeconds(60) : Duration.ofSeconds(30),
+                mode -> "drift".equals(mode) ? "drift 模式心跳超时" : "任务心跳超时",
+                Clock.fixed(Instant.parse("2026-04-22T12:00:45Z"), SHANGHAI_ZONE)
+        );
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("drift");
+        task.setQueryText("请从局部上下文漂移检索课程主题");
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("drift", "请从局部上下文漂移检索课程主题"))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260422_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260422_001"))
+                .willReturn(
+                        Optional.of(new GraphRagTaskSnapshot(
+                                "qt_20260422_001",
+                                "running",
+                                "running",
+                                true,
+                                LocalDateTime.of(2026, 4, 22, 20, 0, 0),
+                                List.of("drift still running"),
+                                null,
+                                null,
+                                null,
+                                LocalDateTime.of(2026, 4, 22, 19, 59, 59),
+                                null
+                        )),
+                        Optional.of(new GraphRagTaskSnapshot(
+                                "qt_20260422_001",
+                                "success",
+                                "done",
+                                false,
+                                LocalDateTime.of(2026, 4, 22, 20, 0, 46),
+                                List.of("drift done"),
+                                "drift 检索结果",
+                                null,
+                                0,
+                                LocalDateTime.of(2026, 4, 22, 19, 59, 59),
+                                LocalDateTime.of(2026, 4, 22, 20, 0, 46)
+                        ))
+                );
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "drift 检索结果")).willReturn(assistant);
+
+        worker.processTask(5L, 9001L);
+
+        then(retrievalLogsService).should(never()).markFailed(9001L, "stale", "drift 模式心跳超时", "drift still running");
+        then(retrievalLogsService).should().markSuccess(9001L, 102L, "drift done", "success");
     }
 }

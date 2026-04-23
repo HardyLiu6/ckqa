@@ -17,7 +17,7 @@ import lombok.Setter;
 public class CreateQaMessageRequest {
 
     @NotBlank(message = "mode不能为空")
-    @Pattern(regexp = "local|global|full", message = "mode取值不合法")
+    @Pattern(regexp = "local|global|drift|basic", message = "mode取值不合法")
     private String mode = "local";
 
     @NotBlank(message = "content不能为空")

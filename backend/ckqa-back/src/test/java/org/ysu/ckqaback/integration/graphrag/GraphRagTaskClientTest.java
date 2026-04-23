@@ -36,7 +36,7 @@ class GraphRagTaskClientTest {
                           "pythonTaskId": "qt_20260422_000001_001",
                           "taskStatus": "pending",
                           "progressStage": "queued",
-                          "createdAt": "2026-04-22T15:20:34"
+                          "createdAt": "2026-04-22T20:20:34"
                         }
                         """, MediaType.APPLICATION_JSON));
 
@@ -46,7 +46,7 @@ class GraphRagTaskClientTest {
         assertThat(result.pythonTaskId()).isEqualTo("qt_20260422_000001_001");
         assertThat(result.taskStatus()).isEqualTo("pending");
         assertThat(result.progressStage()).isEqualTo("queued");
-        assertThat(result.createdAt()).isEqualTo(LocalDateTime.of(2026, 4, 22, 15, 20, 34));
+        assertThat(result.createdAt()).isEqualTo(LocalDateTime.of(2026, 4, 22, 20, 20, 34));
         server.verify();
     }
 
@@ -79,10 +79,10 @@ class GraphRagTaskClientTest {
                           "taskStatus": "success",
                           "progressStage": "done",
                           "processAlive": false,
-                          "createdAt": "2026-04-22T15:20:34",
-                          "startedAt": "2026-04-22T15:20:35",
-                          "lastHeartbeatAt": "2026-04-22T15:20:36",
-                          "finishedAt": "2026-04-22T15:20:37",
+                          "createdAt": "2026-04-22T20:20:34",
+                          "startedAt": "2026-04-22T20:20:35",
+                          "lastHeartbeatAt": "2026-04-22T20:20:36",
+                          "finishedAt": "2026-04-22T20:20:37",
                           "latestLogs": ["started", "done"],
                           "resultText": "图谱主题是操作系统",
                           "errorMessage": null,
@@ -102,6 +102,7 @@ class GraphRagTaskClientTest {
             assertThat(value.latestLogs()).containsExactly("started", "done");
             assertThat(value.resultText()).isEqualTo("图谱主题是操作系统");
             assertThat(value.returnCode()).isEqualTo(0);
+            assertThat(value.lastHeartbeatAt()).isEqualTo(LocalDateTime.of(2026, 4, 22, 20, 20, 36));
             assertThat(value.isTerminal()).isTrue();
         });
         server.verify();

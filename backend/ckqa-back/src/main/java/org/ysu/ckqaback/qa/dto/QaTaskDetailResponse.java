@@ -25,6 +25,9 @@ public class QaTaskDetailResponse {
     private final LocalDateTime finishedAt;
     private final QaMessageResponse assistantMessage;
     private final String errorMessage;
+    private final Long recommendedPollingIntervalSeconds;
+    private final Long staleTimeoutSeconds;
+    private final String timeoutMessage;
 
     private QaTaskDetailResponse(
             Long taskId,
@@ -40,7 +43,10 @@ public class QaTaskDetailResponse {
             LocalDateTime lastHeartbeatAt,
             LocalDateTime finishedAt,
             QaMessageResponse assistantMessage,
-            String errorMessage
+            String errorMessage,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage
     ) {
         this.taskId = taskId;
         this.userMessageId = userMessageId;
@@ -56,6 +62,9 @@ public class QaTaskDetailResponse {
         this.finishedAt = finishedAt;
         this.assistantMessage = assistantMessage;
         this.errorMessage = errorMessage;
+        this.recommendedPollingIntervalSeconds = recommendedPollingIntervalSeconds;
+        this.staleTimeoutSeconds = staleTimeoutSeconds;
+        this.timeoutMessage = timeoutMessage;
     }
 
     public static QaTaskDetailResponse of(
@@ -72,7 +81,10 @@ public class QaTaskDetailResponse {
             LocalDateTime lastHeartbeatAt,
             LocalDateTime finishedAt,
             QaMessageResponse assistantMessage,
-            String errorMessage
+            String errorMessage,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage
     ) {
         return new QaTaskDetailResponse(
                 taskId,
@@ -88,7 +100,10 @@ public class QaTaskDetailResponse {
                 lastHeartbeatAt,
                 finishedAt,
                 assistantMessage,
-                errorMessage
+                errorMessage,
+                recommendedPollingIntervalSeconds,
+                staleTimeoutSeconds,
+                timeoutMessage
         );
     }
 }
