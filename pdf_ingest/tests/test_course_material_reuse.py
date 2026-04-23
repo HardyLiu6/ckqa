@@ -134,6 +134,19 @@ class CourseMaterialReuseTest(unittest.TestCase):
         self.assertNotEqual(first["course_material_id"], second["course_material_id"])
         self.assertEqual(1, len(app.storage.uploads))
 
+    def test_upload_result_keeps_legacy_file_fields(self):
+        app = self.make_app()
+        temp_dir, path = self.write_pdf()
+        self.addCleanup(temp_dir.cleanup)
+
+        result = app.upload("os", str(path))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(result["course_material_id"], result["file_id"])
+        self.assertEqual(1, result["course_material_id"])
+        self.assertEqual("book.pdf", result["display_name"])
+        self.assertEqual("book.pdf", result["file_name"])
+
     def test_same_course_duplicate_returns_existing_relation_without_force(self):
         app = self.make_app()
         temp_dir, path = self.write_pdf()

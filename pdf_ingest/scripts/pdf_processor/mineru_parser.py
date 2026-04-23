@@ -340,49 +340,74 @@ class PDFParserApp:
         course_id: str,
         file_id: Optional[int] = None,
         file_name: Optional[str] = None,
+        material_id: Optional[int] = None,
+        material_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        解析课程下要操作的具体 PDF 文件。
+        解析课程下要操作的具体资料。
 
         规则：
-        - 指定 file_id：按 ID 精确定位，并校验 course_id
-        - 指定 file_name：按课程ID+文件名定位
+        - 指定 material_id/file_id：按课程资料关系 ID 精确定位，并校验 course_id
+        - 指定 material_name/file_name：按课程ID+展示名定位
         - 都未指定：若课程下只有一份文件则自动选择，否则报错要求显式指定
         """
-        if file_id is not None:
-            pdf_file = self.db.get_pdf_file_by_id(file_id)
+        resolved_material_id = material_id if material_id is not None else file_id
+        resolved_material_name = material_name if material_name else file_name
+
+        if resolved_material_id is not None:
+            if hasattr(self.db, "get_course_material_by_id"):
+                pdf_file = self.db.get_course_material_by_id(resolved_material_id)
+            else:
+                pdf_file = self.db.get_pdf_file_by_id(resolved_material_id)
             if not pdf_file or pdf_file["course_id"] != course_id:
-                raise Exception(f"课程 {course_id} 下不存在 file_id={file_id} 的PDF文件")
+                raise Exception(
+                    f"课程 {course_id} 下不存在 material_id={resolved_material_id} 的资料"
+                )
             return pdf_file
 
-        if file_name:
-            pdf_file = self.db.get_pdf_file_by_course(course_id, file_name)
+        if resolved_material_name:
+            if hasattr(self.db, "get_course_material_by_course"):
+                pdf_file = self.db.get_course_material_by_course(
+                    course_id, resolved_material_name
+                )
+            else:
+                pdf_file = self.db.get_pdf_file_by_course(course_id, resolved_material_name)
             if not pdf_file:
-                raise Exception(f"课程 {course_id} 下不存在文件: {file_name}")
+                raise Exception(f"课程 {course_id} 下不存在资料: {resolved_material_name}")
             return pdf_file
 
-        pdf_files = self.db.get_pdf_files_by_course(course_id)
+        if hasattr(self.db, "get_course_materials_by_course"):
+            pdf_files = self.db.get_course_materials_by_course(course_id)
+        else:
+            pdf_files = self.db.get_pdf_files_by_course(course_id)
         if not pdf_files:
-            raise Exception(f"课程 {course_id} 没有上传的PDF文件")
+            raise Exception(f"课程 {course_id} 没有上传的资料")
         if len(pdf_files) == 1:
             return pdf_files[0]
 
         choices = ", ".join(
-            f"{row['id']}:{row['file_name']}" for row in pdf_files[:10]
+            f"{row['id']}:{row.get('display_name') or row.get('file_name')}"
+            for row in pdf_files[:10]
         )
         raise Exception(
-            "课程下存在多份PDF，请使用 --file-id 或 --file-name 指定。"
-            f" 可选文件: {choices}"
+            "课程下存在多份资料，请使用 --material-id 或 --material-name 指定；"
+            "兼容参数 --file-id / --file-name 仍可使用。"
+            f" 可选资料: {choices}"
         )
 
+    def _delete_material_related_data(self, course_material: Dict[str, Any]) -> None:
+        """删除某一份课程资料关系相关的解析产物和 GraphRAG 导出。"""
+        course_id = course_material["course_id"]
+        material_id = course_material["id"]
+        self.storage.delete_artifacts(course_id, f"pdf_{material_id}")
+        self.storage.delete_artifacts(course_id, f"graphrag/pdf_{material_id}")
+        self.storage.delete_artifacts(course_id, f"material_{material_id}")
+        self.storage.delete_artifacts(course_id, f"graphrag/material_{material_id}")
+        self.db.delete_course_material(material_id)
+
     def _delete_pdf_related_data(self, pdf_file: Dict[str, Any]) -> None:
-        """删除某一份 PDF 相关的原始文件、解析产物和 GraphRAG 导出。"""
-        course_id = pdf_file["course_id"]
-        file_id = pdf_file["id"]
-        self.storage.delete_pdf(course_id, pdf_file["file_name"])
-        self.storage.delete_artifacts(course_id, f"pdf_{file_id}")
-        self.storage.delete_artifacts(course_id, f"graphrag/pdf_{file_id}")
-        self.db.delete_pdf_file(file_id)
+        """兼容旧调用；file_id 现在等价于 course_material_id。"""
+        self._delete_material_related_data(pdf_file)
 
     def _cleanup_parse_temp_files(
         self,
@@ -434,61 +459,82 @@ class PDFParserApp:
         self.logger.info(f"大小: {file_size / 1024 / 1024:.2f} MB")
         self.logger.info(f"MD5: {file_md5}")
         
-        # 检查MD5是否已存在
-        existing = self.db.check_md5_exists(file_md5)
-        if existing:
-            if existing["course_id"] != course_id:
-                raise Exception(
-                    "检测到相同内容的PDF已存在于其他课程中，当前系统使用全局MD5唯一约束，"
-                    f"无法将同一份文件同时归属到多个课程。已存在课程: {existing['course_id']}"
-                )
+        material_object = self.db.get_material_object_by_md5(file_md5)
+        if material_object:
+            material_object_id = int(material_object["id"])
+            upload_result = {
+                "bucket": material_object["minio_bucket"],
+                "object_key": material_object["minio_object_key"],
+                "md5": file_md5,
+                "size": material_object.get("file_size", file_size),
+            }
+        else:
+            self.logger.info("上传资料对象到MinIO...")
+            upload_result = self.storage.upload_material_object(
+                str(file_path), file_md5, upload_file_name
+            )
+            material_object_id = self.db.create_material_object(
+                original_file_name=upload_file_name,
+                file_md5=file_md5,
+                file_size=file_size,
+                minio_bucket=upload_result["bucket"],
+                minio_object_key=upload_result["object_key"],
+            )
+
+        existing_relation = self.db.get_course_material_by_object(
+            course_id, material_object_id
+        )
+        if existing_relation:
             if not force:
-                self.logger.warning(f"文件已存在 (课程: {existing['course_id']})")
+                self.logger.warning(f"资料已存在 (课程: {course_id})")
+                display_name = existing_relation.get("display_name") or existing_relation.get("file_name")
                 return {
                     "status": "duplicate",
-                    "message": "文件已存在",
-                    "existing_course_id": existing["course_id"],
-                    "file_id": existing["id"],
-                    "parse_status": existing["parse_status"]
+                    "message": "资料已存在",
+                    "course_id": course_id,
+                    "course_material_id": existing_relation["id"],
+                    "file_id": existing_relation["id"],
+                    "material_object_id": material_object_id,
+                    "display_name": display_name,
+                    "file_name": display_name,
+                    "parse_status": existing_relation["parse_status"],
                 }
-            else:
-                self.logger.info("强制覆盖已存在的文件")
-                self._delete_pdf_related_data(existing)
-        
-        # 检查同课程下是否已有同名文件
-        course_file = self.db.get_pdf_file_by_course(course_id, upload_file_name)
-        if course_file and course_file["file_md5"] != file_md5:
+            self.logger.info("强制替换已存在的课程资料关系")
+            self._delete_material_related_data(existing_relation)
+
+        same_name_material = self.db.get_course_material_by_course(
+            course_id, upload_file_name
+        )
+        if (
+            same_name_material
+            and int(same_name_material["material_object_id"]) != material_object_id
+        ):
             if not force:
                 raise Exception(
-                    f"课程 {course_id} 已存在同名文件 {upload_file_name}，使用 --force 覆盖该文件"
+                    f"课程 {course_id} 已存在同名资料 {upload_file_name}，"
+                    "但内容不同；请使用 --force 替换该课程资料关系"
                 )
             else:
-                self._delete_pdf_related_data(course_file)
-        
-        # 上传到MinIO
-        self.logger.info("上传到MinIO...")
-        upload_result = self.storage.upload_pdf(
-            course_id, str(file_path), upload_file_name
-        )
-        
-        # 写入数据库
-        file_id = self.db.create_pdf_file(
+                self._delete_material_related_data(same_name_material)
+
+        course_material_id = self.db.create_course_material(
             course_id=course_id,
-            file_name=upload_file_name,
-            file_md5=file_md5,
-            file_size=file_size,
-            minio_bucket=upload_result["bucket"],
-            minio_object_key=upload_result["object_key"]
+            material_object_id=material_object_id,
+            display_name=upload_file_name,
         )
         
-        self.db.add_log(file_id, f"文件上传成功: {file_path_obj.name}")
+        self.db.add_log(course_material_id, f"文件上传成功: {file_path_obj.name}")
         
-        self.logger.info(f"上传成功! 文件ID: {file_id}")
+        self.logger.info(f"上传成功! 课程资料ID: {course_material_id}")
         
         return {
             "status": "success",
-            "file_id": file_id,
+            "course_material_id": course_material_id,
+            "file_id": course_material_id,
+            "material_object_id": material_object_id,
             "course_id": course_id,
+            "display_name": upload_file_name,
+            "file_name": upload_file_name,
             "md5": file_md5,
             "size": file_size
         }
@@ -498,6 +544,8 @@ class PDFParserApp:
         course_id: str,
         file_id: Optional[int] = None,
         file_name: Optional[str] = None,
+        material_id: Optional[int] = None,
+        material_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         解析已上传的PDF文件
@@ -508,16 +556,26 @@ class PDFParserApp:
         Returns:
             解析结果
         """
-        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+        pdf_file = self._resolve_pdf_file(
+            course_id,
+            file_id=file_id,
+            file_name=file_name,
+            material_id=material_id,
+            material_name=material_name,
+        )
         
         resolved_file_id: int = int(pdf_file["id"])
+        source_file_name = pdf_file.get("display_name") or pdf_file.get("file_name")
         
         # 检查状态
         if pdf_file["parse_status"] == "done":
             self.logger.warning("文件已解析完成")
             return {
                 "status": "already_done",
+                "course_material_id": resolved_file_id,
                 "file_id": resolved_file_id,
+                "display_name": source_file_name,
+                "file_name": source_file_name,
                 "message": "文件已解析完成"
             }
         
@@ -533,10 +591,13 @@ class PDFParserApp:
         
         try:
             # 从MinIO下载文件到临时目录
-            source_file_name = pdf_file["file_name"]
             temp_pdf = self.config.get_temp_path(course_id, source_file_name)
             self.logger.info(f"从MinIO下载文件...")
-            self.storage.download_pdf(course_id, str(temp_pdf), source_file_name)
+            self.storage.download_pdf_object(
+                pdf_file["minio_bucket"],
+                pdf_file["minio_object_key"],
+                str(temp_pdf),
+            )
             
             # 申请上传链接
             upload_info = self.parser.apply_upload_url([source_file_name])
@@ -590,9 +651,11 @@ class PDFParserApp:
             
             return {
                 "status": "success",
+                "course_material_id": resolved_file_id,
                 "file_id": resolved_file_id,
                 "course_id": course_id,
-                "file_name": pdf_file["file_name"],
+                "display_name": source_file_name,
+                "file_name": source_file_name,
                 "result_count": len(uploaded_files),
                 "files": [f["relative_path"] for f in uploaded_files]
             }
@@ -613,10 +676,18 @@ class PDFParserApp:
         course_id: str,
         file_id: Optional[int] = None,
         file_name: Optional[str] = None,
+        material_id: Optional[int] = None,
+        material_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """获取课程状态"""
         try:
-            pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+            pdf_file = self._resolve_pdf_file(
+                course_id,
+                file_id=file_id,
+                file_name=file_name,
+                material_id=material_id,
+                material_name=material_name,
+            )
         except Exception as e:
             return {
                 "status": "not_found",
@@ -628,8 +699,11 @@ class PDFParserApp:
         
         return {
             "course_id": course_id,
+            "course_material_id": pdf_file["id"],
             "file_id": pdf_file["id"],
-            "file_name": pdf_file["file_name"],
+            "material_object_id": pdf_file.get("material_object_id"),
+            "display_name": pdf_file.get("display_name") or pdf_file.get("file_name"),
+            "file_name": pdf_file.get("display_name") or pdf_file.get("file_name"),
             "file_md5": pdf_file["file_md5"],
             "file_size": pdf_file["file_size"],
             "parse_status": pdf_file["parse_status"],
@@ -653,9 +727,17 @@ class PDFParserApp:
         output_dir: str,
         file_id: Optional[int] = None,
         file_name: Optional[str] = None,
+        material_id: Optional[int] = None,
+        material_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """下载解析结果"""
-        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+        pdf_file = self._resolve_pdf_file(
+            course_id,
+            file_id=file_id,
+            file_name=file_name,
+            material_id=material_id,
+            material_name=material_name,
+        )
         
         if pdf_file["parse_status"] != "done":
             raise Exception(f"文件尚未解析完成 (状态: {pdf_file['parse_status']})")
@@ -686,8 +768,10 @@ class PDFParserApp:
         return {
             "status": "success",
             "course_id": course_id,
+            "course_material_id": pdf_file["id"],
             "file_id": pdf_file["id"],
-            "file_name": pdf_file["file_name"],
+            "display_name": pdf_file.get("display_name") or pdf_file.get("file_name"),
+            "file_name": pdf_file.get("display_name") or pdf_file.get("file_name"),
             "output_dir": str(output_path),
             "file_count": len(downloaded),
             "files": downloaded
@@ -703,8 +787,10 @@ class PDFParserApp:
             "courses": [
                 {
                     "course_id": o["course_id"],
+                    "course_material_id": o["pdf_file_id"],
                     "file_id": o["pdf_file_id"],
                     "file_name": o["file_name"],
+                    "display_name": o["file_name"],
                     "parse_status": o["parse_status"],
                     "result_count": o["result_file_count"]
                 }
@@ -718,6 +804,8 @@ class PDFParserApp:
         options: ExportOptions,
         file_id: Optional[int] = None,
         file_name: Optional[str] = None,
+        material_id: Optional[int] = None,
+        material_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         导出 GraphRAG 输入文件
@@ -732,7 +820,13 @@ class PDFParserApp:
         exporter = GraphRAGExporter(
             db=self.db, storage=self.storage, config=self.config
         )
-        pdf_file = self._resolve_pdf_file(course_id, file_id=file_id, file_name=file_name)
+        pdf_file = self._resolve_pdf_file(
+            course_id,
+            file_id=file_id,
+            file_name=file_name,
+            material_id=material_id,
+            material_name=material_name,
+        )
         return exporter.export(pdf_file, options)
 
 
@@ -796,18 +890,24 @@ def main():
     # parse 命令
     parse_parser = subparsers.add_parser("parse", help="解析已上传的PDF")
     parse_parser.add_argument("course_id", help="课程ID")
+    parse_parser.add_argument("--material-id", type=int, help="指定要解析的课程资料ID")
+    parse_parser.add_argument("--material-name", help="指定要解析的课程资料展示名")
     parse_parser.add_argument("--file-id", type=int, help="指定要解析的PDF文件ID")
     parse_parser.add_argument("--file-name", help="指定要解析的PDF文件名")
     
     # status 命令
     status_parser = subparsers.add_parser("status", help="查看课程状态")
     status_parser.add_argument("course_id", help="课程ID")
+    status_parser.add_argument("--material-id", type=int, help="指定课程资料ID")
+    status_parser.add_argument("--material-name", help="指定课程资料展示名")
     status_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
     status_parser.add_argument("--file-name", help="指定PDF文件名")
     
     # download 命令
     download_parser = subparsers.add_parser("download", help="下载解析结果")
     download_parser.add_argument("course_id", help="课程ID")
+    download_parser.add_argument("--material-id", type=int, help="指定课程资料ID")
+    download_parser.add_argument("--material-name", help="指定课程资料展示名")
     download_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
     download_parser.add_argument("--file-name", help="指定PDF文件名")
     download_parser.add_argument("-o", "--output", default="./output", help="输出目录")
@@ -820,6 +920,8 @@ def main():
         "export-graphrag", help="导出 GraphRAG 输入文件"
     )
     export_parser.add_argument("course_id", help="课程ID")
+    export_parser.add_argument("--material-id", type=int, help="指定课程资料ID")
+    export_parser.add_argument("--material-name", help="指定课程资料展示名")
     export_parser.add_argument("--file-id", type=int, help="指定PDF文件ID")
     export_parser.add_argument("--file-name", help="指定PDF文件名")
     export_parser.add_argument(
@@ -888,6 +990,8 @@ def main():
                 args.course_id,
                 file_id=args.file_id,
                 file_name=args.file_name,
+                material_id=args.material_id,
+                material_name=args.material_name,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
@@ -896,6 +1000,8 @@ def main():
                 args.course_id,
                 file_id=args.file_id,
                 file_name=args.file_name,
+                material_id=args.material_id,
+                material_name=args.material_name,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
@@ -905,6 +1011,8 @@ def main():
                 args.output,
                 file_id=args.file_id,
                 file_name=args.file_name,
+                material_id=args.material_id,
+                material_name=args.material_name,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         
@@ -926,6 +1034,8 @@ def main():
                 options,
                 file_id=args.file_id,
                 file_name=args.file_name,
+                material_id=args.material_id,
+                material_name=args.material_name,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         

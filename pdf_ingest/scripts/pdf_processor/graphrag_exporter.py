@@ -42,6 +42,8 @@ logger = logging.getLogger("GraphRAGExporter")
 _METADATA_FIELDS_TO_FLATTEN = [
     "id",
     "course_id",
+    "course_material_id",
+    "pdf_file_id",
     "source_file",
     "document_type",
     "chapter",
@@ -220,8 +222,9 @@ class GraphRAGExporter:
             raise RuntimeError("GraphRAG 导出依赖 db 与 storage 服务")
 
         course_id: str = pdf_file["course_id"]
-        file_id: int = pdf_file["id"]
-        source_file: str = pdf_file["file_name"]
+        file_id: int = int(pdf_file["id"])
+        course_material_id: int = int(pdf_file.get("course_material_id") or file_id)
+        source_file: str = pdf_file.get("display_name") or pdf_file["file_name"]
 
         if pdf_file["parse_status"] != ParseStatus.DONE.value:
             raise RuntimeError(
@@ -236,6 +239,8 @@ class GraphRAGExporter:
                 return {
                     "status": "exists",
                     "course_id": course_id,
+                    "course_material_id": course_material_id,
+                    "pdf_file_id": file_id,
                     "existing_records": existing,
                 }
 
@@ -360,6 +365,7 @@ class GraphRAGExporter:
             return {
                 "status": "success",
                 "course_id": course_id,
+                "course_material_id": course_material_id,
                 "pdf_file_id": file_id,
                 "raw_blocks": raw_count,
                 "cleaned_blocks": cleaned_count,
@@ -1196,6 +1202,7 @@ class GraphRAGExporter:
 
         metadata: Dict[str, Any] = {
             "schema_version": DOCUMENT_SCHEMA_VERSION,
+            "course_material_id": file_id,
             "pdf_file_id": file_id,
             "doc_unit": doc_unit,
             "block_ids": rendered.block_ids,
