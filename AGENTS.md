@@ -24,13 +24,14 @@ This repository currently has five notable areas, with the two Python modules as
 3. `frontend/apps/student-app/`
    - Student-facing Vue 3 + Vite prototype managed directly inside the CKQA root repository.
    - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
-   - Still not part of the production workflow; many routes are placeholders and the API layer is not wired.
+   - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
 4. `frontend/apps/admin-app/`
    - Small Vue 3 + Vite admin frontend prototype.
    - Secondary unless the task explicitly targets frontend work.
 5. `backend/ckqa-back/`
-   - Small Spring Boot skeleton project.
-   - Not the primary implementation focus unless the task explicitly targets Java backend work.
+   - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
+   - Provides `/api/v1` course, PDF, index, async QA, and system health endpoints.
+   - Still depends on `pdf_ingest/` and `graphrag_pipeline/` for real parsing, indexing, and QA work.
 
 ## Read First
 
@@ -46,6 +47,8 @@ Read these when needed for more detail:
 - `pdf_ingest/docs/MinerU PDF Parser.md`
 - `graphrag_pipeline/README.md`
 - `frontend/apps/student-app/README.md`
+- `backend/ckqa-back/README.md`
+- `docs/student-backend-graphrag-api-contract.md` when touching student/backend/GraphRAG API integration
 
 If docs and code differ, trust the code and call out the mismatch.
 
@@ -104,8 +107,10 @@ Environment and commands:
 - Multi-PDF sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
 - Validation sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --json-file normalized_docs.json --clean`
 - Index: `graphrag index --root .`
-- Query local: `graphrag query --root . --method local --query "问题"`
-- Query global: `graphrag query --root . --method global --query "问题"`
+- Query local: `graphrag query --root . --method local "问题"`
+- Query global: `graphrag query --root . --method global "问题"`
+- Query drift: `graphrag query --root . --method drift "问题"`
+- Query basic: `graphrag query --root . --method basic "问题"`
 - API server: `python utils/main.py`
 
 Notes:
@@ -127,8 +132,8 @@ Notes:
 - `package.json` currently declares Node `^20.19.0 || >=22.12.0`.
 - Treat `node_modules/` as generated dependencies, not source.
 - Treat this directory as part of the main CKQA repository, not as a separate nested Git repository.
-- Current route tree is broader than the actual implemented views; many routes still have commented-out components.
-- `src/axios/index.js` is currently empty, so do not assume a working backend contract exists.
+- Current route tree is broader than the actual implemented views; unopened routes should use the explicit "未开放" status page rather than blank pages.
+- `src/axios/index.js` now contains a minimal Axios wrapper and env-based runtime config, but there is still no stable business API contract wired into the views.
 
 ### `frontend/apps/admin-app/`
 
@@ -138,8 +143,10 @@ Notes:
 
 ### `backend/ckqa-back/`
 
-- Java 21 + Spring Boot 4.0.5 skeleton.
-- Treat it as secondary unless the user explicitly wants backend Java work.
+- Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 phase-1 orchestration backend.
+- Unified response envelope is `code / message / data / timestamp`; business success code is `200`.
+- Async QA uses Python GraphRAG `/v1/query-tasks`; cross-service task timestamps are exposed as Asia/Shanghai offset-free `LocalDateTime` strings.
+- Treat it as secondary to the Python parsing/indexing chain unless the user explicitly wants Java backend, `/api/v1`, orchestration, or frontend integration work.
 
 ## Cross-Module Contract
 
@@ -155,4 +162,4 @@ Any change to exported metadata, naming, or storage structure must be checked fo
 - Do not casually edit `.env` files, generated outputs, caches, `node_modules/`, or IDE metadata.
 - Do not expose or reuse real secrets, tokens, database passwords, or service credentials found in the repo.
 - Prefer minimal, scoped changes in the relevant module.
-- If a task is ambiguous, assume the Python pipelines are the main target before touching the Java or frontend skeletons.
+- If a task is ambiguous, assume the Python pipelines are the main target before touching Java orchestration or frontend prototypes.

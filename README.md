@@ -1,20 +1,20 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-04-20
+> 审计日期：2026-04-23
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
-CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，真正承担主业务链路的是两个 Python 模块：
+CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
 
 1. `pdf_ingest/`
    负责课程 PDF 上传、MinerU 云解析、MinIO/MySQL 落库，以及标准化文档与 GraphRAG 输入导出。
 2. `graphrag_pipeline/`
    负责拉取导出的 JSON、执行 Microsoft GraphRAG 建索引，并通过 FastAPI 提供 OpenAI 兼容问答接口。
 
-其余目录目前仍属于配套原型或预留骨架：
+其余目录目前属于编排入口或配套原型：
 
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
 - `frontend/apps/admin-app/`：管理端前端原型，仍接近 Vite/Vue 起步页。
-- `backend/ckqa-back/`：Spring Boot 4 + Java 21 骨架工程，尚未承接正式业务接口。
+- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，已经承接 `/api/v1` 下的课程、PDF、索引、异步问答和系统健康检查接口，但仍依赖 `pdf_ingest/` 与 `graphrag_pipeline/` 提供真实处理能力。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
 
@@ -24,18 +24,24 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | --- | --- | --- | --- |
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，界面更完整但未接主链路 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端前端原型 | 独立原型，未接主链路 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
-| `backend/ckqa-back/` | Java 后端骨架 | 最小可启动骨架 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
+| `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本次审计结论
 
-- 当前唯一稳定的业务主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
+- 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
-- `frontend/apps/student-app/` 已经是一个比 `admin-app` 更完整的学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，但当前仍未接入稳定 API，`src/axios/index.js` 为空。
+- `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
+- `frontend/apps/student-app/` 已经是一个比 `admin-app` 更完整的学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
 - `frontend/apps/admin-app/` 当前代码仍接近 Vite/Vue 起步页，不应被视为正式管理台。
-- `backend/ckqa-back/` 当前只有启动类、默认配置和默认测试，不应被视为正式服务入口。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
+
+## 人类与机器入口
+
+- 人类阅读入口：优先读本文件，再按模块进入各自 `README.md`，它们负责解释模块角色、运行路径和边界。
+- 机器阅读入口：优先读 [AGENTS.md](AGENTS.md)、[.codex](.codex)、[pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md)、[graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)，它们负责约束 Agent 的默认判断、命令、边界和安全规则。
+- 如果人类文档与机器文档冲突，以当前代码、依赖配置和可运行命令为准，并在改动时同步修正文档。
 
 ## 主流程
 
@@ -145,9 +151,9 @@ ckqa/
 
 ### `backend/ckqa-back/`
 
-- 角色：Java 后端预留骨架
+- 角色：Java 一期编排后端
 - 主入口：`src/main/java/org/ysu/ckqaback/CkqaBackApplication.java`
-- 当前状态：只有最小 Spring Boot 启动结构
+- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、PDF/索引/异步问答编排和系统健康检查；仍不是 Python 主链路的替代实现
 - 文档入口：[backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 
 ## 端到端最短跑通路径
@@ -191,6 +197,21 @@ graphrag index --root .
 python utils/main.py
 ```
 
+### 5. 可选：启动 Java 编排后端
+
+如果需要验证 `/api/v1` 业务入口，先保持 GraphRAG API 可访问，再启动 Java 后端：
+
+```bash
+cd ../backend/ckqa-back
+./mvnw spring-boot:run
+```
+
+常用入口：
+
+```bash
+curl http://127.0.0.1:8080/api/v1/system/health
+```
+
 ## 当前需要特别记住的事实
 
 - 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--file-id` 或 `--file-name`，`graphrag_pipeline` 侧优先使用 `--pdf-file-id`。
@@ -198,6 +219,7 @@ python utils/main.py
 - `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
 - `graphrag_pipeline` 当前活动 Prompt 由 `.env` 与 `prompts/final/active_prompt.json` 协同记录；如果切换了候选 Prompt，需要先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再重建索引。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
+- `backend/ckqa-back/` 的问答链路通过 `graphrag_pipeline` 的 `/v1/query-tasks` 异步任务接口工作；跨服务时间字段对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
 - `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。
@@ -209,6 +231,7 @@ python utils/main.py
 ### 项目级
 
 - [AGENTS.md](AGENTS.md)
+- [docs/student-backend-graphrag-api-contract.md](docs/student-backend-graphrag-api-contract.md)
 - [docs/标准化导出验证说明.md](docs/标准化导出验证说明.md)
 - [docs/archive/MIGRATION_GRAPHRAG_3_0_9.md](docs/archive/MIGRATION_GRAPHRAG_3_0_9.md)（历史归档）
 - [docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md](docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md)（历史归档）

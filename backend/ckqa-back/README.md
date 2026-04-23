@@ -13,6 +13,7 @@
 如果你需要了解整个仓库的主链路，请同时查看：
 
 - [../../README.md](../../README.md)
+- [../../docs/student-backend-graphrag-api-contract.md](../../docs/student-backend-graphrag-api-contract.md)
 - [../../pdf_ingest/README.md](../../pdf_ingest/README.md)
 - [../../graphrag_pipeline/README.md](../../graphrag_pipeline/README.md)
 

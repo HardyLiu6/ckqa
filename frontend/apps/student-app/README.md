@@ -79,7 +79,7 @@ cp .env.example .env
 
 学生端当前只约定两个最小运行时变量：
 
-- `VITE_API_BASE_URL`：请求基础地址。可以是反向代理路径 `/api`，也可以直接写成完整地址，例如 `http://127.0.0.1:8012/v1`
+- `VITE_API_BASE_URL`：请求基础地址。正式联调时应指向 Java 后端 `/api/v1`，例如 `http://127.0.0.1:8080/api/v1`；如果使用反向代理，建议代理前缀也保持为 `/api/v1`
 - `VITE_API_TIMEOUT`：请求超时时间，单位毫秒，默认 `10000`
 
 对应示例见 `.env.example`。当前 `src/axios/index.js` 会自动读取它们，并导出默认实例与 `get` / `post` / `put` / `patch` / `del` 这些最常用方法。
@@ -122,3 +122,5 @@ http://0.0.0.0:8080
 2. 在组件里逐步把示例数据切换到 `src/axios/index.js` 导出的请求方法。
 3. 为登录态、鉴权失败和接口错误补一层真实的业务跳转与提示。
 4. 在真正联调前补齐 API 契约、Mock 数据和请求失败恢复策略。
+
+当前联调契约见 [../../../docs/student-backend-graphrag-api-contract.md](../../../docs/student-backend-graphrag-api-contract.md)。

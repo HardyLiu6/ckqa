@@ -1,7 +1,7 @@
 [project]
 name = "graphrag-pipeline"
 version = "2.0.1"
-description = "Knowledge graph Q&A system built on Microsoft GraphRAG 3.0.9, providing an OpenAI-compatible REST API with local, global, and mixed search modes."
+description = "Knowledge graph Q&A system built on Microsoft GraphRAG 3.0.9, providing an OpenAI-compatible REST API with local, global, drift, and basic search modes."
 requires-python = ">=3.10,<3.13"
 license = "MIT"
 

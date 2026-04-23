@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Knowledge graph Q&A system built around Microsoft GraphRAG, currently pinned to `graphrag==3.0.9` in `pyproject.toml`. The project uses an OpenAI-compatible LLM / embedding endpoint (often routed through OneAPI) and exposes an OpenAI-compatible FastAPI API with local, global, and mixed search modes.
+Knowledge graph Q&A system built around Microsoft GraphRAG, currently pinned to `graphrag==3.0.9` in `pyproject.toml`. The project uses an OpenAI-compatible LLM / embedding endpoint (often routed through OneAPI) and exposes an OpenAI-compatible FastAPI API with `local`, `global`, `drift`, and `basic` search modes.
 
 **Language:** Chinese (comments, prompts, docs, and commit messages are in Chinese).
 **Build system:** `pyproject.toml` (setuptools) with `.env` / `settings.yaml` for GraphRAG CLI, plus a small runtime config layer in `utils/main.py`.
@@ -32,8 +32,10 @@ python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file normalized_docs.
 graphrag index --root .
 
 # Query via CLI
-graphrag query --root . --method local --query "问题"
-graphrag query --root . --method global --query "问题"
+graphrag query --root . --method local "问题"
+graphrag query --root . --method global "问题"
+graphrag query --root . --method drift "问题"
+graphrag query --root . --method basic "问题"
 
 # Start the API server (port 8012)
 python utils/main.py
