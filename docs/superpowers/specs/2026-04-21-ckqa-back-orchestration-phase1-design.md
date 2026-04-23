@@ -126,7 +126,7 @@
 一期建议只新增以下 4 类能力，不大改现有分层：
 
 1. `ProcessRunner`
-   统一执行本机外部命令，负责命令组装、工作目录、环境变量、超时、中止、stdout/stderr 收集。
+   统一执行本机外部命令，负责命令组装、工作目录、环境变量、超时、中止、stdout/stderr 收集，以及活跃子进程跟踪与清理。
 2. `PdfIngestOrchestrator`
    统一封装 `mineru_parser.py` 的 `parse`、`export-graphrag` 等调用。
 3. `GraphRagIndexOrchestrator`
@@ -143,6 +143,14 @@ Controller
           -> Python CLI / HTTP / MySQL
 ```
 
+`ProcessRunner` 在一期还需承担以下进程生命周期职责：
+
+1. 在内存中维护活跃子进程引用，便于查询和清理。
+2. 在 Spring Bean 销毁或 JVM 正常停机时，优先尝试优雅终止子进程，超时后再强制终止。
+3. 记录子进程对应的业务上下文，例如 `pdf_file_id`、`index_run_id`、命令类型和启动时间。
+
+需要明确的是，`shutdown hook` 只能覆盖正常停机场景，不能覆盖 JVM 崩溃、宿主机故障或进程被强制杀死的情况。因此一期仍必须依赖数据库中的任务超时恢复机制，不能把进程回收完全寄托在内存态子进程管理上。
+
 ## 5. 一期 API 设计
 
 ## 5.1 PDF 解析相关接口
@@ -156,6 +164,13 @@ Controller
 1. `pdf_file_id` 必须存在。
 2. `parse_status` 仅允许为 `pending` 或 `failed`。
 3. 当状态为 `processing` 或 `done` 时返回 `409`。
+4. 状态检查与进入执行态必须通过数据库原子更新完成，不能只做“先查后调”。
+
+一期建议做法：
+
+1. 通过条件更新将 `parse_status` 从 `pending/failed` 原子切换为 `processing`。
+2. 只有更新行数为 `1` 时，才允许继续调用 `mineru_parser.py parse`。
+3. 若更新行数为 `0`，说明已有并发请求先一步抢占，直接返回 `409`。
 
 ### `POST /api/v1/pdf-files/{id}/export-graphrag`
 
@@ -165,11 +180,19 @@ Controller
 
 1. `pdf_file_id` 必须存在。
 2. `parse_status` 必须为 `done`。
+3. 同一 `pdf_file_id` 的导出在任一时刻只允许一个执行者进入。
 
 默认行为：
 
 1. 默认导出 `section` 模式。
 2. 可通过请求参数决定是否附带 `page_docs`。
+3. 若已存在完整导出且未指定 `force`，按幂等请求处理，直接返回已有导出结果。
+
+一期补充约束：
+
+1. `export-graphrag` 不能只依赖“是否已存在导出记录”做幂等判断，因为并发首次导出仍可能重复写入 `parse_results`。
+2. 一期应为同一 `pdf_file_id` 的导出过程增加互斥保护，推荐使用 MySQL 命名锁或等价的数据库级互斥机制。
+3. 若未获取到导出锁，直接返回 `409`，提示当前已有导出任务在执行。
 
 ### `GET /api/v1/pdf-files/{id}`
 
@@ -197,6 +220,7 @@ Controller
 
 1. `knowledge_base_id` 必须存在。
 2. 同一 `knowledge_base_id` 不允许同时存在 `running` 状态的索引任务。
+3. 一期需要额外定义“陈旧运行中任务”的恢复策略，避免 `running` 状态长期僵死。
 
 执行行为：
 
@@ -204,6 +228,19 @@ Controller
 2. 调用 `fetch_from_minio.py` 拉取输入。
 3. 调用 `graphrag index --root .` 构建索引。
 4. 更新 `index_runs` 的最终状态。
+
+关于幂等与僵尸任务，一期补充以下约束：
+
+1. 发起新任务前，需要同时检查是否存在“活跃 `running`”任务和“超时未完成 `running`”任务。
+2. 若存在仍在有效窗口内的 `running` 任务，返回 `409`。
+3. 若存在超过阈值仍未完成的 `running` 任务，应先标记为 `failed`，并在 `run_metadata` 中注明 `stale_timeout_recovered=true` 后，再允许创建新任务。
+
+陈旧任务恢复触发者在一期固定为两种，不采用带副作用的健康检查，也不引入定时任务框架：
+
+1. `backend/ckqa-back` 启动时扫描一次现有 `running` 的 `index_runs`
+2. 每次创建新索引任务前，对目标知识库再检查一次
+
+这样可以覆盖“服务刚重启后无人触发新任务”和“新任务进入前发现僵尸状态”两类场景，同时保持一期实现复杂度可控。
 
 ### `GET /api/v1/index-runs/{id}`
 
@@ -259,8 +296,8 @@ Controller
 
 1. 先写入一条 `role=user` 的 `qa_messages`。
 2. 调用 GraphRAG FastAPI 获取回答。
-3. 成功时写入一条 `role=assistant` 的 `qa_messages`。
-4. 同时写入一条 `qa_retrieval_logs`。
+3. 无论成功还是失败，都写入一条 `qa_retrieval_logs`。
+4. 仅在成功时写入一条 `role=assistant` 的 `qa_messages`。
 
 ### `GET /api/v1/qa-sessions/{id}`
 
@@ -293,9 +330,19 @@ Controller
 
 1. Java 服务自身是否可用
 2. MySQL 是否可访问
-3. GraphRAG FastAPI 是否可访问
-4. `pdf_ingest` Python 路径与目录是否存在
-5. `graphrag_pipeline` Python 路径与目录是否存在
+3. GraphRAG FastAPI 是否网络可达
+4. GraphRAG 问答能力是否就绪
+5. `pdf_ingest` Python 路径与目录是否存在
+6. `graphrag_pipeline` Python 路径与目录是否存在
+
+健康检查响应建议区分以下状态：
+
+1. `reachable`
+   仅表示网络或进程级可达，例如 HTTP 能连通、路径存在、目录存在。
+2. `ready`
+   表示服务具备处理真实业务请求的前提，例如 GraphRAG API 可正常返回模型列表或关键健康信息，索引目录与必要产物存在。
+
+如果一期暂不实现严格的 `ready` 判定，至少需要在健康检查返回体中细分每个子项的检查结果，而不是只返回单一布尔值。
 
 ## 6. 一期端到端数据流
 
@@ -313,16 +360,25 @@ POST /api/v1/pdf-files/{id}/parse
 
 1. Java 不重复维护解析任务表。
 2. `pdf_files` 与 `parse_results` 继续作为解析链路主状态源。
+3. 解析入口必须通过数据库原子状态切换缩小并发竞态窗口，不能仅依赖应用层先查后调。
 
 ## 6.2 导出
 
 ```text
 POST /api/v1/pdf-files/{id}/export-graphrag
   -> Java 校验 parse_status=done
+  -> Java 获取该 pdf_file_id 的导出互斥锁
+  -> Java 检查是否已存在完整导出且是否 force
   -> PdfIngestOrchestrator 调用 mineru_parser.py export-graphrag ...
   -> pdf_ingest 写回导出产物和 parse_results
+  -> Java 释放导出互斥锁
   -> Java 返回执行结果与产物摘要
 ```
+
+一期规定：
+
+1. 默认导出请求按幂等语义处理：已有完整导出且未指定 `force` 时直接返回现有结果。
+2. 同一 PDF 的导出过程必须串行化，避免并发首次导出造成 `parse_results` 重复写入。
 
 ## 6.3 建索引
 
@@ -339,6 +395,7 @@ POST /api/v1/knowledge-bases/{id}/index-runs
 
 1. `index_runs` 是索引执行过程的唯一业务状态源。
 2. 一期先允许 `index_artifacts` 仅做最小记录，不要求完整穷举所有产物。
+3. 对超过阈值仍为 `running` 的索引任务，必须提供陈旧任务恢复机制。
 
 ## 6.4 问答
 
@@ -346,8 +403,8 @@ POST /api/v1/knowledge-bases/{id}/index-runs
 POST /api/v1/qa-sessions/{id}/messages
   -> Java 写入 user message
   -> GraphRagQueryClient 调用 /v1/chat/completions
+  -> 无论成功失败都写入 qa_retrieval_logs
   -> 成功时写入 assistant message
-  -> 写入 qa_retrieval_logs
   -> Java 返回本轮问答结果
 ```
 
@@ -372,6 +429,13 @@ POST /api/v1/qa-sessions/{id}/messages
 4. 超时错误
    例如：解析、索引或问答代理超时
 
+需要特别补充两类一期容易被低估的运行风险：
+
+1. 长连接中断风险
+   例如 `graphrag index` 执行期间 HTTP 连接被网关、客户端或上游代理断开。
+2. 僵尸运行中状态
+   例如 Java 进程重启或崩溃后，数据库里残留 `running` 状态，但真实任务已不可恢复。
+
 ## 7.2 API 返回策略
 
 1. 参数或资源错误返回 `404` 或 `409`
@@ -393,11 +457,52 @@ POST /api/v1/qa-sessions/{id}/messages
 3. 完成后更新为 `success` 或 `failed`
 4. `run_metadata` 用于保存命令摘要、耗时和失败简述
 
+对 `running` 状态的一期补充要求：
+
+1. 需要定义一个明确的陈旧超时阈值。
+2. 超过阈值仍未完成的 `running` 任务，必须能够被启动扫描或新任务触发流程识别。
+3. 被识别为陈旧任务后，应自动转为 `failed`，并记录恢复原因，而不是永久阻塞后续索引。
+
+一期在此处进一步固定恢复触发策略：
+
+1. 应用启动时执行一次全局扫描，处理超时未完成的 `running` 记录。
+2. 新建某个知识库索引任务前，再对该知识库执行一次局部检查。
+3. 健康检查接口不承担状态修复副作用，只负责报告状态。
+
+`run_metadata` 在一期需要遵守固定核心字段约定，避免写入侧和消费侧各自解释：
+
+```json
+{
+  "command": "graphrag index --root .",
+  "elapsed_seconds": 1823,
+  "exit_code": 1,
+  "error_summary": "索引命令返回非零退出码",
+  "stale_timeout_recovered": true
+}
+```
+
+其中：
+
+1. `command`：本次执行的命令摘要字符串
+2. `elapsed_seconds`：执行耗时，单位秒
+3. `exit_code`：外部命令退出码；若未真正启动可为空
+4. `error_summary`：面向排障的简短失败摘要
+5. `stale_timeout_recovered`：是否由陈旧任务恢复逻辑标记失败
+
+在以上固定字段之外，一期允许追加扩展字段，但不得修改核心字段语义。
+
+另外，一期数据库设计需要补充以下索引约束，避免状态查询和恢复扫描退化为全表扫描：
+
+1. `index_runs(knowledge_base_id, status)`，用于判断某知识库是否已有活跃 `running` 任务
+2. `index_runs(status, started_at)`，用于扫描超过阈值仍未完成的 `running` 任务
+
 ### `qa_retrieval_logs`
 
-1. 问答成功时写 `retrieval_status=success`
-2. 问答超时或调用失败时写 `retrieval_status=failed`
-3. 错误摘要写入 `error_message`
+1. 用户消息入库后，调用 GraphRAG FastAPI。
+2. 无论调用成功还是失败，都写入一条 `qa_retrieval_logs`。
+3. 问答成功时写 `retrieval_status=success`，并追加 assistant 消息。
+4. 问答超时或调用失败时写 `retrieval_status=failed`，且不写入伪造的 assistant 消息。
+5. 错误摘要写入 `error_message`。
 
 ## 7.4 事务边界
 
@@ -410,6 +515,13 @@ POST /api/v1/qa-sessions/{id}/messages
 3. 成功或失败后，再用短事务写回最终状态
 
 这样可以降低锁持有时间，并避免长时间外部调用影响数据库事务稳定性。
+
+但对进入执行态的状态切换，一期不允许只依赖应用层内存判断。以下动作需要以数据库原子写入作为准入闸门：
+
+1. `pdf_files.parse_status` 从 `pending/failed` 进入 `processing`
+2. `index_runs` 从预创建记录进入 `running`
+
+原因是只有这样才能尽量缩小“检查通过但并发请求已先触发”的竞态窗口。
 
 ## 8. 超时策略
 
@@ -426,6 +538,12 @@ POST /api/v1/qa-sessions/{id}/messages
 7. `system/health` 外部探测超时：3 秒
 
 同步执行的代价是接口响应时间偏长，但这是一期为尽快打通业务闭环所接受的权衡。后续若需要异步任务化，应复用本设计中的编排边界，不重写 Controller 接口语义。
+
+需要明确的是，同步长任务不只是体验问题，也是运营风险问题：
+
+1. HTTP 连接可能在任务完成前被中间网关或客户端断开。
+2. Java 进程重启后，数据库中的 `running` 记录可能变成僵尸状态。
+3. 因此一期必须为长任务补充陈旧任务恢复机制，而不是只设置命令超时。
 
 ## 9. 配置设计
 
@@ -449,6 +567,7 @@ ckqa.integration.*
 8. `ckqa.integration.timeout.fetch-seconds`
 9. `ckqa.integration.timeout.index-seconds`
 10. `ckqa.integration.timeout.query-seconds`
+11. `ckqa.integration.timeout.index-stale-seconds`
 
 推荐命令调用形式：
 
@@ -467,6 +586,8 @@ ckqa.integration.*
 
 这样可以避免依赖 shell 初始化逻辑，也更容易在健康检查中提前发现配置问题。
 
+一期建议将陈旧任务阈值也配置化，避免把恢复窗口硬编码在代码中。
+
 ## 10. 一期测试与验收
 
 ## 10.1 单元测试
@@ -474,9 +595,10 @@ ckqa.integration.*
 覆盖重点：
 
 1. `ProcessRunner` 的成功、非 0 退出、超时和命令不存在场景
-2. `PdfIngestOrchestrator` 的命令组装与状态校验
-3. `GraphRagIndexOrchestrator` 的状态流转与失败分支
-4. `GraphRagQueryClient` 的成功、超时和 5xx 处理
+2. `ProcessRunner` 的活跃子进程注册与清理场景
+3. `PdfIngestOrchestrator` 的命令组装、状态原子切换、导出互斥与并发拒绝
+4. `GraphRagIndexOrchestrator` 的状态流转、启动扫描恢复、陈旧任务恢复与失败分支
+5. `GraphRagQueryClient` 的成功、超时和 5xx 处理
 
 ## 10.2 WebMvc 测试
 
@@ -485,6 +607,7 @@ ckqa.integration.*
 1. Controller 参数校验
 2. `404 / 409 / 500` 错误映射
 3. 统一返回体结构
+4. 健康检查返回体的子项状态结构
 
 ## 10.3 最小联调验证
 
@@ -509,12 +632,17 @@ ckqa.integration.*
 3. Java 后端能成功代理一次问答，并把消息与检索日志写入数据库。
 4. 任一失败场景都能在 API 返回、数据库状态和服务日志中定位到问题。
 
+此外，一期还需满足两个稳定性补充标准：
+
+1. 对超时未完成的 `running` 索引任务，系统能够识别并自动恢复为 `failed`。
+2. 对问答失败路径，系统能够保留 user message 与 retrieval log，但不会写入伪造的 assistant message。
+
 ## 11. 已知遗留与后续演进方向
 
 一期完成后，仍然存在以下已知遗留：
 
 1. 长任务仍采用同步接口，吞吐与用户体验有限。
-2. 没有任务重试、队列调度和统一 trace id。
+2. 仍然没有真正的任务队列、重试调度和统一 trace id。
 3. `qa_retrieval_hits` 仍未落地。
 4. Java 侧尚未承接文件上传能力，仍依赖已有 `pdf_files` 记录作为起点。
 
