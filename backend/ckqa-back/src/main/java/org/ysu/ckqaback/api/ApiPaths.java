@@ -28,6 +28,7 @@ public final class ApiPaths {
     public static final String QA_SESSIONS = API_V1 + "/qa-sessions";
     public static final String ROLE_PERMISSIONS = API_V1 + "/role-permissions";
     public static final String ROLES = API_V1 + "/roles";
+    public static final String SYSTEM_HEALTH = API_V1 + "/system/health";
     public static final String USER_ROLES = API_V1 + "/user-roles";
     public static final String USERS = API_V1 + "/users";
 

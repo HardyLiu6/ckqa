@@ -42,12 +42,18 @@ class TestApiRuntimeConfig(unittest.TestCase):
         )
         self.assertEqual(config.api_host, "127.0.0.1")
         self.assertEqual(config.api_port, 18012)
+        self.assertFalse(hasattr(config, "global_search_community_level"))
+        self.assertFalse(hasattr(config, "global_search_dynamic_selection"))
+        self.assertFalse(hasattr(config, "global_search_response_type"))
 
     def test_defaults_are_safe_and_do_not_expose_internal_api_fields(self):
         config = load_api_runtime_config({}, load_dotenv_file=False)
 
         self.assertEqual(config.api_host, "0.0.0.0")
         self.assertEqual(config.api_port, 8012)
+        self.assertFalse(hasattr(config, "global_search_community_level"))
+        self.assertFalse(hasattr(config, "global_search_dynamic_selection"))
+        self.assertFalse(hasattr(config, "global_search_response_type"))
         self.assertFalse(hasattr(config, "chat_api_key"))
         self.assertFalse(hasattr(config, "embedding_api_key"))
 

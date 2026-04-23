@@ -2,6 +2,7 @@ package org.ysu.ckqaback.service;
 
 import org.ysu.ckqaback.entity.QaSessions;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 
 /**
  * <p>
@@ -13,4 +14,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface QaSessionsService extends IService<QaSessions> {
 
+    QaSessions getRequiredById(Long id);
+
+    QaSessions createSession(CreateQaSessionRequest request);
+
+    void touchLastMessageAt(Long id);
 }

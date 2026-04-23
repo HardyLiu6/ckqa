@@ -2,7 +2,7 @@
 GraphRAG API 测试脚本
 
 该脚本用于测试 GraphRAG 知识图谱问答系统的不同搜索模式。
-支持全局搜索、本地搜索和综合搜索三种模式。
+当前公开支持本地、全局、drift 和 basic 四种模式。
 """
 import os
 os.environ['no_proxy'] = 'localhost,127.0.0.1'
@@ -30,6 +30,8 @@ def check_health():
             print(f"   - 兼容模式: {data.get('compat_mode')}")
             print(f"   - 本地搜索: {'就绪' if data.get('local_search_ready') else '未就绪'}")
             print(f"   - 全局搜索: {'就绪' if data.get('global_search_ready') else '未就绪'}")
+            print(f"   - Drift 搜索: {'就绪' if data.get('drift_search_ready') else '未就绪'}")
+            print(f"   - Basic 搜索: {'就绪' if data.get('basic_search_ready') else '未就绪'}")
             return True
         else:
             print(f"❌ 服务异常: {response.status_code}")
@@ -108,8 +110,11 @@ if __name__ == "__main__":
     # 测试本地搜索
     # test_search("graphrag-local-search:latest", test_query)
     
-    # 测试综合搜索
-    # test_search("full-model:latest", test_query)
+    # 测试 drift 搜索
+    # test_search("graphrag-drift-search:latest", test_query)
+
+    # 测试 basic 搜索
+    # test_search("graphrag-basic-search:latest", test_query)
     
     # 测试流式输出
     # test_search("graphrag-local-search:latest", test_query, stream=True)

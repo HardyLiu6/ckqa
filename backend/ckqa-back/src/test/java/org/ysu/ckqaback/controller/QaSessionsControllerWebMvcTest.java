@@ -1,0 +1,167 @@
+package org.ysu.ckqaback.controller;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.exception.GlobalExceptionHandler;
+import org.ysu.ckqaback.qa.QaWorkflowService;
+import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
+import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+class QaSessionsControllerWebMvcTest {
+
+    private QaWorkflowService qaWorkflowService;
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        qaWorkflowService = Mockito.mock(QaWorkflowService.class);
+        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+        validator.afterPropertiesSet();
+        mockMvc = MockMvcBuilders.standaloneSetup(new QaSessionsController(qaWorkflowService))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .setValidator(validator)
+                .build();
+    }
+
+    @Test
+    void shouldCreateSession() throws Exception {
+        QaSessionResponse response = QaSessionResponse.of(
+                5L,
+                "qa-0001",
+                7L,
+                "os",
+                3L,
+                "操作系统问答",
+                "active",
+                null,
+                LocalDateTime.of(2026, 4, 21, 12, 0)
+        );
+        given(qaWorkflowService.createSession(any())).willReturn(response);
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": 7,
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3,
+                                  "title": "操作系统问答"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(5))
+                .andExpect(jsonPath("$.data.status").value("active"));
+    }
+
+    @Test
+    void shouldSubmitMessageAsAsyncTask() throws Exception {
+        QaTaskSubmissionResponse response = QaTaskSubmissionResponse.of(
+                QaMessageResponse.of(101L, 5L, "user", 1, "请概括这套图谱的主题", LocalDateTime.of(2026, 4, 22, 15, 20), null, null),
+                9001L,
+                "pending",
+                "queued",
+                null,
+                LocalDateTime.of(2026, 4, 22, 15, 20, 31),
+                "drift",
+                15L,
+                1800L,
+                "drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"
+        );
+        given(qaWorkflowService.sendMessage(eq(5L), any())).willReturn(response);
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "mode": "drift",
+                                  "content": "请概括这套图谱的主题"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.taskId").value(9001))
+                .andExpect(jsonPath("$.data.mode").value("drift"))
+                .andExpect(jsonPath("$.data.taskStatus").value("pending"))
+                .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(15))
+                .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(1800))
+                .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"))
+                .andExpect(jsonPath("$.data.assistantMessage").doesNotExist());
+    }
+
+    @Test
+    void shouldRejectArchivedFullMode() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                                {
+                                  "mode": "full",
+                                  "content": "请概括这套图谱的主题"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("参数校验失败"));
+    }
+
+    @Test
+    void shouldGetTaskDetail() throws Exception {
+        QaTaskDetailResponse response = QaTaskDetailResponse.of(
+                9001L,
+                101L,
+                102L,
+                "success",
+                "done",
+                "success",
+                "global",
+                "请概括这套图谱的主题",
+                List.of("started graphrag query --method global", "done"),
+                LocalDateTime.of(2026, 4, 22, 15, 20, 35),
+                LocalDateTime.of(2026, 4, 22, 15, 21, 5),
+                LocalDateTime.of(2026, 4, 22, 15, 22, 0),
+                QaMessageResponse.of(102L, 5L, "assistant", 2, "图谱主题集中在操作系统概念网络", LocalDateTime.of(2026, 4, 22, 15, 22), null, null),
+                null,
+                5L,
+                30L,
+                "任务心跳超时"
+        );
+        given(qaWorkflowService.getTaskDetail(5L, 9001L)).willReturn(response);
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.taskStatus").value("success"))
+                .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(5))
+                .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(30))
+                .andExpect(jsonPath("$.data.latestLogs[0]").value("started graphrag query --method global"));
+    }
+
+    @Test
+    void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() throws Exception {
+        given(qaWorkflowService.listMessages(5L)).willReturn(List.of(
+                QaMessageResponse.of(101L, 5L, "user", 1, "请概括这套图谱的主题", LocalDateTime.of(2026, 4, 22, 15, 20), "running", "running"),
+                QaMessageResponse.of(102L, 5L, "assistant", 2, "图谱主题集中在操作系统概念网络", LocalDateTime.of(2026, 4, 22, 15, 22), null, null)
+        ));
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/messages"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].taskStatus").value("running"))
+                .andExpect(jsonPath("$.data[0].progressStage").value("running"))
+                .andExpect(jsonPath("$.data[1].taskStatus").isEmpty());
+    }
+}

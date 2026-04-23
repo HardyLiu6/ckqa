@@ -90,7 +90,7 @@ cache:
     
 vector_store:
   type: lancedb
-  db_uri: output/lancedb
+  db_uri: ${GRAPHRAG_STORAGE_DIR}/lancedb
 
 ### Workflow settings ###
 

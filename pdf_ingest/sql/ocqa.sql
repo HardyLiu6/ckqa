@@ -303,6 +303,8 @@ CREATE TABLE `index_runs` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_kb_index_version`(`knowledge_base_id` ASC, `index_version` ASC) USING BTREE,
+  INDEX `idx_index_runs_kb_status`(`knowledge_base_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_index_runs_status_started`(`status` ASC, `started_at` ASC) USING BTREE,
   CONSTRAINT `fk_index_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '索引运行表' ROW_FORMAT = Dynamic;
 
@@ -375,7 +377,7 @@ CREATE TABLE `qa_retrieval_logs` (
   `session_id` bigint NOT NULL COMMENT '会话ID',
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
   `index_run_id` bigint NULL DEFAULT NULL COMMENT '索引运行ID',
-  `query_mode` enum('local','global','full') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
+  `query_mode` enum('local','global','drift','basic') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
   `query_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询文本',
   `retrieval_status` enum('success','partial','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '检索状态',
   `error_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '错误信息',
@@ -386,6 +388,26 @@ CREATE TABLE `qa_retrieval_logs` (
   CONSTRAINT `fk_retrieval_logs_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_retrieval_logs_index_run` FOREIGN KEY (`index_run_id`) REFERENCES `index_runs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答检索日志表' ROW_FORMAT = Dynamic;
+
+ALTER TABLE `qa_retrieval_logs`
+  MODIFY COLUMN `query_mode` enum('local','global','drift','basic') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
+  MODIFY COLUMN `retrieval_status` enum('success','partial','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '检索状态',
+  ADD COLUMN `user_message_id` bigint NULL COMMENT '用户消息ID' AFTER `session_id`,
+  ADD COLUMN `assistant_message_id` bigint NULL COMMENT '助手消息ID' AFTER `user_message_id`,
+  ADD COLUMN `task_seq` int NOT NULL DEFAULT 1 COMMENT '同一用户消息下的任务序号' AFTER `assistant_message_id`,
+  ADD COLUMN `task_status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'legacy' COMMENT '异步任务状态' AFTER `task_seq`,
+  ADD COLUMN `progress_stage` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'legacy' COMMENT '编排阶段' AFTER `task_status`,
+  ADD COLUMN `python_task_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT 'Python侧任务ID' AFTER `progress_stage`,
+  ADD COLUMN `latest_logs` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '最近日志tail' AFTER `python_task_id`,
+  ADD COLUMN `started_at` timestamp NULL DEFAULT NULL COMMENT '开始时间' AFTER `latest_logs`,
+  ADD COLUMN `last_heartbeat_at` timestamp NULL DEFAULT NULL COMMENT '最近心跳时间' AFTER `started_at`,
+  ADD COLUMN `finished_at` timestamp NULL DEFAULT NULL COMMENT '完成时间' AFTER `last_heartbeat_at`,
+  ADD INDEX `idx_retrieval_logs_session_created` (`session_id`, `created_at`),
+  ADD INDEX `idx_retrieval_logs_user_message_seq` (`user_message_id`, `task_seq`),
+  ADD INDEX `idx_retrieval_logs_task_status_heartbeat` (`task_status`, `last_heartbeat_at`),
+  ADD UNIQUE KEY `uk_retrieval_logs_python_task_id` (`python_task_id`),
+  ADD CONSTRAINT `fk_retrieval_logs_user_message` FOREIGN KEY (`user_message_id`) REFERENCES `qa_messages` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  ADD CONSTRAINT `fk_retrieval_logs_assistant_message` FOREIGN KEY (`assistant_message_id`) REFERENCES `qa_messages` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT;
 
 -- ----------------------------
 -- Table structure for qa_retrieval_hits

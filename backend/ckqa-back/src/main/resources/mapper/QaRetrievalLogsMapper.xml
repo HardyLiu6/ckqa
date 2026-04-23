@@ -6,18 +6,30 @@
     <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.QaRetrievalLogs">
         <id column="id" property="id" />
         <result column="session_id" property="sessionId" />
+        <result column="user_message_id" property="userMessageId" />
+        <result column="assistant_message_id" property="assistantMessageId" />
+        <result column="task_seq" property="taskSeq" />
+        <result column="task_status" property="taskStatus" />
+        <result column="progress_stage" property="progressStage" />
+        <result column="python_task_id" property="pythonTaskId" />
+        <result column="latest_logs" property="latestLogs" />
         <result column="course_id" property="courseId" />
         <result column="index_run_id" property="indexRunId" />
         <result column="query_mode" property="queryMode" />
         <result column="query_text" property="queryText" />
         <result column="retrieval_status" property="retrievalStatus" />
         <result column="error_message" property="errorMessage" />
+        <result column="started_at" property="startedAt" />
+        <result column="last_heartbeat_at" property="lastHeartbeatAt" />
+        <result column="finished_at" property="finishedAt" />
         <result column="created_at" property="createdAt" />
     </resultMap>
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, session_id, course_id, index_run_id, query_mode, query_text, retrieval_status, error_message, created_at
+        id, session_id, user_message_id, assistant_message_id, task_seq, task_status, progress_stage,
+        python_task_id, latest_logs, course_id, index_run_id, query_mode, query_text, retrieval_status,
+        error_message, started_at, last_heartbeat_at, finished_at, created_at
     </sql>
 
 </mapper>

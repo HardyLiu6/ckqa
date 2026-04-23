@@ -75,6 +75,18 @@ class TestRuntimeDefaults(unittest.TestCase):
         self.assertIn("call_args:", text)
         self.assertIn("encoding_format: float", text)
 
+    def test_settings_vector_store_tracks_storage_dir_instead_of_hardcoded_output(self):
+        text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("db_uri: ${GRAPHRAG_STORAGE_DIR}/lancedb", text)
+        self.assertNotIn("db_uri: output/lancedb", text)
+
+    def test_settings_global_search_removes_dynamic_selection_knobs(self):
+        text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
+
+        self.assertNotIn("dynamic_search_use_summary: true", text)
+        self.assertNotIn("dynamic_search_max_level: 1", text)
+
     def test_extract_claims_is_disabled_by_default_for_standard_index(self):
         text = (_PROJECT_ROOT / "settings.yaml").read_text(encoding="utf-8")
 

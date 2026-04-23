@@ -13,4 +13,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface KnowledgeBasesService extends IService<KnowledgeBases> {
 
+    KnowledgeBases getRequiredById(Long id);
+
+    java.util.List<KnowledgeBases> listByCourseId(String courseId);
+
+    void updateActiveIndexRunId(Long knowledgeBaseId, Long indexRunId);
 }
