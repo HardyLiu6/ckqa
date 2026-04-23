@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -14,6 +15,15 @@ MIGRATION_PATH = (
 class TestOCQABusinessSchemaContract(unittest.TestCase):
     def setUp(self):
         self.text = SQL_PATH.read_text(encoding="utf-8")
+
+    def _create_table_block(self, table_name: str) -> str:
+        pattern = re.compile(
+            rf"CREATE TABLE `{re.escape(table_name)}`.*?\n\) ENGINE = InnoDB",
+            flags=re.DOTALL,
+        )
+        match = pattern.search(self.text)
+        self.assertIsNotNone(match, f"Missing CREATE TABLE block for {table_name}")
+        return match.group(0)
 
     def test_business_tables_exist(self):
         for table_name in [
@@ -76,6 +86,18 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
         ]:
             self.assertNotIn(fk_name, self.text)
 
+    def test_material_reuse_tables_do_not_define_database_foreign_keys(self):
+        for table_name in [
+            "material_objects",
+            "course_materials",
+            "parse_results",
+            "parse_logs",
+        ]:
+            with self.subTest(table_name=table_name):
+                table_block = self._create_table_block(table_name).upper()
+                self.assertNotIn("FOREIGN KEY", table_block)
+                self.assertNotIn("REFERENCES", table_block)
+
     def test_parse_artifacts_reference_course_materials_without_database_fks(self):
         self.assertIn(
             "`course_material_id` bigint NOT NULL COMMENT '关联的课程资料ID'",
@@ -101,6 +123,9 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
 
     def test_course_materials_migration_guard(self):
         migration = MIGRATION_PATH.read_text(encoding="utf-8")
+        self.assertIn("CREATE PROCEDURE `ckqa_migrate_pdf_files_if_exists`", migration)
+        self.assertIn("information_schema.TABLES", migration)
+        self.assertIn("TABLE_NAME = 'pdf_files'", migration)
         self.assertIn("START TRANSACTION;", migration)
         self.assertIn("COMMIT;", migration)
         self.assertIn(
@@ -116,6 +141,7 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
         self.assertIn("idx_course_materials_upload_time", migration)
         self.assertIn("AUTO_INCREMENT = ", migration)
         self.assertIn("DROP TABLE IF EXISTS `pdf_files`", migration)
+        self.assertIn("DROP PROCEDURE IF EXISTS `ckqa_migrate_pdf_files_if_exists`", migration)
         self.assertNotIn("ckqa_add_fk_if_missing", migration)
         for fk_name in [
             "fk_course_materials_course",

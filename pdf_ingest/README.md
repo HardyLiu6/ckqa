@@ -123,6 +123,7 @@ python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --n
 - 一个课程可以有多份 PDF。
 - 多 PDF 场景下，后续命令优先显式传 `--file-id` 或 `--file-name`。
 - 当前系统使用 `material_objects` 按 MD5 对原始资料对象全局去重，并使用 `course_materials` 表达课程与资料的多对多引用关系。同一份资料可以被多门课程复用，但解析状态、解析产物与 GraphRAG 导出仍按课程资料关系独立管理。
+- 当前 Task 1 只更新数据库 schema/migration/docs contract，CLI/服务代码切换到 `course_materials` 会在后续任务完成；在整套计划执行完之前，不要单独用新 ocqa.sql 配旧代码跑生产流程。
 - MySQL 状态流转是 `pending -> processing -> done/failed`，不要轻易改动这条状态机。
 - MinIO 中对象路径属于上下游真实接口的一部分，修改命名或目录结构时必须同时检查 `graphrag_pipeline/`。
 

@@ -24,6 +24,8 @@ class TestOCQADocsContract(unittest.TestCase):
         self.assertIn("material_objects", text)
         self.assertIn("course_materials", text)
         self.assertIn("同一份资料可以被多门课程复用", text)
+        self.assertIn("Task 1 只更新数据库 schema/migration/docs contract", text)
+        self.assertIn("不要单独用新 ocqa.sql 配旧代码跑生产流程", text)
         self.assertNotIn("同一份 PDF 不能同时归属多个课程", text)
 
     def test_spec_mentions_db_only_boundary(self):

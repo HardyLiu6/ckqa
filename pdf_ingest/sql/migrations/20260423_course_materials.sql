@@ -106,6 +106,95 @@ BEGIN
   END IF;
 END $$
 
+DROP PROCEDURE IF EXISTS `ckqa_migrate_pdf_files_if_exists` $$
+CREATE PROCEDURE `ckqa_migrate_pdf_files_if_exists`()
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'pdf_files'
+  ) THEN
+    START TRANSACTION;
+
+    INSERT INTO `material_objects` (
+      `id`,
+      `original_file_name`,
+      `file_md5`,
+      `file_size`,
+      `mime_type`,
+      `minio_bucket`,
+      `minio_object_key`,
+      `created_at`,
+      `updated_at`
+    )
+    SELECT
+      pf.`id`,
+      pf.`file_name`,
+      pf.`file_md5`,
+      pf.`file_size`,
+      'application/pdf',
+      pf.`minio_bucket`,
+      pf.`minio_object_key`,
+      COALESCE(pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP),
+      COALESCE(pf.`updated_at`, pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP)
+    FROM `pdf_files` pf
+    ON DUPLICATE KEY UPDATE
+      `original_file_name` = VALUES(`original_file_name`),
+      `file_size` = VALUES(`file_size`),
+      `mime_type` = VALUES(`mime_type`),
+      `minio_bucket` = VALUES(`minio_bucket`),
+      `minio_object_key` = VALUES(`minio_object_key`),
+      `updated_at` = VALUES(`updated_at`);
+
+    INSERT INTO `course_materials` (
+      `id`,
+      `course_id`,
+      `material_object_id`,
+      `display_name`,
+      `material_type`,
+      `parse_status`,
+      `parse_started_at`,
+      `parse_finished_at`,
+      `parse_error_msg`,
+      `mineru_batch_id`,
+      `upload_time`,
+      `created_at`,
+      `updated_at`
+    )
+    SELECT
+      pf.`id`,
+      pf.`course_id`,
+      mo.`id`,
+      pf.`file_name`,
+      'textbook',
+      COALESCE(pf.`parse_status`, 'pending'),
+      pf.`parse_started_at`,
+      pf.`parse_finished_at`,
+      pf.`parse_error_msg`,
+      pf.`mineru_batch_id`,
+      pf.`upload_time`,
+      COALESCE(pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP),
+      COALESCE(pf.`updated_at`, pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP)
+    FROM `pdf_files` pf
+    JOIN `material_objects` mo ON mo.`file_md5` = pf.`file_md5`
+    ON DUPLICATE KEY UPDATE
+      `course_id` = VALUES(`course_id`),
+      `material_object_id` = VALUES(`material_object_id`),
+      `display_name` = VALUES(`display_name`),
+      `material_type` = VALUES(`material_type`),
+      `parse_status` = VALUES(`parse_status`),
+      `parse_started_at` = VALUES(`parse_started_at`),
+      `parse_finished_at` = VALUES(`parse_finished_at`),
+      `parse_error_msg` = VALUES(`parse_error_msg`),
+      `mineru_batch_id` = VALUES(`mineru_batch_id`),
+      `upload_time` = VALUES(`upload_time`),
+      `updated_at` = VALUES(`updated_at`);
+
+    COMMIT;
+  END IF;
+END $$
+
 DELIMITER ;
 
 CALL `ckqa_drop_fk_if_exists`('parse_results', 'fk_parse_results_pdf_file');
@@ -165,83 +254,7 @@ CALL `ckqa_add_index_if_missing`(
   'INDEX `idx_course_materials_upload_time`(`upload_time` ASC)'
 );
 
-START TRANSACTION;
-
-INSERT INTO `material_objects` (
-  `id`,
-  `original_file_name`,
-  `file_md5`,
-  `file_size`,
-  `mime_type`,
-  `minio_bucket`,
-  `minio_object_key`,
-  `created_at`,
-  `updated_at`
-)
-SELECT
-  pf.`id`,
-  pf.`file_name`,
-  pf.`file_md5`,
-  pf.`file_size`,
-  'application/pdf',
-  pf.`minio_bucket`,
-  pf.`minio_object_key`,
-  COALESCE(pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP),
-  COALESCE(pf.`updated_at`, pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP)
-FROM `pdf_files` pf
-ON DUPLICATE KEY UPDATE
-  `original_file_name` = VALUES(`original_file_name`),
-  `file_size` = VALUES(`file_size`),
-  `mime_type` = VALUES(`mime_type`),
-  `minio_bucket` = VALUES(`minio_bucket`),
-  `minio_object_key` = VALUES(`minio_object_key`),
-  `updated_at` = VALUES(`updated_at`);
-
-INSERT INTO `course_materials` (
-  `id`,
-  `course_id`,
-  `material_object_id`,
-  `display_name`,
-  `material_type`,
-  `parse_status`,
-  `parse_started_at`,
-  `parse_finished_at`,
-  `parse_error_msg`,
-  `mineru_batch_id`,
-  `upload_time`,
-  `created_at`,
-  `updated_at`
-)
-SELECT
-  pf.`id`,
-  pf.`course_id`,
-  mo.`id`,
-  pf.`file_name`,
-  'textbook',
-  COALESCE(pf.`parse_status`, 'pending'),
-  pf.`parse_started_at`,
-  pf.`parse_finished_at`,
-  pf.`parse_error_msg`,
-  pf.`mineru_batch_id`,
-  pf.`upload_time`,
-  COALESCE(pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP),
-  COALESCE(pf.`updated_at`, pf.`created_at`, pf.`upload_time`, CURRENT_TIMESTAMP)
-FROM `pdf_files` pf
-JOIN `material_objects` mo ON mo.`file_md5` = pf.`file_md5`
-ON DUPLICATE KEY UPDATE
-  `course_id` = VALUES(`course_id`),
-  `material_object_id` = VALUES(`material_object_id`),
-  `display_name` = VALUES(`display_name`),
-  `material_type` = VALUES(`material_type`),
-  `parse_status` = VALUES(`parse_status`),
-  `parse_started_at` = VALUES(`parse_started_at`),
-  `parse_finished_at` = VALUES(`parse_finished_at`),
-  `parse_error_msg` = VALUES(`parse_error_msg`),
-  `mineru_batch_id` = VALUES(`mineru_batch_id`),
-  `upload_time` = VALUES(`upload_time`),
-  `updated_at` = VALUES(`updated_at`);
-
-COMMIT;
+CALL `ckqa_migrate_pdf_files_if_exists`();
 
 CALL `ckqa_change_pdf_column_if_needed`('parse_results');
 CALL `ckqa_change_pdf_column_if_needed`('parse_logs');
@@ -301,6 +314,7 @@ DEALLOCATE PREPARE ckqa_stmt;
 
 DROP TABLE IF EXISTS `pdf_files`;
 
+DROP PROCEDURE IF EXISTS `ckqa_migrate_pdf_files_if_exists`;
 DROP PROCEDURE IF EXISTS `ckqa_change_pdf_column_if_needed`;
 DROP PROCEDURE IF EXISTS `ckqa_rename_index_if_exists`;
 DROP PROCEDURE IF EXISTS `ckqa_add_index_if_missing`;
