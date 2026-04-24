@@ -33,11 +33,14 @@ class CoursesControllerWebMvcTest {
     @Test
     void shouldListCoursePdfFiles() throws Exception {
         given(courseLookupService.listCoursePdfFiles("os")).willReturn(List.of(
-                CoursePdfFileSummaryResponse.of(7L, "book.pdf", "done")
+                CoursePdfFileSummaryResponse.of(7L, 7L, 17L, "book.pdf", "done")
         ));
 
         mockMvc.perform(get(ApiPaths.COURSES + "/os/pdf-files"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(7))
+                .andExpect(jsonPath("$.data[0].materialId").value(7))
+                .andExpect(jsonPath("$.data[0].materialObjectId").value(17))
                 .andExpect(jsonPath("$.data[0].fileName").value("book.pdf"));
     }
 }

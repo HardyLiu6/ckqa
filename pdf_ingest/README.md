@@ -6,7 +6,7 @@
 
 - 上传课程 PDF 到 MinIO
 - 调用 MinerU 云 API 解析 PDF
-- 使用 MySQL 跟踪文件、批次和解析状态
+- 使用 MySQL 跟踪 `material_objects`、`course_materials`、批次和解析状态
 - 导出 `normalized_docs.json`
 - 导出下游使用的 `section_docs.json` / `page_docs.json`
 
@@ -16,6 +16,7 @@
 
 - 属于主链路模块
 - 命令行入口稳定，测试覆盖相对完整
+- 当前已经切换到 `material_objects` / `course_materials` 的课程资料模型，旧 `--file-id` / `--file-name` 仍保留兼容入口
 - 运行时配置主要来自 `.env`
 - 与 `graphrag_pipeline/` 之间通过导出 JSON 和 MinIO 路径契约对接
 
@@ -86,19 +87,19 @@ python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --pa
 ### 解析、查看状态、下载结果
 
 ```bash
-python scripts/pdf_processor/mineru_parser.py parse os --file-id 3
-python scripts/pdf_processor/mineru_parser.py status os --file-id 3
-python scripts/pdf_processor/mineru_parser.py download os --file-id 3 -o ./output
+python scripts/pdf_processor/mineru_parser.py parse os --material-id 3
+python scripts/pdf_processor/mineru_parser.py status os --material-id 3
+python scripts/pdf_processor/mineru_parser.py download os --material-id 3 -o ./output
 python scripts/pdf_processor/mineru_parser.py list
 ```
 
 ### 导出给 GraphRAG
 
 ```bash
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section --with-page-docs
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode page --force
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --no-semantic-table
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section --with-page-docs
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode page --force
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --no-semantic-table
 ```
 
 ## 导出产物说明
@@ -121,9 +122,11 @@ python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --n
 ## 使用时要注意
 
 - 一个课程可以有多份 PDF。
-- 多 PDF 场景下，后续命令优先显式传 `--file-id` 或 `--file-name`。
-- 当前系统使用 `material_objects` 按 MD5 对原始资料对象全局去重，并使用 `course_materials` 表达课程与资料的多对多引用关系。同一份资料可以被多门课程复用，但解析状态、解析产物与 GraphRAG 导出仍按课程资料关系独立管理。
-- 当前 Task 1 只更新数据库 schema/migration/docs contract，CLI/服务代码切换到 `course_materials` 会在后续任务完成；在整套计划执行完之前，不要单独用新 ocqa.sql 配旧代码跑生产流程。
+- 多 PDF 场景下，后续命令优先显式传 `--material-id`；旧 `--file-id` / `--file-name` 仅作为兼容入口。
+- 当前系统使用 `material_objects` 按 MD5 对原始资料对象去重，并使用 `course_materials` 表达课程与资料的关联关系。同一份资料可以被多门课程复用，但解析状态、解析产物与 GraphRAG 导出仍按 `course_material_id` 独立管理。
+- 历史阶段里曾有“Task 1 只更新数据库 schema/migration/docs contract”的过渡约束；当前该过渡已经结束，CLI、服务层和导出链路都已经按 `course_materials` / `material_objects` 模型落地，只保留旧参数作为兼容入口。
+- 兼容与回滚安全上，仍然不要单独用新 ocqa.sql 配旧代码跑生产流程；升级数据库结构时，应保证当前 CLI、服务层和下游抓取逻辑一并处于新模型版本。
+- 新推荐参数是 `--material-id`；旧 `--file-id` / `--file-name` 仍可作为兼容入口使用。
 - MySQL 状态流转是 `pending -> processing -> done/failed`，不要轻易改动这条状态机。
 - MinIO 中对象路径属于上下游真实接口的一部分，修改命名或目录结构时必须同时检查 `graphrag_pipeline/`。
 

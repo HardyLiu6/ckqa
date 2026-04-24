@@ -1,14 +1,14 @@
 package org.ysu.ckqaback.pdf;
 
 import org.junit.jupiter.api.Test;
-import org.ysu.ckqaback.entity.PdfFiles;
+import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.locks.DatabaseNamedLockService;
 import org.ysu.ckqaback.integration.pdf.PdfIngestOrchestrator;
 import org.ysu.ckqaback.integration.process.ProcessExecutionResult;
 import org.ysu.ckqaback.pdf.dto.ExportGraphRagRequest;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.ParseResultsService;
-import org.ysu.ckqaback.service.PdfFilesService;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,20 +23,20 @@ class PdfWorkflowServiceTest {
 
     @Test
     void shouldRejectParseWhenClaimParseStartFails() {
-        PdfFilesService pdfFilesService = mock(PdfFilesService.class);
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(pdfFilesService, parseResultsService, orchestrator, databaseNamedLockService);
-        PdfFiles pdfFile = new PdfFiles();
-        pdfFile.setId(7L);
-        pdfFile.setCourseId("os");
-        pdfFile.setFileName("book.pdf");
-        pdfFile.setParseStatus("processing");
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = new CourseMaterials();
+        material.setId(7L);
+        material.setCourseId("os");
+        material.setDisplayName("book.pdf");
+        material.setParseStatus("processing");
 
-        given(pdfFilesService.getRequiredById(7L)).willReturn(pdfFile);
-        given(pdfFilesService.claimParseStart(7L)).willReturn(false);
+        given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
+        given(courseMaterialsService.claimParseStart(7L)).willReturn(false);
 
         assertThatThrownBy(() -> workflowService.startParse(7L))
                 .isInstanceOf(BusinessException.class)
@@ -45,21 +45,21 @@ class PdfWorkflowServiceTest {
 
     @Test
     void shouldFallbackToFailedWhenParseProcessReturnsError() throws Exception {
-        PdfFilesService pdfFilesService = mock(PdfFilesService.class);
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(pdfFilesService, parseResultsService, orchestrator, databaseNamedLockService);
-        PdfFiles pdfFile = new PdfFiles();
-        pdfFile.setId(7L);
-        pdfFile.setCourseId("os");
-        pdfFile.setFileName("book.pdf");
-        pdfFile.setParseStatus("pending");
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = new CourseMaterials();
+        material.setId(7L);
+        material.setCourseId("os");
+        material.setDisplayName("book.pdf");
+        material.setParseStatus("pending");
 
-        given(pdfFilesService.getRequiredById(7L)).willReturn(pdfFile, pdfFile);
-        given(pdfFilesService.claimParseStart(7L)).willReturn(true);
-        given(orchestrator.parse(pdfFile)).willReturn(ProcessExecutionResult.builder()
+        given(courseMaterialsService.getRequiredById(7L)).willReturn(material, material);
+        given(courseMaterialsService.claimParseStart(7L)).willReturn(true);
+        given(orchestrator.parse(material)).willReturn(ProcessExecutionResult.builder()
                 .command(List.of("python", "mineru_parser.py"))
                 .exitCode(1)
                 .stdout("")
@@ -73,49 +73,49 @@ class PdfWorkflowServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("PDF解析执行失败");
 
-        then(pdfFilesService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
+        then(courseMaterialsService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
     }
 
     @Test
     void shouldFallbackToFailedWhenParseCommandThrowsException() throws Exception {
-        PdfFilesService pdfFilesService = mock(PdfFilesService.class);
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(pdfFilesService, parseResultsService, orchestrator, databaseNamedLockService);
-        PdfFiles pdfFile = new PdfFiles();
-        pdfFile.setId(7L);
-        pdfFile.setCourseId("os");
-        pdfFile.setFileName("book.pdf");
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = new CourseMaterials();
+        material.setId(7L);
+        material.setCourseId("os");
+        material.setDisplayName("book.pdf");
 
-        given(pdfFilesService.getRequiredById(7L)).willReturn(pdfFile);
-        given(pdfFilesService.claimParseStart(7L)).willReturn(true);
-        willThrow(new IOException("spawn failed")).given(orchestrator).parse(pdfFile);
+        given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
+        given(courseMaterialsService.claimParseStart(7L)).willReturn(true);
+        willThrow(new IOException("spawn failed")).given(orchestrator).parse(material);
 
         assertThatThrownBy(() -> workflowService.startParse(7L))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("spawn failed");
 
-        then(pdfFilesService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
+        then(courseMaterialsService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
     }
 
     @Test
     void shouldRejectExportWhenNamedLockNotAcquired() {
-        PdfFilesService pdfFilesService = mock(PdfFilesService.class);
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(pdfFilesService, parseResultsService, orchestrator, databaseNamedLockService);
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
 
-        PdfFiles pdfFile = new PdfFiles();
-        pdfFile.setId(9L);
-        pdfFile.setCourseId("os");
-        pdfFile.setFileName("slides.pdf");
-        pdfFile.setParseStatus("done");
+        CourseMaterials material = new CourseMaterials();
+        material.setId(9L);
+        material.setCourseId("os");
+        material.setDisplayName("slides.pdf");
+        material.setParseStatus("done");
 
-        given(pdfFilesService.getRequiredById(9L)).willReturn(pdfFile);
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
         given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(false);
 
         ExportGraphRagRequest request = new ExportGraphRagRequest();

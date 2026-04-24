@@ -26,7 +26,7 @@ public class ParseResultsServiceImpl extends ServiceImpl<ParseResultsMapper, Par
     @Override
     public List<ParseResults> listByPdfFileId(Long pdfFileId) {
         LambdaQueryWrapper<ParseResults> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ParseResults::getPdfFileId, pdfFileId)
+        queryWrapper.eq(ParseResults::getCourseMaterialId, pdfFileId)
                 .orderByDesc(ParseResults::getCreatedAt)
                 .orderByDesc(ParseResults::getId);
         return list(queryWrapper);
@@ -35,7 +35,7 @@ public class ParseResultsServiceImpl extends ServiceImpl<ParseResultsMapper, Par
     @Override
     public List<ParseResults> listGraphRagOutputs(Long pdfFileId) {
         LambdaQueryWrapper<ParseResults> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ParseResults::getPdfFileId, pdfFileId)
+        queryWrapper.eq(ParseResults::getCourseMaterialId, pdfFileId)
                 .likeRight(ParseResults::getFileName, "graphrag_")
                 .orderByDesc(ParseResults::getCreatedAt)
                 .orderByDesc(ParseResults::getId);

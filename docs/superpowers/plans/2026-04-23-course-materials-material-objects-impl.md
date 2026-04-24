@@ -102,7 +102,7 @@
 - Modify: `pdf_ingest/sql/ocqa.sql`
 - Create: `pdf_ingest/sql/migrations/20260423_course_materials.sql`
 
-- [ ] **Step 1: Write failing schema contract tests**
+- [x] **Step 1: Write failing schema contract tests**
 
 Add these tests to `pdf_ingest/tests/test_ocqa_business_schema_contract.py`:
 
@@ -186,7 +186,7 @@ python -m pytest tests/test_ocqa_business_schema_contract.py tests/test_ocqa_doc
 
 Expected: FAIL because `material_objects` and `course_materials` are not in `ocqa.sql` and README yet.
 
-- [ ] **Step 3: Replace old `pdf_files` schema with new material schema**
+- [x] **Step 3: Replace old `pdf_files` schema with new material schema**
 
 In `pdf_ingest/sql/ocqa.sql`, replace the old `parse_logs`, `parse_results`, and `pdf_files` block with this structure:
 
@@ -286,7 +286,7 @@ left join `course_materials` `cm` on((`c`.`course_id` = `cm`.`course_id`)))
 left join `material_objects` `mo` on((`cm`.`material_object_id` = `mo`.`id`)));
 ```
 
-- [ ] **Step 4: Add live migration script**
+- [x] **Step 4: Add live migration script**
 
 Create `pdf_ingest/sql/migrations/20260423_course_materials.sql`:
 
@@ -523,7 +523,7 @@ DROP PROCEDURE IF EXISTS `ckqa_rename_index_if_exists`;
 DROP PROCEDURE IF EXISTS `ckqa_change_pdf_column_if_needed`;
 ```
 
-- [ ] **Step 5: Update docs required by schema contract**
+- [x] **Step 5: Update docs required by schema contract**
 
 In `pdf_ingest/README.md`, replace the old note:
 
@@ -547,7 +547,7 @@ rg -n "同一份 PDF 不能同时归属多个课程|material_objects|course_mate
 Expected before edit: the old `同一份 PDF 不能同时归属多个课程` sentence is present.
 Expected after edit: `material_objects` and `course_materials` are present, and the old incompatibility sentence is gone.
 
-- [ ] **Step 6: Run schema contract tests**
+- [x] **Step 6: Run schema contract tests**
 
 Run:
 
@@ -576,7 +576,7 @@ git commit -m "feat: model reusable course materials"
 - Modify: `pdf_ingest/scripts/pdf_processor/db_service.py`
 - Modify: `pdf_ingest/scripts/pdf_processor/storage_service.py`
 
-- [ ] **Step 1: Write failing Python service tests**
+- [x] **Step 1: Write failing Python service tests**
 
 Create `pdf_ingest/tests/test_course_material_reuse.py`:
 
@@ -758,7 +758,7 @@ python -m pytest tests/test_course_material_reuse.py -q
 
 Expected: FAIL because `upload_material_object`, `get_material_object_by_md5`, `create_material_object`, and `create_course_material` are not wired into `PDFParserApp.upload`.
 
-- [ ] **Step 3: Add DB service methods and compatibility wrappers**
+- [x] **Step 3: Add DB service methods and compatibility wrappers**
 
 In `pdf_ingest/scripts/pdf_processor/db_service.py`, add material methods:
 
@@ -968,7 +968,7 @@ Update parse-related methods to use `course_material_id`:
 
 Change `create_parse_result`, `get_parse_results`, `delete_parse_results`, `add_log`, and `get_logs` SQL from `pdf_file_id` to `course_material_id`.
 
-- [ ] **Step 4: Add storage material object helpers**
+- [x] **Step 4: Add storage material object helpers**
 
 In `pdf_ingest/scripts/pdf_processor/storage_service.py`, add:
 
@@ -1008,7 +1008,7 @@ In `pdf_ingest/scripts/pdf_processor/storage_service.py`, add:
         return local_path
 ```
 
-- [ ] **Step 5: Run targeted Python tests**
+- [x] **Step 5: Run targeted Python tests**
 
 Run:
 
@@ -1035,7 +1035,7 @@ git commit -m "feat: add course material service primitives"
 - Modify: `pdf_ingest/scripts/pdf_processor/graphrag_exporter.py`
 - Modify: `pdf_ingest/tests/test_course_material_reuse.py`
 
-- [ ] **Step 1: Add CLI compatibility assertions to tests**
+- [x] **Step 1: Add CLI compatibility assertions to tests**
 
 Append this test to `pdf_ingest/tests/test_course_material_reuse.py`:
 
@@ -1063,7 +1063,7 @@ python -m pytest tests/test_course_material_reuse.py -q
 
 Expected: FAIL because `PDFParserApp.upload` still returns only old fields and rejects cross-course duplicate MD5.
 
-- [ ] **Step 3: Update `PDFParserApp.upload`**
+- [x] **Step 3: Update `PDFParserApp.upload`**
 
 In `pdf_ingest/scripts/pdf_processor/mineru_parser.py`, replace the old MD5 duplicate section in `upload()` with this flow:
 
@@ -1160,7 +1160,7 @@ Rename `_delete_pdf_related_data` to `_delete_material_related_data` and keep an
         self._delete_material_related_data(pdf_file)
 ```
 
-- [ ] **Step 4: Update resolve and parse paths**
+- [x] **Step 4: Update resolve and parse paths**
 
 Update `_resolve_pdf_file` to delegate to new course material queries but keep old parameter names:
 
@@ -1220,7 +1220,7 @@ Keep return aliases:
                 "file_name": pdf_file["display_name"],
 ```
 
-- [ ] **Step 5: Add CLI arguments for material names**
+- [x] **Step 5: Add CLI arguments for material names**
 
 For `parse`, `status`, `download`, and `export-graphrag` subcommands, add:
 
@@ -1275,7 +1275,7 @@ When invoking app methods, pass both aliases for every affected subcommand:
 
 Update method signatures for `parse`, `status`, `download`, and `export_graphrag` to accept `material_id` and `material_name`, then pass them to `_resolve_pdf_file`.
 
-- [ ] **Step 6: Update GraphRAG exporter metadata and DB calls**
+- [x] **Step 6: Update GraphRAG exporter metadata and DB calls**
 
 In `pdf_ingest/scripts/pdf_processor/graphrag_exporter.py`, treat the incoming dict as course material:
 
@@ -1294,7 +1294,7 @@ When building metadata in normalized/projected documents, add:
 
 Keep persisted paths as `graphrag/pdf_{file_id}/{out_name}` for this phase so `graphrag_pipeline` remains compatible.
 
-- [ ] **Step 7: Run Python targeted tests**
+- [x] **Step 7: Run Python targeted tests**
 
 Run:
 
@@ -1321,7 +1321,7 @@ git commit -m "feat: support reusable materials in pdf ingest cli"
 - Modify: `graphrag_pipeline/utils/fetch_from_minio.py`
 - Create: `graphrag_pipeline/tests/test_fetch_from_minio_paths.py`
 
-- [ ] **Step 1: Write failing argument and path tests**
+- [x] **Step 1: Write failing argument and path tests**
 
 Create `graphrag_pipeline/tests/test_fetch_from_minio_paths.py`:
 
@@ -1374,7 +1374,7 @@ conda run -n graphrag-oneapi python -m pytest tests/test_fetch_from_minio_paths.
 
 Expected: FAIL because `build_candidate_object_keys` and `--material-id` do not exist.
 
-- [ ] **Step 3: Add key builder and material argument**
+- [x] **Step 3: Add key builder and material argument**
 
 In `graphrag_pipeline/utils/fetch_from_minio.py`, add:
 
@@ -1530,7 +1530,7 @@ When calling `fetch_and_prepare`, pass:
         material_id=args.material_id,
 ```
 
-- [ ] **Step 4: Run GraphRAG fetch tests**
+- [x] **Step 4: Run GraphRAG fetch tests**
 
 Run:
 
@@ -1563,7 +1563,7 @@ git commit -m "feat: accept course material ids for graphrag input fetch"
 - Create: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/service/impl/MaterialObjectsServiceImpl.java`
 - Create: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/service/impl/CourseMaterialsServiceImpl.java`
 
-- [ ] **Step 1: Create Java entities and mappers**
+- [x] **Step 1: Create Java entities and mappers**
 
 Create `backend/ckqa-back/src/main/java/org/ysu/ckqaback/entity/MaterialObjects.java`:
 
@@ -1721,7 +1721,7 @@ public interface CourseMaterialsMapper extends BaseMapper<CourseMaterials> {
 }
 ```
 
-- [ ] **Step 2: Create Java services**
+- [x] **Step 2: Create Java services**
 
 Create `CourseMaterialsService.java`:
 
@@ -1853,7 +1853,7 @@ public class MaterialObjectsServiceImpl extends ServiceImpl<MaterialObjectsMappe
 }
 ```
 
-- [ ] **Step 3: Update Parse entity fields**
+- [x] **Step 3: Update Parse entity fields**
 
 In `ParseResults.java`, rename `pdfFileId` field to:
 
@@ -1867,7 +1867,7 @@ In `ParseResults.java`, rename `pdfFileId` field to:
 
 In `ParseLogs.java`, rename the same field to `courseMaterialId` with `@TableField("course_material_id")`.
 
-- [ ] **Step 4: Update code generator table list**
+- [x] **Step 4: Update code generator table list**
 
 In `MybatisPlusCodeGenerator.java`, replace `"pdf_files"` with:
 
@@ -1876,7 +1876,7 @@ In `MybatisPlusCodeGenerator.java`, replace `"pdf_files"` with:
             "course_materials",
 ```
 
-- [ ] **Step 5: Run Java compile target**
+- [x] **Step 5: Run Java compile target**
 
 Run:
 
@@ -1917,7 +1917,7 @@ git commit -m "feat: add course material java model"
 - Modify: `backend/ckqa-back/src/test/java/org/ysu/ckqaback/controller/PdfFilesControllerWebMvcTest.java`
 - Modify: `backend/ckqa-back/src/test/java/org/ysu/ckqaback/controller/CoursesControllerWebMvcTest.java`
 
-- [ ] **Step 1: Update workflow service tests**
+- [x] **Step 1: Update workflow service tests**
 
 Modify `backend/ckqa-back/src/test/java/org/ysu/ckqaback/pdf/PdfWorkflowServiceTest.java` imports and mocks from `PdfFiles`/`PdfFilesService` to `CourseMaterials`/`CourseMaterialsService`. The first test setup becomes:
 
@@ -1955,7 +1955,7 @@ cd /home/sunlight/Projects/ckqa/backend/ckqa-back
 
 Expected: FAIL because `PdfWorkflowService`, DTO mapping, and orchestrator method signatures still use `PdfFiles`.
 
-- [ ] **Step 3: Update workflow service implementation**
+- [x] **Step 3: Update workflow service implementation**
 
 In `PdfWorkflowService.java`, replace `PdfFilesService` and `PdfFiles` with `CourseMaterialsService` and `CourseMaterials`. Constructor field becomes:
 
@@ -1993,7 +1993,7 @@ Success response uses:
 
 `exportGraphRag` uses `CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);`.
 
-- [ ] **Step 4: Update orchestrator command**
+- [x] **Step 4: Update orchestrator command**
 
 In `PdfIngestOrchestrator.java`, replace method parameters with `CourseMaterials material`, and use `--material-id`:
 
@@ -2022,7 +2022,7 @@ In `PdfIngestOrchestrator.java`, replace method parameters with `CourseMaterials
 
 Use the same `--material-id` replacement in `exportGraphRag`.
 
-- [ ] **Step 5: Update DTO compatibility**
+- [x] **Step 5: Update DTO compatibility**
 
 In `PdfFileResponse.java`, switch `fromEntity` to `CourseMaterials` and add fields:
 
@@ -2051,7 +2051,7 @@ In `CoursePdfFileSummaryResponse.java`, add:
 
 Keep `id` equal to `materialId` for legacy API clients.
 
-- [ ] **Step 6: Update course lookup**
+- [x] **Step 6: Update course lookup**
 
 In `CourseLookupService.java`, replace `PdfFilesService` with `CourseMaterialsService`:
 
@@ -2065,7 +2065,7 @@ In `CourseLookupService.java`, replace `PdfFilesService` with `CourseMaterialsSe
     }
 ```
 
-- [ ] **Step 7: Run focused Java tests**
+- [x] **Step 7: Run focused Java tests**
 
 Run:
 
@@ -2076,7 +2076,7 @@ cd /home/sunlight/Projects/ckqa/backend/ckqa-back
 
 Expected: PASS after updating tests to new entity/service while retaining old route names.
 
-- [ ] **Step 8: Compile Java backend**
+- [x] **Step 8: Compile Java backend**
 
 Run:
 
@@ -2113,7 +2113,7 @@ git commit -m "feat: route pdf workflow through course materials"
 
 Note: `scripts/audit_repo_drift.py` already exists at the repository root. This task only runs it and fixes any flagged documentation drift; do not create a second drift-audit script.
 
-- [ ] **Step 1: Update root README main flow**
+- [x] **Step 1: Update root README main flow**
 
 In `README.md`, replace the main-flow line:
 
@@ -2127,7 +2127,7 @@ with:
 -> pdf_ingest 将原始资料对象按 MD5 存入 MinIO/material_objects，并在 course_materials 中登记课程资料关系
 ```
 
-- [ ] **Step 2: Update pdf_ingest guidance**
+- [x] **Step 2: Update pdf_ingest guidance**
 
 In `pdf_ingest/CLAUDE.md`, replace the architecture relationship:
 
@@ -2150,7 +2150,7 @@ Replace the old MD5 note with:
 - Parse status belongs to `course_materials`, not to the shared physical object.
 ```
 
-- [ ] **Step 3: Update detailed MinerU parser doc**
+- [x] **Step 3: Update detailed MinerU parser doc**
 
 In `pdf_ingest/docs/MinerU PDF Parser.md`, replace all statements that say identical content cannot belong to multiple courses with:
 
@@ -2166,7 +2166,7 @@ python scripts/pdf_processor/mineru_parser.py status os --material-id 3
 python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
 ```
 
-- [ ] **Step 4: Update backend README compatibility boundary**
+- [x] **Step 4: Update backend README compatibility boundary**
 
 In `backend/ckqa-back/README.md`, add under "当前已知边界":
 
@@ -2174,7 +2174,7 @@ In `backend/ckqa-back/README.md`, add under "当前已知边界":
 - `/api/v1/pdf-files` 当前作为兼容路由保留，内部数据源已经演进为 `course_materials`。新业务文档中应优先使用“课程资料”语义，后续前端稳定后再新增或切换到 `/api/v1/course-materials`。
 ```
 
-- [ ] **Step 5: Run documentation contract and drift audit**
+- [x] **Step 5: Run documentation contract and drift audit**
 
 Run:
 
@@ -2203,7 +2203,14 @@ git commit -m "docs: describe reusable course materials model"
 **Files:**
 - No required code edits unless a regression fails.
 
-- [ ] **Step 1: Run full pdf_ingest tests**
+已确认的非 live 证据：
+- `cd pdf_ingest && conda run -n courseKg python -m pytest tests/` 通过
+- `cd graphrag_pipeline && conda run -n graphrag-oneapi python -m pytest tests/` 通过
+- `cd backend/ckqa-back && ./mvnw -q test` 通过
+- `cd backend/ckqa-back && ./mvnw -q -DskipTests compile` 通过
+- `cd /home/sunlight/Projects/ckqa && python scripts/audit_repo_drift.py --strict` 通过
+
+- [x] **Step 1: Run full pdf_ingest tests**
 
 Run:
 
@@ -2214,7 +2221,7 @@ python -m pytest tests/
 
 Expected: all tests PASS.
 
-- [ ] **Step 2: Run GraphRAG tests**
+- [x] **Step 2: Run GraphRAG tests**
 
 Run:
 
@@ -2225,7 +2232,7 @@ conda run -n graphrag-oneapi python -m pytest tests/
 
 Expected: all tests PASS.
 
-- [ ] **Step 3: Run Java tests and compile**
+- [x] **Step 3: Run Java tests and compile**
 
 Run:
 
@@ -2237,7 +2244,7 @@ cd /home/sunlight/Projects/ckqa/backend/ckqa-back
 
 Expected: both commands PASS.
 
-- [ ] **Step 4: Run SQL migration smoke on disposable schema when MySQL is available**
+- [x] **Step 4: Run SQL migration smoke on disposable schema when MySQL is available**
 
 Run this only against a disposable or backed-up database:
 
@@ -2287,7 +2294,16 @@ SHOW TABLE STATUS LIKE 'course_materials';
 
 Expected: tables exist; old rows are represented in new tables; overview returns both `course_material_id` and legacy `file_name` fields; the `course_material_id` column comment is `关联的课程资料ID` in both parse tables, proving the stored-procedure quote escaping executed correctly; the FK query returns no rows for both old and new FK names; `course_materials.Auto_increment` is greater than `MAX(id)`.
 
-- [ ] **Step 5: Run CLI smoke with fake or local sample when services are available**
+已完成：2026-04-24 使用 disposable DB `ocqa_task8_smoke_full_20260424` 通过 `/tmp/ckqa_task8_step4_smoke.py` 跑通全量表克隆 + migration smoke，结果为：
+- `pre_fk ()`
+- `material_objects_count = 1`
+- `course_materials_count = 1`
+- `v_course_parse_overview` 返回旧行 `task8_mig / 900001 / migration-smoke.pdf`
+- `parse_logs` 与 `parse_results` 的 `course_material_id` 列注释均为 `关联的课程资料ID`
+- 旧 FK 名与新 FK 名检查结果均为空
+- `course_materials.Auto_increment = 900002`，大于 `MAX(id) = 900001`
+
+- [x] **Step 5: Run CLI smoke with fake or local sample when services are available**
 
 If MinIO/MySQL/MinerU credentials are available, run:
 
@@ -2306,7 +2322,13 @@ second upload: status=success with same material_object_id and different course_
 list: both courses show their own material row
 ```
 
-- [ ] **Step 6: Run Java health and legacy route smoke when services are available**
+已完成：2026-04-24 使用本地样本 [pdf_ingest/data/os/计算机操作系统.pdf](/home/sunlight/Projects/ckqa/pdf_ingest/data/os/计算机操作系统.pdf) 在 disposable DB `ocqa_task8_smoke_full_20260424` 上跑通 CLI smoke：
+- 首次上传课程 `task8smoke_a_full_1777028024` 成功，`course_material_id = 900002`，`material_object_id = 900002`
+- 第二次上传课程 `task8smoke_b_full_1777028024` 成功，`course_material_id = 900003`，`material_object_id = 900002`
+- `list` 同时返回两个课程各自的资料行
+- SQL 复核显示 `material_objects` 中该 MD5 仅 1 行，`course_materials` 中两个课程各有 1 行且共用同一个 `material_object_id`
+
+- [x] **Step 6: Run Java health and legacy route smoke when services are available**
 
 Start Java backend after MySQL migration:
 
@@ -2328,6 +2350,16 @@ Expected:
 /system/health returns code=200 envelope
 /courses/os/pdf-files returns course material rows through the legacy route
 ```
+
+已完成：2026-04-24 在 `backend/ckqa-back` 使用 migrated disposable DB `ocqa_task8_smoke_full_20260424` 启动 `./mvnw spring-boot:run`，并验证：
+- `/api/v1/system/health` 返回 `code=200` envelope，且 `mysql` 项为 `reachable=true`、`ready=true`
+- `/api/v1/courses/task8smoke_a_full_1777028024/pdf-files` 返回 `code=200`，数据中包含 `id=900002`、`materialId=900002`、`materialObjectId=900002`、`fileName=计算机操作系统.pdf`
+- 随后在现有 `graphrag_pipeline/output` 基础上启动 GraphRAG API 后，`/api/v1/system/health` 返回 `up=true`，`graphrag-api` 与 `graphrag-ready` 均为 `reachable=true`、`ready=true`
+
+执行备注：
+- 第一次 Java smoke 失败的原因不是 schema 缺项，而是启动命令把 `.env` 路径误写成了 `../pdf_ingest/.env`；从 `backend/ckqa-back` 启动时正确路径应为 `../../pdf_ingest/.env`
+- 为避免重建现有索引与覆盖已写入 Neo4j 的图数据，本轮额外使用 `/tmp/ckqa_graphrag_python_wrapper.sh` 对 `python -m graphrag index --root .` 做 no-op smoke：`fetch_from_minio.py os --clean` 仍真实执行，索引命令仅验证可编排执行并返回 `exitCode = 0`
+- no-op smoke 后 `graphrag_pipeline/output` 文件指纹保持不变：`f414e393bc30d6db35e7e6a4bc1430ff828d511290cefecdad1c148101ea80b8`
 
 - [ ] **Step 7: Final commit after regressions**
 
@@ -2351,10 +2383,10 @@ If no files changed after regression, do not create an empty commit.
 
 ## Final Verification Checklist
 
-- [ ] `cd pdf_ingest && python -m pytest tests/` passes.
-- [ ] `cd graphrag_pipeline && conda run -n graphrag-oneapi python -m pytest tests/` passes.
-- [ ] `cd backend/ckqa-back && ./mvnw -q test` passes.
-- [ ] `cd backend/ckqa-back && ./mvnw -q -DskipTests compile` passes.
-- [ ] `cd /home/sunlight/Projects/ckqa && python scripts/audit_repo_drift.py --strict` passes.
-- [ ] If live services are available, cross-course same-PDF upload creates one `material_objects` row and multiple `course_materials` rows.
-- [ ] Existing Java `/api/v1/pdf-files/{id}/parse` and `/api/v1/pdf-files/{id}/export-graphrag` continue to work as compatibility routes.
+- [x] `cd pdf_ingest && python -m pytest tests/` passes.
+- [x] `cd graphrag_pipeline && conda run -n graphrag-oneapi python -m pytest tests/` passes.
+- [x] `cd backend/ckqa-back && ./mvnw -q test` passes.
+- [x] `cd backend/ckqa-back && ./mvnw -q -DskipTests compile` passes.
+- [x] `cd /home/sunlight/Projects/ckqa && python scripts/audit_repo_drift.py --strict` passes.
+- [x] If live services are available, cross-course same-PDF upload creates one `material_objects` row and multiple `course_materials` rows.
+- [x] Existing Java `/api/v1/pdf-files/{id}/parse` and `/api/v1/pdf-files/{id}/export-graphrag` continue to work as compatibility routes.

@@ -47,7 +47,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 ```text
 课程 PDF
-  -> pdf_ingest 上传到 MinIO，登记到 MySQL
+  -> pdf_ingest 将原始资料对象按 MD5 存入 MinIO/material_objects，并在 course_materials 中登记课程资料关系
   -> 调用 MinerU 云 API 解析
   -> 导出 normalized_docs.json / section_docs.json / page_docs.json
   -> graphrag_pipeline 从 MinIO 拉取 JSON 到 input/
@@ -168,7 +168,7 @@ conda activate courseKg
 pip install -e ".[dev]"
 
 python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section --with-page-docs
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section --with-page-docs
 ```
 
 当前共享开发环境里的 `courseKg` 已安装 `pytest`，进入模块目录后可直接执行 `python -m pytest tests/` 做快速验证；如果是新环境，仍建议按上面的开发依赖安装方式准备。
@@ -180,7 +180,7 @@ cd ../graphrag_pipeline
 conda activate graphrag-oneapi
 pip install -e ".[all]"
 
-python utils/fetch_from_minio.py os --pdf-file-id 3 --clean
+python utils/fetch_from_minio.py os --material-id 3 --clean
 ```
 
 当前共享开发环境里的 `graphrag-oneapi` 也已安装 `pytest`，可直接执行 `python -m pytest tests/`；如果是新环境，仅执行 `pip install -e ".[all]"` 还不够，需再补装 `pytest`。
@@ -214,7 +214,7 @@ curl http://127.0.0.1:8080/api/v1/system/health
 
 ## 当前需要特别记住的事实
 
-- 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--file-id` 或 `--file-name`，`graphrag_pipeline` 侧优先使用 `--pdf-file-id`。
+- 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--material-id`，旧 `--file-id` / `--file-name` 仅作为兼容入口；`graphrag_pipeline` 侧优先使用 `--material-id`。
 - `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
 - `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
 - `graphrag_pipeline` 当前活动 Prompt 由 `.env` 与 `prompts/final/active_prompt.json` 协同记录；如果切换了候选 Prompt，需要先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再重建索引。
@@ -223,6 +223,7 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
 - `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。
+- `pdf_ingest` 和 `graphrag_pipeline` 都已进入课程资料模型：`material_objects` 按 MD5 去重物理对象，`course_materials` 维护课程内资料关系，解析状态、导出产物和日志按 `course_material_id` 隔离。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 - 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 

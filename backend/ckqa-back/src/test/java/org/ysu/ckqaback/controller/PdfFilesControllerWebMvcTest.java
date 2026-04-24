@@ -40,12 +40,15 @@ class PdfFilesControllerWebMvcTest {
 
     @Test
     void shouldReturnPdfDetail() throws Exception {
-        PdfFileResponse response = PdfFileResponse.of(7L, "os", "book.pdf", "done", null, null, null);
+        PdfFileResponse response = PdfFileResponse.of(7L, 7L, 17L, "os", "book.pdf", "done", null, null, null);
         given(pdfWorkflowService.getPdfFile(7L)).willReturn(response);
 
         mockMvc.perform(get(ApiPaths.PDF_FILES + "/7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(7))
+                .andExpect(jsonPath("$.data.materialId").value(7))
+                .andExpect(jsonPath("$.data.materialObjectId").value(17))
+                .andExpect(jsonPath("$.data.fileName").value("book.pdf"))
                 .andExpect(jsonPath("$.data.parseStatus").value("done"));
     }
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CKG (Course Knowledge Graph) — a PDF processing pipeline that parses course materials via the MinerU cloud API, stores results in MinIO object storage, tracks metadata in MySQL, and transforms parsed content into GraphRAG-compatible input format.
+CKG (Course Knowledge Graph) — a PDF processing pipeline that parses course materials via the MinerU cloud API, stores physical material objects in MinIO, tracks course-material relations and parse state in MySQL, and transforms parsed content into GraphRAG-compatible input format.
 
 输出规范补充：课程文本标准 schema 与预处理目标见 `docs/课程文本规范与预处理流程.md`。
 手工验证与抽样验收流程见 `../docs/标准化导出验证说明.md`。
@@ -30,10 +30,10 @@ python scripts/pdf_processor/mineru_parser.py <command> [options]
 python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
 python scripts/pdf_processor/mineru_parser.py upload os -f data/os/slides.pdf
 python scripts/pdf_processor/mineru_parser.py parse os --file-name slides.pdf
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
 
 # Export to GraphRAG format
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --file-id 3 --mode section
+python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
 
 # Audit exported documents (example)
 python scripts/pdf_processor/export_audit.py ../graphrag_pipeline/tmp_validate/os/normalized/normalized_docs.json
@@ -80,14 +80,15 @@ PDF → MinerU Cloud API → JSON (content_list.json)
 ### Database Schema (`sql/ocqa.sql`)
 
 ```
-courses (1) ──→ (N) pdf_files (1) ──→ (N) parse_results
-                        │
-                        └──→ (N) parse_logs
+courses (1) ──→ (N) course_materials (N) ──→ (1) material_objects
+                          │
+                          └──→ (N) parse_results / parse_logs
 ```
 
-- `pdf_files.file_md5` enables upload deduplication
-- One course can contain multiple PDFs; operational commands should use `--file-id` or `--file-name` once a course has more than one file
-- `pdf_files.parse_status` enum tracks pipeline state
+- `material_objects.file_md5` enables physical object deduplication
+- `course_materials` records the course-level relation, display name, material type, and parse state
+- `parse_results.course_material_id` and `parse_logs.course_material_id` isolate outputs and logs by course material
+- One course can contain multiple materials; operational commands should use `--material-id` first, while `--file-id` / `--file-name` remain compatibility inputs
 - `v_course_parse_overview` view aggregates stats
 
 ## Dependencies

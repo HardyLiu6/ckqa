@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
-import org.ysu.ckqaback.service.PdfFilesService;
 
 import java.util.List;
 
@@ -16,11 +16,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CourseLookupService {
 
-    private final PdfFilesService pdfFilesService;
+    private final CourseMaterialsService courseMaterialsService;
     private final KnowledgeBasesService knowledgeBasesService;
 
     public List<CoursePdfFileSummaryResponse> listCoursePdfFiles(String courseId) {
-        return pdfFilesService.listByCourseId(courseId).stream()
+        return courseMaterialsService.listByCourseId(courseId).stream()
                 .map(CoursePdfFileSummaryResponse::fromEntity)
                 .toList();
     }

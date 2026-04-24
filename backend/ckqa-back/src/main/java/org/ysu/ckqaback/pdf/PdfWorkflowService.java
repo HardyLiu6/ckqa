@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.ysu.ckqaback.api.ApiResultCode;
-import org.ysu.ckqaback.entity.PdfFiles;
+import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.locks.DatabaseNamedLockService;
 import org.ysu.ckqaback.integration.pdf.PdfIngestOrchestrator;
@@ -13,8 +13,8 @@ import org.ysu.ckqaback.pdf.dto.ExportGraphRagRequest;
 import org.ysu.ckqaback.pdf.dto.ParseResultResponse;
 import org.ysu.ckqaback.pdf.dto.PdfFileResponse;
 import org.ysu.ckqaback.pdf.dto.PdfOperationResponse;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.ParseResultsService;
-import org.ysu.ckqaback.service.PdfFilesService;
 
 import java.io.IOException;
 import java.util.List;
@@ -26,13 +26,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PdfWorkflowService {
 
-    private final PdfFilesService pdfFilesService;
+    private final CourseMaterialsService courseMaterialsService;
     private final ParseResultsService parseResultsService;
     private final PdfIngestOrchestrator pdfIngestOrchestrator;
     private final DatabaseNamedLockService databaseNamedLockService;
 
     public PdfFileResponse getPdfFile(Long id) {
-        return PdfFileResponse.fromEntity(pdfFilesService.getRequiredById(id));
+        return PdfFileResponse.fromEntity(courseMaterialsService.getRequiredById(id));
     }
 
     public List<ParseResultResponse> listParseResults(Long pdfFileId) {
@@ -42,25 +42,25 @@ public class PdfWorkflowService {
     }
 
     public PdfOperationResponse startParse(Long pdfFileId) throws IOException, InterruptedException {
-        PdfFiles pdfFile = pdfFilesService.getRequiredById(pdfFileId);
-        if (!pdfFilesService.claimParseStart(pdfFileId)) {
+        CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);
+        if (!courseMaterialsService.claimParseStart(pdfFileId)) {
             throw new BusinessException(ApiResultCode.PDF_PARSE_STATE_CONFLICT, HttpStatus.CONFLICT);
         }
 
         ProcessExecutionResult result;
         try {
-            result = pdfIngestOrchestrator.parse(pdfFile);
+            result = pdfIngestOrchestrator.parse(material);
         } catch (IOException ex) {
-            pdfFilesService.markParseFailedIfStillProcessing(pdfFileId, ex.getMessage());
+            courseMaterialsService.markParseFailedIfStillProcessing(pdfFileId, ex.getMessage());
             throw ex;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            pdfFilesService.markParseFailedIfStillProcessing(pdfFileId, "解析任务被中断");
+            courseMaterialsService.markParseFailedIfStillProcessing(pdfFileId, "解析任务被中断");
             throw ex;
         }
 
         if (result.isTimedOut() || result.getExitCode() != 0) {
-            pdfFilesService.markParseFailedIfStillProcessing(
+            courseMaterialsService.markParseFailedIfStillProcessing(
                     pdfFileId,
                     result.isTimedOut() ? "解析命令执行超时" : result.getStderr()
             );
@@ -71,11 +71,11 @@ public class PdfWorkflowService {
             );
         }
 
-        PdfFiles refreshed = pdfFilesService.getRequiredById(pdfFileId);
+        CourseMaterials refreshed = courseMaterialsService.getRequiredById(pdfFileId);
         return PdfOperationResponse.success(
                 refreshed.getId(),
                 refreshed.getCourseId(),
-                refreshed.getFileName(),
+                refreshed.getDisplayName(),
                 refreshed.getParseStatus(),
                 "解析任务已启动"
         );
@@ -83,8 +83,8 @@ public class PdfWorkflowService {
 
     public PdfOperationResponse exportGraphRag(Long pdfFileId, ExportGraphRagRequest request)
             throws IOException, InterruptedException {
-        PdfFiles pdfFile = pdfFilesService.getRequiredById(pdfFileId);
-        if (!"done".equals(pdfFile.getParseStatus())) {
+        CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);
+        if (!"done".equals(material.getParseStatus())) {
             throw new BusinessException(
                     ApiResultCode.PDF_PARSE_STATE_CONFLICT,
                     HttpStatus.CONFLICT,
@@ -101,19 +101,19 @@ public class PdfWorkflowService {
             if (!request.isForce() && parseResultsService.hasCompleteGraphRagExport(pdfFileId, request.getMode(), request.isWithPageDocs())) {
                 return PdfOperationResponse.success(
                         pdfFileId,
-                        pdfFile.getCourseId(),
-                        pdfFile.getFileName(),
-                        pdfFile.getParseStatus(),
+                        material.getCourseId(),
+                        material.getDisplayName(),
+                        material.getParseStatus(),
                         "已存在完整导出结果"
                 );
             }
 
-            pdfIngestOrchestrator.exportGraphRag(pdfFile, request);
+            pdfIngestOrchestrator.exportGraphRag(material, request);
             return PdfOperationResponse.success(
                     pdfFileId,
-                    pdfFile.getCourseId(),
-                    pdfFile.getFileName(),
-                    pdfFile.getParseStatus(),
+                    material.getCourseId(),
+                    material.getDisplayName(),
+                    material.getParseStatus(),
                     "GraphRAG导出完成"
             );
         } finally {

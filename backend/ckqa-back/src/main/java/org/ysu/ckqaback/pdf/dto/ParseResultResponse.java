@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class ParseResultResponse {
 
     private final Long id;
+    private final Long courseMaterialId;
     private final Long pdfFileId;
     private final String courseId;
     private final String resultType;
@@ -23,6 +24,7 @@ public class ParseResultResponse {
 
     private ParseResultResponse(
             Long id,
+            Long courseMaterialId,
             Long pdfFileId,
             String courseId,
             String resultType,
@@ -33,6 +35,7 @@ public class ParseResultResponse {
             LocalDateTime createdAt
     ) {
         this.id = id;
+        this.courseMaterialId = courseMaterialId;
         this.pdfFileId = pdfFileId;
         this.courseId = courseId;
         this.resultType = resultType;
@@ -46,7 +49,8 @@ public class ParseResultResponse {
     public static ParseResultResponse fromEntity(ParseResults parseResult) {
         return new ParseResultResponse(
                 parseResult.getId(),
-                parseResult.getPdfFileId(),
+                parseResult.getCourseMaterialId(),
+                parseResult.getCourseMaterialId(),
                 parseResult.getCourseId(),
                 parseResult.getResultType(),
                 parseResult.getFileName(),

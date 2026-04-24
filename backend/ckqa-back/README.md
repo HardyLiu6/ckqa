@@ -37,6 +37,8 @@
 - `POST /api/v1/qa-sessions/{id}/messages`
 - `GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}`
 
+其中 `/api/v1/pdf-files` 与 `/api/v1/courses/{courseId}/pdf-files` 目前都保留兼容语义：对外仍沿用旧路径，内部数据源已经切换为 `course_materials`，并通过 `material_objects` 复用同一份物理资料对象。新业务文档和后续前端接入应优先按“课程资料”理解。
+
 统一响应格式示例：
 
 ```json
@@ -251,4 +253,4 @@ curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
 - Python 任务快照目前仍是进程内内存态，Python 服务重启会导致 Java 把对应任务标记为 `failed`
 - `qa_retrieval_hits` 尚未落地
 - `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活
-- Java 侧还没有承接上传链路，仍以已有 `pdf_files` 记录为起点
+- Java 侧还没有承接上传链路，仍以已有课程资料记录为起点；`/api/v1/pdf-files` 现在只是兼容路由，内部实际读写的是 `course_materials` / `material_objects`
