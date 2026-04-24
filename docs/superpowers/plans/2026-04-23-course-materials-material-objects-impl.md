@@ -2361,7 +2361,7 @@ Expected:
 - 为避免重建现有索引与覆盖已写入 Neo4j 的图数据，本轮额外使用 `/tmp/ckqa_graphrag_python_wrapper.sh` 对 `python -m graphrag index --root .` 做 no-op smoke：`fetch_from_minio.py os --clean` 仍真实执行，索引命令仅验证可编排执行并返回 `exitCode = 0`
 - no-op smoke 后 `graphrag_pipeline/output` 文件指纹保持不变：`f414e393bc30d6db35e7e6a4bc1430ff828d511290cefecdad1c148101ea80b8`
 
-- [ ] **Step 7: Final commit after regressions**
+- [x] **Step 7: Final commit after regressions**
 
 If any regression fixes were needed, commit them:
 
@@ -2371,6 +2371,8 @@ git commit -m "test: verify reusable course materials regression"
 ```
 
 If no files changed after regression, do not create an empty commit.
+
+已完成：2026-04-24 提交 `feat: finalize reusable course materials compatibility`，commit `12b225f`
 
 ## Rollback Notes
 
