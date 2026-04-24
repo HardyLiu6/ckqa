@@ -5,7 +5,7 @@
     <!-- 通用查询映射结果 -->
     <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.ParseResults">
         <id column="id" property="id" />
-        <result column="pdf_file_id" property="pdfFileId" />
+        <result column="course_material_id" property="courseMaterialId" />
         <result column="course_id" property="courseId" />
         <result column="result_type" property="resultType" />
         <result column="file_name" property="fileName" />
@@ -17,7 +17,7 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, pdf_file_id, course_id, result_type, file_name, minio_bucket, minio_object_key, file_size, created_at
+        id, course_material_id, course_id, result_type, file_name, minio_bucket, minio_object_key, file_size, created_at
     </sql>
 
 </mapper>
