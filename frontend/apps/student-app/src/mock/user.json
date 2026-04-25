@@ -1,0 +1,26 @@
+{
+  "profile": {
+    "id": "LJD2024",
+    "name": "刘俊达",
+    "college": "计算机与软件工程学院",
+    "major": "软件工程",
+    "studentNo": "2024001",
+    "email": "liujunda@example.edu",
+    "bio": "喜欢折腾系统和 AI 的本科生。"
+  },
+  "stats": {
+    "coursesLearned": 12,
+    "coursesTotal": 24,
+    "qaCount": 156,
+    "streakDays": 28,
+    "favorites": 43
+  },
+  "notifications": [
+    { "id": 1, "type": "system", "title": "系统维护通知", "time": "今天 14:30", "read": false },
+    { "id": 2, "type": "course", "title": "新课程《编译原理》上线", "time": "昨天", "read": false }
+  ],
+  "favorites": [
+    { "id": 1, "title": "深度学习入门", "type": "course" },
+    { "id": 2, "title": "红黑树的平衡策略", "type": "qa" }
+  ]
+}
