@@ -1,68 +1,20 @@
-// ============================================
-// 全局样式变量和基础样式
-// 面向课程的混合型问答系统
-// ============================================
+// 全站样式入口
 
-// 颜色变量
-$primary-color: #4f46e5;
-$primary-light: #818cf8;
-$primary-dark: #3730a3;
-$secondary-color: #0ea5e9;
-$success-color: #10b981;
-$warning-color: #f59e0b;
-$danger-color: #ef4444;
-$info-color: #6366f1;
+// 设计 token 聚合导出（给 Vue 组件 @use 时可快速引入）
+@forward './tokens/colors';
+@forward './tokens/typography';
+@forward './tokens/radius';
+@forward './tokens/shadow';
+@forward './tokens/glass';
+@forward './tokens/space';
+@forward './tokens/motion';
+@forward './tokens/breakpoints';
 
-// 背景色
-$bg-primary: #f8fafc;
-$bg-secondary: #f1f5f9;
-$bg-card: #ffffff;
-$bg-dark: #0f172a;
+// 字体加载
+@use './fonts';
 
-// 文字颜色
-$text-primary: #1e293b;
-$text-secondary: #64748b;
-$text-muted: #94a3b8;
-$text-light: #cbd5e1;
-
-// 边框
-$border-color: #e2e8f0;
-$border-light: #f1f5f9;
-
-// 阴影
-$shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-$shadow-md:
-  0 4px 6px -1px rgb(0 0 0 / 0.1),
-  0 2px 4px -2px rgb(0 0 0 / 0.1);
-$shadow-lg:
-  0 10px 15px -3px rgb(0 0 0 / 0.1),
-  0 4px 6px -4px rgb(0 0 0 / 0.1);
-$shadow-xl:
-  0 20px 25px -5px rgb(0 0 0 / 0.1),
-  0 8px 10px -6px rgb(0 0 0 / 0.1);
-
-// 圆角
-$radius-sm: 6px;
-$radius-md: 12px;
-$radius-lg: 16px;
-$radius-xl: 24px;
-
-// 字体
-$font-family:
-  'PingFang SC',
-  'Microsoft YaHei',
-  -apple-system,
-  BlinkMacSystemFont,
-  'Segoe UI',
-  sans-serif;
-
-// ============================================
-// CSS Reset & 基础样式
-// ============================================
-
-*,
-*::before,
-*::after {
+// ========== 全局重置 ==========
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -70,249 +22,63 @@ $font-family:
 
 html {
   font-size: 16px;
+  font-family: 'Manrope', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color: #0f172a;
+  background: #f8fafc;
 }
 
 body {
-  font-family: $font-family;
-  font-size: 14px;
-  line-height: 1.5;
-  color: $text-primary;
-  background-color: $bg-primary;
+  min-height: 100vh;
 }
 
 a {
-  color: $primary-color;
+  color: inherit;
   text-decoration: none;
-  transition: color 0.2s;
+}
 
-  &:hover {
-    color: $primary-dark;
-  }
+ul, ol {
+  list-style: none;
 }
 
 img {
+  display: block;
   max-width: 100%;
-  height: auto;
 }
 
-button {
-  cursor: pointer;
-  font-family: inherit;
-}
-
-input,
-textarea,
-select {
-  font-family: inherit;
-}
-
-// ============================================
-// Element Plus 主题覆盖
-// ============================================
-
-:root {
-  --el-color-primary: #{$primary-color};
-  --el-color-primary-light-3: #{$primary-light};
-  --el-color-primary-light-5: #{lighten($primary-color, 25%)};
-  --el-color-primary-light-7: #{lighten($primary-color, 35%)};
-  --el-color-primary-light-8: #{lighten($primary-color, 40%)};
-  --el-color-primary-light-9: #{lighten($primary-color, 45%)};
-  --el-color-primary-dark-2: #{$primary-dark};
-
-  --el-border-radius-base: #{$radius-sm};
-  --el-border-radius-small: 4px;
-  --el-border-radius-round: #{$radius-xl};
-
-  --el-font-family: #{$font-family};
-}
-
-// 按钮样式优化
-.el-button {
-  font-weight: 500;
-  border-radius: $radius-sm;
-
-  &--primary {
-    background: linear-gradient(135deg, $primary-color, $primary-dark);
-    border: none;
-
-    &:hover,
-    &:focus {
-      background: linear-gradient(135deg, $primary-light, $primary-color);
-    }
-  }
-}
-
-// 输入框样式优化
-.el-input__wrapper {
-  border-radius: $radius-sm;
-
-  &:hover {
-    box-shadow: 0 0 0 1px $primary-light inset;
-  }
-
-  &.is-focus {
-    box-shadow: 0 0 0 1px $primary-color inset;
-  }
-}
-
-// 卡片样式
-.el-card {
-  border-radius: $radius-md;
-  border: 1px solid $border-color;
-  box-shadow: $shadow-sm;
-
-  &:hover {
-    box-shadow: $shadow-md;
-  }
-}
-
-// 标签样式
-.el-tag {
-  border-radius: $radius-sm;
-  font-weight: 500;
-}
-
-// 对话框样式
-.el-dialog {
-  border-radius: $radius-lg;
-  overflow: hidden;
-
-  .el-dialog__header {
-    padding: 20px 24px;
-    border-bottom: 1px solid $border-color;
-  }
-
-  .el-dialog__body {
-    padding: 24px;
-  }
-
-  .el-dialog__footer {
-    padding: 16px 24px;
-    border-top: 1px solid $border-color;
-  }
-}
-
-// 表格样式
-.el-table {
-  border-radius: $radius-md;
-  overflow: hidden;
-
-  th.el-table__cell {
-    background-color: $bg-secondary;
-    font-weight: 600;
-  }
-}
-
-// 分页样式
-.el-pagination {
-  .el-pager li {
-    border-radius: $radius-sm;
-
-    &.is-active {
-      background: linear-gradient(135deg, $primary-color, $primary-dark);
-    }
-  }
-}
-
-// 消息提示样式
-.el-message {
-  border-radius: $radius-md;
-  padding: 12px 20px;
-}
-
-// ============================================
-// 工具类
-// ============================================
-
-// 文字截断
-.text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.text-ellipsis-2 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.text-ellipsis-3 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-// Flex布局
-.flex {
-  display: flex;
-}
-
-.flex-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.flex-between {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.flex-col {
-  display: flex;
-  flex-direction: column;
-}
-
-// 间距
-.gap-1 {
-  gap: 4px;
-}
-.gap-2 {
-  gap: 8px;
-}
-.gap-3 {
-  gap: 12px;
-}
-.gap-4 {
-  gap: 16px;
-}
-.gap-5 {
-  gap: 20px;
-}
-.gap-6 {
-  gap: 24px;
-}
-
-// 滚动条美化
+// ========== 全局滚动条 ==========
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: $bg-secondary;
-  border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: $text-muted;
+  background: rgba(100, 116, 139, 0.3);
   border-radius: 4px;
-
-  &:hover {
-    background: $text-secondary;
-  }
 }
 
-// 选中文字颜色
-::selection {
-  background: rgba($primary-color, 0.2);
-  color: $primary-dark;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+// ========== 全局焦点环 ==========
+:focus-visible {
+  outline: 2px solid var(--module-color-50, #6366f1);
+  outline-offset: 2px;
+}
+
+// ========== prefers-reduced-motion ==========
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
