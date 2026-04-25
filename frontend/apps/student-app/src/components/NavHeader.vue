@@ -1,33 +1,123 @@
+<!-- 全站顶栏 · 居中胶囊导航 + 激活态荧光 · 详见设计稿 §5.2 -->
+<script setup>
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { useCurrentModule, MODULE_COLORS } from '@/composables/useCurrentModule'
+import { Bell, ChatDotRound, Search } from '@element-plus/icons-vue'
+
+const router = useRouter()
+const userStore = useUserStore()
+const { moduleKey } = useCurrentModule()
+
+const globalSearch = ref('')
+const unreadCount = ref(3)
+const isScrolled = ref(false)
+
+// 顶栏主导航项
+const modules = [
+  { key: 'home', path: '/home', label: '首页' },
+  { key: 'course', path: '/course', label: '课程' },
+  { key: 'qa', path: '/qa', label: '问答' },
+  { key: 'knowledge', path: '/knowledge', label: '图谱' },
+  { key: 'community', path: '/community', label: '社区' },
+  { key: 'analysis', path: '/analysis', label: '分析' },
+]
+
+const activeModule = computed(() => moduleKey.value)
+
+function isActive(key) {
+  return activeModule.value === key
+}
+
+function itemStyle(key) {
+  if (!isActive(key)) return {}
+  const c = MODULE_COLORS[key] || MODULE_COLORS.home
+  return {
+    background: '#fff',
+    color: c[500],
+    boxShadow: `0 1px 3px rgba(${hexToRgb(c[500])}, 0.1), 0 0 0 1px rgba(${hexToRgb(c[500])}, 0.15), 0 0 16px rgba(${hexToRgb(c[500])}, 0.15)`,
+  }
+}
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '')
+  return `${parseInt(h.slice(0, 2), 16)}, ${parseInt(h.slice(2, 4), 16)}, ${parseInt(h.slice(4, 6), 16)}`
+}
+
+function handleUserCommand(command) {
+  switch (command) {
+    case 'profile':
+      router.push('/user/profile')
+      break
+    case 'settings':
+      router.push('/user/settings')
+      break
+    case 'logout':
+      userStore.logout()
+      router.push('/login')
+      break
+  }
+}
+
+// 滚动监听：scrollY > 80 时背景收浓
+function handleScroll() {
+  isScrolled.value = window.scrollY > 80
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
+</script>
+
 <template>
-  <header class="nav-header">
-    <div class="nav-content">
-      <div class="logo-section">
-        <div class="logo-icon">
-          <el-icon :size="28">
-            <ChatDotRound />
-          </el-icon>
-        </div>
-        <span class="logo-text">智课问答</span>
+  <header class="nav-header" :class="{ scrolled: isScrolled }">
+    <div class="nav-grid">
+      <!-- 左：Logo -->
+      <div class="nav-left">
+        <RouterLink to="/home" class="logo-section">
+          <div class="logo-icon">
+            <el-icon :size="20"><ChatDotRound /></el-icon>
+          </div>
+          <span class="logo-text">智课问答</span>
+        </RouterLink>
       </div>
 
-      <nav class="nav-menu">
-        <router-link to="/home" class="nav-item" :class="{ active: isActive('/home') }">首页</router-link>
-        <router-link to="/course" class="nav-item" :class="{ active: isActive('/course') }">课程中心</router-link>
-        <router-link to="/community" class="nav-item" :class="{ active: isActive('/community') }">学习社区</router-link>
-        <router-link to="/knowledge" class="nav-item" :class="{ active: isActive('/knowledge') }">知识库</router-link>
+      <!-- 中：模块胶囊导航 -->
+      <nav class="nav-center">
+        <RouterLink
+          v-for="m in modules"
+          :key="m.key"
+          :to="m.path"
+          class="nav-item"
+          :class="{ active: isActive(m.key) }"
+          :style="itemStyle(m.key)"
+        >
+          {{ m.label }}
+        </RouterLink>
       </nav>
 
-      <div class="nav-actions">
-        <el-input v-model="globalSearch" placeholder="搜索课程、问题..." class="global-search" :prefix-icon="Search"
-          clearable />
-        <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
-          <el-button :icon="Bell" circle class="icon-btn" />
+      <!-- 右：搜索 + 通知 + 头像 -->
+      <div class="nav-right">
+        <div class="search-box">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <input v-model="globalSearch" placeholder="搜索课程、问题或知识点" />
+          <kbd class="shortcut">⌘K</kbd>
+        </div>
+
+        <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notify-badge">
+          <button class="icon-btn" aria-label="通知">
+            <el-icon :size="16"><Bell /></el-icon>
+          </button>
         </el-badge>
+
         <el-dropdown trigger="click" @command="handleUserCommand">
-          <div class="user-avatar">
-            <el-avatar :size="36" :src="userStore.avatar">
-              {{ userStore.nickname?.charAt(0) || 'U' }}
-            </el-avatar>
+          <div class="avatar">
+            {{ userStore.user?.name?.charAt(0) || 'U' }}
           </div>
           <template #dropdown>
             <el-dropdown-menu>
@@ -42,43 +132,12 @@
   </header>
 </template>
 
-<script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useUserStore } from '@/stores/user'
-import { Bell, ChatDotRound, Search } from '@element-plus/icons-vue'
-
-const router = useRouter()
-const userStore = useUserStore()
-
-const globalSearch = ref('')
-const unreadCount = ref(3)
-
-const currentPath = computed(() => router.currentRoute.value.path)
-const isActive = (path) => currentPath.value.startsWith(path)
-
-const handleUserCommand = (command) => {
-  switch (command) {
-    case 'profile':
-      router.push('/user/profile')
-      break
-    case 'settings':
-      router.push('/user/settings')
-      break
-    case 'logout':
-      userStore.logout()
-      router.push('/login')
-      break
-  }
-}
-</script>
-
 <style scoped lang="scss">
-$primary-color: #4f46e5;
-$secondary-color: #0ea5e9;
-$radius-sm: 6px;
-$radius-md: 12px;
-$radius-lg: 16px;
+@use '@/styles/mixins/glass' as glass;
+@use '@/styles/tokens/radius' as *;
+@use '@/styles/tokens/shadow' as *;
+@use '@/styles/tokens/motion' as *;
+@use '@/styles/tokens/breakpoints' as *;
 
 .nav-header {
   position: fixed;
@@ -86,117 +145,182 @@ $radius-lg: 16px;
   left: 0;
   right: 0;
   z-index: 100;
-  background: rgba(15, 15, 26, 0.9);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  height: 64px;
+  @include glass.glass-base;
+  background: rgba(255, 255, 255, 0.8);
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-color: rgba(229, 231, 235, 0.6);
+  transition: background $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-  .nav-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 32px;
-    height: 64px;
+  &.scrolled {
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: $shadow-sm;
+  }
+}
+
+.nav-grid {
+  height: 100%;
+  padding: 0 32px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+
+  @media (max-width: $bp-laptop) {
+    padding: 0 20px;
+  }
+}
+
+.nav-left { justify-self: start; }
+.nav-center { justify-self: center; }
+.nav-right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1, #06b6d4);
+    border-radius: $radius-lg;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
   }
 
-  .logo-section {
+  .logo-text {
+    font-family: 'Space Grotesk', 'Noto Sans SC', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+}
+
+.nav-center {
+  display: flex;
+  gap: 4px;
+  background: rgba(248, 250, 252, 0.6);
+  border: 1px solid rgba(229, 231, 235, 0.4);
+  border-radius: $radius-full;
+  padding: 4px;
+
+  .nav-item {
+    padding: 6px 14px;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: $radius-full;
+    transition: color $duration-fast $ease-out, background $duration-fast $ease-out,
+      box-shadow $duration-fast $ease-out;
+
+    &:hover:not(.active) {
+      color: #334155;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    &.active {
+      font-weight: 600;
+    }
+  }
+
+  @media (max-width: $bp-laptop) {
+    .nav-item { padding: 6px 10px; font-size: 12px; }
+  }
+}
+
+.nav-right {
+  .search-box {
     display: flex;
     align-items: center;
-    gap: 10px;
-
-    .logo-icon {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, $primary-color, $secondary-color);
-      border-radius: $radius-md;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-    }
-
-    .logo-text {
-      font-size: 20px;
-      font-weight: 700;
-      background: linear-gradient(135deg, #6366f1, #06b6d4);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-  }
-
-  .nav-menu {
-    display: flex;
     gap: 8px;
+    padding: 7px 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid #e5e7eb;
+    border-radius: $radius-lg;
+    min-width: 240px;
+    transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-    .nav-item {
-      padding: 8px 20px;
-      color: rgba(255, 255, 255, 0.7);
-      text-decoration: none;
-      font-size: 15px;
+    .search-icon { color: #9ca3af; font-size: 14px; }
+
+    input {
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font-size: 13px;
+      color: #0f172a;
+      font-family: inherit;
+
+      &::placeholder { color: #9ca3af; }
+    }
+
+    .shortcut {
+      font-size: 10px;
+      padding: 2px 6px;
+      background: #f1f5f9;
       border-radius: $radius-sm;
-      transition: all 0.2s;
+      color: #64748b;
+      font-family: 'JetBrains Mono', monospace;
+    }
 
-      &:hover {
-        color: #fff;
-        background: rgba(255, 255, 255, 0.1);
-      }
+    &:focus-within {
+      border-color: var(--module-color-500, #6366f1);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+    }
 
-      &.active {
-        color: #fff;
-        font-weight: 600;
-      }
+    @media (max-width: $bp-laptop) {
+      min-width: 180px;
     }
   }
 
-  .nav-actions {
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid #e5e7eb;
+    border-radius: $radius-lg;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 16px;
+    justify-content: center;
+    color: #64748b;
+    transition: background $duration-fast $ease-out, color $duration-fast $ease-out;
 
-    .global-search {
-      width: 240px;
-
-      :deep(.el-input__wrapper) {
-        border-radius: $radius-lg;
-        background: rgba(255, 255, 255, 0.1);
-        box-shadow: none;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-
-        .el-input__inner {
-          color: #fff;
-
-          &::placeholder {
-            color: rgba(255, 255, 255, 0.5);
-          }
-        }
-
-        &:hover,
-        &:focus {
-          box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.5);
-        }
-      }
-    }
-
-    .icon-btn {
-      border: none;
-      background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.7);
-
-      &:hover {
-        background: rgba(99, 102, 241, 0.3);
-        color: #fff;
-      }
-    }
-
-    .user-avatar {
-      cursor: pointer;
-      transition: transform 0.2s;
-
-      &:hover {
-        transform: scale(1.05);
-      }
+    &:hover {
+      background: #fff;
+      color: #0f172a;
     }
   }
+
+  .avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1, #818cf8);
+    border-radius: $radius-lg;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+    transition: transform $duration-fast $ease-out;
+
+    &:hover { transform: scale(1.05); }
+  }
+}
+
+// 小屏：隐藏搜索框，只保留搜索图标
+@media (max-width: $bp-tablet) {
+  .search-box { display: none; }
 }
 </style>
