@@ -1,0 +1,39 @@
+// 模块色 mixin · 一处改全局换色
+
+@use '../tokens/colors' as *;
+
+// 模块色 Map：名称 → {50, 500, 700}
+$module-colors: (
+  'home': ($color-home-50, $color-home-500, $color-home-700),
+  'course': ($color-course-50, $color-course-500, $color-course-700),
+  'qa': ($color-qa-50, $color-qa-500, $color-qa-700),
+  'knowledge': ($color-knowledge-50, $color-knowledge-500, $color-knowledge-700),
+  'community': ($color-community-50, $color-community-500, $color-community-700),
+  'analysis': ($color-analysis-50, $color-analysis-500, $color-analysis-700),
+);
+
+// 根据模块名获取三档色
+@function module-50($module) {
+  @return nth(map-get($module-colors, $module), 1);
+}
+
+@function module-500($module) {
+  @return nth(map-get($module-colors, $module), 2);
+}
+
+@function module-700($module) {
+  @return nth(map-get($module-colors, $module), 3);
+}
+
+// 生成模块色 glow 阴影
+@function module-glow($module, $alpha: 0.25) {
+  $c: module-500($module);
+  @return 0 8px 32px rgba(red($c), green($c), blue($c), $alpha);
+}
+
+// 一键输出"模块配色全套" CSS 变量（给组件局部作用域用）
+@mixin module-vars($module) {
+  --module-color-50: #{module-50($module)};
+  --module-color-500: #{module-500($module)};
+  --module-color-700: #{module-700($module)};
+}

@@ -1,0 +1,47 @@
+// 毛玻璃 mixin
+
+@use '../tokens/glass' as *;
+@use '../tokens/radius' as *;
+
+@mixin glass-light {
+  background: $glass-light-bg;
+  backdrop-filter: blur($glass-light-blur);
+  -webkit-backdrop-filter: blur($glass-light-blur);
+  border: 1px solid $glass-light-border;
+}
+
+@mixin glass-base {
+  background: $glass-base-bg;
+  backdrop-filter: blur($glass-base-blur);
+  -webkit-backdrop-filter: blur($glass-base-blur);
+  border: 1px solid $glass-base-border;
+}
+
+@mixin glass-strong {
+  background: $glass-strong-bg;
+  backdrop-filter: blur($glass-strong-blur);
+  -webkit-backdrop-filter: blur($glass-strong-blur);
+  border: 1px solid $glass-strong-border;
+}
+
+// 深色场景（落地页、课程学习页）
+@mixin glass-dark-light {
+  background: $glass-dark-light-bg;
+  backdrop-filter: blur($glass-light-blur);
+  -webkit-backdrop-filter: blur($glass-light-blur);
+  border: 1px solid $glass-dark-light-border;
+}
+
+@mixin glass-dark-base {
+  background: $glass-dark-base-bg;
+  backdrop-filter: blur($glass-base-blur);
+  -webkit-backdrop-filter: blur($glass-base-blur);
+  border: 1px solid $glass-dark-base-border;
+}
+
+@mixin glass-dark-strong {
+  background: $glass-dark-strong-bg;
+  backdrop-filter: blur($glass-strong-blur);
+  -webkit-backdrop-filter: blur($glass-strong-blur);
+  border: 1px solid $glass-dark-strong-border;
+}
