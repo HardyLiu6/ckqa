@@ -1,0 +1,9 @@
+// 响应式断点 · 详见设计稿 §4.10
+
+$bp-desktop: 1440px;
+$bp-laptop: 1024px;
+$bp-tablet: 768px;
+
+// 使用示例：
+// @media (max-width: $bp-laptop) { ... }
+// @media (max-width: $bp-tablet) { ... }
