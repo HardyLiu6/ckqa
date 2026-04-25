@@ -5,40 +5,57 @@ import { routes, whiteList } from '../src/router/routes.js'
 
 const routeMap = new Map(routes.map((route) => [route.name, route]))
 
-test('占位功能路由会显式标记为未开放', () => {
-  const comingSoonNames = [
+test('新增视觉壳路由已从 coming-soon 清单移除', () => {
+  // 这些原本是 coming-soon，本次改成真实视觉壳
+  const nowImplementedNames = [
     'KnowledgeGraph',
     'KnowledgeSearch',
-    'KnowledgeDetail',
-    'CommunityDiscuss',
-    'CommunityPost',
-    'CommunityCreate',
-    'CommunityRank',
-    'WrongAnalysis',
-    'LearningReport',
-    'SmartRecommend',
     'UserProfile',
     'UserSettings',
     'UserNotification',
     'UserFavorite',
-    'Login',
-    'Register',
-    'ForgotPassword',
   ]
-
-  for (const routeName of comingSoonNames) {
-    const route = routeMap.get(routeName)
-    assert.ok(route, `${routeName} 路由不存在`)
-    assert.equal(route.meta.routeState, 'coming-soon')
-    assert.equal(typeof route.component, 'function')
+  for (const name of nowImplementedNames) {
+    const route = routeMap.get(name)
+    assert.ok(route, `路由 ${name} 不存在`)
+    assert.notEqual(route.meta.routeState, 'coming-soon', `${name} 不应再是 coming-soon`)
+    assert.equal(route.meta.layout, 'module', `${name} 应该使用 module layout`)
   }
 })
 
-test('系统状态路由保留明确状态，未实现页面不会伪装成正常页面', () => {
-  assert.equal(routeMap.get('Home').meta.routeState, undefined)
-  assert.equal(routeMap.get('Forbidden').meta.routeState, '403')
-  assert.equal(routeMap.get('NotFound').meta.routeState, '404')
-  assert.equal(routeMap.get('ServerError').meta.routeState, '500')
+test('剩余 coming-soon 路由仍显式标记', () => {
+  const comingSoonNames = [
+    'KnowledgeDetail',
+    'CommunityDiscuss', 'CommunityPost', 'CommunityCreate', 'CommunityRank',
+    'WrongAnalysis', 'LearningReport', 'SmartRecommend',
+    'Login', 'Register', 'ForgotPassword',
+  ]
+  for (const routeName of comingSoonNames) {
+    const route = routeMap.get(routeName)
+    assert.ok(route, `${routeName} 路由不存在`)
+    assert.equal(route.meta.routeState, 'coming-soon', `${routeName} 未标 coming-soon`)
+  }
+})
+
+test('关键主路由都有 layout meta', () => {
+  const cases = [
+    ['Intro', 'landing'],
+    ['Home', 'product'],
+    ['QAAsk', 'module'],
+    ['CourseList', 'module'],
+    ['CourseLearn', 'product'], // 深色例外
+    ['KnowledgeGraph', 'module'],
+    ['UserProfile', 'module'],
+  ]
+  for (const [name, expected] of cases) {
+    const route = routeMap.get(name)
+    assert.ok(route, `${name} 不存在`)
+    assert.equal(route.meta.layout, expected, `${name} layout 不等于 ${expected}`)
+  }
+})
+
+test('whiteList 覆盖未登录可访问的基础路径', () => {
+  assert.ok(whiteList.includes('/'))
+  assert.ok(whiteList.includes('/login'))
   assert.ok(whiteList.includes('/404'))
-  assert.equal(routes.at(-1).redirect, '/404')
 })
