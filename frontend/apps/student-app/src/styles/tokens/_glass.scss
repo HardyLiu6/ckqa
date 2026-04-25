@@ -1,0 +1,24 @@
+// 毛玻璃 · 详见设计稿 §4.7
+
+// 亮色场景
+$glass-light-bg: rgba(255, 255, 255, 0.5);
+$glass-light-blur: 12px;
+$glass-light-border: rgba(255, 255, 255, 0.6);
+
+$glass-base-bg: rgba(255, 255, 255, 0.7);
+$glass-base-blur: 20px;
+$glass-base-border: rgba(255, 255, 255, 0.8);
+
+$glass-strong-bg: rgba(255, 255, 255, 0.88);
+$glass-strong-blur: 28px;
+$glass-strong-border: rgba(255, 255, 255, 0.95);
+
+// 深色场景（落地页、课程学习页）
+$glass-dark-light-bg: rgba(15, 15, 26, 0.5);
+$glass-dark-light-border: rgba(255, 255, 255, 0.08);
+
+$glass-dark-base-bg: rgba(15, 15, 26, 0.7);
+$glass-dark-base-border: rgba(255, 255, 255, 0.12);
+
+$glass-dark-strong-bg: rgba(15, 15, 26, 0.88);
+$glass-dark-strong-border: rgba(255, 255, 255, 0.15);
