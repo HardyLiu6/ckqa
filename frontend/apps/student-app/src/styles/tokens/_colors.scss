@@ -1,0 +1,79 @@
+// 颜色 token · 详见 docs/superpowers/specs/2026-04-21-student-app-ui-redesign-design.md §4.1-§4.3
+
+// ========== 模块主色 · 每模块 3 档 ==========
+// 命名：$color-{module}-{50|500|700}
+
+// 首页 Indigo
+$color-home-50: #eef2ff;
+$color-home-500: #6366f1;
+$color-home-700: #4338ca;
+
+// 课程 Blue
+$color-course-50: #eff6ff;
+$color-course-500: #2563eb;
+$color-course-700: #1d4ed8;
+
+// 问答 Purple
+$color-qa-50: #faf5ff;
+$color-qa-500: #9333ea;
+$color-qa-700: #7e22ce;
+
+// 知识图谱 Teal
+$color-knowledge-50: #f0fdfa;
+$color-knowledge-500: #0d9488;
+$color-knowledge-700: #0f766e;
+
+// 学习社区 Orange
+$color-community-50: #fff7ed;
+$color-community-500: #ea580c;
+$color-community-700: #c2410c;
+
+// 学习分析 Pink
+$color-analysis-50: #fdf2f8;
+$color-analysis-500: #db2777;
+$color-analysis-700: #be185d;
+
+// 个人中心 中性 + 场景色（琥珀用于消息，柠檬用于收藏）
+$color-user-500: #64748b;
+$color-user-700: #334155;
+$color-user-accent-amber: #f59e0b;
+$color-user-accent-lemon: #eab308;
+
+// ========== 中性色阶（Slate 家族） ==========
+$color-white: #ffffff;
+$color-neutral-50: #f8fafc;
+$color-neutral-100: #f1f5f9;
+$color-neutral-200: #e2e8f0;
+$color-neutral-300: #cbd5e1;
+$color-neutral-400: #94a3b8;
+$color-neutral-500: #64748b;
+$color-neutral-600: #475569;
+$color-neutral-700: #334155;
+$color-neutral-900: #0f172a;
+
+// ========== 语义化映射 ==========
+$text-primary: $color-neutral-900;
+$text-secondary: $color-neutral-500;
+$text-tertiary: $color-neutral-400;
+$text-placeholder: $color-neutral-300;
+$border-default: $color-neutral-200;
+$border-subtle: $color-neutral-100;
+$bg-page: $color-neutral-50;
+$bg-card: $color-white;
+
+// ========== 语义色（状态反馈） ==========
+$color-success: #10b981;
+$color-success-light: #34d399;
+$color-warning: #f59e0b;
+$color-warning-light: #fbbf24;
+$color-error: #ef4444;
+$color-error-light: #f87171;
+$color-info: #3b82f6;
+$color-info-light: #60a5fa;
+
+// ========== CSS 自定义属性（用于运行时切换模块色） ==========
+:root {
+  --module-color-50: #{$color-home-50};
+  --module-color-500: #{$color-home-500};
+  --module-color-700: #{$color-home-700};
+}
