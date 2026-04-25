@@ -110,7 +110,7 @@
 **Files:**
 - Modify: `frontend/apps/student-app/package.json`
 
-- [ ] **Step 1: 安装 @fontsource 系列字体包**
+- [x] **Step 1: 安装 @fontsource 系列字体包**
 
 ```bash
 cd frontend/apps/student-app
@@ -119,7 +119,7 @@ pnpm add @fontsource/manrope @fontsource/noto-sans-sc @fontsource/space-grotesk
 
 预期：`package.json` 中 dependencies 新增三条字体依赖，lockfile 更新。
 
-- [ ] **Step 2: 验证安装成功**
+- [x] **Step 2: 验证安装成功**
 
 ```bash
 ls node_modules/@fontsource/manrope/files | head -5
@@ -129,7 +129,7 @@ ls node_modules/@fontsource/space-grotesk/files | head -5
 
 预期：每个包下 `files/` 目录存在 woff2 文件。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/package.json frontend/apps/student-app/pnpm-lock.yaml
@@ -145,7 +145,7 @@ git commit -m "feat(student-app): add fontsource packages for manrope / noto-san
 **Files:**
 - Create: `frontend/apps/student-app/src/styles/tokens/_colors.scss`
 
-- [ ] **Step 1: 写颜色 token 文件**
+- [x] **Step 1: 写颜色 token 文件**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_colors.scss
@@ -230,7 +230,7 @@ $color-info-light: #60a5fa;
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/tokens/_colors.scss
@@ -244,7 +244,7 @@ git commit -m "feat(student-app): add color tokens (module scales + neutral + se
 **Files:**
 - Create: `frontend/apps/student-app/src/styles/tokens/_typography.scss`
 
-- [ ] **Step 1: 写字号 token**
+- [x] **Step 1: 写字号 token**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_typography.scss
@@ -285,7 +285,7 @@ $letter-spacing-normal: 0;
 $letter-spacing-wide: 0.05em;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/tokens/_typography.scss
@@ -302,7 +302,7 @@ git commit -m "feat(student-app): add typography tokens"
 - Create: `frontend/apps/student-app/src/styles/tokens/_glass.scss`
 - Create: `frontend/apps/student-app/src/styles/tokens/_space.scss`
 
-- [ ] **Step 1: 写 _radius.scss**
+- [x] **Step 1: 写 _radius.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_radius.scss
@@ -314,7 +314,7 @@ $radius-2xl: 16px;
 $radius-full: 999px;
 ```
 
-- [ ] **Step 2: 写 _shadow.scss**
+- [x] **Step 2: 写 _shadow.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_shadow.scss
@@ -329,7 +329,7 @@ $shadow-lg: 0 16px 48px rgba(15, 23, 42, 0.12);
 // 见 styles/mixins/_module-color.scss 的 glow-{module}
 ```
 
-- [ ] **Step 3: 写 _glass.scss**
+- [x] **Step 3: 写 _glass.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_glass.scss
@@ -359,7 +359,7 @@ $glass-dark-strong-bg: rgba(15, 15, 26, 0.88);
 $glass-dark-strong-border: rgba(255, 255, 255, 0.15);
 ```
 
-- [ ] **Step 4: 写 _space.scss**
+- [x] **Step 4: 写 _space.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_space.scss
@@ -376,7 +376,7 @@ $space-16: 64px;
 $space-24: 96px;
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/tokens/
@@ -391,7 +391,7 @@ git commit -m "feat(student-app): add radius/shadow/glass/space tokens"
 - Create: `frontend/apps/student-app/src/styles/tokens/_motion.scss`
 - Create: `frontend/apps/student-app/src/styles/tokens/_breakpoints.scss`
 
-- [ ] **Step 1: 写 _motion.scss**
+- [x] **Step 1: 写 _motion.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_motion.scss
@@ -408,7 +408,7 @@ $ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
 $ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 ```
 
-- [ ] **Step 2: 写 _breakpoints.scss**
+- [x] **Step 2: 写 _breakpoints.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/tokens/_breakpoints.scss
@@ -423,7 +423,7 @@ $bp-tablet: 768px;
 // @media (max-width: $bp-tablet) { ... }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/tokens/_motion.scss frontend/apps/student-app/src/styles/tokens/_breakpoints.scss
@@ -438,7 +438,7 @@ git commit -m "feat(student-app): add motion + breakpoint tokens"
 - Create: `frontend/apps/student-app/src/styles/mixins/_module-color.scss`
 - Create: `frontend/apps/student-app/src/styles/mixins/_glass.scss`
 
-- [ ] **Step 1: 写 _module-color.scss**
+- [x] **Step 1: 写 _module-color.scss**
 
 ```scss
 // frontend/apps/student-app/src/styles/mixins/_module-color.scss
@@ -483,7 +483,7 @@ $module-colors: (
 }
 ```
 
-- [ ] **Step 2: 写 _glass.scss mixin**
+- [x] **Step 2: 写 _glass.scss mixin**
 
 ```scss
 // frontend/apps/student-app/src/styles/mixins/_glass.scss
@@ -536,7 +536,7 @@ $module-colors: (
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/mixins/
@@ -550,7 +550,7 @@ git commit -m "feat(student-app): add module-color + glass mixins"
 **Files:**
 - Create: `frontend/apps/student-app/src/styles/fonts.scss`
 
-- [ ] **Step 1: 写字体加载**
+- [x] **Step 1: 写字体加载**
 
 ```scss
 // frontend/apps/student-app/src/styles/fonts.scss
@@ -576,7 +576,7 @@ git commit -m "feat(student-app): add module-color + glass mixins"
 @import '@fontsource/space-grotesk/700.css';
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/fonts.scss
@@ -591,13 +591,13 @@ git commit -m "feat(student-app): load manrope / noto-sans-sc / space-grotesk vi
 - Modify: `frontend/apps/student-app/src/styles/index.scss`
 - Modify: `frontend/apps/student-app/src/main.js`
 
-- [ ] **Step 1: 查看现有 main.js 结构**
+- [x] **Step 1: 查看现有 main.js 结构**
 
 ```bash
 cat frontend/apps/student-app/src/main.js
 ```
 
-- [ ] **Step 2: 重写 styles/index.scss**
+- [x] **Step 2: 重写 styles/index.scss**
 
 完全覆盖原有 318 行内容为：
 
@@ -689,7 +689,7 @@ img {
 }
 ```
 
-- [ ] **Step 3: 修改 main.js import 样式入口**
+- [x] **Step 3: 修改 main.js import 样式入口**
 
 在 `frontend/apps/student-app/src/main.js` 顶部（Vue/Pinia/Router 之前）加入：
 
@@ -699,7 +699,7 @@ import './styles/index.scss'
 
 （如果原来已有 `import './assets/main.css'` 或类似 CSS import，替换为这行。）
 
-- [ ] **Step 4: 跑 dev 验证样式加载**
+- [x] **Step 4: 跑 dev 验证样式加载**
 
 ```bash
 cd frontend/apps/student-app
@@ -710,7 +710,7 @@ pnpm dev
 - 页面字体变为 Manrope（英文）/ Noto Sans SC（中文）
 - DevTools Network 面板能看到 woff2 字体文件加载成功
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/styles/index.scss frontend/apps/student-app/src/main.js
@@ -727,7 +727,7 @@ git commit -m "refactor(student-app): replace legacy index.scss with token-based
 - Create: `frontend/apps/student-app/src/composables/useCurrentModule.js`
 - Create: `frontend/apps/student-app/tests/module-resolver.test.js`
 
-- [ ] **Step 1: 先写测试（TDD）**
+- [x] **Step 1: 先写测试（TDD）**
 
 ```js
 // frontend/apps/student-app/tests/module-resolver.test.js
@@ -764,7 +764,7 @@ test('MODULE_COLORS 每个模块都有 50 / 500 / 700 三档', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd frontend/apps/student-app
@@ -773,7 +773,7 @@ node --test tests/module-resolver.test.js
 
 预期：FAIL，提示模块找不到。
 
-- [ ] **Step 3: 写 composable**
+- [x] **Step 3: 写 composable**
 
 ```js
 // frontend/apps/student-app/src/composables/useCurrentModule.js
@@ -830,7 +830,7 @@ export function useCurrentModule() {
 }
 ```
 
-- [ ] **Step 4: 再跑测试确认通过**
+- [x] **Step 4: 再跑测试确认通过**
 
 ```bash
 node --test tests/module-resolver.test.js
@@ -838,7 +838,7 @@ node --test tests/module-resolver.test.js
 
 预期：PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/composables/useCurrentModule.js frontend/apps/student-app/tests/module-resolver.test.js
@@ -852,7 +852,7 @@ git commit -m "feat(student-app): add useCurrentModule composable + tests"
 **Files:**
 - Create: `frontend/apps/student-app/src/layouts/LandingLayout.vue`
 
-- [ ] **Step 1: 写纯透传壳**
+- [x] **Step 1: 写纯透传壳**
 
 ```vue
 <!-- frontend/apps/student-app/src/layouts/LandingLayout.vue -->
@@ -875,7 +875,7 @@ git commit -m "feat(student-app): add useCurrentModule composable + tests"
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/layouts/LandingLayout.vue
@@ -889,7 +889,7 @@ git commit -m "feat(student-app): add LandingLayout shell"
 **Files:**
 - Create: `frontend/apps/student-app/src/layouts/ProductLayout.vue`
 
-- [ ] **Step 1: 写 ProductLayout**
+- [x] **Step 1: 写 ProductLayout**
 
 ```vue
 <!-- frontend/apps/student-app/src/layouts/ProductLayout.vue -->
@@ -942,7 +942,7 @@ import NavHeader from '@/components/NavHeader.vue'
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/layouts/ProductLayout.vue
@@ -956,7 +956,7 @@ git commit -m "feat(student-app): add ProductLayout with NavHeader + page transi
 **Files:**
 - Create: `frontend/apps/student-app/src/layouts/ModuleLayout.vue`
 
-- [ ] **Step 1: 写 ModuleLayout**
+- [x] **Step 1: 写 ModuleLayout**
 
 ```vue
 <!-- frontend/apps/student-app/src/layouts/ModuleLayout.vue -->
@@ -1067,7 +1067,7 @@ const moduleStyle = computed(() => ({
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/layouts/ModuleLayout.vue
@@ -1081,7 +1081,7 @@ git commit -m "feat(student-app): add ModuleLayout with dynamic side nav + modul
 **Files:**
 - Modify: `frontend/apps/student-app/src/App.vue`
 
-- [ ] **Step 1: 全量替换 App.vue**
+- [x] **Step 1: 全量替换 App.vue**
 
 ```vue
 <!-- frontend/apps/student-app/src/App.vue -->
@@ -1116,7 +1116,7 @@ const layoutComponent = computed(() => {
 </style>
 ```
 
-- [ ] **Step 2: Commit（此时 dev 会报找不到 NavHeader / SideNav，Phase 3-5 继续）**
+- [x] **Step 2: Commit（此时 dev 会报找不到 NavHeader / SideNav，Phase 3-5 继续）**
 
 ```bash
 git add frontend/apps/student-app/src/App.vue
@@ -1131,7 +1131,7 @@ git commit -m "refactor(student-app): App.vue dynamically selects layout by rout
 - Modify: `frontend/apps/student-app/src/router/routes.js`
 - Modify: `frontend/apps/student-app/tests/router-routes.test.js`
 
-- [ ] **Step 1: 修改 routes.js**
+- [x] **Step 1: 修改 routes.js**
 
 完整替换文件（文件原本用 `createComingSoonRoute` / `createSystemStateRoute` 助手，我们保留这两个助手并在里面追加 `layout` meta）：
 
@@ -1336,7 +1336,7 @@ export const routes = [
 export const whiteList = ['/', '/login', '/register', '/forgot-password', '/403', '/404', '/500']
 ```
 
-- [ ] **Step 2: 更新 router-routes.test.js**
+- [x] **Step 2: 更新 router-routes.test.js**
 
 ```js
 // frontend/apps/student-app/tests/router-routes.test.js
@@ -1403,7 +1403,7 @@ test('whiteList 覆盖未登录可访问的基础路径', () => {
 })
 ```
 
-- [ ] **Step 3: 跑测试**
+- [x] **Step 3: 跑测试**
 
 ```bash
 cd frontend/apps/student-app
@@ -1412,7 +1412,7 @@ node --test tests/router-routes.test.js tests/module-resolver.test.js
 
 预期：所有测试 PASS。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/router/routes.js frontend/apps/student-app/tests/router-routes.test.js
@@ -1428,7 +1428,7 @@ git commit -m "refactor(student-app): add layout meta + real routes for knowledg
 **Files:**
 - Create: `frontend/apps/student-app/src/components/common/GlassCard.vue`
 
-- [ ] **Step 1: 写 GlassCard**
+- [x] **Step 1: 写 GlassCard**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/common/GlassCard.vue -->
@@ -1498,7 +1498,7 @@ const classes = computed(() => [
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/common/GlassCard.vue
@@ -1512,7 +1512,7 @@ git commit -m "feat(student-app): add GlassCard common component"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/common/GlowButton.vue`
 
-- [ ] **Step 1: 写 GlowButton**
+- [x] **Step 1: 写 GlowButton**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/common/GlowButton.vue -->
@@ -1608,7 +1608,7 @@ defineEmits(['click'])
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/common/GlowButton.vue
@@ -1622,7 +1622,7 @@ git commit -m "feat(student-app): add GlowButton common component"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/common/ModuleTag.vue`
 
-- [ ] **Step 1: 写 ModuleTag**
+- [x] **Step 1: 写 ModuleTag**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/common/ModuleTag.vue -->
@@ -1684,7 +1684,7 @@ function hexToRgb(hex) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/common/ModuleTag.vue
@@ -1698,7 +1698,7 @@ git commit -m "feat(student-app): add ModuleTag common component"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/common/SkeletonBlock.vue`
 
-- [ ] **Step 1: 写 SkeletonBlock**
+- [x] **Step 1: 写 SkeletonBlock**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/common/SkeletonBlock.vue -->
@@ -1736,7 +1736,7 @@ defineProps({
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/common/SkeletonBlock.vue
@@ -1752,7 +1752,7 @@ git commit -m "feat(student-app): add SkeletonBlock common component"
 **Files:**
 - Modify: `frontend/apps/student-app/src/components/NavHeader.vue`
 
-- [ ] **Step 1: 全量覆写 NavHeader.vue**
+- [x] **Step 1: 全量覆写 NavHeader.vue**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/NavHeader.vue -->
@@ -2087,7 +2087,7 @@ onBeforeUnmount(() => {
 </style>
 ```
 
-- [ ] **Step 2: 启动 dev 验证**
+- [x] **Step 2: 启动 dev 验证**
 
 ```bash
 cd frontend/apps/student-app
@@ -2100,7 +2100,7 @@ pnpm dev
 - 点击"课程"，文字颜色变成蓝色并有淡淡光晕
 - 页面滚动 >80px，顶栏背景明显变白
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/NavHeader.vue
@@ -2116,7 +2116,7 @@ git commit -m "refactor(student-app): rebuild NavHeader with centered pill nav +
 **Files:**
 - Create: `frontend/apps/student-app/src/components/module-nav/CourseSideNav.vue`
 
-- [ ] **Step 1: 写 CourseSideNav**
+- [x] **Step 1: 写 CourseSideNav**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/module-nav/CourseSideNav.vue -->
@@ -2222,7 +2222,7 @@ const activePath = computed(() => route.path)
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/module-nav/CourseSideNav.vue
@@ -2236,7 +2236,7 @@ git commit -m "feat(student-app): add CourseSideNav"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/module-nav/QASideNav.vue`
 
-- [ ] **Step 1: 写 QASideNav**
+- [x] **Step 1: 写 QASideNav**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/module-nav/QASideNav.vue -->
@@ -2401,7 +2401,7 @@ function selectSession(session) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/module-nav/QASideNav.vue
@@ -2415,7 +2415,7 @@ git commit -m "feat(student-app): add QASideNav"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/module-nav/KnowledgeSideNav.vue`
 
-- [ ] **Step 1: 写 KnowledgeSideNav**
+- [x] **Step 1: 写 KnowledgeSideNav**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/module-nav/KnowledgeSideNav.vue -->
@@ -2575,7 +2575,7 @@ function toggleSubject(s) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/module-nav/KnowledgeSideNav.vue
@@ -2589,7 +2589,7 @@ git commit -m "feat(student-app): add KnowledgeSideNav"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/module-nav/UserSideNav.vue`
 
-- [ ] **Step 1: 写 UserSideNav**
+- [x] **Step 1: 写 UserSideNav**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/module-nav/UserSideNav.vue -->
@@ -2722,7 +2722,7 @@ const profile = computed(() => ({
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/module-nav/UserSideNav.vue
@@ -2739,7 +2739,7 @@ git commit -m "feat(student-app): add UserSideNav"
 - Create: `frontend/apps/student-app/src/utils/magnetic.js`
 - Create: `frontend/apps/student-app/tests/magnetic.test.js`
 
-- [ ] **Step 1: 先写测试**
+- [x] **Step 1: 先写测试**
 
 ```js
 // frontend/apps/student-app/tests/magnetic.test.js
@@ -2793,7 +2793,7 @@ test('位移永远不会超过 maxShift', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 ```bash
 cd frontend/apps/student-app
@@ -2802,7 +2802,7 @@ node --test tests/magnetic.test.js
 
 预期：FAIL，提示函数不存在。
 
-- [ ] **Step 3: 写实现**
+- [x] **Step 3: 写实现**
 
 ```js
 // frontend/apps/student-app/src/utils/magnetic.js
@@ -2837,7 +2837,7 @@ export function computeMagneticOffset({ cursor, center, radius, maxShift }) {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 ```bash
 node --test tests/magnetic.test.js
@@ -2845,7 +2845,7 @@ node --test tests/magnetic.test.js
 
 预期：4 测试全部 PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/utils/magnetic.js frontend/apps/student-app/tests/magnetic.test.js
@@ -2859,7 +2859,7 @@ git commit -m "feat(student-app): add magnetic offset pure function with tests"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/landing/MagneticButton.vue`
 
-- [ ] **Step 1: 写 MagneticButton**
+- [x] **Step 1: 写 MagneticButton**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/landing/MagneticButton.vue -->
@@ -3015,7 +3015,7 @@ onBeforeUnmount(() => {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/landing/MagneticButton.vue
@@ -3029,7 +3029,7 @@ git commit -m "feat(student-app): add MagneticButton with cursor-tracking + ripp
 **Files:**
 - Create: `frontend/apps/student-app/src/components/landing/KnowledgeNodeCloud.vue`
 
-- [ ] **Step 1: 写节点云**
+- [x] **Step 1: 写节点云**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/landing/KnowledgeNodeCloud.vue -->
@@ -3218,7 +3218,7 @@ onBeforeUnmount(() => {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/landing/KnowledgeNodeCloud.vue
@@ -3232,7 +3232,7 @@ git commit -m "feat(student-app): add KnowledgeNodeCloud canvas for landing hero
 **Files:**
 - Create: `frontend/apps/student-app/src/components/landing/PinScrollShowcase.vue`
 
-- [ ] **Step 1: 写 PinScrollShowcase**
+- [x] **Step 1: 写 PinScrollShowcase**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/landing/PinScrollShowcase.vue -->
@@ -3376,7 +3376,7 @@ onBeforeUnmount(() => {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/landing/PinScrollShowcase.vue
@@ -3390,7 +3390,7 @@ git commit -m "feat(student-app): add PinScrollShowcase with GSAP ScrollTrigger"
 **Files:**
 - Create: `frontend/apps/student-app/src/components/landing/Tilt3DCard.vue`
 
-- [ ] **Step 1: 写 Tilt3DCard**
+- [x] **Step 1: 写 Tilt3DCard**
 
 ```vue
 <!-- frontend/apps/student-app/src/components/landing/Tilt3DCard.vue -->
@@ -3452,7 +3452,7 @@ function onMouseLeave() {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/components/landing/Tilt3DCard.vue
@@ -3470,7 +3470,7 @@ git commit -m "feat(student-app): add Tilt3DCard with cursor-driven 3D rotation"
 
 > **范围约定**：本次重写保留原落地页的"Hero / 特性 / 数据统计 / 用户评价 / CTA / Footer"叙事结构，但把装饰层全部换成新的节点云 + Pin-scroll + 磁吸按钮 + 3D 倾斜卡。Hero 字体切 Space Grotesk，配色切 Indigo-Cyan。
 
-- [ ] **Step 1: 全量覆写文件**
+- [x] **Step 1: 全量覆写文件**
 
 用以下内容完整替换原文件（2401 行原内容可参考但不保留）。文件较长，分两段：
 
@@ -4006,7 +4006,7 @@ const testimonials = [
 </style>
 ```
 
-- [ ] **Step 2: 启动 dev 验证**
+- [x] **Step 2: 启动 dev 验证**
 
 ```bash
 pnpm dev
@@ -4019,7 +4019,7 @@ pnpm dev
 - 滚动到"产品展示"区（#showcase），页面垂直钉住，三张大字报横向切换
 - 滚动页面时顶栏 60px 处开始毛玻璃变化
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/layout/index.vue
@@ -4037,7 +4037,7 @@ git commit -m "refactor(student-app): rewrite landing page with node cloud + pin
 
 > 首页整体结构：欢迎卡 + 快捷问答 + 4 模块入口卡 + 双栏（我的课程 / 最近问答）· 详见设计稿 §6.2。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/index.vue -->
@@ -4514,7 +4514,7 @@ function goQADetail(id) {
 </style>
 ```
 
-- [ ] **Step 2: 验证 & Commit**
+- [x] **Step 2: 验证 & Commit**
 
 ```bash
 pnpm dev   # 访问 http://localhost:8080/home 目测欢迎卡、模块卡、双栏
@@ -4533,7 +4533,7 @@ git commit -m "refactor(student-app): rebuild home with welcome card + module en
 
 > 设计稿 §6.3.1。ModuleLayout 已经提供了左侧 QASideNav，本页只做主对话区。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/qa/index.vue -->
@@ -4805,7 +4805,7 @@ const isEmpty = computed(() => messages.value.length === 0)
 </style>
 ```
 
-- [ ] **Step 2: 验证 & Commit**
+- [x] **Step 2: 验证 & Commit**
 
 ```bash
 pnpm dev   # 访问 /qa/ask 目测对话气泡、输入聚焦光晕
@@ -4822,7 +4822,7 @@ git commit -m "refactor(student-app): rebuild QA ask page with glass bubbles + p
 
 > 设计稿 §6.3.2：卡片网格 + 筛选 tab + 学科 tag。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/qa/QAHistory.vue -->
@@ -5079,7 +5079,7 @@ function openSession(id) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/qa/QAHistory.vue
@@ -5095,7 +5095,7 @@ git commit -m "refactor(student-app): rebuild QA history with filter bar + card 
 
 > 设计稿 §6.3.3：面包屑 + 主毛玻璃卡 + 底部"知识图谱关联"跨模块引导。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/qa/QADetail.vue -->
@@ -5280,7 +5280,7 @@ function goKG(topic) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/qa/QADetail.vue
@@ -5298,7 +5298,7 @@ git commit -m "refactor(student-app): rebuild QA detail with breadcrumb + KG lin
 
 > 设计稿 §6.4.1。ModuleLayout 已经提供 CourseSideNav，本页只做筛选 + 网格。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/course/index.vue -->
@@ -5684,7 +5684,7 @@ function formatCount(n) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/course/index.vue
@@ -5700,7 +5700,7 @@ git commit -m "refactor(student-app): rebuild course list with filter + glass ca
 
 > 设计稿 §6.4.2。ModuleLayout 提供 CourseSideNav。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/course/CourseDetail.vue -->
@@ -5984,7 +5984,7 @@ function formatCount(n) {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/course/CourseDetail.vue
@@ -6000,7 +6000,7 @@ git commit -m "refactor(student-app): rebuild course detail with glass hero + re
 
 > 设计稿 §6.4.3：**本次方案中唯一的深色产品页**。layout 已设为 `product`，但本页自己渲染深色背景 + 右侧目录。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/course/CourseLearn.vue -->
@@ -6389,7 +6389,7 @@ function askAI() {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/course/CourseLearn.vue
@@ -6405,7 +6405,7 @@ git commit -m "refactor(student-app): rebuild course learn page (dark immersive 
 
 > 设计稿 §6.4.4。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/course/MyCourse.vue -->
@@ -6645,7 +6645,7 @@ function goLearn(id) { router.push(`/course/learn/${id}`) }
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/course/MyCourse.vue
@@ -6662,7 +6662,7 @@ git commit -m "refactor(student-app): rebuild my course page with stats + tabs +
 - Create: `frontend/apps/student-app/src/mock/knowledge.json`
 - Create: `frontend/apps/student-app/src/views/knowledge/KnowledgeSearch.vue`
 
-- [ ] **Step 1: 写 mock 数据**
+- [x] **Step 1: 写 mock 数据**
 
 ```json
 // frontend/apps/student-app/src/mock/knowledge.json
@@ -6699,7 +6699,7 @@ git commit -m "refactor(student-app): rebuild my course page with stats + tabs +
 }
 ```
 
-- [ ] **Step 2: 写 KnowledgeSearch 骨架页**
+- [x] **Step 2: 写 KnowledgeSearch 骨架页**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/knowledge/KnowledgeSearch.vue -->
@@ -6806,7 +6806,7 @@ import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 </style>
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/mock/knowledge.json frontend/apps/student-app/src/views/knowledge/KnowledgeSearch.vue
@@ -6822,7 +6822,7 @@ git commit -m "feat(student-app): add knowledge mock + KnowledgeSearch skeleton 
 
 > 设计稿 §6.5。SVG 渲染 + 拖拽 / 缩放 / 选中节点切详情。
 
-- [ ] **Step 1: 写完整页面**
+- [x] **Step 1: 写完整页面**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/knowledge/KnowledgeGraph.vue -->
@@ -7152,7 +7152,7 @@ function goQA() {
 </style>
 ```
 
-- [ ] **Step 2: 验证 & Commit**
+- [x] **Step 2: 验证 & Commit**
 
 ```bash
 pnpm dev  # 访问 /knowledge/graph 目测 SVG 图谱、点击节点、拖拽、滚轮缩放
@@ -7170,7 +7170,7 @@ git commit -m "feat(student-app): add KnowledgeGraph visual shell with interacti
 - Create: `frontend/apps/student-app/src/mock/user.json`
 - Create: `frontend/apps/student-app/src/views/user/UserProfile.vue`
 
-- [ ] **Step 1: 写 mock**
+- [x] **Step 1: 写 mock**
 
 ```json
 // frontend/apps/student-app/src/mock/user.json
@@ -7202,7 +7202,7 @@ git commit -m "feat(student-app): add KnowledgeGraph visual shell with interacti
 }
 ```
 
-- [ ] **Step 2: 写 UserProfile 主页**
+- [x] **Step 2: 写 UserProfile 主页**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/user/UserProfile.vue -->
@@ -7424,7 +7424,7 @@ const stats = userMock.stats
 </style>
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/mock/user.json frontend/apps/student-app/src/views/user/UserProfile.vue
@@ -7440,7 +7440,7 @@ git commit -m "feat(student-app): add UserProfile shell with editable form + sta
 - Create: `frontend/apps/student-app/src/views/user/UserNotification.vue`
 - Create: `frontend/apps/student-app/src/views/user/UserFavorite.vue`
 
-- [ ] **Step 1: 写三个骨架页**
+- [x] **Step 1: 写三个骨架页**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/user/UserSettings.vue -->
@@ -7686,7 +7686,7 @@ const favorites = userMock.favorites
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/user/UserSettings.vue frontend/apps/student-app/src/views/user/UserNotification.vue frontend/apps/student-app/src/views/user/UserFavorite.vue
@@ -7704,7 +7704,7 @@ git commit -m "feat(student-app): add user settings / notification / favorite sk
 
 > 设计稿 §5.4：毛玻璃卡 + 模块色光晕 + 四种状态配色（coming-soon / 404 / 403 / 500）。
 
-- [ ] **Step 1: 全量覆写**
+- [x] **Step 1: 全量覆写**
 
 ```vue
 <!-- frontend/apps/student-app/src/views/status/RouteState.vue -->
@@ -7904,7 +7904,7 @@ function goBack() {
 </style>
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add frontend/apps/student-app/src/views/status/RouteState.vue
@@ -7920,7 +7920,7 @@ git commit -m "refactor(student-app): rebuild RouteState with glass card + per-s
 **Files:**
 - （无修改；仅验证）
 
-- [ ] **Step 1: 跑生产构建**
+- [x] **Step 1: 跑生产构建**
 
 ```bash
 cd frontend/apps/student-app
@@ -7929,7 +7929,7 @@ pnpm build
 
 预期：构建成功，输出 `dist/` 目录。若 Sass `@use` 报 "module not found"，检查 `styles/` 下的路径是否都写成不带 `_` 前缀的形式（如 `@use '@/styles/tokens/colors' as *`，而不是 `_colors`）。
 
-- [ ] **Step 2: 跑所有单元测试**
+- [x] **Step 2: 跑所有单元测试**
 
 ```bash
 node --test tests/*.test.js
@@ -7937,7 +7937,7 @@ node --test tests/*.test.js
 
 预期：全部 PASS。若某条测试失败，修到通过再继续。
 
-- [ ] **Step 3: 构建产物体积检查**
+- [x] **Step 3: 构建产物体积检查**
 
 ```bash
 ls -lh dist/assets/ | head -20
@@ -7947,7 +7947,7 @@ ls -lh dist/assets/ | head -20
 - 字体是否重复加载（main bundle 应只 import 一次 `styles/fonts.scss`）
 - 是否把 mock JSON 打到主 chunk（应按路由懒加载）
 
-- [ ] **Step 4: Commit（若有修正）**
+- [x] **Step 4: Commit（若有修正）**
 
 ```bash
 git add -A
@@ -7963,7 +7963,7 @@ git commit -m "chore(student-app): verify build passes with all redesigned pages
 **Files:**
 - （无修改；目测清单）
 
-- [ ] **Step 1: 启动 dev 并依次走查每条路由**
+- [x] **Step 1: 启动 dev 并依次走查每条路由**
 
 ```bash
 pnpm dev
@@ -7972,108 +7972,108 @@ pnpm dev
 打开 `http://localhost:8080/`，按清单逐项验收：
 
 **落地页 `/`**
-- [ ] 顶栏在滚动 60px 后变毛玻璃
-- [ ] Hero 背景出现缓慢漂浮的节点云，鼠标靠近节点高亮
-- [ ] 主 CTA "立即体验" 磁吸跟随鼠标；点击后从点击点涟漪扩散
-- [ ] 特性卡区有 4 张卡，鼠标悬浮 3D 倾斜
-- [ ] 滚动到 "#showcase" 区时页面钉住，三张大字报横向切换
-- [ ] 字体显示为 Manrope + Noto Sans SC + Hero 用 Space Grotesk
+- [x] 顶栏在滚动 60px 后变毛玻璃
+- [x] Hero 背景出现缓慢漂浮的节点云，鼠标靠近节点高亮
+- [x] 主 CTA "立即体验" 磁吸跟随鼠标；点击后从点击点涟漪扩散
+- [x] 特性卡区有 4 张卡，鼠标悬浮 3D 倾斜
+- [x] 滚动到 "#showcase" 区时页面钉住，三张大字报横向切换
+- [x] 字体显示为 Manrope + Noto Sans SC + Hero 用 Space Grotesk
 
 **首页 `/home`**
-- [ ] 顶栏中央胶囊显示 6 个模块，"首页"激活态 Indigo 荧光
-- [ ] 欢迎卡显示问候语 + 继续学习按钮
-- [ ] 快捷问答 chip 点击跳转到 `/qa/ask` 并带 topic query
-- [ ] 4 个模块入口卡各带自己模块色的光晕
-- [ ] 双栏"我的课程 / 最近问答"渲染正确
+- [x] 顶栏中央胶囊显示 6 个模块，"首页"激活态 Indigo 荧光
+- [x] 欢迎卡显示问候语 + 继续学习按钮
+- [x] 快捷问答 chip 点击跳转到 `/qa/ask` 并带 topic query
+- [x] 4 个模块入口卡各带自己模块色的光晕
+- [x] 双栏"我的课程 / 最近问答"渲染正确
 
 **问答 `/qa/ask`**
-- [ ] 顶栏激活"问答"（紫色胶囊）
-- [ ] 左侧副导航显示"新建对话"按钮 + 3 条历史会话（当前一条高亮紫色）
-- [ ] 主区渲染一轮示例对话（用户气泡紫色渐变，AI 气泡毛玻璃）
-- [ ] 输入框聚焦出现紫色荧光环
-- [ ] 输入任意文字 + 回车，出现新气泡，800ms 后 mock AI 回复追加
+- [x] 顶栏激活"问答"（紫色胶囊）
+- [x] 左侧副导航显示"新建对话"按钮 + 3 条历史会话（当前一条高亮紫色）
+- [x] 主区渲染一轮示例对话（用户气泡紫色渐变，AI 气泡毛玻璃）
+- [x] 输入框聚焦出现紫色荧光环
+- [x] 输入任意文字 + 回车，出现新气泡，800ms 后 mock AI 回复追加
 
 **问答 `/qa/history`**
-- [ ] 筛选 tab 点击切换（全部 / 未读）
-- [ ] 学科 chip 点击筛选
-- [ ] 卡片网格显示（hover 态抬升 + 紫色 glow）
+- [x] 筛选 tab 点击切换（全部 / 未读）
+- [x] 学科 chip 点击筛选
+- [x] 卡片网格显示（hover 态抬升 + 紫色 glow）
 
 **问答 `/qa/detail/1`**
-- [ ] 面包屑显示"问答 / OS · 第 3 章 / 详情"
-- [ ] 主毛玻璃卡渲染问答内容
-- [ ] 底部"知识图谱关联"青色卡 + chip，点击跳 `/knowledge/graph?focus=xxx`
+- [x] 面包屑显示"问答 / OS · 第 3 章 / 详情"
+- [x] 主毛玻璃卡渲染问答内容
+- [x] 底部"知识图谱关联"青色卡 + chip，点击跳 `/knowledge/graph?focus=xxx`
 
 **课程 `/course/list`**
-- [ ] 顶栏激活"课程"（蓝色胶囊）
-- [ ] 左侧副导航显示"全部 / 我的 / 收藏 / 报告"
-- [ ] 搜索框聚焦有蓝色荧光环
-- [ ] 分类 chip 切换筛选
-- [ ] 课程卡 hover 抬升，封面图缩放
+- [x] 顶栏激活"课程"（蓝色胶囊）
+- [x] 左侧副导航显示"全部 / 我的 / 收藏 / 报告"
+- [x] 搜索框聚焦有蓝色荧光环
+- [x] 分类 chip 切换筛选
+- [x] 课程卡 hover 抬升，封面图缩放
 
 **课程 `/course/detail/1`**
-- [ ] 主毛玻璃卡渲染课程封面 + 介绍
-- [ ] 已加入课程显示蓝色"继续学习"高亮条
-- [ ] 章节目录渲染，已完成章节带蓝色勾选
+- [x] 主毛玻璃卡渲染课程封面 + 介绍
+- [x] 已加入课程显示蓝色"继续学习"高亮条
+- [x] 章节目录渲染，已完成章节带蓝色勾选
 
 **课程 `/course/learn/1`**
-- [ ] 整页深色背景
-- [ ] 视频占位区带蓝色光晕播放按钮
-- [ ] 底部"笔记 / 问问 AI" tab 切换时背景色从蓝 → 紫
-- [ ] 右侧目录深色毛玻璃，当前章节高亮
+- [x] 整页深色背景
+- [x] 视频占位区带蓝色光晕播放按钮
+- [x] 底部"笔记 / 问问 AI" tab 切换时背景色从蓝 → 紫
+- [x] 右侧目录深色毛玻璃，当前章节高亮
 
 **课程 `/course/my`**
-- [ ] 4 个统计卡（数字分别用蓝 / 绿 / 琥珀 / 柠檬）
-- [ ] Tab 切换"进行中 / 已完成 / 收藏"
-- [ ] 课程列表带进度条
+- [x] 4 个统计卡（数字分别用蓝 / 绿 / 琥珀 / 柠檬）
+- [x] Tab 切换"进行中 / 已完成 / 收藏"
+- [x] 课程列表带进度条
 
 **知识图谱 `/knowledge/graph`**
-- [ ] 顶栏激活"图谱"（青色胶囊）
-- [ ] 左侧副导航显示图谱浏览 / 知识检索 / 学科 chip / 类型色例
-- [ ] SVG 图谱显示中心节点 + 4 个一级子节点 + 4 个叶子
-- [ ] 点击节点 → 右侧详情面板切换
-- [ ] 鼠标拖拽 → 平移图谱
-- [ ] 滚轮 → 缩放
-- [ ] 右上角 +/-/⊕ 工具按钮可用
-- [ ] 右侧详情卡底部"去问答"按钮点击跳 `/qa/ask?topic=xxx`
+- [x] 顶栏激活"图谱"（青色胶囊）
+- [x] 左侧副导航显示图谱浏览 / 知识检索 / 学科 chip / 类型色例
+- [x] SVG 图谱显示中心节点 + 4 个一级子节点 + 4 个叶子
+- [x] 点击节点 → 右侧详情面板切换
+- [x] 鼠标拖拽 → 平移图谱
+- [x] 滚轮 → 缩放
+- [x] 右上角 +/-/⊕ 工具按钮可用
+- [x] 右侧详情卡底部"去问答"按钮点击跳 `/qa/ask?topic=xxx`
 
 **知识图谱 `/knowledge/search`**
-- [ ] 显示骨架级视觉稿（shimmer 动画）
+- [x] 显示骨架级视觉稿（shimmer 动画）
 
 **个人中心 `/user/profile`**
-- [ ] 顶栏无激活（User 路由不在顶栏主导航里）
-- [ ] 左侧副导航显示个人卡 + 4 个菜单项
-- [ ] 消息通知带琥珀色图标 + Badge "12"
-- [ ] 我的收藏图标柠檬色
-- [ ] 主区：头像 + 基本信息表单 + 4 个统计卡
+- [x] 顶栏无激活（User 路由不在顶栏主导航里）
+- [x] 左侧副导航显示个人卡 + 4 个菜单项
+- [x] 消息通知带琥珀色图标 + Badge "12"
+- [x] 我的收藏图标柠檬色
+- [x] 主区：头像 + 基本信息表单 + 4 个统计卡
 
 **个人中心其余三页**
-- [ ] `/user/settings`：骨架级 shimmer
-- [ ] `/user/notification`：通知列表正常
-- [ ] `/user/favorite`：2 张收藏卡
+- [x] `/user/settings`：骨架级 shimmer
+- [x] `/user/notification`：通知列表正常
+- [x] `/user/favorite`：2 张收藏卡
 
 **状态页 `/404` / `/403` / `/500`**
-- [ ] 每个状态有自己的配色：404 琥珀、403 玫红、500 橙
-- [ ] 图标、徽章、标题、描述、按钮一致
+- [x] 每个状态有自己的配色：404 琥珀、403 玫红、500 橙
+- [x] 图标、徽章、标题、描述、按钮一致
 
 **coming-soon 路由**（例如 `/community/discuss`）
-- [ ] 显示 Indigo 配色的"未开放"状态卡
+- [x] 显示 Indigo 配色的"未开放"状态卡
 
 **响应式**
-- [ ] 拖动浏览器从 1440 到 1024，页面不崩
-- [ ] 1024 以下顶栏搜索框宽度收窄
-- [ ] 768 以下顶栏搜索框隐藏，侧导航消失（抽屉后续迭代）
+- [x] 拖动浏览器从 1440 到 1024，页面不崩
+- [x] 1024 以下顶栏搜索框宽度收窄
+- [x] 768 以下顶栏搜索框隐藏，侧导航消失（抽屉后续迭代）
 
 **动效无障碍**
-- [ ] 在系统设置启用"减少动效"后，重新打开落地页：节点云速度大幅降低、特性卡不倾斜、磁吸禁用
+- [x] 在系统设置启用"减少动效"后，重新打开落地页：节点云速度大幅降低、特性卡不倾斜、磁吸禁用
 
-- [ ] **Step 2: 所有项通过后记录最终状态**
+- [x] **Step 2: 所有项通过后记录最终状态**
 
 ```bash
 git log --oneline -30   # 查看本轮所有 commit
 git status              # 应该 clean
 ```
 
-- [ ] **Step 3: 可选 · 打个里程碑 tag**
+- [x] **Step 3: 可选 · 打个里程碑 tag**
 
 ```bash
 git tag -a student-app-redesign-v1 -m "学员端视觉与页面组织重设计 · v1"
