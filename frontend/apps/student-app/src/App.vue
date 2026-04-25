@@ -1,43 +1,29 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
-import NavHeader from '@/components/NavHeader.vue'
 import { userLoadingStore } from './stores'
 
 const userLoading = userLoadingStore()
 const route = useRoute()
-const showNav = computed(() => route.path.startsWith('/home'))
+
+// 按 route.meta.layout 选择外壳
+const LandingLayout = defineAsyncComponent(() => import('@/layouts/LandingLayout.vue'))
+const ProductLayout = defineAsyncComponent(() => import('@/layouts/ProductLayout.vue'))
+const ModuleLayout = defineAsyncComponent(() => import('@/layouts/ModuleLayout.vue'))
+
+const layoutComponent = computed(() => {
+  const layout = route.meta.layout
+  if (layout === 'landing') return LandingLayout
+  if (layout === 'module') return ModuleLayout
+  // 默认 product
+  return ProductLayout
+})
 </script>
 
 <template>
-  <div class="app-shell">
-    <RouterView v-loading.fullscreen.lock="userLoading.loading" />
-  </div>
+  <component :is="layoutComponent" v-loading.fullscreen.lock="userLoading.loading" />
 </template>
 
 <style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html {
-  font-size: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Roboto, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  text-decoration: none;
-}
-
-ul li {
-  list-style: none;
-}
-
-.app-shell {
-  min-height: 100vh;
-}
+/* 全局样式由 styles/index.scss 注入，这里保持干净 */
 </style>
