@@ -1,0 +1,20 @@
+// 字体加载 · 本地打包，避免依赖 Google CDN
+
+// Manrope 主字体
+@import '@fontsource/manrope/400.css';
+@import '@fontsource/manrope/500.css';
+@import '@fontsource/manrope/600.css';
+@import '@fontsource/manrope/700.css';
+@import '@fontsource/manrope/800.css';
+
+// Noto Sans SC 中文主字体
+@import '@fontsource/noto-sans-sc/400.css';
+@import '@fontsource/noto-sans-sc/500.css';
+@import '@fontsource/noto-sans-sc/700.css';
+@import '@fontsource/noto-sans-sc/900.css';
+
+// Space Grotesk 展示字体（仅落地页 Hero + 模块大标题）
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
