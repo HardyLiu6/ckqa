@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    { "id": "os", "label": "操作系统", "type": "root", "x": 400, "y": 300, "r": 20 },
+    { "id": "process", "label": "进程", "type": "concept", "x": 200, "y": 180, "r": 14 },
+    { "id": "memory", "label": "内存", "type": "concept", "x": 600, "y": 180, "r": 14 },
+    { "id": "file", "label": "文件系统", "type": "concept", "x": 180, "y": 420, "r": 14 },
+    { "id": "io", "label": "I/O 设备", "type": "concept", "x": 620, "y": 420, "r": 14 },
+    { "id": "schedule", "label": "进程调度", "type": "instance", "x": 90, "y": 100, "r": 9 },
+    { "id": "ipc", "label": "进程间通信", "type": "instance", "x": 260, "y": 80, "r": 9 },
+    { "id": "virtual", "label": "虚拟内存", "type": "instance", "x": 720, "y": 100, "r": 9 },
+    { "id": "page", "label": "页面置换", "type": "error", "x": 540, "y": 80, "r": 9 },
+    { "id": "fs", "label": "FAT / NTFS", "type": "instance", "x": 90, "y": 500, "r": 9 },
+    { "id": "buffer", "label": "缓冲技术", "type": "instance", "x": 720, "y": 500, "r": 9 }
+  ],
+  "edges": [
+    { "from": "os", "to": "process" }, { "from": "os", "to": "memory" },
+    { "from": "os", "to": "file" }, { "from": "os", "to": "io" },
+    { "from": "process", "to": "schedule" }, { "from": "process", "to": "ipc" },
+    { "from": "memory", "to": "virtual" }, { "from": "memory", "to": "page" },
+    { "from": "file", "to": "fs" }, { "from": "io", "to": "buffer" }
+  ],
+  "details": {
+    "process": {
+      "name": "进程",
+      "type": "概念节点",
+      "errorCount": 2,
+      "desc": "程序的一次执行过程，是系统资源分配和调度的基本单位。",
+      "related": ["线程", "进程调度", "进程间通信"]
+    }
+  }
+}
