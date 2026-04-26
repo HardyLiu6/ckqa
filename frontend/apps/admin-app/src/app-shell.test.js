@@ -3,7 +3,17 @@ import assert from 'node:assert/strict'
 
 import { createAuthStore } from './stores/auth.js'
 import { API_BASE_URL, createHttpClient } from './axios/index.js'
+import {
+  buildNavigationGroups,
+  findActiveNavigationPath,
+} from './components/shell/navigation-model.js'
 import { routeRecords } from './router/routes.js'
+import {
+  THEME_ACCENTS,
+  isValidAccent,
+  resolveTheme,
+  themeStore,
+} from './stores/theme.js'
 import { getModulePageConfig } from './views/pages/module-content.js'
 
 test('路由骨架包含首版关键入口和后续页面状态', () => {
@@ -73,5 +83,97 @@ test('问答会话列表页面模型保留正式问答和冒烟验证过滤项',
   assert.deepEqual(
     config.filters.find((filter) => filter.key === 'sessionType').options,
     ['全部', '正式问答', '冒烟验证'],
+  )
+})
+
+test('主题 store 可在 Node 环境安全导入并解析主题', () => {
+  assert.equal(themeStore.state.mode, 'auto')
+  assert.equal(themeStore.state.accent, 'indigo')
+  assert.equal(resolveTheme('auto', false), 'light')
+  assert.equal(resolveTheme('auto', true), 'dark')
+  assert.equal(resolveTheme('light', true), 'light')
+  assert.equal(resolveTheme('dark', false), 'dark')
+})
+
+test('主题色只允许固定枚举并提供强色阶', () => {
+  assert.deepEqual(
+    THEME_ACCENTS.map((item) => item.key),
+    ['indigo', 'blue', 'teal', 'purple', 'amber'],
+  )
+  assert.equal(isValidAccent('teal'), true)
+  assert.equal(isValidAccent('custom'), false)
+  assert.equal(THEME_ACCENTS.find((item) => item.key === 'teal').strong, '#0f766e')
+  assert.equal(THEME_ACCENTS.find((item) => item.key === 'amber').strong, '#b45309')
+})
+
+test('控制台导航按权限过滤并保留模块分组', () => {
+  const canAccessWithoutUserWrite = (permissions = []) => {
+    return !permissions.includes('user:write')
+  }
+
+  const groups = buildNavigationGroups(routeRecords, canAccessWithoutUserWrite)
+
+  assert.deepEqual(
+    groups.map((group) => group.key),
+    ['dashboard', 'courses', 'knowledge', 'qa', 'users', 'system'],
+  )
+  assert.equal(groups.find((group) => group.key === 'dashboard').items[0].path, '/app/dashboard')
+  assert.equal(
+    groups.find((group) => group.key === 'users').items.some((item) => item.permissions.includes('user:write')),
+    false,
+  )
+})
+
+test('控制台导航不暴露动态详情路径并保留顶层未开放入口', () => {
+  const groups = buildNavigationGroups(routeRecords, () => true)
+  const items = groups.flatMap((group) => group.items)
+  const paths = items.map((item) => item.path)
+
+  assert.equal(paths.some((path) => path.includes(':')), false)
+  assert.equal(paths.includes('/app/courses/:courseId'), false)
+  assert.equal(paths.includes('/app/materials/:materialId'), false)
+  assert.equal(paths.includes('/app/qa-sessions/:sessionId'), false)
+
+  const auditItem = items.find((item) => item.path === '/app/authorization-audit-logs')
+  assert.equal(auditItem.displayState, 'coming-soon')
+  assert.equal(auditItem.status, 'upcoming')
+  assert.equal(
+    items.find((item) => item.path === '/app/knowledge-bases/:kbId/index-runs'),
+    undefined,
+  )
+})
+
+test('控制台导航保留直接可访问模块入口', () => {
+  const groups = buildNavigationGroups(routeRecords, () => true)
+  const paths = groups.flatMap((group) => group.items).map((item) => item.path)
+
+  assert.ok(paths.includes('/app/dashboard'))
+  assert.ok(paths.includes('/app/courses'))
+  assert.ok(paths.includes('/app/knowledge-bases'))
+  assert.ok(paths.includes('/app/qa-sessions'))
+  assert.ok(paths.includes('/app/health'))
+  assert.equal(
+    groups.find((group) => group.key === 'system').items.find((item) => item.path === '/app/authorization-audit-logs').displayState,
+    'coming-soon',
+  )
+})
+
+test('控制台导航在详情路径回落高亮所属模块入口', () => {
+  const groups = buildNavigationGroups(routeRecords, () => true)
+
+  assert.equal(findActiveNavigationPath(groups, 'courses', '/app/materials/42'), '/app/courses')
+  assert.equal(
+    findActiveNavigationPath(groups, 'courses', '/app/materials/42/parse-results'),
+    '/app/courses',
+  )
+  assert.equal(
+    findActiveNavigationPath(groups, 'knowledge', '/app/index-runs/7'),
+    '/app/knowledge-bases',
+  )
+  assert.equal(findActiveNavigationPath(groups, 'qa', '/app/retrieval-logs/9'), '/app/qa-sessions')
+  assert.equal(findActiveNavigationPath(groups, 'system', '/app/health'), '/app/health')
+  assert.equal(
+    findActiveNavigationPath(groups, 'system', '/app/authorization-audit-logs'),
+    '/app/authorization-audit-logs',
   )
 })
