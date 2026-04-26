@@ -17,6 +17,10 @@ const currentUser = computed(() => authStore.state.currentUser)
 
 function switchRole(event) {
   authStore.loginAs(event.target.value)
+
+  if (!authStore.canAccess(route.meta.permissions)) {
+    router.push('/app/dashboard')
+  }
 }
 
 function logout() {
@@ -27,6 +31,7 @@ function logout() {
 
 <template>
   <div class="console-layout">
+    <a class="skip-link" href="#main-content">跳到主内容</a>
     <header class="topbar">
       <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
         <span class="brand-mark">CK</span>
@@ -37,6 +42,10 @@ function logout() {
       </RouterLink>
 
       <div class="topbar-actions">
+        <div class="runtime-chip" title="当前请求基线">
+          <span>API</span>
+          <strong>/api/v1</strong>
+        </div>
         <RouterLink class="health-pill" to="/app/system">系统健康</RouterLink>
         <label class="role-switch">
           <span>身份</span>
@@ -50,7 +59,7 @@ function logout() {
     </header>
 
     <aside class="sidebar" aria-label="一级导航">
-      <nav>
+      <nav class="primary-nav">
         <RouterLink
           v-for="item in visibleNavigation"
           :key="item.key"
@@ -58,7 +67,8 @@ function logout() {
           :class="{ active: item.key === activeGroup }"
           :to="item.path"
         >
-          {{ item.label }}
+          <span>{{ item.label }}</span>
+          <small>{{ item.description }}</small>
         </RouterLink>
       </nav>
 
@@ -68,10 +78,13 @@ function logout() {
       </div>
     </aside>
 
-    <main class="workspace">
+    <main id="main-content" class="workspace">
       <div class="workspace-heading">
-        <p class="breadcrumb">{{ route.meta.navGroup || 'app' }}</p>
-        <h1>{{ route.meta.title }}</h1>
+        <div>
+          <p class="breadcrumb">{{ route.meta.navGroup || 'app' }}</p>
+          <h1>{{ route.meta.title }}</h1>
+        </div>
+        <span class="status-badge" :data-status="route.meta.status">{{ route.meta.status }}</span>
       </div>
       <slot />
     </main>

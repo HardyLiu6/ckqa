@@ -23,15 +23,23 @@ async function loadHealth() {
 </script>
 
 <template>
+  <section class="module-hero">
+    <div>
+      <p class="eyebrow">System Health</p>
+      <h2>Java 编排入口健康检查</h2>
+      <p>聚合 MySQL、PDF 解析、GraphRAG 输出和问答服务状态。</p>
+    </div>
+    <button class="primary-button compact" type="button" :disabled="loading" @click="loadHealth">
+      {{ loading ? '刷新中' : '刷新健康' }}
+    </button>
+  </section>
+
   <section class="panel">
     <div class="panel-heading">
       <div>
         <h2>系统健康</h2>
         <p>Java `/api/v1/system/health`</p>
       </div>
-      <button class="primary-button compact" type="button" :disabled="loading" @click="loadHealth">
-        {{ loading ? '刷新中' : '刷新' }}
-      </button>
     </div>
 
     <p v-if="errorMessage" class="inline-error">{{ errorMessage }}</p>

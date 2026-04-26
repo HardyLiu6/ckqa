@@ -16,8 +16,14 @@ function submit() {
 
 <template>
   <div class="login-view">
-    <p class="eyebrow">CKQA Admin</p>
-    <h1>进入课程知识库运维台</h1>
+    <div class="login-brand">
+      <span class="brand-mark">CK</span>
+      <div>
+        <p class="eyebrow">CKQA Admin</p>
+        <h1>进入课程知识库运维台</h1>
+      </div>
+    </div>
+    <p class="login-copy">选择身份后进入控制台，菜单和数据范围会随角色收敛。</p>
 
     <form class="login-form" @submit.prevent="submit">
       <label>

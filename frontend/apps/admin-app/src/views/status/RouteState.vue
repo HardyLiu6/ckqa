@@ -48,6 +48,11 @@ const copy = computed(() => stateCopy[currentState.value] ?? stateCopy['coming-s
     <p class="eyebrow">{{ currentState }}</p>
     <h1>{{ copy.title }}</h1>
     <p>{{ copy.message }}</p>
-    <RouterLink class="primary-button" :to="copy.to">{{ copy.action }}</RouterLink>
+    <div class="button-row">
+      <RouterLink class="primary-button" :to="copy.to">{{ copy.action }}</RouterLink>
+      <RouterLink v-if="currentState === 'coming-soon'" class="secondary-button" to="/app/system">
+        查看系统状态
+      </RouterLink>
+    </div>
   </section>
 </template>
