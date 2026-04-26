@@ -1,7 +1,5 @@
-<script setup>
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <HelloWorld />
+  <component :is="$route.meta.layoutComponent || 'main'" class="app-layout">
+    <RouterView />
+  </component>
 </template>
