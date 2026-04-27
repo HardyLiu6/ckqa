@@ -1,9 +1,15 @@
 <script setup>
+import DataSourceChip from '../../components/common/DataSourceChip.vue'
+import DiagnosticLogPanel from '../../components/common/DiagnosticLogPanel.vue'
+import MetricTile from '../../components/common/MetricTile.vue'
+import ProductionTrack from './ProductionTrack.vue'
+
 const metrics = [
-  { label: '可管理课程', value: '6', tone: 'blue', detail: '按当前身份过滤' },
-  { label: '课程资料', value: '24', tone: 'green', detail: '解析状态可追踪' },
-  { label: '激活知识库', value: '4', tone: 'amber', detail: '存在可用索引' },
-  { label: '待排查任务', value: '2', tone: 'red', detail: '失败或超时' },
+  { label: '可管理课程', value: '6', tone: 'running', hint: '按当前身份过滤' },
+  { label: '课程资料', value: '24', tone: 'success', hint: '解析状态可追踪' },
+  { label: '激活知识库', value: '4', tone: 'warning', hint: '存在可用索引' },
+  { label: '问答会话', value: '128', tone: 'neutral', hint: '近 7 日示例' },
+  { label: '待排查任务', value: '2', tone: 'danger', hint: '失败或超时' },
 ]
 
 const recentRuns = [
@@ -13,11 +19,18 @@ const recentRuns = [
 ]
 
 const productionSteps = [
-  { label: '课程资料', value: '24', state: 'ready' },
-  { label: 'PDF 解析', value: '18 done', state: 'ready' },
-  { label: 'GraphRAG 导出', value: '12 ready', state: 'running' },
-  { label: '索引激活', value: '4 active', state: 'ready' },
-  { label: '问答验证', value: '3 smoke', state: 'pending' },
+  { key: 'material', counts: { done: 24 } },
+  { key: 'parse', counts: { done: 18, failed: 2 } },
+  { key: 'export', counts: { running: 3, done: 12 } },
+  { key: 'index', counts: { running: 1, done: 8 } },
+  { key: 'activate', counts: { done: 4 } },
+  { key: 'smoke', counts: { pending: 3 } },
+]
+
+const diagnosticLines = [
+  '[parse] material:OS-2024 第 3 章图片 OCR 置信度偏低',
+  '[index] kb:data-structure 等待 output/lancedb 刷新',
+  '[qa] smoke-run#17 命中率低于阈值，建议复测',
 ]
 </script>
 
@@ -28,23 +41,24 @@ const productionSteps = [
       <h2>知识库生产链路</h2>
       <p>从课程资料到索引激活和问答验证，首屏只保留最需要扫读的状态。</p>
     </div>
-    <RouterLink class="primary-button compact" to="/app/knowledge-bases">进入构建</RouterLink>
+    <div class="page-title-actions">
+      <DataSourceChip source="mock" />
+      <RouterLink class="primary-button compact" to="/app/knowledge-bases">进入构建</RouterLink>
+    </div>
   </section>
 
   <section class="dashboard-grid">
-    <article v-for="metric in metrics" :key="metric.label" class="metric-card" :data-tone="metric.tone">
-      <span>{{ metric.label }}</span>
-      <strong>{{ metric.value }}</strong>
-      <small>{{ metric.detail }}</small>
-    </article>
+    <MetricTile
+      v-for="metric in metrics"
+      :key="metric.label"
+      :label="metric.label"
+      :value="metric.value"
+      :hint="metric.hint"
+      :tone="metric.tone"
+    />
   </section>
 
-  <section class="flow-rail" aria-label="知识库生产链路">
-    <article v-for="step in productionSteps" :key="step.label" :data-state="step.state">
-      <span>{{ step.label }}</span>
-      <strong>{{ step.value }}</strong>
-    </article>
-  </section>
+  <ProductionTrack :nodes="productionSteps" />
 
   <section class="content-grid two-columns">
     <article class="panel">
@@ -82,4 +96,10 @@ const productionSteps = [
       </dl>
     </article>
   </section>
+
+  <DiagnosticLogPanel
+    title="异常摘要"
+    :lines="diagnosticLines"
+    :actions="[{ label: '查看问答会话', to: '/app/qa-sessions' }]"
+  />
 </template>

@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { authStore } from '../../stores/auth.js'
+
 const props = defineProps({
   state: {
     type: String,
@@ -13,45 +15,136 @@ const route = useRoute()
 
 const currentState = computed(() => props.state || route.meta.routeState || 'coming-soon')
 
-const stateCopy = {
-  forbidden: {
-    title: '无权限',
-    message: '当前身份不能访问该页面。',
-    action: '返回工作台',
-    to: '/app/dashboard',
-  },
-  'not-found': {
-    title: '页面不存在',
-    message: '目标路由没有匹配的页面。',
-    action: '返回工作台',
-    to: '/app/dashboard',
-  },
-  'server-error': {
-    title: '服务器错误',
-    message: '页面进入异常状态。',
-    action: '返回工作台',
-    to: '/app/dashboard',
-  },
-  'coming-soon': {
-    title: '未开放',
-    message: '该页面已预留在路由结构中，当前阶段暂不实施。',
-    action: '返回工作台',
-    to: '/app/dashboard',
-  },
+const navGroupLabels = {
+  dashboard: '工作台',
+  courses: '课程与资料',
+  knowledge: '知识库构建',
+  qa: '问答运维',
+  users: '用户与权限',
+  system: '系统与审计',
 }
 
-const copy = computed(() => stateCopy[currentState.value] ?? stateCopy['coming-soon'])
+const statusLabels = {
+  mvp: 'MVP 已开放',
+  upcoming: '已规划，待接入',
+  skeleton: '页面骨架',
+}
+
+function toQueryString(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join('、')
+  return value || ''
+}
+
+const requiredPermissions = computed(() => {
+  const queryRequired = toQueryString(route.query.required)
+  if (queryRequired) return queryRequired
+
+  const metaPermissions = route.meta.permissions || []
+  if (metaPermissions.length) return metaPermissions.join('、')
+
+  return '当前路由所需权限'
+})
+
+const currentUser = computed(() => authStore.state.currentUser)
+
+const identityLabel = computed(() => currentUser.value?.name || '未登录身份')
+const dataScope = computed(() => currentUser.value?.dataScope || '未分配数据范围')
+
+const moduleLabel = computed(() => {
+  const queryModule = toQueryString(route.query.module)
+  if (queryModule) return queryModule
+
+  return navGroupLabels[route.meta.navGroup] || '当前模块'
+})
+
+const routeTitle = computed(() => toQueryString(route.query.title) || route.meta.title || '预留页面')
+const planningStatus = computed(() => {
+  const queryStatus = toQueryString(route.query.status)
+  if (queryStatus) return queryStatus
+
+  return statusLabels[route.meta.status] || '已纳入路由规划'
+})
+
+const copy = computed(() => {
+  if (currentState.value === 'forbidden') {
+    return {
+      eyebrow: '403 / Forbidden',
+      title: '当前身份无权访问',
+      message: '路由守卫已拦截本次访问，请切换到具备权限的身份或返回工作台。',
+    }
+  }
+
+  if (currentState.value === 'not-found') {
+    return {
+      eyebrow: '404 / Not Found',
+      title: '页面不存在',
+      message: '目标地址没有匹配到 CKQA 管理台页面。',
+    }
+  }
+
+  if (currentState.value === 'server-error') {
+    return {
+      eyebrow: '500 / Server Error',
+      title: '页面进入异常状态',
+      message: '可以先刷新当前页面；如果仍然异常，请进入系统健康页查看 Java 编排与下游服务状态。',
+    }
+  }
+
+  return {
+    eyebrow: 'Coming Soon',
+    title: routeTitle.value,
+    message: '该入口已保留在导航和权限结构中，当前阶段暂不开放业务页面。',
+  }
+})
+
+function refreshPage() {
+  window.location.reload()
+}
 </script>
 
 <template>
   <section class="route-state">
-    <p class="eyebrow">{{ currentState }}</p>
+    <p class="eyebrow">{{ copy.eyebrow }}</p>
     <h1>{{ copy.title }}</h1>
     <p>{{ copy.message }}</p>
+
+    <dl v-if="currentState === 'forbidden'" class="route-state__facts">
+      <div>
+        <dt>当前身份</dt>
+        <dd>{{ identityLabel }}</dd>
+      </div>
+      <div>
+        <dt>数据范围</dt>
+        <dd>{{ dataScope }}</dd>
+      </div>
+      <div>
+        <dt>缺失权限</dt>
+        <dd>{{ requiredPermissions }}</dd>
+      </div>
+    </dl>
+
+    <dl v-else-if="currentState === 'coming-soon'" class="route-state__facts">
+      <div>
+        <dt>所属模块</dt>
+        <dd>{{ moduleLabel }}</dd>
+      </div>
+      <div>
+        <dt>规划状态</dt>
+        <dd>{{ planningStatus }}</dd>
+      </div>
+      <div>
+        <dt>路由名称</dt>
+        <dd>{{ route.name || route.path }}</dd>
+      </div>
+    </dl>
+
     <div class="button-row">
-      <RouterLink class="primary-button" :to="copy.to">{{ copy.action }}</RouterLink>
-      <RouterLink v-if="currentState === 'coming-soon'" class="secondary-button" to="/app/system">
-        查看系统状态
+      <RouterLink class="primary-button" to="/app/dashboard">返回工作台</RouterLink>
+      <button v-if="currentState === 'server-error'" class="secondary-button" type="button" @click="refreshPage">
+        刷新页面
+      </button>
+      <RouterLink v-if="currentState === 'server-error'" class="secondary-button" to="/app/health">
+        系统健康
       </RouterLink>
     </div>
   </section>

@@ -1023,11 +1023,22 @@ pnpm test && pnpm build && pnpm dev
 
 ## 13. 遗留问题与下一步建议
 
-1. `admin-app` 仍缺真实登录接口，开发态身份切换需要保留明显的"开发态"视觉标识。
-2. 多数业务页面仍使用本地示例数据，`DataSourceChip` 必须在视觉重构时同步落地。
-3. `HealthView` 已有真实请求入口，适合作为第一个实接页面打磨完整四态。
-4. `ProductionTrack` 是工作台核心组件，混合态规则和响应式降级须在编码前与业务方确认。
-5. `DiagnosticLogPanel` 需确认日志 API 路径和首版轮询方案，避免组件与接口耦合。
-6. `DataTableShell` 的虚拟滚动接口首版只定义 prop，不实现，待大数据量场景出现后再接入 `vue-virtual-scroller`。
-7. 对比度验收建议引入 `jest-axe` 或在 CI 中集成 `pa11y`，避免主题色变更后退化。
-8. DM Sans 和 DM Mono 通过 `@fontsource` 在本地打包，不依赖 CDN，生产环境字体稳定可控。
+### 13.1 已落地状态
+
+1. 视觉基础已落地：`tokens.css` / `base.css` / `components.css` 分层样式、DM Sans / DM Mono 本地字体、`light / dark / auto` 主题模式和固定主题色色板已经接入。
+2. 控制台壳层已落地：`ConsoleLayout` 拆分为 `AppTopbar`、`SideNavigation` 和 `ThemeControl`，顶栏显示 Java `/api/v1` 运行基线，侧栏按权限过滤并保留未开放入口。
+3. 公共状态组件已落地：`StatusBadge`、`DataSourceChip`、`SkeletonBlock`、`DiagnosticLogPanel`、`MetricTile`、`DataTableShell`、`WorkflowStepper` 已用于工作台、健康页和通用业务页。
+4. 工作台已落地：`DashboardView` 使用 5 个指标块、`ProductionTrack`、近期任务和局部深色异常摘要；生产链路混合态规则已有 `node --test` 覆盖。
+5. 健康页已落地：`HealthView` 继续请求 Java `/api/v1/system/health`，通过 `HealthMatrix` 区分 `reachable` 与 `ready`，原始 JSON 收进折叠区，诊断摘要使用局部深色面板。
+6. 通用业务页模板已落地：`ModulePage` 按 table / overview / workflow 三类变体渲染；业务页配置显式声明 `dataSource: 'mock'`、主次操作和权限字段；表格筛选按显式列匹配。
+7. 登录页和状态页已落地：登录页保留开发态身份切换并明确标注正式登录接口待接入；403 / 404 / 500 / coming-soon 状态页提供可读原因和恢复入口。
+8. 自动化验证已覆盖主题、导航、数据来源、生产链路、健康归一化、业务页模型、表格筛选和 workflow 阻塞动作；当前验收命令是 `pnpm test` 与 `pnpm build`。
+
+### 13.2 仍需后续推进
+
+1. `admin-app` 仍缺真实登录接口；开发态身份切换应继续保留明显的"开发态"视觉标识，直到后端认证契约确定。
+2. 除系统健康外，多数业务页面仍使用本地示例数据；后续每接入一个 Java `/api/v1` 页面，都要把对应 `DataSourceChip` 从 `mock` 调整为 `live` 并补四态处理。
+3. 403 页面当前只能显示兜底缺失权限；如果要展示精确权限点，需要路由守卫跳转时附带 `required` 查询参数。
+4. `DiagnosticLogPanel` 目前用于示例诊断摘要；真实索引运行、检索日志、失败任务摘要还需要后端日志 API 或任务状态接口。
+5. `DataTableShell` 首版不实现虚拟滚动；若出现大数据量表格，再接入 `vue-virtual-scroller` 或后端分页。
+6. 对比度与无障碍仍建议后续引入 `pa11y` 或等效检查，避免主题色和密集表格迭代时退化。

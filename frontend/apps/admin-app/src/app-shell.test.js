@@ -7,6 +7,11 @@ import {
   buildNavigationGroups,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
+import {
+  DATA_SOURCE_LABELS,
+  getDataSourceLabel,
+  getStatusTone,
+} from './components/common/status-model.js'
 import { routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -14,7 +19,17 @@ import {
   resolveTheme,
   themeStore,
 } from './stores/theme.js'
-import { getModulePageConfig } from './views/pages/module-content.js'
+import {
+  deriveTrackNodeState,
+  PRODUCTION_STEPS,
+} from './views/dashboard/production-track-model.js'
+import {
+  filterRowsByFilters,
+  getModulePageConfig,
+  isWorkflowPrimaryActionDisabled,
+  resolveActiveWorkflowStep,
+} from './views/pages/module-content.js'
+import { normalizeHealthResponse } from './views/system/health-model.js'
 
 test('路由骨架包含首版关键入口和后续页面状态', () => {
   const paths = routeRecords.map((route) => route.path)
@@ -76,6 +91,17 @@ test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义',
   assert.equal(config.workflowSteps.at(-1).label, '问答冒烟验证')
 })
 
+test('业务页模型显式声明数据来源和主操作', () => {
+  const courses = getModulePageConfig('courses')
+  const build = getModulePageConfig('knowledge-base-build')
+
+  assert.equal(courses.dataSource, 'mock')
+  assert.equal(courses.primaryAction.label, '新建课程')
+  assert.equal(build.dataSource, 'mock')
+  assert.equal(build.workflowSteps.every((step) => Boolean(step.status)), true)
+  assert.equal(build.workflowSteps.every((step) => Array.isArray(step.conditions)), true)
+})
+
 test('问答会话列表页面模型保留正式问答和冒烟验证过滤项', () => {
   const config = getModulePageConfig('qa-sessions')
 
@@ -84,6 +110,34 @@ test('问答会话列表页面模型保留正式问答和冒烟验证过滤项',
     config.filters.find((filter) => filter.key === 'sessionType').options,
     ['全部', '正式问答', '冒烟验证'],
   )
+})
+
+test('业务页列表筛选只按显式列匹配', () => {
+  const courses = getModulePageConfig('courses')
+  const qaSessions = getModulePageConfig('qa-sessions')
+
+  assert.deepEqual(
+    filterRowsByFilters(courses.rows, courses.filters, { status: 'active', scope: '我的课程' }).map((row) => row[0]),
+    ['操作系统'],
+  )
+  assert.deepEqual(
+    filterRowsByFilters(qaSessions.rows, qaSessions.filters, { sessionType: '冒烟验证' }).map((row) => row[0]),
+    ['构建后冒烟验证', '索引切换验证'],
+  )
+  assert.deepEqual(
+    filterRowsByFilters(qaSessions.rows, qaSessions.filters, { status: 'failed' }),
+    [],
+  )
+})
+
+test('构建向导步骤选择和阻塞动作有稳定模型', () => {
+  const { workflowSteps } = getModulePageConfig('knowledge-base-build')
+
+  assert.equal(resolveActiveWorkflowStep(workflowSteps, '').key, 'material')
+  assert.equal(resolveActiveWorkflowStep(workflowSteps, 'index').key, 'index')
+  assert.equal(resolveActiveWorkflowStep(workflowSteps, 'missing').key, 'material')
+  assert.equal(isWorkflowPrimaryActionDisabled(resolveActiveWorkflowStep(workflowSteps, 'index')), true)
+  assert.equal(isWorkflowPrimaryActionDisabled(resolveActiveWorkflowStep(workflowSteps, 'export')), false)
 })
 
 test('主题 store 可在 Node 环境安全导入并解析主题', () => {
@@ -176,4 +230,50 @@ test('控制台导航在详情路径回落高亮所属模块入口', () => {
     findActiveNavigationPath(groups, 'system', '/app/authorization-audit-logs'),
     '/app/authorization-audit-logs',
   )
+})
+
+test('状态和数据来源有稳定映射', () => {
+  assert.equal(getStatusTone('failed'), 'danger')
+  assert.equal(getStatusTone('running'), 'running')
+  assert.equal(getStatusTone('blocked'), 'blocked')
+  assert.equal(getStatusTone('unknown'), 'blocked')
+  assert.equal(getDataSourceLabel('mock'), '示例数据')
+  assert.equal(getDataSourceLabel('live'), '实时数据')
+  assert.equal(DATA_SOURCE_LABELS.skeleton, '页面骨架')
+})
+
+test('生产链路节点按失败优先规则归一化', () => {
+  assert.equal(PRODUCTION_STEPS.length, 6)
+  assert.deepEqual(
+    deriveTrackNodeState({ done: 18, failed: 2 }),
+    { tone: 'danger', label: '18 done / 2 failed', priority: 5 },
+  )
+  assert.deepEqual(
+    deriveTrackNodeState({ running: 3, done: 7 }),
+    { tone: 'running', label: '3 running / 7 done', priority: 4 },
+  )
+  assert.equal(deriveTrackNodeState({ done: 10 }).tone, 'success')
+  assert.equal(deriveTrackNodeState({ pending: 4 }).tone, 'warning')
+  assert.equal(deriveTrackNodeState({}).tone, 'blocked')
+})
+
+test('健康响应同时保留 reachable 和 ready', () => {
+  const result = normalizeHealthResponse({
+    status: 'degraded',
+    services: {
+      javaApi: { reachable: true, ready: true, message: 'ok' },
+      graphRagApi: { reachable: true, ready: false, message: 'index missing' },
+    },
+  })
+
+  assert.equal(result.overallStatus, 'degraded')
+  assert.equal(result.services.length, 2)
+  assert.deepEqual(result.services[1], {
+    key: 'graphRagApi',
+    label: 'GraphRAG API',
+    reachable: true,
+    ready: false,
+    message: 'index missing',
+    tone: 'warning',
+  })
 })
