@@ -5,7 +5,7 @@
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
 - `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API。
 - `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，已有最小 Axios 请求层，但尚未接入稳定业务契约。
-- `frontend/apps/admin-app/`：独立的 Vue 3 + Vite 管理端原型，当前不是主流程入口。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成运维台壳层、主题系统、工作台、系统健康页和通用业务页模板，但仍不是知识生产主链路入口。
 - `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
 
 ## 必读顺序
@@ -23,6 +23,7 @@
 - `graphrag_pipeline/README.md`
 - `frontend/apps/student-app/README.md`
 - `frontend/apps/admin-app/README.md`
+- `docs/admin-teacher-frontend-structure.md`（涉及 admin-app 页面结构、路由或 RBAC 时）
 - `backend/ckqa-back/README.md`
 - `docs/student-backend-graphrag-api-contract.md`（涉及 student-app、Java 后端或 GraphRAG API 联调时）
 
@@ -137,13 +138,14 @@
 
 ### 4. `frontend/apps/admin-app/`
 
-- 当前是独立的 Vue 3 + Vite 原型工程。
+- 当前是独立的 Vue 3 + Vite 管理员/教师控制台前端。
 - 常用命令：
   - `cd frontend/apps/admin-app`
-  - `npm install`
-  - `npm run dev`
-  - `npm run build`
-- 目前尚未与 Python 主链路或 Java 编排后端打通，更多是管理端占位与前端实验场。
+  - `pnpm install`
+  - `pnpm test`
+  - `pnpm build`
+  - `pnpm dev`
+- 目前已完成控制台壳层、主题系统、工作台、健康页、通用业务页模板、登录页与状态页；正式浏览器接口边界仍是 Java `/api/v1`，除系统健康外多数页面仍使用示例数据。
 - `node_modules/` 已出现在仓库中，但它不是源码，不要把依赖目录当成改动目标。
 
 ### 5. `backend/ckqa-back/`

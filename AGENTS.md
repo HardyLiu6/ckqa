@@ -26,8 +26,9 @@ This repository currently has five notable areas, with the two Python modules as
    - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
    - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
 4. `frontend/apps/admin-app/`
-   - Small Vue 3 + Vite admin frontend prototype.
-   - Secondary unless the task explicitly targets frontend work.
+   - Shared admin/teacher Vue 3 + Vite console frontend.
+   - Already has theme tokens, route guards, dashboard, system health page, and config-driven table/overview/workflow page templates.
+   - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
    - Provides `/api/v1` course, PDF, index, async QA, and system health endpoints.
@@ -47,6 +48,7 @@ Read these when needed for more detail:
 - `pdf_ingest/docs/MinerU PDF Parser.md`
 - `graphrag_pipeline/README.md`
 - `frontend/apps/student-app/README.md`
+- `docs/admin-teacher-frontend-structure.md` when touching admin-app information architecture, routes, or RBAC
 - `backend/ckqa-back/README.md`
 - `docs/student-backend-graphrag-api-contract.md` when touching student/backend/GraphRAG API integration
 
@@ -137,9 +139,11 @@ Notes:
 
 ### `frontend/apps/admin-app/`
 
-- Vue 3 + Vite standalone prototype.
-- Typical commands: `npm install`, `npm run dev`, `npm run build`.
+- Vue 3 + Vite standalone admin/teacher console frontend.
+- Preferred commands: `pnpm install`, `pnpm test`, `pnpm build`, `pnpm dev`, `pnpm preview`
 - Treat `node_modules/` as generated dependencies, not source.
+- Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
+- Current state: shell, theme system, dashboard, health page, login/status pages, and config-driven business page templates are implemented; except for `/app/health`, most pages still use explicit mock data or upcoming-state placeholders.
 
 ### `backend/ckqa-back/`
 

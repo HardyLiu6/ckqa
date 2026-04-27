@@ -15,6 +15,12 @@
 - [../../../pdf_ingest/README.md](../../../pdf_ingest/README.md)
 - [../../../graphrag_pipeline/README.md](../../../graphrag_pipeline/README.md)
 
+本次已完成的结构设计与视觉重构稿已归档，可按需回看：
+
+- [../../../docs/admin-teacher-frontend-structure.md](../../../docs/admin-teacher-frontend-structure.md)
+- [../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md](../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md)
+- [../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md)
+
 ## 目录与入口
 
 | 文件 | 作用 |

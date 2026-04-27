@@ -1,5 +1,7 @@
 # 管理员端前端美化重构设计规格
 
+> 归档说明：该设计稿对应的管理员端前端重构已完成并提交。当前活跃入口请优先参考 `frontend/apps/admin-app/README.md` 与 `docs/admin-teacher-frontend-structure.md`。
+
 - 日期：2026-04-26
 - 范围：`frontend/apps/admin-app/`
 - 参考：`docs/admin-teacher-frontend-structure.md`、`docs/superpowers/specs/2026-04-21-student-app-ui-redesign-design.md`、`frontend/apps/student-app/`

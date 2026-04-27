@@ -10,10 +10,10 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 2. `graphrag_pipeline/`
    负责拉取导出的 JSON、执行 Microsoft GraphRAG 建索引，并通过 FastAPI 提供 OpenAI 兼容问答接口。
 
-其余目录目前属于编排入口或配套原型：
+其余目录目前属于编排入口或配套前端/后端工作区：
 
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
-- `frontend/apps/admin-app/`：管理端前端原型，仍接近 Vite/Vue 起步页。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成运维台壳层、工作台、系统健康页和通用页面模板，业务数据仍以 Java `/api/v1` 渐进接入为主。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，已经承接 `/api/v1` 下的课程、PDF、索引、异步问答和系统健康检查接口，但仍依赖 `pdf_ingest/` 与 `graphrag_pipeline/` 提供真实处理能力。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
@@ -25,7 +25,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端前端原型 | 独立原型，未接主链路 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
+| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 已完成壳层与核心页面模板，业务接口仍在渐进接入 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本次审计结论
@@ -33,8 +33,8 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 - 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
-- `frontend/apps/student-app/` 已经是一个比 `admin-app` 更完整的学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
-- `frontend/apps/admin-app/` 当前代码仍接近 Vite/Vue 起步页，不应被视为正式管理台。
+- `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
+- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备主题系统、路由守卫、工作台、系统健康页和通用业务页模板，但除系统健康外多数页面仍使用示例数据。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
 ## 人类与机器入口
@@ -76,6 +76,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 - [graphrag_pipeline/PROMPT_TUNING_PIPELINE.md](graphrag_pipeline/PROMPT_TUNING_PIPELINE.md)
 - [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 - [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
+- [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 
 ## 目录导航
@@ -144,10 +145,11 @@ ckqa/
 
 ### `frontend/apps/admin-app/`
 
-- 角色：前端页面原型与占位
+- 角色：管理员端/教师端共用控制台前端
 - 主入口：`src/App.vue`
-- 当前状态：仍是原型工程，尚未接主链路
+- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页和通用业务页模板；系统健康页已请求 Java `/api/v1/system/health`，其他多数页面仍保留示例数据和“未开放”边界
 - 文档入口：[frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
+- 结构设计入口：[docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 
 ### `backend/ckqa-back/`
 
@@ -246,4 +248,6 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - [graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)
 - [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 - [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
+- [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
+- [docs/superpowers/archive/README.md](docs/superpowers/archive/README.md)（已完成设计/计划归档索引）

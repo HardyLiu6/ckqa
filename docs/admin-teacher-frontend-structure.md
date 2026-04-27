@@ -52,7 +52,7 @@
 
 本设计基于当前仓库事实：
 
-1. `frontend/apps/admin-app/` 目前仍接近 Vue/Vite 起步页，适合作为管理端正式结构的起点。
+1. `frontend/apps/admin-app/` 已经完成管理端壳层、开发态身份切换、路由守卫、工作台、系统健康页和通用业务页模板，本结构文档继续作为页面/路由/RBAC 设计依据，而不是“起步页待搭骨架”的提案。
 2. `backend/ckqa-back/` 已提供 `/api/v1` 下的课程资料、PDF 解析、GraphRAG 导出、索引任务、问答任务和系统健康接口。
 3. `pdf_ingest/sql/ocqa.sql` 已包含 `users`、`roles`、`permissions`、`user_roles`、`role_permissions`、`course_memberships`、`course_materials`、`material_objects`、`knowledge_bases`、`index_runs`、`qa_sessions`、`qa_messages`、`authorization_audit_logs` 等表结构。
 4. 正式前端应通过 Java `/api/v1` 调用业务能力，不应直接请求 GraphRAG Python 服务。GraphRAG Python 服务属于后端内部编排和开发调试依赖。
@@ -633,6 +633,8 @@ system:read
 
 目标：让 `admin-app` 从起步页变成有真实信息架构的后台壳。
 
+当前状态：本阶段已经完成，相关成果已在 `frontend/apps/admin-app/` 落地。
+
 建议完成：
 
 1. 路由表。
@@ -657,6 +659,8 @@ system:read
 5. 构建向导。
 6. 索引运行详情。
 7. 系统健康。
+
+当前状态：页面结构、工作台、系统健康页和构建向导模板已经落地，但除系统健康外仍主要停留在示例数据与未开放边界；这一阶段接下来的重点应转向 Java `/api/v1` 的真实数据接入。
 
 ### 11.3 第三阶段：问答运维与权限管理
 
@@ -715,13 +719,10 @@ system:read
 
 ## 14. 下一步建议
 
-建议下一步创建 `admin-app` 的结构骨架，不先做复杂视觉：
+当前结构骨架和视觉重构已经完成，下一步建议从“结构建设”切换到“真实业务接入与验收”：
 
-1. 引入 Vue Router。
-2. 建立 `src/router/routes.js`。
-3. 建立 `src/layouts/AuthLayout.vue`、`ConsoleLayout.vue`、`DetailLayout.vue`、`WorkflowLayout.vue`。
-4. 建立 `src/views/status/RouteState.vue` 处理 403/404/500/未开放。
-5. 建立 `src/stores/auth.js` 或等价认证状态模块，先支持管理员/教师开发态身份切换。
-6. 建立路由守卫和 Axios 拦截器，覆盖未登录、登录过期、无权限和 Java `ApiResponse` 错误。
-7. 建立 `src/axios/` 请求层，默认使用 `VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1`。
-8. 先实现系统健康、课程列表、知识库列表三个可验证页面。
+1. 优先接入 Java `/api/v1` 的真实数据页：`/app/courses`、`/app/knowledge-bases`、`/app/qa-sessions`。
+2. 将工作台指标和近期任务从本地数组切换为 Java 聚合接口返回，保持 `DataSourceChip` 从 `mock` 向 `live` 渐进迁移。
+3. 为 403 页面补精确缺失权限提示：路由守卫跳转时附带 `required` 查询参数。
+4. 为控制台补浏览器级冒烟测试，覆盖登录、工作台、健康页、构建向导和未开放状态页。
+5. 在后端聚合接口稳定后，再逐步补用户、角色权限矩阵、课程成员和授权审计日志等管理页的真实数据。
