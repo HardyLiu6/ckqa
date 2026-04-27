@@ -477,23 +477,77 @@ select {
 
 .nav-group {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
-.nav-group-heading {
+.nav-folder {
   display: grid;
-  gap: 2px;
-  padding: 8px 10px 4px;
+  gap: 4px;
 }
 
-.nav-group-heading strong {
+.nav-folder-trigger {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ckqa-radius);
   color: var(--ckqa-text);
-  font-size: 13px;
+  cursor: pointer;
+  list-style: none;
 }
 
-.nav-group-heading span {
+.nav-folder-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.nav-folder-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.nav-folder-title {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-folder-copy small {
+  overflow: hidden;
   color: var(--ckqa-text-muted);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-folder-icon {
+  flex: 0 0 auto;
+  color: var(--ckqa-text-muted);
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.nav-folder[open] .nav-folder-icon {
+  transform: rotate(90deg);
+}
+
+.nav-folder-trigger:hover,
+.nav-folder-trigger.active {
+  color: var(--ckqa-accent-strong);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--ckqa-accent) 7%, transparent);
+}
+
+.nav-folder-trigger.active .nav-folder-icon,
+.nav-folder-trigger:hover .nav-folder-icon {
+  color: var(--ckqa-accent-strong);
 }
 
 .nav-items {
@@ -511,6 +565,27 @@ select {
   border: 1px solid transparent;
   border-radius: var(--ckqa-radius);
   color: var(--ckqa-text-muted);
+  text-decoration: none;
+}
+
+.nav-folder .nav-items {
+  margin-top: 2px;
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--ckqa-border) 82%, transparent);
+}
+
+.nav-folder .nav-link {
+  padding: 8px 9px;
+  border-radius: calc(var(--ckqa-radius) - 2px);
+}
+
+.nav-link--single .nav-link-title {
+  font-size: 15px;
+}
+
+.nav-folder .nav-link-title {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .nav-link-main {
@@ -551,6 +626,12 @@ select {
   color: var(--ckqa-accent-strong);
   border-color: color-mix(in srgb, var(--ckqa-accent) 22%, transparent);
   background: color-mix(in srgb, var(--ckqa-accent) 10%, transparent);
+}
+
+.nav-link:focus-visible,
+.nav-folder-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ckqa-accent) 42%, transparent);
+  outline-offset: 2px;
 }
 
 .scope-panel {

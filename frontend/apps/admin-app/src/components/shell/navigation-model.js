@@ -13,6 +13,14 @@ function isDirectNavigationRoute(route) {
   return NAV_LAYOUTS.has(route.meta?.layout) && !route.path.includes(':')
 }
 
+function resolveGroupPresentation(group, items) {
+  if (items.length === 1 && items[0].title === group.label) {
+    return 'single'
+  }
+
+  return 'folder'
+}
+
 export function buildNavigationGroups(routes, canAccess) {
   return NAV_GROUPS.map((group) => {
     const items = routes
@@ -30,7 +38,12 @@ export function buildNavigationGroups(routes, canAccess) {
         permissions: route.meta.permissions || [],
       }))
 
-    return { ...group, items }
+    return {
+      ...group,
+      items,
+      presentation: resolveGroupPresentation(group, items),
+      primaryItem: items[0] || null,
+    }
   })
 }
 

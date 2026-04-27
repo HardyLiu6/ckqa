@@ -178,6 +178,26 @@ test('控制台导航按权限过滤并保留模块分组', () => {
   )
 })
 
+test('控制台侧栏区分单入口菜单和下拉子模块', () => {
+  const groups = buildNavigationGroups(routeRecords, () => true)
+  const dashboard = groups.find((group) => group.key === 'dashboard')
+  const courses = groups.find((group) => group.key === 'courses')
+  const users = groups.find((group) => group.key === 'users')
+
+  assert.equal(dashboard.presentation, 'single')
+  assert.equal(dashboard.primaryItem.path, '/app/dashboard')
+  assert.equal(dashboard.primaryItem.title, '工作台')
+
+  assert.equal(courses.presentation, 'folder')
+  assert.deepEqual(courses.items.map((item) => item.title), ['课程列表'])
+
+  assert.equal(users.presentation, 'folder')
+  assert.deepEqual(
+    users.items.map((item) => item.path),
+    ['/app/users', '/app/roles', '/app/course-memberships'],
+  )
+})
+
 test('控制台导航不暴露动态详情路径并保留顶层未开放入口', () => {
   const groups = buildNavigationGroups(routeRecords, () => true)
   const items = groups.flatMap((group) => group.items)
