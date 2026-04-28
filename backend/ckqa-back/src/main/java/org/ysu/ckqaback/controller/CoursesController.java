@@ -1,13 +1,19 @@
 package org.ysu.ckqaback.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.course.CourseLookupService;
+import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
+import org.ysu.ckqaback.course.dto.CourseQueryRequest;
+import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
 import org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +34,16 @@ import java.util.List;
 public class CoursesController {
 
     private final CourseLookupService courseLookupService;
+
+    @GetMapping
+    public ApiResponse<ApiPageData<CourseSummaryResponse>> listCourses(@Valid @ModelAttribute CourseQueryRequest request) {
+        return ApiResponseUtils.success(courseLookupService.listCourses(request));
+    }
+
+    @GetMapping("/{courseId}")
+    public ApiResponse<CourseDetailResponse> getCourseDetail(@PathVariable String courseId) {
+        return ApiResponseUtils.success(courseLookupService.getCourseDetail(courseId));
+    }
 
     @GetMapping("/{courseId}/pdf-files")
     public ApiResponse<List<CoursePdfFileSummaryResponse>> listCoursePdfFiles(@PathVariable String courseId) {
