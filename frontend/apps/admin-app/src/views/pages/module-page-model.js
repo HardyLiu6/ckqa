@@ -8,6 +8,7 @@ export function buildPageQuery(query = {}, page) {
 export function createRouteSnapshot(route, query = route?.query ?? {}) {
   return {
     name: route?.name,
+    params: { ...(route?.params ?? {}) },
     query: { ...query },
     meta: { ...(route?.meta ?? {}) },
   }

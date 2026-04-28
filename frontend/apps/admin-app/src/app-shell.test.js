@@ -44,8 +44,27 @@ import {
 import {
   buildCourseListParams,
   createCoursesLoaderResult,
+  loadCourseDetailBlock,
+  loadModulePage,
   resolveCoursesRequestState,
 } from './views/pages/module-loaders.js'
+import {
+  exportGraphRag,
+  getMaterial,
+  hasCompleteGraphRagExport,
+  listParseResults,
+  startParse,
+} from './api/materials.js'
+import {
+  LONG_TASK_LIMITS,
+  createLongTaskController,
+  resolveLongTaskState,
+  shouldStartFallback,
+} from './views/pages/long-task-state.js'
+import {
+  createMaterialExportTaskOptions,
+  resolveMaterialExportPayload,
+} from './views/pages/material-lifecycle-actions.js'
 import {
   buildPageQuery,
   createRouteSnapshot,
@@ -168,6 +187,207 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', () =
   assert.equal(Array.isArray(contract.blocks), false)
 })
 
+test('课程详情 loader 只在主资源失败时进入页面级错误', async () => {
+  const route = { name: 'course-detail', query: {}, params: { courseId: 'os' } }
+  const partialResult = await loadModulePage(route, route.query, {
+    getCourse: async () => ({ courseId: 'os', courseName: '操作系统', status: 'active' }),
+    listCourseMaterials: async () => {
+      throw { status: 500, message: '资料接口失败' }
+    },
+    listCourseKnowledgeBases: async () => ([{ id: 3, name: 'OS 知识库', status: 'active', activeIndexRunId: 12 }]),
+  })
+
+  assert.equal(partialResult.requestState, 'success')
+  assert.equal(partialResult.blocks.course.state, 'success')
+  assert.equal(partialResult.blocks.materials.state, 'error')
+  assert.equal(partialResult.blocks.materials.error.message, '资料接口失败')
+  assert.equal(partialResult.blocks.knowledgeBases.state, 'success')
+  assert.equal(partialResult.blocks.knowledgeBases.items[0].detail, '激活索引 #12')
+
+  const failedResult = await loadModulePage(route, route.query, {
+    getCourse: async () => {
+      throw { status: 404, message: '课程不存在' }
+    },
+    listCourseMaterials: async () => ([]),
+    listCourseKnowledgeBases: async () => ([]),
+  })
+
+  assert.equal(failedResult.requestState, 'error')
+  assert.equal(failedResult.error.message, '课程不存在')
+})
+
+test('课程详情区块重试 helper 只加载指定资源', async () => {
+  const route = { name: 'course-detail', query: {}, params: { courseId: 'os' } }
+  const calls = []
+
+  const materialsBlock = await loadCourseDetailBlock(route, 'materials', {
+    getCourse: async () => {
+      calls.push('course')
+      return {}
+    },
+    listCourseMaterials: async () => {
+      calls.push('materials')
+      return [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }]
+    },
+    listCourseKnowledgeBases: async () => {
+      calls.push('knowledgeBases')
+      return []
+    },
+  })
+
+  assert.deepEqual(calls, ['materials'])
+  assert.equal(materialsBlock.state, 'success')
+  assert.equal(materialsBlock.items[0].to, '/app/materials/9')
+})
+
+test('资料 API 暴露生命周期方法并按文件名判断 GraphRAG 完整导出', async () => {
+  assert.equal(typeof getMaterial, 'function')
+  assert.equal(typeof listParseResults, 'function')
+  assert.equal(typeof startParse, 'function')
+  assert.equal(typeof exportGraphRag, 'function')
+
+  const results = [
+    { fileName: 'graphrag_normalized_docs.json' },
+    { fileName: 'graphrag_section_docs.json' },
+    { fileName: 'graphrag_page_docs.json' },
+    { fileName: 'content_list.json' },
+  ]
+
+  assert.equal(hasCompleteGraphRagExport(results, { mode: 'section', withPageDocs: true }), true)
+  assert.equal(hasCompleteGraphRagExport(results.slice(0, 2), { mode: 'section', withPageDocs: true }), false)
+  assert.equal(hasCompleteGraphRagExport(results, { mode: 'page', withPageDocs: false }), true)
+  assert.equal(hasCompleteGraphRagExport([{ fileName: 'graphrag_section_docs.json' }], { mode: 'page' }), false)
+})
+
+test('资料详情 loader 根据解析状态推导可执行按钮', async () => {
+  const route = { name: 'material-detail', query: {}, params: { materialId: '9' } }
+  const result = await loadModulePage(route, route.query, {
+    getMaterial: async () => ({ id: 9, fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => ([{ id: 1, fileName: 'graphrag_normalized_docs.json' }]),
+  })
+
+  assert.equal(result.requestState, 'success')
+  assert.equal(result.blocks.material.state, 'success')
+  assert.equal(result.blocks.parseResults.items.length, 1)
+  assert.equal(result.actions.canParse, false)
+  assert.equal(result.actions.canExport, true)
+
+  const processingResult = await loadModulePage(route, route.query, {
+    getMaterial: async () => ({ id: 9, fileName: 'book.pdf', parseStatus: 'processing' }),
+    listParseResults: async () => ([]),
+  })
+
+  assert.equal(processingResult.actions.canParse, false)
+  assert.equal(processingResult.actions.parseHint, '解析任务执行中')
+  assert.equal(processingResult.actions.canExport, false)
+})
+
+test('长任务 fallback 识别超时/冲突并支持取消轮询', async () => {
+  assert.deepEqual(LONG_TASK_LIMITS.parse, { intervalMs: 10000, timeoutMs: 900000 })
+  assert.equal(shouldStartFallback({ status: 504 }), true)
+  assert.equal(shouldStartFallback({ code: 4094 }), true)
+  assert.equal(shouldStartFallback({ code: 4000 }), false)
+
+  assert.equal(resolveLongTaskState({ parseStatus: 'processing' }), 'running')
+  assert.equal(resolveLongTaskState({ parseStatus: 'done' }), 'success')
+  assert.equal(resolveLongTaskState({ parseStatus: 'failed' }), 'failed')
+  assert.equal(resolveLongTaskState({}), 'unknown')
+
+  let pollCount = 0
+  const controller = createLongTaskController({
+    trigger: async () => {
+      throw { status: 504 }
+    },
+    poll: async () => {
+      pollCount += 1
+      return { parseStatus: 'done' }
+    },
+    isSuccess: (snapshot) => resolveLongTaskState(snapshot) === 'success',
+    isFailed: (snapshot) => resolveLongTaskState(snapshot) === 'failed',
+    limits: { intervalMs: 20, timeoutMs: 100 },
+  })
+
+  controller.start()
+  controller.cancel()
+  await new Promise((resolve) => setTimeout(resolve, 40))
+
+  assert.equal(pollCount, 0)
+})
+
+test('长任务 controller 非 fallback 失败会回调失败并 resolve', async () => {
+  const states = []
+  const controller = createLongTaskController({
+    trigger: async () => {
+      throw { status: 400, message: '参数错误' }
+    },
+    poll: async () => [],
+    onState: (state) => states.push(state),
+    limits: { intervalMs: 20, timeoutMs: 100 },
+  })
+
+  await assert.doesNotReject(() => controller.start())
+  assert.deepEqual(states, ['running', 'failed'])
+})
+
+test('资料导出 fallback 以导出产物完整性判定成功', async () => {
+  const payload = { mode: 'section', withPageDocs: true, force: false }
+  const pollSnapshots = [
+    [
+      { fileName: 'graphrag_normalized_docs.json', parseStatus: 'done' },
+      { fileName: 'graphrag_section_docs.json' },
+    ],
+    [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+  ]
+  const states = []
+  let successSnapshot = null
+
+  const task = createMaterialExportTaskOptions({
+    materialId: 9,
+    payload,
+    exportGraphRagRequest: async () => {
+      throw { status: 504 }
+    },
+    listParseResultsRequest: async () => pollSnapshots.shift(),
+  })
+  const controller = createLongTaskController({
+    ...task,
+    onState: (state) => states.push(state),
+    onSuccess: (snapshot) => {
+      successSnapshot = snapshot
+    },
+    limits: { intervalMs: 10, timeoutMs: 100 },
+  })
+
+  controller.start()
+  await new Promise((resolve) => setTimeout(resolve, 35))
+
+  assert.deepEqual(states, ['running', 'confirming', 'confirming', 'success'])
+  assert.equal(successSnapshot.length, 3)
+})
+
+test('资料导出覆盖确认取消时不生成请求 payload', () => {
+  const actions = {
+    hasCompleteExport: true,
+    exportPayload: { mode: 'section', withPageDocs: true, force: false },
+  }
+
+  assert.equal(resolveMaterialExportPayload(actions, () => false), null)
+  assert.deepEqual(resolveMaterialExportPayload(actions, () => true), {
+    mode: 'section',
+    withPageDocs: true,
+    force: true,
+  })
+  assert.deepEqual(resolveMaterialExportPayload(actions, null), {
+    mode: 'section',
+    withPageDocs: true,
+    force: false,
+  })
+})
+
 test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {
   assert.deepEqual(buildPageQuery({ keyword: 'os', status: 'active', page: 1 }, 3), {
     keyword: 'os',
@@ -181,6 +401,7 @@ test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => 
   route.query.page = 9
   assert.deepEqual(snapshot, {
     name: 'courses',
+    params: {},
     query: { page: 2 },
     meta: { title: '课程列表' },
   })

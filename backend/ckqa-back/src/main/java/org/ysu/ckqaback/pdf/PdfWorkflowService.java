@@ -108,7 +108,15 @@ public class PdfWorkflowService {
                 );
             }
 
-            pdfIngestOrchestrator.exportGraphRag(material, request);
+            ProcessExecutionResult result = pdfIngestOrchestrator.exportGraphRag(material, request);
+            if (result.isTimedOut() || result.getExitCode() != 0) {
+                throw new BusinessException(
+                        ApiResultCode.PDF_PARSE_EXECUTION_FAILED,
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "GraphRAG导出失败"
+                );
+            }
+
             return PdfOperationResponse.success(
                     pdfFileId,
                     material.getCourseId(),

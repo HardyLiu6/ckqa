@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.pdf;
 
 import org.junit.jupiter.api.Test;
+import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.locks.DatabaseNamedLockService;
@@ -14,10 +15,12 @@ import java.io.IOException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 class PdfWorkflowServiceTest {
 
@@ -126,5 +129,192 @@ class PdfWorkflowServiceTest {
         assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("当前已有导出任务在执行");
+    }
+
+    @Test
+    void shouldReturnExistingGraphRagExportWhenCompleteAndForceFalse() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = new CourseMaterials();
+        material.setId(9L);
+        material.setCourseId("os");
+        material.setDisplayName("slides.pdf");
+        material.setParseStatus("done");
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+        given(parseResultsService.hasCompleteGraphRagExport(9L, "section", true)).willReturn(true);
+
+        ExportGraphRagRequest request = new ExportGraphRagRequest();
+        request.setMode("section");
+        request.setWithPageDocs(true);
+        request.setForce(false);
+
+        var response = workflowService.exportGraphRag(9L, request);
+
+        assertThat(response.getMessage()).isEqualTo("已存在完整导出结果");
+        then(orchestrator).should(never()).exportGraphRag(material, request);
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    @Test
+    void shouldRunExportWhenForceTrueEvenIfCompleteExportExists() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = new CourseMaterials();
+        material.setId(9L);
+        material.setCourseId("os");
+        material.setDisplayName("slides.pdf");
+        material.setParseStatus("done");
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+
+        ExportGraphRagRequest request = new ExportGraphRagRequest();
+        request.setMode("section");
+        request.setWithPageDocs(true);
+        request.setForce(true);
+        given(orchestrator.exportGraphRag(material, request)).willReturn(successResult());
+
+        var response = workflowService.exportGraphRag(9L, request);
+
+        assertThat(response.getMessage()).isEqualTo("GraphRAG导出完成");
+        then(parseResultsService).should(never()).hasCompleteGraphRagExport(9L, "section", true);
+        then(orchestrator).should().exportGraphRag(material, request);
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    @Test
+    void shouldRejectExportWhenProcessReturnsNonZeroAndReleaseLock() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = doneMaterial();
+        ExportGraphRagRequest request = exportRequest(true);
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+        given(orchestrator.exportGraphRag(material, request)).willReturn(ProcessExecutionResult.builder()
+                .command(List.of("python", "mineru_parser.py"))
+                .exitCode(1)
+                .stderr("export failed")
+                .timedOut(false)
+                .build());
+
+        assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("GraphRAG导出失败")
+                .extracting("code")
+                .isEqualTo(ApiResultCode.PDF_PARSE_EXECUTION_FAILED.getCode());
+
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    @Test
+    void shouldRejectExportWhenProcessTimesOutAndReleaseLock() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = doneMaterial();
+        ExportGraphRagRequest request = exportRequest(true);
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+        given(orchestrator.exportGraphRag(material, request)).willReturn(ProcessExecutionResult.builder()
+                .command(List.of("python", "mineru_parser.py"))
+                .exitCode(0)
+                .stderr("")
+                .timedOut(true)
+                .build());
+
+        assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("GraphRAG导出失败");
+
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    @Test
+    void shouldReleaseExportLockWhenExportCommandThrowsIOException() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = doneMaterial();
+        ExportGraphRagRequest request = exportRequest(true);
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+        willThrow(new IOException("spawn failed")).given(orchestrator).exportGraphRag(material, request);
+
+        assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("spawn failed");
+
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    @Test
+    void shouldReleaseExportLockWhenExportCommandThrowsInterruptedException() throws Exception {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+
+        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService);
+        CourseMaterials material = doneMaterial();
+        ExportGraphRagRequest request = exportRequest(true);
+
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        given(databaseNamedLockService.acquire("pdf-export:9", 1)).willReturn(true);
+        willThrow(new InterruptedException("interrupted")).given(orchestrator).exportGraphRag(material, request);
+
+        assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
+                .isInstanceOf(InterruptedException.class)
+                .hasMessageContaining("interrupted");
+
+        then(databaseNamedLockService).should().release("pdf-export:9");
+    }
+
+    private static CourseMaterials doneMaterial() {
+        CourseMaterials material = new CourseMaterials();
+        material.setId(9L);
+        material.setCourseId("os");
+        material.setDisplayName("slides.pdf");
+        material.setParseStatus("done");
+        return material;
+    }
+
+    private static ExportGraphRagRequest exportRequest(boolean force) {
+        ExportGraphRagRequest request = new ExportGraphRagRequest();
+        request.setMode("section");
+        request.setWithPageDocs(true);
+        request.setForce(force);
+        return request;
+    }
+
+    private static ProcessExecutionResult successResult() {
+        return ProcessExecutionResult.builder()
+                .command(List.of("python", "mineru_parser.py"))
+                .exitCode(0)
+                .stderr("")
+                .timedOut(false)
+                .build();
     }
 }
