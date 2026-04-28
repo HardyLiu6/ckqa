@@ -30,7 +30,7 @@ export function createMaterialExportTaskOptions({
   return {
     trigger: ({ signal }) => exportGraphRagRequest(materialId, payload, { signal }),
     poll: ({ signal }) => listParseResultsRequest(materialId, { signal }),
-    isSuccess: (results) => hasCompleteGraphRagExport(results, payload),
+    isSuccess: (results) => Array.isArray(results) && hasCompleteGraphRagExport(results, payload),
     isFailed: () => false,
   }
 }

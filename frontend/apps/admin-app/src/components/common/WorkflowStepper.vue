@@ -73,7 +73,7 @@ function selectStep(step) {
         <strong>{{ activeStep.label }}</strong>
         <StatusBadge :status="activeStep.status" />
       </div>
-      <p>{{ activeStep.logLabel }} · 当前展示为示例任务摘要，正式执行仍等待 Java /api/v1 接入。</p>
+      <p>{{ activeStep.logLabel }} · 当前状态来自页面数据与任务轮询。</p>
       <ol class="timeline-list">
         <li v-for="step in steps" :key="`${step.key}-log`">
           <StatusBadge :status="step.status" />

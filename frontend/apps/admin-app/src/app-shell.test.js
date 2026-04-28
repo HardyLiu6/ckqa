@@ -56,6 +56,13 @@ import {
   startParse,
 } from './api/materials.js'
 import {
+  createIndexRun,
+  getIndexRun,
+  getKnowledgeBase,
+  listIndexRuns,
+  listKnowledgeBases,
+} from './api/knowledge-bases.js'
+import {
   LONG_TASK_LIMITS,
   createLongTaskController,
   resolveLongTaskState,
@@ -69,6 +76,8 @@ import {
   buildPageQuery,
   createRouteSnapshot,
   createStaleRequestGuard,
+  resolveCleanMaterialQuery,
+  selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
 import { normalizeHealthResponse } from './views/system/health-model.js'
 
@@ -329,6 +338,53 @@ test('长任务 controller 非 fallback 失败会回调失败并 resolve', async
   assert.deepEqual(states, ['running', 'failed'])
 })
 
+test('长任务 controller 对 running 回执继续轮询直到成功', async () => {
+  const states = []
+  let successSnapshot = null
+  const controller = createLongTaskController({
+    trigger: async () => ({ id: 15, status: 'running' }),
+    poll: async () => ({ id: 15, status: 'success' }),
+    onState: (state) => states.push(state),
+    onSuccess: (snapshot) => {
+      successSnapshot = snapshot
+    },
+    limits: { intervalMs: 10, timeoutMs: 100 },
+  })
+
+  await controller.start()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  assert.deepEqual(states, ['running', 'confirming', 'success'])
+  assert.equal(successSnapshot.id, 15)
+})
+
+test('索引 fallback 只发起一次 POST 并从运行列表选择最新终态候选', async () => {
+  const candidate = selectLatestRunningOrSuccess([
+    { id: 11, status: 'failed', createdAt: '2026-04-28T10:00:00' },
+    { id: 12, status: 'running', createdAt: '2026-04-28T10:01:00' },
+    { id: 13, status: 'success', createdAt: '2026-04-28T10:02:00' },
+  ], resolveLongTaskState)
+  assert.equal(candidate.id, 13)
+
+  const calls = []
+  const controller = createLongTaskController({
+    trigger: async () => {
+      calls.push('post')
+      throw { code: 4095, message: '当前知识库已有索引任务在运行' }
+    },
+    poll: async () => {
+      calls.push('list')
+      return { id: 21, status: 'success' }
+    },
+    limits: { intervalMs: 10, timeoutMs: 100 },
+  })
+
+  await controller.start()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  assert.deepEqual(calls, ['post', 'list'])
+})
+
 test('资料导出 fallback 以导出产物完整性判定成功', async () => {
   const payload = { mode: 'section', withPageDocs: true, force: false }
   const pollSnapshots = [
@@ -353,6 +409,8 @@ test('资料导出 fallback 以导出产物完整性判定成功', async () => {
     },
     listParseResultsRequest: async () => pollSnapshots.shift(),
   })
+
+  assert.equal(task.isSuccess({ parseStatus: 'done' }), false)
   const controller = createLongTaskController({
     ...task,
     onState: (state) => states.push(state),
@@ -386,6 +444,157 @@ test('资料导出覆盖确认取消时不生成请求 payload', () => {
     withPageDocs: true,
     force: false,
   })
+})
+
+test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运行', async () => {
+  const calls = []
+  const client = {
+    get: async (url, config) => {
+      calls.push(['get', url, config?.params ?? null])
+      return { data: { code: 200, message: 'ok', data: { url } } }
+    },
+    post: async (url) => {
+      calls.push(['post', url, null])
+      return { data: { code: 200, message: 'ok', data: { url } } }
+    },
+  }
+
+  await listKnowledgeBases({ page: 2, status: 'active' }, client)
+  await getKnowledgeBase(7, client)
+  await listIndexRuns(7, client)
+  await createIndexRun(7, client)
+  await getIndexRun(9, client)
+
+  assert.deepEqual(calls, [
+    ['get', '/knowledge-bases', { page: 2, status: 'active' }],
+    ['get', '/knowledge-bases/7', null],
+    ['get', '/knowledge-bases/7/index-runs', null],
+    ['post', '/knowledge-bases/7/index-runs', null],
+    ['get', '/index-runs/9', null],
+  ])
+})
+
+test('知识库列表和详情 loader 映射实时字段与构建入口', async () => {
+  const listResult = await loadModulePage(
+    { name: 'knowledge-bases', query: { page: 1 }, params: {} },
+    { page: 1 },
+    {
+      listKnowledgeBases: async () => ({
+        items: [
+          {
+            id: 7,
+            kbCode: 'os-kb',
+            name: 'OS 知识库',
+            courseId: 'os',
+            status: 'active',
+            activeIndexRunId: 12,
+            latestIndexRunId: 12,
+            latestIndexRunStatus: 'success',
+            updatedAt: '2026-04-28T10:00:00',
+          },
+        ],
+        current: 1,
+        size: 20,
+        total: 1,
+        pages: 1,
+      }),
+    },
+  )
+
+  assert.equal(listResult.source, 'live')
+  assert.equal(listResult.rows[0].to, '/app/knowledge-bases/7')
+  assert.deepEqual(listResult.rows[0].cells, [
+    'OS 知识库',
+    'os',
+    'active',
+    '#12 可问答',
+    '#12 success',
+    '2026-04-28T10:00:00',
+  ])
+
+  const detailResult = await loadModulePage(
+    { name: 'knowledge-base-detail', query: {}, params: { kbId: '7' } },
+    {},
+    {
+      getKnowledgeBase: async () => ({
+        id: 7,
+        name: 'OS 知识库',
+        courseId: 'os',
+        status: 'active',
+        activeIndexRunId: 12,
+        indexRunCount: 3,
+      }),
+      listIndexRuns: async () => [{ id: 12, status: 'success', createdAt: '2026-04-28T10:00:00' }],
+    },
+  )
+
+  assert.equal(detailResult.requestState, 'success')
+  assert.equal(detailResult.blocks.knowledgeBase.item.id, 7)
+  assert.equal(detailResult.blocks.indexRuns.items[0].to, '/app/index-runs/12')
+  assert.equal(detailResult.actions.buildTo, '/app/knowledge-bases/7/build')
+})
+
+test('知识库构建 loader 以 materialId query 恢复选择并清理非法资料', async () => {
+  const baseRoute = { name: 'knowledge-base-build', query: { materialId: '9' }, params: { kbId: '7' } }
+  const result = await loadModulePage(baseRoute, baseRoute.query, {
+    getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+      { id: 10, fileName: 'slides.pdf', parseStatus: 'pending' },
+    ],
+    listIndexRuns: async () => [],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+  })
+
+  assert.equal(result.blocks.selection.selectedMaterialId, '9')
+  assert.equal(result.blocks.selection.shouldCleanMaterialQuery, false)
+  assert.equal(result.workflowSteps.find((step) => step.key === 'material').status, 'done')
+  assert.equal(result.workflowSteps.find((step) => step.key === 'export').status, 'done')
+  assert.equal(result.workflowSteps.find((step) => step.key === 'smoke').status, 'blocked')
+
+  const invalidResult = await loadModulePage(
+    { name: 'knowledge-base-build', query: { materialId: '404' }, params: { kbId: '7' } },
+    { materialId: '404' },
+    {
+      getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+      listCourseMaterials: async () => [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }],
+      listIndexRuns: async () => [],
+      getMaterial: async () => ({ id: 404, courseId: 'other', fileName: 'other.pdf', parseStatus: 'done' }),
+      listParseResults: async () => [],
+    },
+  )
+
+  assert.equal(invalidResult.blocks.selection.selectedMaterialId, '')
+  assert.equal(invalidResult.blocks.selection.shouldCleanMaterialQuery, true)
+  assert.deepEqual(resolveCleanMaterialQuery({ page: '1', materialId: '404' }), { page: '1' })
+})
+
+test('知识库构建五步状态使用长任务状态和激活索引映射', async () => {
+  const route = { name: 'knowledge-base-build', query: { materialId: '9' }, params: { kbId: '7' } }
+  const result = await loadModulePage(route, route.query, {
+    getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: 15 }),
+    listCourseMaterials: async () => [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }],
+    listIndexRuns: async () => [{ id: 15, status: 'success', createdAt: '2026-04-28T10:00:00' }],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+  })
+
+  assert.deepEqual(result.workflowSteps.map((step) => [step.key, step.status]), [
+    ['material', 'done'],
+    ['parse', 'done'],
+    ['export', 'done'],
+    ['index', 'done'],
+    ['smoke', 'ready'],
+  ])
 })
 
 test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {
@@ -449,13 +658,21 @@ test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义',
 
 test('业务页模型显式声明数据来源和主操作', () => {
   const courses = getModulePageConfig('courses')
+  const knowledgeBases = getModulePageConfig('knowledge-bases')
+  const knowledgeBaseDetail = getModulePageConfig('knowledge-base-detail')
   const build = getModulePageConfig('knowledge-base-build')
 
   assert.equal(courses.dataSource, 'live')
   assert.equal(courses.primaryAction.label, '新建课程')
   assert.equal(courses.primaryAction.disabled, true)
   assert.equal(courses.primaryAction.title, '课程创建接口未开放，当前仅支持读取已有课程。')
-  assert.equal(build.dataSource, 'mock')
+  assert.equal(knowledgeBases.dataSource, 'live')
+  assert.deepEqual(knowledgeBases.rows, [])
+  assert.equal(knowledgeBases.primaryAction.disabled, true)
+  assert.equal(knowledgeBases.primaryAction.title, '知识库创建接口未开放，当前请使用已有知识库完成构建联调。')
+  assert.equal(knowledgeBaseDetail.dataSource, 'live')
+  assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看索引运行')
+  assert.equal(build.dataSource, 'live')
   assert.equal(build.workflowSteps.every((step) => Boolean(step.status)), true)
   assert.equal(build.workflowSteps.every((step) => Array.isArray(step.conditions)), true)
 })

@@ -3,6 +3,12 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { createApiError } from '../../api/client.js'
+import { http } from '../../axios/index.js'
+import {
+  createIndexRun,
+  getKnowledgeBase,
+  listIndexRuns,
+} from '../../api/knowledge-bases.js'
 import {
   exportGraphRag,
   getMaterial,
@@ -28,6 +34,9 @@ import {
   buildPageQuery,
   createRouteSnapshot,
   createStaleRequestGuard,
+  resolveCleanMaterialQuery,
+  resolveMaterialQuery,
+  selectLatestRunningOrSuccess,
 } from './module-page-model.js'
 
 const route = useRoute()
@@ -51,6 +60,7 @@ const config = computed(() => {
   return {
     ...baseConfig.value,
     dataSource: liveState.value.source ?? baseConfig.value.dataSource,
+    summary: liveState.value.summary ?? baseConfig.value.summary,
     columns: liveState.value.columns ?? baseConfig.value.columns,
     rows: liveState.value.rows ?? baseConfig.value.rows,
     pagination: liveState.value.pagination ?? null,
@@ -72,6 +82,12 @@ const materialsBlock = computed(() => config.value.blocks?.materials)
 const knowledgeBasesBlock = computed(() => config.value.blocks?.knowledgeBases)
 const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
+const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
+const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+const buildSelectionBlock = computed(() => config.value.blocks?.selection)
+const knowledgeBaseRows = computed(() => {
+  return route.name === 'knowledge-bases' ? (config.value.rows ?? []) : []
+})
 
 async function loadPage(query = route.query) {
   cancelLongTask()
@@ -80,7 +96,18 @@ async function loadPage(query = route.query) {
   requestState.value = 'loading'
   loadError.value = null
 
-  const result = await loadModulePage(routeSnapshot, routeSnapshot.query)
+  let result = null
+
+  try {
+    result = await loadModulePage(routeSnapshot, routeSnapshot.query)
+  } catch (error) {
+    result = {
+      source: baseConfig.value.dataSource,
+      requestState: 'error',
+      error: createApiError(error),
+    }
+  }
+
   if (!requestGuard.isCurrent(requestId)) {
     return
   }
@@ -94,6 +121,14 @@ async function loadPage(query = route.query) {
   liveState.value = result
   requestState.value = result.requestState
   loadError.value = result.error ? createApiError(result.error) : null
+
+  if (
+    route.name === 'knowledge-base-build'
+    && result.blocks?.selection?.shouldCleanMaterialQuery
+    && route.query.materialId
+  ) {
+    await router.replace({ query: resolveCleanMaterialQuery(route.query) })
+  }
 }
 
 function handlePageChange(page) {
@@ -123,11 +158,14 @@ async function retryCourseBlock(key) {
 }
 
 async function handlePrimaryAction() {
-  if (route.name !== 'material-detail') {
+  if (route.name === 'material-detail') {
+    await runMaterialParse()
     return
   }
 
-  await runMaterialParse()
+  if (route.name === 'knowledge-base-build') {
+    await runKnowledgeBaseIndex()
+  }
 }
 
 async function handleSecondaryAction() {
@@ -183,19 +221,57 @@ async function runMaterialExport() {
   })
 }
 
-function startLongTask({ trigger, poll, limits }) {
+function startLongTask({ trigger, poll, isSuccess, isFailed, limits }) {
   cancelLongTask()
   activeLongTaskController = createLongTaskController({
     trigger,
     poll,
-    isSuccess: (snapshot) => resolveLongTaskState(snapshot) === 'success',
-    isFailed: (snapshot) => resolveLongTaskState(snapshot) === 'failed',
+    isSuccess: isSuccess ?? ((snapshot) => resolveLongTaskState(snapshot) === 'success'),
+    isFailed: isFailed ?? ((snapshot) => resolveLongTaskState(snapshot) === 'failed'),
     onState: (state, snapshot) => {
       actionState.value = state
       actionMessage.value = resolveActionMessage(state, snapshot)
     },
     onSuccess: () => loadPage(),
     limits,
+  })
+  void activeLongTaskController.start().catch(() => {})
+}
+
+async function selectBuildMaterial(materialId) {
+  if (route.name !== 'knowledge-base-build') {
+    return
+  }
+
+  await router.replace({ query: resolveMaterialQuery(route.query, materialId) })
+}
+
+async function runKnowledgeBaseIndex() {
+  const kbId = route.params.kbId
+  const indexStep = config.value.workflowSteps?.find((step) => step.key === 'index')
+
+  if (indexStep?.status !== 'ready' || actionRunning.value) {
+    return
+  }
+
+  cancelLongTask()
+  activeLongTaskController = createLongTaskController({
+    trigger: ({ signal }) => createIndexRun(kbId, { post: (url) => http.post(url, null, { signal }) }),
+    poll: async ({ signal }) => selectLatestRunningOrSuccess(
+      await listIndexRuns(kbId, { get: (url) => http.get(url, { signal }) }),
+      resolveLongTaskState,
+    ),
+    isSuccess: (snapshot) => resolveLongTaskState(snapshot) === 'success',
+    isFailed: (snapshot) => resolveLongTaskState(snapshot) === 'failed',
+    onState: (state, snapshot) => {
+      actionState.value = state
+      actionMessage.value = resolveActionMessage(state, snapshot)
+    },
+    onSuccess: async () => {
+      await getKnowledgeBase(kbId)
+      await loadPage()
+    },
+    limits: LONG_TASK_LIMITS.index,
   })
   void activeLongTaskController.start().catch(() => {})
 }
@@ -293,6 +369,99 @@ onBeforeUnmount(() => cancelLongTask())
     v-model:active-key="activeStepKey"
     :steps="config.workflowSteps"
   />
+
+  <section v-if="route.name === 'knowledge-base-build'" class="content-grid two-columns">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>本次构建主资料</h2>
+        <span class="record-count">{{ buildSelectionBlock?.selectedMaterialId || '未选择' }}</span>
+      </div>
+      <ol class="timeline-list">
+        <li v-for="item in materialsBlock?.items" :key="item.id">
+          <StatusBadge :status="item.meta" />
+          <button class="text-button" type="button" @click="selectBuildMaterial(item.id)">
+            {{ item.title }}
+          </button>
+          <small>{{ item.detail }}</small>
+        </li>
+      </ol>
+      <p v-if="materialsBlock?.state === 'empty'">当前课程暂无资料。</p>
+      <p v-if="buildSelectionBlock?.error" class="inline-error">{{ buildSelectionBlock.error.message }}</p>
+    </article>
+
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>索引运行</h2>
+        <button
+          class="primary-button compact"
+          type="button"
+          :disabled="config.workflowSteps?.find((step) => step.key === 'index')?.status !== 'ready' || actionRunning"
+          @click="runKnowledgeBaseIndex"
+        >
+          开始构建索引
+        </button>
+      </div>
+      <ol class="timeline-list">
+        <li v-for="item in indexRunsBlock?.items" :key="item.id">
+          <StatusBadge :status="item.meta" />
+          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
+          <small>{{ item.detail }}</small>
+        </li>
+      </ol>
+      <p v-if="indexRunsBlock?.state === 'empty'">暂无索引运行。</p>
+    </article>
+  </section>
+
+  <section v-else-if="route.name === 'knowledge-bases'" class="panel data-table-shell">
+    <div class="panel-heading">
+      <h2>{{ pageTitle }}</h2>
+      <span class="record-count">{{ config.pagination?.total ?? knowledgeBaseRows.length }} 条</span>
+    </div>
+    <p v-if="loadError" class="inline-error">{{ loadError.message }}</p>
+    <div v-if="loading" class="empty-state">正在加载列表。</div>
+    <div v-else class="table-scroll">
+      <table class="data-table" :aria-label="pageTitle">
+        <thead>
+          <tr>
+            <th v-for="column in config.columns" :key="column" scope="col">{{ column }}</th>
+            <th scope="col">操作</th>
+          </tr>
+        </thead>
+        <tbody v-if="knowledgeBaseRows.length">
+          <tr v-for="row in knowledgeBaseRows" :key="row.id">
+            <td v-for="(cell, index) in row.cells" :key="`${row.id}-${index}`">
+              <RouterLink v-if="index === 0" :to="row.to"><strong>{{ cell }}</strong></RouterLink>
+              <StatusBadge v-else-if="index === 2" :status="cell" />
+              <span v-else>{{ cell }}</span>
+            </td>
+            <td>
+              <RouterLink class="text-link" :to="row.buildTo">构建</RouterLink>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-if="!loading && !knowledgeBaseRows.length" class="empty-state">暂无知识库。</p>
+    <div v-if="config.pagination" class="pagination-bar" aria-label="分页">
+      <button
+        class="secondary-button compact"
+        type="button"
+        :disabled="Number(config.pagination.page ?? 1) <= 1 || loading"
+        @click="handlePageChange(Number(config.pagination.page ?? 1) - 1)"
+      >
+        上一页
+      </button>
+      <span>第 {{ config.pagination.page }} / {{ Math.max(config.pagination.pages, 1) }} 页</span>
+      <button
+        class="secondary-button compact"
+        type="button"
+        :disabled="Number(config.pagination.page ?? 1) >= Math.max(Number(config.pagination.pages ?? 1), 1) || loading"
+        @click="handlePageChange(Number(config.pagination.page ?? 1) + 1)"
+      >
+        下一页
+      </button>
+    </div>
+  </section>
 
   <DataTableShell
     v-else-if="config.variant === 'table'"
@@ -401,6 +570,46 @@ onBeforeUnmount(() => cancelLongTask())
         </li>
       </ol>
       <p v-if="parseResultsBlock?.state === 'empty'">暂无解析产物。</p>
+    </article>
+  </section>
+
+  <section v-else-if="knowledgeBaseBlock || config.blocks?.indexRun" class="content-grid two-columns">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>{{ knowledgeBaseBlock ? '知识库概览' : '索引运行概览' }}</h2>
+        <StatusBadge :status="knowledgeBaseBlock?.item?.status ?? config.blocks?.indexRun?.item?.status" />
+      </div>
+      <div class="field-grid">
+        <div
+          v-for="field in (knowledgeBaseBlock?.facts ?? config.blocks?.indexRun?.facts)"
+          :key="field.label"
+          class="field-tile"
+        >
+          <span>{{ renderFactLabel(field) }}</span>
+          <strong>{{ renderFactValue(field) }}</strong>
+        </div>
+      </div>
+      <RouterLink
+        v-if="config.actions?.buildTo"
+        class="primary-button compact"
+        :to="config.actions.buildTo"
+      >
+        进入构建向导
+      </RouterLink>
+    </article>
+
+    <article v-if="indexRunsBlock" class="panel">
+      <div class="panel-heading">
+        <h2>索引运行</h2>
+      </div>
+      <ol class="timeline-list">
+        <li v-for="item in indexRunsBlock.items" :key="item.id">
+          <StatusBadge :status="item.meta" />
+          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
+          <small>{{ item.detail }}</small>
+        </li>
+      </ol>
+      <p v-if="indexRunsBlock.state === 'empty'">暂无索引运行。</p>
     </article>
   </section>
 

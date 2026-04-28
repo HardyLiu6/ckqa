@@ -151,9 +151,22 @@ export function createLongTaskController(options = {}) {
         return null
       }
 
-      clearTimers()
-      onState('success', result)
-      onSuccess(result)
+      if (isSuccess(result)) {
+        clearTimers()
+        onState('success', result)
+        onSuccess(result)
+        return result
+      }
+
+      if (isFailed(result)) {
+        clearTimers()
+        onState('failed', result)
+        onFailure(result)
+        return result
+      }
+
+      onState('confirming', result)
+      schedulePoll(resolveIntervalMs())
       return result
     } catch (error) {
       if (cancelled) {
