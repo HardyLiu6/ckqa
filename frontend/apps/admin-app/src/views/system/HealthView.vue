@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-import { http } from '../../axios/index.js'
+import { createApiError } from '../../api/client.js'
+import { getSystemHealth } from '../../api/system.js'
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DiagnosticLogPanel from '../../components/common/DiagnosticLogPanel.vue'
 import StatusBadge from '../../components/common/StatusBadge.vue'
@@ -30,12 +31,11 @@ async function loadHealth() {
   errorMessage.value = ''
 
   try {
-    const response = await http.get('/system/health')
-    healthPayload.value = response.data?.data ?? response.data
+    healthPayload.value = await getSystemHealth()
     refreshedAt.value = new Date().toISOString()
     requestState.value = 'success'
   } catch (error) {
-    errorMessage.value = error.message
+    errorMessage.value = createApiError(error).message
     requestState.value = 'error'
   } finally {
     if (requestState.value === 'loading') {
@@ -43,6 +43,8 @@ async function loadHealth() {
     }
   }
 }
+
+onMounted(loadHealth)
 </script>
 
 <template>
@@ -72,13 +74,13 @@ async function loadHealth() {
       />
     </div>
 
-    <p v-if="requestState === 'idle'" class="empty-state">等待手动刷新健康检查。</p>
+    <p v-if="requestState === 'idle'" class="empty-state">等待自动刷新健康检查。</p>
     <div v-else-if="requestState === 'loading'" class="health-loading">
       <p>正在请求 GET /api/v1/system/health</p>
     </div>
     <p v-else-if="requestState === 'error'" class="inline-error">{{ errorMessage }}</p>
 
-    <HealthMatrix v-if="requestState === 'success'" :services="normalizedHealth.services" />
+    <HealthMatrix v-if="healthPayload" :services="normalizedHealth.services" />
 
     <details v-if="healthPayload" class="raw-json-details">
       <summary>原始响应 JSON</summary>

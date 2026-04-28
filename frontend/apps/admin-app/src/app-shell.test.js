@@ -4,9 +4,21 @@ import assert from 'node:assert/strict'
 import { createAuthStore } from './stores/auth.js'
 import { API_BASE_URL, createHttpClient } from './axios/index.js'
 import {
+  createApiError,
+  normalizePageData,
+  unwrapApiResponse,
+} from './api/client.js'
+import { getSystemHealth } from './api/system.js'
+import {
   buildNavigationGroups,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
+import {
+  resolvePageChangeTarget,
+  resolvePaginationState,
+  resolveTableError,
+  resolveTableRecordCount,
+} from './components/common/data-table-shell-model.js'
 import {
   DATA_SOURCE_LABELS,
   getDataSourceLabel,
@@ -29,6 +41,16 @@ import {
   isWorkflowPrimaryActionDisabled,
   resolveActiveWorkflowStep,
 } from './views/pages/module-content.js'
+import {
+  buildCourseListParams,
+  createCoursesLoaderResult,
+  resolveCoursesRequestState,
+} from './views/pages/module-loaders.js'
+import {
+  buildPageQuery,
+  createRouteSnapshot,
+  createStaleRequestGuard,
+} from './views/pages/module-page-model.js'
 import { normalizeHealthResponse } from './views/system/health-model.js'
 
 test('路由骨架包含首版关键入口和后续页面状态', () => {
@@ -79,14 +101,127 @@ test('请求层默认指向 Java /api/v1 并保留认证头注入入口', async 
   assert.equal(requestConfig.headers.Authorization, 'Bearer dev-teacher-token')
 })
 
+test('ApiResponse 解包只接受 CKQA envelope 和业务成功码 200', () => {
+  assert.deepEqual(unwrapApiResponse({ status: 200, data: { code: 200, message: 'ok', data: { ok: true } } }), {
+    ok: true,
+  })
+  assert.throws(
+    () => unwrapApiResponse({ status: 200, data: { ok: true } }),
+    (error) => error.nonStandard === true
+      && error.message === '后端响应格式不符合 CKQA ApiResponse 契约',
+  )
+
+  const error = createApiError({
+    status: 409,
+    code: 4095,
+    message: '当前知识库已有索引任务在运行',
+    data: { id: 7 },
+  })
+  assert.equal(error.status, 409)
+  assert.equal(error.code, 4095)
+  assert.equal(error.data.id, 7)
+
+  const httpEnvelopeError = createApiError({
+    status: 404,
+    data: { code: 4000, message: '课程不存在', data: { courseId: 'missing' } },
+    raw: { response: { status: 404 } },
+  })
+  assert.equal(httpEnvelopeError.status, 404)
+  assert.equal(httpEnvelopeError.code, 4000)
+  assert.equal(httpEnvelopeError.message, '课程不存在')
+  assert.equal(httpEnvelopeError.data.courseId, 'missing')
+})
+
+test('分页响应兼容 current 字段并归一为前端 page', () => {
+  const result = normalizePageData({
+    items: [{ courseId: 'os' }],
+    current: 2,
+    size: 10,
+    total: 21,
+    pages: 3,
+  })
+
+  assert.equal(result.pagination.page, 2)
+  assert.equal(result.pagination.size, 10)
+  assert.equal(result.pagination.total, 21)
+  assert.equal(result.pagination.pages, 3)
+
+  const defaults = normalizePageData({ items: [{ courseId: 'os' }] })
+  assert.equal(defaults.pagination.size, 20)
+  assert.equal(defaults.pagination.total, 0)
+})
+
+test('课程 live loader 显式归一查询参数并区分空列表状态', () => {
+  assert.deepEqual(buildCourseListParams({ page: '2', keyword: 'os' }), {
+    page: '2',
+    size: 20,
+    keyword: 'os',
+    status: '',
+  })
+  assert.equal(resolveCoursesRequestState([]), 'empty')
+  assert.equal(resolveCoursesRequestState([{ courseId: 'os' }]), 'success')
+
+  const contract = createCoursesLoaderResult({ requestState: 'empty' })
+  assert.deepEqual(contract.facts, [])
+  assert.deepEqual(contract.workflowSteps, [])
+  assert.deepEqual(contract.blocks, {})
+  assert.equal(Array.isArray(contract.blocks), false)
+})
+
+test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {
+  assert.deepEqual(buildPageQuery({ keyword: 'os', status: 'active', page: 1 }, 3), {
+    keyword: 'os',
+    status: 'active',
+    page: 3,
+  })
+
+  const route = { name: 'courses', query: { page: 1 }, meta: { title: '课程列表' } }
+  const snapshot = createRouteSnapshot(route, { page: 2 })
+  route.name = 'knowledge-bases'
+  route.query.page = 9
+  assert.deepEqual(snapshot, {
+    name: 'courses',
+    query: { page: 2 },
+    meta: { title: '课程列表' },
+  })
+
+  const guard = createStaleRequestGuard()
+  const first = guard.next()
+  const latest = guard.next()
+  assert.equal(guard.isCurrent(first), false)
+  assert.equal(guard.isCurrent(latest), true)
+})
+
+test('表格分页计数、翻页目标和错误展示有稳定模型', () => {
+  const pagination = resolvePaginationState({ page: 2, size: 10, total: 32, pages: 4 })
+
+  assert.equal(resolveTableRecordCount([['当前页']], pagination), 32)
+  assert.equal(resolvePageChangeTarget(pagination, 'prev'), 1)
+  assert.equal(resolvePageChangeTarget(pagination, 'next'), 3)
+  assert.equal(resolveTableError({ message: '课程接口不可用' }), '课程接口不可用')
+})
+
+test('系统健康接口通过统一 ApiResponse 解包', async () => {
+  const payload = { status: 'healthy', services: {} }
+  const result = await getSystemHealth({
+    get: async (url) => ({
+      status: 200,
+      config: { url },
+      data: { code: 200, message: '操作成功', data: payload },
+    }),
+  })
+
+  assert.deepEqual(result, payload)
+})
+
 test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义', () => {
   const config = getModulePageConfig('knowledge-base-build')
 
   assert.equal(config.variant, 'workflow')
-  assert.equal(config.workflowSteps.length, 6)
+  assert.equal(config.workflowSteps.length, 5)
   assert.deepEqual(
     config.workflowSteps.map((step) => step.key),
-    ['material', 'parse', 'export', 'index', 'activate', 'smoke'],
+    ['material', 'parse', 'export', 'index', 'smoke'],
   )
   assert.equal(config.workflowSteps.at(-1).label, '问答冒烟验证')
 })
@@ -95,8 +230,10 @@ test('业务页模型显式声明数据来源和主操作', () => {
   const courses = getModulePageConfig('courses')
   const build = getModulePageConfig('knowledge-base-build')
 
-  assert.equal(courses.dataSource, 'mock')
+  assert.equal(courses.dataSource, 'live')
   assert.equal(courses.primaryAction.label, '新建课程')
+  assert.equal(courses.primaryAction.disabled, true)
+  assert.equal(courses.primaryAction.title, '课程创建接口未开放，当前仅支持读取已有课程。')
   assert.equal(build.dataSource, 'mock')
   assert.equal(build.workflowSteps.every((step) => Boolean(step.status)), true)
   assert.equal(build.workflowSteps.every((step) => Array.isArray(step.conditions)), true)
@@ -115,9 +252,13 @@ test('问答会话列表页面模型保留正式问答和冒烟验证过滤项',
 test('业务页列表筛选只按显式列匹配', () => {
   const courses = getModulePageConfig('courses')
   const qaSessions = getModulePageConfig('qa-sessions')
+  const liveCourseRows = [
+    ['操作系统', 'active', '1/2 done', '1/1 active', '#9 success', '2026-04-28T09:30:00'],
+    ['数据结构', 'draft', '0/1 done', '0/0 active', '-', '2026-04-27T09:30:00'],
+  ]
 
   assert.deepEqual(
-    filterRowsByFilters(courses.rows, courses.filters, { status: 'active', scope: '我的课程' }).map((row) => row[0]),
+    filterRowsByFilters(liveCourseRows, courses.filters, { status: 'active', scope: '我的课程' }).map((row) => row[0]),
     ['操作系统'],
   )
   assert.deepEqual(

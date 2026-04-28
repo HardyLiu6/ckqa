@@ -30,11 +30,12 @@ export function createHttpClient({ authStore: activeAuthStore = authStore } = {}
     (response) => response,
     (error) => {
       const status = error.response?.status
-      const message = error.response?.data?.message ?? error.message ?? '请求失败'
+      const message = error.message ?? '请求失败'
 
       return Promise.reject({
         status,
         message,
+        data: error.response?.data,
         raw: error,
       })
     },

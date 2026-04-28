@@ -2,6 +2,12 @@
 import { computed, reactive } from 'vue'
 
 import StatusBadge from './StatusBadge.vue'
+import {
+  resolvePageChangeTarget,
+  resolvePaginationState,
+  resolveTableError,
+  resolveTableRecordCount,
+} from './data-table-shell-model.js'
 import { filterRowsByFilters } from '../../views/pages/module-content.js'
 
 const STATUS_VALUES = new Set([
@@ -24,10 +30,18 @@ const props = defineProps({
   rows: { type: Array, required: true },
   filters: { type: Array, default: () => [] },
   emptyText: { type: String, default: '暂无记录' },
+  pagination: { type: Object, default: null },
+  loading: { type: Boolean, default: false },
+  error: { type: [Object, String], default: null },
 })
+
+const emit = defineEmits(['pageChange'])
 
 const filterValues = reactive({})
 
+const paginationState = computed(() => resolvePaginationState(props.pagination))
+const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
+const tableError = computed(() => resolveTableError(props.error))
 const filteredRows = computed(() => {
   return filterRowsByFilters(props.rows, props.filters, filterValues)
 })
@@ -35,14 +49,20 @@ const filteredRows = computed(() => {
 function isStatusCell(column, cell) {
   return column.includes('状态') || STATUS_VALUES.has(String(cell))
 }
+
+function emitPageChange(direction) {
+  emit('pageChange', resolvePageChangeTarget(paginationState.value, direction))
+}
 </script>
 
 <template>
   <section class="panel data-table-shell" :aria-labelledby="`${title}-table-title`">
     <div class="panel-heading">
       <h2 :id="`${title}-table-title`">{{ title }}</h2>
-      <span class="record-count">{{ filteredRows.length }} 条</span>
+      <span class="record-count">{{ recordCount }} 条</span>
     </div>
+
+    <p v-if="tableError" class="inline-error">{{ tableError }}</p>
 
     <div v-if="filters.length" class="filter-bar" aria-label="列表筛选">
       <label v-for="filter in filters" :key="filter.key">
@@ -53,7 +73,9 @@ function isStatusCell(column, cell) {
       </label>
     </div>
 
-    <div class="table-scroll">
+    <div v-if="loading" class="empty-state">正在加载列表。</div>
+
+    <div v-else class="table-scroll">
       <table class="data-table" :aria-label="title">
         <thead>
           <tr>
@@ -75,6 +97,26 @@ function isStatusCell(column, cell) {
       </table>
     </div>
 
-    <p v-if="!filteredRows.length" class="empty-state">{{ emptyText }}</p>
+    <p v-if="!loading && !filteredRows.length" class="empty-state">{{ emptyText }}</p>
+
+    <div v-if="paginationState" class="pagination-bar" aria-label="分页">
+      <button
+        class="secondary-button compact"
+        type="button"
+        :disabled="paginationState.page <= 1 || loading"
+        @click="emitPageChange('prev')"
+      >
+        上一页
+      </button>
+      <span>第 {{ paginationState.page }} / {{ Math.max(paginationState.pages, 1) }} 页</span>
+      <button
+        class="secondary-button compact"
+        type="button"
+        :disabled="paginationState.page >= Math.max(paginationState.pages, 1) || loading"
+        @click="emitPageChange('next')"
+      >
+        下一页
+      </button>
+    </div>
   </section>
 </template>
