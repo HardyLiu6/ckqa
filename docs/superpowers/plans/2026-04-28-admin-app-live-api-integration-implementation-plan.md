@@ -207,6 +207,11 @@ export async function loadModulePage(route, query = {}) {
   - 新增 `error` prop。
   - 新增 `onPageChange` emit。
   - 表头计数使用 `pagination.total` 优先，没有分页时使用当前 rows 数量。
+- [ ] 新增 `frontend/apps/admin-app/src/components/common/data-table-shell-model.js`，把分页与错误态的可测试逻辑从 Vue 模板中抽出：
+  - `resolveTableRecordCount(rows, pagination)`：分页存在时优先返回 `pagination.total`。
+  - `resolvePaginationState(pagination)`：返回当前页、总页数、上一页/下一页是否可用。
+  - `resolvePageChangeTarget(pagination, direction)`：返回上一页或下一页的目标页码。
+  - `resolveTableError(error)`：归一错误面板展示文案。
 - [ ] 更新 `frontend/apps/admin-app/src/views/pages/ModulePage.vue`：
   - 引入 `onMounted/watch/reactive`。
   - 页面进入和路由 query 变化时调用 `loadModulePage()`。
@@ -217,6 +222,9 @@ export async function loadModulePage(route, query = {}) {
 - [ ] 更新 `frontend/apps/admin-app/src/app-shell.test.js`：
   - `/app/courses` 数据来源断言从 `mock` 改为 `live`。
   - 增加 `normalizePageData({ current: 2 })` 映射为 `pagination.page === 2`。
+  - 增加 `resolveTableRecordCount()` 覆盖分页 total 优先。
+  - 增加 `resolvePageChangeTarget()` 覆盖上一页/下一页目标页码。
+  - 增加 `resolveTableError()` 覆盖 `error` prop 能渲染为错误面板文案。
   - 构建向导步骤断言改为 5 步且无 `activate`。
 
 ### 2.6 Phase 1 Verification
@@ -360,8 +368,8 @@ curl --noproxy '*' http://127.0.0.1:8080/api/v1/courses/os/pdf-files
 ### 4.1 Backend Knowledge Base Read APIs
 
 - [ ] 新建 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/dto/KnowledgeBaseQueryRequest.java`。
-- [ ] 新建 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/dto/KnowledgeBaseSummaryResponse.java`，字段包含 `id/courseId/kbCode/name/status/activeIndexRunId/description/latestIndexRunId/latestIndexRunStatus/createdAt/updatedAt`。
-- [ ] 新建 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/dto/KnowledgeBaseDetailResponse.java`，首版包含 Summary 全部字段，额外保留 `indexRunCount/successIndexRunCount/latestIndexRunMetadata`。
+- [ ] 新建 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/dto/KnowledgeBaseSummaryResponse.java`，完整类名为 `org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse`，字段包含 `id/courseId/kbCode/name/status/activeIndexRunId/description/latestIndexRunId/latestIndexRunStatus/createdAt/updatedAt`。
+- [ ] 新建 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/dto/KnowledgeBaseDetailResponse.java`，完整类名为 `org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse`，首版包含 Summary 全部字段，额外保留 `indexRunCount/successIndexRunCount/latestIndexRunMetadata`。
 - [ ] 在 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/` 下新增 `KnowledgeBaseLookupService.java`：
   - 注入 `KnowledgeBasesService` 和 `IndexRunsService`。
   - 新增 `ApiPageData<KnowledgeBaseSummaryResponse> listKnowledgeBases(KnowledgeBaseQueryRequest request)`。
@@ -409,6 +417,12 @@ curl --noproxy '*' http://127.0.0.1:8080/api/v1/courses/os/pdf-files
   - 请求 `listIndexRuns(kbId)`。
   - 如果 URL query 存在 `materialId`，请求该资料详情和解析结果。
   - 首版只允许单选一个“本次构建主资料”。
+- [ ] 资料选择持久化策略：
+  - 第一步选择资料后，使用 `router.replace({ query: { ...route.query, materialId: selectedMaterialId } })` 写入 URL query。
+  - loader 和工作流组件都以 `route.query.materialId` 作为已选资料的唯一恢复来源。
+  - 刷新页面后如果 query 中存在合法 `materialId`，向导恢复到该资料对应状态。
+  - 如果 query 中不存在 `materialId` 或资料不属于当前课程，向导回到“选择课程资料”步骤，并清理非法 query。
+  - 使用 `router.replace` 而不是 `router.push`，避免每次切换资料都污染浏览器历史栈。
 - [ ] `workflowSteps` 状态映射：
   - `material`：已选择一个资料为 `done`，否则 `ready`。
   - `parse`：`parseStatus=done` 为 `done`，`processing` 为 `running`，`failed` 为 `failed`，未选择资料为 `blocked`。
@@ -461,6 +475,11 @@ curl --noproxy '*' http://127.0.0.1:8080/api/v1/knowledge-bases/1/index-runs
   - `resolveQaPollingInterval(task, requestMode)`。
   - `resolveQaStaleTimeout(task, requestMode)`。
   - `isQaTerminalState(status)`。
+- [ ] QA 轮询复用 `long-task-state.js`：
+  - `qa-polling.js` 只负责 mode、interval、stale timeout 和终态判断，不持有 timer，也不直接创建 AbortController。
+  - `knowledge-base-build` 的 QA 冒烟步骤通过 `createLongTaskController()` 运行轮询。
+  - QA step 把 `resolveQaPollingInterval()` 和 `resolveQaStaleTimeout()` 的结果转成 controller 的 `limits`。
+  - 组件卸载时只调用 controller 的 `cancel()`，避免 QA 和长任务各维护一套清理逻辑。
 - [ ] 轮询参数规则：
   - interval 优先使用 `recommendedPollingIntervalSeconds`。
   - stale 上限优先使用 `staleTimeoutSeconds`。
@@ -532,13 +551,13 @@ cd backend/ckqa-back
 
 ## 7. CORS Strategy
 
-- [ ] 首选后端受控 CORS，新增 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/config/WebCorsConfig.java`。
+- [ ] 复查 Phase 1 已落地的 `backend/ckqa-back/src/main/java/org/ysu/ckqaback/config/WebCorsConfig.java` 是否满足以下约束；本节不重复创建配置类。
 - [ ] 仅允许本地开发来源：
   - `http://127.0.0.1:*`
   - `http://localhost:*`
 - [ ] 生产来源不在代码中硬编码；生产通过部署配置收紧。
 - [ ] 如果项目改用 Vite proxy，则保持后端 CORS 关闭，并把 `VITE_API_BASE_URL` 设置为 `/api/v1`；同一环境不同时启用两种方案。
-- [ ] `WebCorsConfig` 已在 Phase 1 落地；本节作为后续环境切换时的约束，不再重复实现。
+- [ ] 复查 CORS 测试仍覆盖本地 origin 允许、非白名单 origin 不返回允许跨域头。
 
 ## 8. Final Regression And Handoff
 
@@ -614,4 +633,8 @@ curl --noproxy '*' http://127.0.0.1:8080/api/v1/knowledge-bases
 - [ ] Commit 3：课程详情、资料详情、长任务兜底和测试。
 - [ ] Commit 4：后端知识库列表/详情接口和测试。
 - [ ] Commit 5：知识库列表/详情、构建向导五步 live 流程和测试。
-- [ ] Commit 6：QA 冒烟验证、最终回归和文档同步。
+- [ ] Commit 6：QA 冒烟验证、最终回归和文档同步。文档同步目标固定为：
+  - `docs/superpowers/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md`：勾选已完成步骤并记录最终验证结果。
+  - `docs/superpowers/specs/2026-04-28-admin-app-live-api-integration-design.md`：仅当实现与设计稿发生有意偏差时更新。
+  - `frontend/apps/admin-app/README.md`：如果 `VITE_API_BASE_URL`、CORS 或本地启动方式发生变化则更新。
+  - `backend/ckqa-back/README.md`：如果新增 CORS 配置或联调启动说明影响后端使用方式则更新。
