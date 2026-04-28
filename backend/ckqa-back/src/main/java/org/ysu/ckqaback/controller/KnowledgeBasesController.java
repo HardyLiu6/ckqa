@@ -1,14 +1,21 @@
 package org.ysu.ckqaback.controller;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.index.IndexWorkflowService;
+import org.ysu.ckqaback.index.KnowledgeBaseLookupService;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,6 +39,21 @@ import java.util.List;
 public class KnowledgeBasesController {
 
     private final IndexWorkflowService indexWorkflowService;
+    private final KnowledgeBaseLookupService knowledgeBaseLookupService;
+
+    @GetMapping
+    public ApiResponse<ApiPageData<KnowledgeBaseSummaryResponse>> listKnowledgeBases(
+            @Valid @ModelAttribute KnowledgeBaseQueryRequest request
+    ) {
+        return ApiResponseUtils.success(knowledgeBaseLookupService.listKnowledgeBases(request));
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<KnowledgeBaseDetailResponse> getKnowledgeBase(
+            @PathVariable @Positive(message = "id必须大于0") Long id
+    ) {
+        return ApiResponseUtils.success(knowledgeBaseLookupService.getKnowledgeBase(id));
+    }
 
     @PostMapping("/{id}/index-runs")
     public ApiResponse<IndexRunResponse> createIndexRun(@PathVariable @Positive(message = "id必须大于0") Long id)
