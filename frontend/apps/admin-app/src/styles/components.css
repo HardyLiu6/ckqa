@@ -574,6 +574,10 @@ select {
   border-left: 1px solid color-mix(in srgb, var(--ckqa-border) 82%, transparent);
 }
 
+.nav-folder:not([open]) > .nav-items {
+  display: none;
+}
+
 .nav-folder .nav-link {
   padding: 8px 9px;
   border-radius: calc(var(--ckqa-radius) - 2px);
