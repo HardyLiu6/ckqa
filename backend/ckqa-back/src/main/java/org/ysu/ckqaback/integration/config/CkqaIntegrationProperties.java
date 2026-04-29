@@ -76,6 +76,21 @@ public class CkqaIntegrationProperties {
     @Setter
     public static class GraphRagProperties extends PythonProcessProperties {
         private String apiBaseUrl;
+        private final ManagedApiProperties managedApi = new ManagedApiProperties();
+    }
+
+    @Getter
+    @Setter
+    public static class ManagedApiProperties {
+        private boolean enabled = false;
+        private String host = "127.0.0.1";
+        private int port = 8012;
+        private String condaEnv = "graphrag-oneapi";
+        private String outputDir;
+        private String storageDir;
+        private String lancedbUri;
+        private boolean skipIfReachable = true;
+        private long stopTimeoutSeconds = 5L;
     }
 
     @Getter

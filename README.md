@@ -30,9 +30,67 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 ## 本机启动前后端服务
 
-下面是当前管理端联调最常用的启动顺序。默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`。
+开发阶段推荐把入口分成两层：
 
-### 0. 确认基础依赖
+默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`，student-app `5174`。
+
+- 前端用 `pnpm` 原生命令启动，不额外包一层 shell 脚本。
+- 后端用 Java 编排层启动；开发态可让 Java 在启动时托管拉起 GraphRAG Python API。
+- `pdf_ingest/` 当前没有常驻 HTTP 服务，Java 后端会在解析/导出动作发生时按需调用它的 CLI。
+
+### 1. 一键启动前端
+
+```bash
+# 仓库根目录
+pnpm --dir frontend/apps/admin-app install
+pnpm --dir frontend/apps/student-app install
+
+pnpm dev:admin
+pnpm dev:student
+```
+
+也可以进入具体应用目录启动：
+
+```bash
+cd frontend/apps/admin-app
+pnpm dev:local
+
+cd frontend/apps/student-app
+pnpm dev:local
+```
+
+admin-app 开发态默认从浏览器请求同源 `/api/v1`，由 Vite 代理到 Java 后端 `http://127.0.0.1:8080`。这样在远程开发或端口转发场景下，浏览器不需要直接访问后端所在环境的 `8080`。student-app 目前仍是原型，正式联调也应走 Java `/api/v1`。
+
+### 2. 一键启动 Java 后端和托管 GraphRAG API
+
+```bash
+cd backend/ckqa-back
+
+export MYSQL_HOST=127.0.0.1
+export MYSQL_PORT=23306
+export MYSQL_DATABASE=ocqa
+export MYSQL_USER=root
+export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+
+export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
+export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
+export GRAPHRAG_API_HOST=127.0.0.1
+export GRAPHRAG_API_PORT=8012
+export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+export GRAPHRAG_API_MANAGED_ENABLED=true
+
+./mvnw spring-boot:run
+```
+
+开启 `GRAPHRAG_API_MANAGED_ENABLED=true` 后，Java 后端会在启动阶段检查 `GRAPHRAG_API_BASE_URL/health`：如果 GraphRAG API 已经可访问，就复用外部服务；如果不可访问，就在 `GRAPHRAG_ROOT` 下启动 `utils/main.py`。Java 进程退出时会同步停止由它托管启动的 GraphRAG 子进程。
+
+如果希望 GraphRAG API 继续手工独立启动，把 `GRAPHRAG_API_MANAGED_ENABLED` 设为 `false` 或不设置即可。
+
+下面保留手工启动顺序，方便排查 Java 托管启动以外的环境问题。
+
+### 3. 手工排障启动顺序
+
+#### 3.1 确认基础依赖
 
 MySQL、MinIO、One API、Neo4j 等容器通常由本机开发环境提供。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，GraphRAG 输出目录中存在 `output/*.parquet` 和 `output/lancedb/`。
 
@@ -46,7 +104,7 @@ docker ps
 export MYSQL_PASSWORD="$(docker exec mysql printenv MYSQL_ROOT_PASSWORD)"
 ```
 
-### 1. 启动 GraphRAG Python API
+#### 3.2 手工启动 GraphRAG Python API
 
 ```bash
 cd graphrag_pipeline
@@ -68,7 +126,7 @@ curl http://127.0.0.1:8012/v1/models
 
 如果 `8012` 被占用，可以把 `GRAPHRAG_API_PORT` 改成其他端口，并在后端启动时同步修改 `GRAPHRAG_API_BASE_URL`。
 
-### 2. 启动 Java 后端
+#### 3.3 手工启动 Java 后端
 
 另开终端：
 
@@ -100,16 +158,14 @@ curl http://127.0.0.1:8080/api/v1/knowledge-bases
 
 `/api/v1/system/health` 中 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-output`、`graphrag-api`、`graphrag-ready` 都为 `ready=true` 时，管理端核心流程才具备真实联调条件。
 
-### 3. 启动 admin-app 前端
+#### 3.4 手工启动 admin-app 前端
 
 另开终端：
 
 ```bash
 cd frontend/apps/admin-app
 pnpm install
-
-VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1 \
-pnpm dev --host 127.0.0.1 --port 5173
+pnpm dev:local
 ```
 
 浏览器访问：

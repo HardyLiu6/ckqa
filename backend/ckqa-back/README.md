@@ -89,7 +89,10 @@ export GRAPHRAG_PYTHON=/path/to/graphrag-oneapi/bin/python
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_API_HOST=127.0.0.1
+export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+export GRAPHRAG_API_MANAGED_ENABLED=true
 
 export PARSE_TIMEOUT_SECONDS=900
 export EXPORT_TIMEOUT_SECONDS=300
@@ -131,9 +134,10 @@ export INDEX_STALE_SECONDS=2400
 一期联调推荐按下面顺序启动：
 
 1. 启动 MySQL
-2. 启动 `graphrag_pipeline/utils/main.py`
-3. 根据需要确认 `pdf_ingest/` 和 `graphrag_pipeline/` 根目录、Python 解释器路径已配置
-4. 启动 `backend/ckqa-back`
+2. 根据需要确认 `pdf_ingest/` 和 `graphrag_pipeline/` 根目录、Python 解释器路径已配置
+3. 启动 `backend/ckqa-back`
+
+开发态可以让 Java 后端托管启动 GraphRAG API：设置 `GRAPHRAG_API_MANAGED_ENABLED=true` 后，Spring Boot 启动阶段会先探测 `GRAPHRAG_API_BASE_URL/health`，服务已存在则复用，服务不可达则在 `GRAPHRAG_ROOT` 下启动 `utils/main.py`。`pdf_ingest/` 当前没有常驻 HTTP 服务，仍由 Java 后端在解析/导出动作发生时按需调用 CLI。
 
 启动 Java 后端：
 
@@ -150,10 +154,15 @@ export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_API_HOST=127.0.0.1
+export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+export GRAPHRAG_API_MANAGED_ENABLED=true
 
 ./mvnw spring-boot:run
 ```
+
+如果希望 GraphRAG API 继续手工独立启动，将 `GRAPHRAG_API_MANAGED_ENABLED` 设为 `false` 或不设置即可。
 
 如果 MySQL root 密码保存在本机 `mysql` 容器环境变量中，可先执行：
 

@@ -21,4 +21,14 @@ class CkqaIntegrationPropertiesTest {
         assertThat(properties.resolveQueryTaskModePolicy("drift").staleTimeoutSeconds()).isEqualTo(1800L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").timeoutMessage()).contains("10 到 20 分钟");
     }
+
+    @Test
+    void shouldKeepManagedGraphRagApiOptInForDevelopment() {
+        CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
+
+        assertThat(properties.getGraphrag().getManagedApi().isEnabled()).isFalse();
+        assertThat(properties.getGraphrag().getManagedApi().getCondaEnv()).isEqualTo("graphrag-oneapi");
+        assertThat(properties.getGraphrag().getManagedApi().getHost()).isEqualTo("127.0.0.1");
+        assertThat(properties.getGraphrag().getManagedApi().getPort()).isEqualTo(8012);
+    }
 }

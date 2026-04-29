@@ -88,18 +88,20 @@ cp .env.example .env
 
 ```bash
 cd frontend/apps/student-app
-pnpm dev
+pnpm dev:local
 pnpm build
 pnpm preview
 pnpm format
 node --test tests/*.test.js
 ```
 
-默认开发端口来自 `vite.config.js`：
+本地联调推荐端口：
 
 ```text
-http://0.0.0.0:8080
+http://127.0.0.1:5174
 ```
+
+`pnpm dev` 仍保留 Vite 原始启动方式；`pnpm dev:local` 用于避免和 Java 后端默认 `8080` 端口冲突。
 
 ## 当前实现特点
 

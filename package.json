@@ -1,0 +1,10 @@
+{
+  "name": "ckqa",
+  "private": true,
+  "scripts": {
+    "dev:admin": "pnpm --dir frontend/apps/admin-app dev:local",
+    "dev:student": "pnpm --dir frontend/apps/student-app dev:local",
+    "build:admin": "pnpm --dir frontend/apps/admin-app build",
+    "build:student": "pnpm --dir frontend/apps/student-app build"
+  }
+}
