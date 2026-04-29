@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-04-23
+> 审计日期：2026-04-29
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -13,8 +13,8 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 其余目录目前属于编排入口或配套前端/后端工作区：
 
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成运维台壳层、工作台、系统健康页和通用页面模板，业务数据仍以 Java `/api/v1` 渐进接入为主。
-- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，已经承接 `/api/v1` 下的课程、PDF、索引、异步问答和系统健康检查接口，但仍依赖 `pdf_ingest/` 与 `graphrag_pipeline/` 提供真实处理能力。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
+- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
 
@@ -25,16 +25,129 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 已完成壳层与核心页面模板，业务接口仍在渐进接入 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
+| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
+
+## 本机启动前后端服务
+
+下面是当前管理端联调最常用的启动顺序。默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`。
+
+### 0. 确认基础依赖
+
+MySQL、MinIO、One API、Neo4j 等容器通常由本机开发环境提供。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，GraphRAG 输出目录中存在 `output/*.parquet` 和 `output/lancedb/`。
+
+```bash
+docker ps
+```
+
+如果当前机器的 MySQL root 密码来自容器环境变量，后端启动时可以这样注入，避免把密码写入仓库文件：
+
+```bash
+export MYSQL_PASSWORD="$(docker exec mysql printenv MYSQL_ROOT_PASSWORD)"
+```
+
+### 1. 启动 GraphRAG Python API
+
+```bash
+cd graphrag_pipeline
+
+GRAPHRAG_API_HOST=127.0.0.1 \
+GRAPHRAG_API_PORT=8012 \
+GRAPHRAG_OUTPUT_DIR="$PWD/output" \
+GRAPHRAG_STORAGE_DIR="$PWD/output" \
+GRAPHRAG_LANCEDB_URI="$PWD/output/lancedb" \
+conda run -n graphrag-oneapi python utils/main.py
+```
+
+验收：
+
+```bash
+curl http://127.0.0.1:8012/health
+curl http://127.0.0.1:8012/v1/models
+```
+
+如果 `8012` 被占用，可以把 `GRAPHRAG_API_PORT` 改成其他端口，并在后端启动时同步修改 `GRAPHRAG_API_BASE_URL`。
+
+### 2. 启动 Java 后端
+
+另开终端：
+
+```bash
+cd backend/ckqa-back
+
+export MYSQL_HOST=127.0.0.1
+export MYSQL_PORT=23306
+export MYSQL_DATABASE=ocqa
+export MYSQL_USER=root
+export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+
+export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
+export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
+export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
+export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+
+./mvnw spring-boot:run
+```
+
+验收：
+
+```bash
+curl http://127.0.0.1:8080/api/v1/system/health
+curl http://127.0.0.1:8080/api/v1/courses
+curl http://127.0.0.1:8080/api/v1/knowledge-bases
+```
+
+`/api/v1/system/health` 中 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-output`、`graphrag-api`、`graphrag-ready` 都为 `ready=true` 时，管理端核心流程才具备真实联调条件。
+
+### 3. 启动 admin-app 前端
+
+另开终端：
+
+```bash
+cd frontend/apps/admin-app
+pnpm install
+
+VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1 \
+pnpm dev --host 127.0.0.1 --port 5173
+```
+
+浏览器访问：
+
+```text
+http://127.0.0.1:5173/app/health
+http://127.0.0.1:5173/app/courses
+http://127.0.0.1:5173/app/knowledge-bases
+```
+
+开发态登录页选择“平台管理员”或“教师”后即可进入控制台。
+
+### 4. 前端/后端回归验证
+
+```bash
+cd frontend/apps/admin-app
+pnpm test
+pnpm build
+pnpm test:e2e
+```
+
+```bash
+cd backend/ckqa-back
+./mvnw test
+```
+
+```bash
+cd pdf_ingest
+conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.py -q
+```
 
 ## 本次审计结论
 
 - 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
-- `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
+- `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
 - `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
-- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备主题系统、路由守卫、工作台、系统健康页和通用业务页模板，但除系统健康外多数页面仍使用示例数据。
+- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
 ## 人类与机器入口
@@ -147,7 +260,7 @@ ckqa/
 
 - 角色：管理员端/教师端共用控制台前端
 - 主入口：`src/App.vue`
-- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页和通用业务页模板；系统健康页已请求 Java `/api/v1/system/health`，其他多数页面仍保留示例数据和“未开放”边界
+- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、知识库构建向导、QA 冒烟验证和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
 - 文档入口：[frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - 结构设计入口：[docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 
@@ -155,7 +268,7 @@ ckqa/
 
 - 角色：Java 一期编排后端
 - 主入口：`src/main/java/org/ysu/ckqaback/CkqaBackApplication.java`
-- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、PDF/索引/异步问答编排和系统健康检查；仍不是 Python 主链路的替代实现
+- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、课程/资料/知识库读接口、PDF/索引/异步问答编排、QA 冒烟会话和系统健康检查；仍不是 Python 主链路的替代实现
 - 文档入口：[backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 
 ## 端到端最短跑通路径
@@ -251,3 +364,4 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 - [docs/superpowers/archive/README.md](docs/superpowers/archive/README.md)（已完成设计/计划归档索引）
+  - 已归档：管理员端 UI 重构、管理端真实数据接入设计稿与实施计划。

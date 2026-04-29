@@ -8,6 +8,10 @@
   - 管理员端前端美化重构设计稿，已完成落地。
 - `plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md`
   - 管理员端前端美化重构实施计划，已执行完成。
+- `specs/2026-04-28-admin-app-live-api-integration-design.md`
+  - 管理端真实数据接入设计稿，已完成并合并到 `main`。
+- `plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md`
+  - 管理端真实数据接入实施计划，已完成课程、资料、知识库、QA 冒烟验证和 Playwright 故障注入验收。
 
 ## 使用约定
 

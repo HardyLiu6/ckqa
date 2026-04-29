@@ -1,5 +1,7 @@
 # Admin App Live API Integration Implementation Plan
 
+> 归档说明：本计划已完成并合并到 `main`。当前启动、验证和模块状态请优先查看仓库根 [README.md](../../../../README.md)、[frontend/apps/admin-app/README.md](../../../../frontend/apps/admin-app/README.md) 与 [backend/ckqa-back/README.md](../../../../backend/ckqa-back/README.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 `frontend/apps/admin-app` 中 `/app/health`、`/app/courses`、课程详情、资料生命周期、知识库列表/详情、知识库构建向导逐步从 mock 数据切到 Java `backend/ckqa-back` 的 `/api/v1`，并保持 `DataSourceChip` 只在真实接入页面显示 `live`。
@@ -30,7 +32,7 @@
 
 ## 0. Source Of Truth
 
-- 设计稿：`docs/superpowers/specs/2026-04-28-admin-app-live-api-integration-design.md`
+- 设计稿：`docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md`
 - 设计稿提交：`f7a2af1 docs: add admin app live api integration design`
 - 前端正式边界：只访问 Java `/api/v1`，不直接访问 GraphRAG Python `/v1`。
 - 当前代码事实：`ApiPageData` 后端字段为 `current / size / total / pages`，前端 loader 统一归一为 `pagination: { page, size, total, pages }`，其中 `page = data.page ?? data.current ?? 1`。
@@ -652,7 +654,7 @@ curl --noproxy '*' http://127.0.0.1:8080/api/v1/knowledge-bases
 - [ ] Commit 4：后端知识库列表/详情接口和测试。
 - [ ] Commit 5：知识库列表/详情、构建向导五步 live 流程和测试。
 - [ ] Commit 6：QA 冒烟验证、最终回归和文档同步。文档同步目标固定为：
-  - `docs/superpowers/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md`：勾选已完成步骤并记录最终验证结果。
-  - `docs/superpowers/specs/2026-04-28-admin-app-live-api-integration-design.md`：仅当实现与设计稿发生有意偏差时更新。
+  - `docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md`：勾选已完成步骤并记录最终验证结果。
+  - `docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md`：仅当实现与设计稿发生有意偏差时更新。
   - `frontend/apps/admin-app/README.md`：如果 `VITE_API_BASE_URL`、CORS 或本地启动方式发生变化则更新。
   - `backend/ckqa-back/README.md`：如果新增 CORS 配置或联调启动说明影响后端使用方式则更新。

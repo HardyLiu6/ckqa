@@ -4,10 +4,10 @@
 
 ## 当前状态
 
-- 技术栈：Vue 3 + Vite + Vue Router + Axios
+- 技术栈：Vue 3 + Vite + Vue Router + Axios + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页和通用业务页模板
-- 当前角色：管理员/教师共用控制台前端；系统健康页已走 Java `/api/v1`，多数业务页仍以示例数据等待后续接口接入
+- 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
+- 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
 
@@ -15,11 +15,13 @@
 - [../../../pdf_ingest/README.md](../../../pdf_ingest/README.md)
 - [../../../graphrag_pipeline/README.md](../../../graphrag_pipeline/README.md)
 
-本次已完成的结构设计与视觉重构稿已归档，可按需回看：
+本次已完成的结构设计、视觉重构与真实数据接入文档已归档，可按需回看：
 
 - [../../../docs/admin-teacher-frontend-structure.md](../../../docs/admin-teacher-frontend-structure.md)
 - [../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md](../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md)
 - [../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md)
+- [../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md](../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md)
+- [../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md)
 
 ## 目录与入口
 
@@ -35,6 +37,9 @@
 | `src/stores/auth.js` | 开发态认证状态、角色和权限判断 |
 | `src/stores/theme.js` | `light / dark / auto` 主题模式和固定主题色 |
 | `src/axios/index.js` | Axios 实例、认证头注入和错误收敛 |
+| `src/api/` | Java `/api/v1` 业务 API 边界和 ApiResponse 解包 |
+| `src/views/pages/module-loaders.js` | 按路由加载 live 数据并映射页面状态 |
+| `e2e/local-operation-errors.spec.js` | Playwright 浏览器级故障注入验收 |
 | `src/views/` | 登录、工作台、系统健康、通用页面和状态页 |
 | `src/main.js` | Vue 应用挂载入口 |
 | `src/style.css` | 样式入口，导入 `styles/tokens.css`、`base.css`、`components.css` |
@@ -45,9 +50,25 @@
 cd frontend/apps/admin-app
 pnpm install
 pnpm test
+pnpm test:e2e
 pnpm build
 pnpm dev
 pnpm preview
+```
+
+本地联调时通常这样启动：
+
+```bash
+cd frontend/apps/admin-app
+VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1 pnpm dev --host 127.0.0.1 --port 5173
+```
+
+浏览器入口：
+
+```text
+http://127.0.0.1:5173/app/health
+http://127.0.0.1:5173/app/courses
+http://127.0.0.1:5173/app/knowledge-bases
 ```
 
 ## 环境变量
@@ -70,14 +91,17 @@ VITE_API_TIMEOUT=15000
 5. 登录页支持管理员/教师开发态身份切换，并明确标记“当前为开发态身份切换，正式登录接口待接入”。
 6. 未开放页面统一显示模块、规划状态和恢复入口，避免空白路由。
 7. 系统健康页只调用 Java `/api/v1/system/health`，并区分 `reachable` 与 `ready`。
-8. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
-9. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
-10. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
+8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`。
+9. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
+10. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
+11. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
+12. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
+13. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 
 1. 登录仍是开发态 mock 身份，正式登录接口待后端确认。
-2. 多数业务页面仍为示例数据，真实列表、表单和详情数据仍需后续接入 Java `/api/v1` 聚合接口。
-3. `material:upload` 仅作为预留权限点，Java 上传链路确认前不提供上传 UI。
-4. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
-5. 403 页面当前使用兜底权限说明；若需要精确缺失权限，需要路由守卫跳转时附带 `required` 查询参数。
+2. `material:upload` 仅作为预留权限点，Java 上传链路确认前不提供上传 UI。
+3. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
+4. 403 页面当前使用兜底权限说明；若需要精确缺失权限，需要路由守卫跳转时附带 `required` 查询参数。
+5. 正式登录、细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。

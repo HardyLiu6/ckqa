@@ -1,5 +1,7 @@
 # 管理端真实数据接入设计稿
 
+> 归档说明：本设计已在 `feature/admin-app-live-api-integration` 完成并合并到 `main`。当前运行入口请优先查看仓库根 [README.md](../../../../README.md)、[frontend/apps/admin-app/README.md](../../../../frontend/apps/admin-app/README.md) 与 [backend/ckqa-back/README.md](../../../../backend/ckqa-back/README.md)。
+
 - 日期：2026-04-28
 - 范围：`frontend/apps/admin-app/`、`backend/ckqa-back/`
 - 目标：从 `/app/health` 与 `/app/courses` 开始，把管理端 mock 页面逐步切到 Java `/api/v1`，并优先完成知识库构建流程页面与后端的真实衔接。

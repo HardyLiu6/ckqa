@@ -4,6 +4,8 @@
 > 适用范围：`frontend/apps/admin-app/`、`backend/ckqa-back/`、`pdf_ingest/`、`graphrag_pipeline/`
 > 目标：为管理员端与教师端共用平台确定前端信息架构、布局结构、页面数量与首版落地范围。本设计只涉及结构，不涉及页面视觉风格、配色、动效与组件美术规范。
 
+> 实现状态更新：截至 2026-04-29，`frontend/apps/admin-app/` 已经完成核心运维页的 Java `/api/v1` 真实接入，覆盖系统健康、课程、资料生命周期、知识库列表/详情、构建向导、索引详情和 QA 冒烟验证；详细真实数据接入设计稿与实施计划已归档到 `docs/superpowers/archive/`。
+
 ## 1. 定位
 
 管理员端与教师端建议合并为同一个前端平台，定位为“课程知识库构建与运维平台”。
@@ -52,10 +54,11 @@
 
 本设计基于当前仓库事实：
 
-1. `frontend/apps/admin-app/` 已经完成管理端壳层、开发态身份切换、路由守卫、工作台、系统健康页和通用业务页模板，本结构文档继续作为页面/路由/RBAC 设计依据，而不是“起步页待搭骨架”的提案。
-2. `backend/ckqa-back/` 已提供 `/api/v1` 下的课程资料、PDF 解析、GraphRAG 导出、索引任务、问答任务和系统健康接口。
+1. `frontend/apps/admin-app/` 已经完成管理端壳层、开发态身份切换、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、索引详情、QA 冒烟验证和 Playwright 故障注入验收，本结构文档继续作为页面/路由/RBAC 设计依据，而不是“起步页待搭骨架”的提案。
+2. `backend/ckqa-back/` 已提供 `/api/v1` 下的课程、课程资料、知识库、PDF 解析、GraphRAG 导出、索引任务、问答任务、QA 冒烟会话和系统健康接口。
 3. `pdf_ingest/sql/ocqa.sql` 已包含 `users`、`roles`、`permissions`、`user_roles`、`role_permissions`、`course_memberships`、`course_materials`、`material_objects`、`knowledge_bases`、`index_runs`、`qa_sessions`、`qa_messages`、`authorization_audit_logs` 等表结构。
 4. 正式前端应通过 Java `/api/v1` 调用业务能力，不应直接请求 GraphRAG Python 服务。GraphRAG Python 服务属于后端内部编排和开发调试依赖。
+5. 2026-04-28 真实数据接入设计稿与实施计划已完成并归档；当前启动方式、验证命令和已落地模块以仓库根 `README.md`、`frontend/apps/admin-app/README.md`、`backend/ckqa-back/README.md` 为准。
 
 ## 4. 总体布局结构
 
@@ -660,7 +663,7 @@ system:read
 6. 索引运行详情。
 7. 系统健康。
 
-当前状态：页面结构、工作台、系统健康页和构建向导模板已经落地，但除系统健康外仍主要停留在示例数据与未开放边界；这一阶段接下来的重点应转向 Java `/api/v1` 的真实数据接入。
+当前状态：本阶段的核心页面已经完成 Java `/api/v1` 真实接入，课程列表、课程详情、资料详情、知识库列表/详情、构建向导、索引运行详情和 QA 冒烟验证均已落地；后续重点应转向正式登录、细粒度 RBAC、审计与问答运维页面。
 
 ### 11.3 第三阶段：问答运维与权限管理
 

@@ -9,6 +9,7 @@
 3. 索引构建与陈旧任务恢复
 4. GraphRAG 问答代理
 5. 课程入口与系统健康检查
+6. 管理端 live API 所需课程、资料、知识库和 QA 冒烟验证聚合接口
 
 如果你需要了解整个仓库的主链路，请同时查看：
 
@@ -22,8 +23,12 @@
 当前已经落地的核心接口如下：
 
 - `GET /api/v1/system/health`
+- `GET /api/v1/courses`
+- `GET /api/v1/courses/{courseId}`
 - `GET /api/v1/courses/{courseId}/pdf-files`
 - `GET /api/v1/courses/{courseId}/knowledge-bases`
+- `GET /api/v1/knowledge-bases`
+- `GET /api/v1/knowledge-bases/{id}`
 - `GET /api/v1/pdf-files/{id}`
 - `GET /api/v1/pdf-files/{id}/results`
 - `POST /api/v1/pdf-files/{id}/parse`
@@ -82,6 +87,8 @@ export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 
 export GRAPHRAG_PYTHON=/path/to/graphrag-oneapi/bin/python
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
+export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
+export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
 
 export PARSE_TIMEOUT_SECONDS=900
@@ -132,7 +139,34 @@ export INDEX_STALE_SECONDS=2400
 
 ```bash
 cd backend/ckqa-back
+
+export MYSQL_HOST=127.0.0.1
+export MYSQL_PORT=23306
+export MYSQL_DATABASE=ocqa
+export MYSQL_USER=root
+export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+
+export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
+export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
+export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
+export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
+
 ./mvnw spring-boot:run
+```
+
+如果 MySQL root 密码保存在本机 `mysql` 容器环境变量中，可先执行：
+
+```bash
+export MYSQL_PASSWORD="$(docker exec mysql printenv MYSQL_ROOT_PASSWORD)"
+```
+
+本机验收：
+
+```bash
+curl http://127.0.0.1:8080/api/v1/system/health
+curl http://127.0.0.1:8080/api/v1/courses
+curl http://127.0.0.1:8080/api/v1/knowledge-bases
 ```
 
 ## 健康检查说明

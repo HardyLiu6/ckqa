@@ -27,11 +27,11 @@ This repository currently has five notable areas, with the two Python modules as
    - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
-   - Already has theme tokens, route guards, dashboard, system health page, and config-driven table/overview/workflow page templates.
+   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, knowledge-base build wizard, QA smoke validation, and Playwright browser fault-injection tests.
    - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
-   - Provides `/api/v1` course, PDF, index, async QA, and system health endpoints.
+   - Provides `/api/v1` course, PDF, knowledge-base, index, async QA, QA smoke session, and system health endpoints.
    - Still depends on `pdf_ingest/` and `graphrag_pipeline/` for real parsing, indexing, and QA work.
 
 ## Read First
@@ -140,16 +140,18 @@ Notes:
 ### `frontend/apps/admin-app/`
 
 - Vue 3 + Vite standalone admin/teacher console frontend.
-- Preferred commands: `pnpm install`, `pnpm test`, `pnpm build`, `pnpm dev`, `pnpm preview`
+- Preferred commands: `pnpm install`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, `pnpm dev`, `pnpm preview`
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
-- Current state: shell, theme system, dashboard, health page, login/status pages, and config-driven business page templates are implemented; except for `/app/health`, most pages still use explicit mock data or upcoming-state placeholders.
+- Current state: shell, theme system, dashboard, health page, login/status pages, courses, course detail, material lifecycle, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Playwright E2E uses mocked `/api/v1` fault injection to verify local operation error panels. Do not commit `test-results/`, `playwright-report/`, `dist/`, or `node_modules/`.
 
 ### `backend/ckqa-back/`
 
 - Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 phase-1 orchestration backend.
 - Unified response envelope is `code / message / data / timestamp`; business success code is `200`.
 - Async QA uses Python GraphRAG `/v1/query-tasks`; cross-service task timestamps are exposed as Asia/Shanghai offset-free `LocalDateTime` strings.
+- Local admin-app integration expects MySQL, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, GraphRAG output/lancedb, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
 - Treat it as secondary to the Python parsing/indexing chain unless the user explicitly wants Java backend, `/api/v1`, orchestration, or frontend integration work.
 
 ## Cross-Module Contract
