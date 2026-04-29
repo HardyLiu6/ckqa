@@ -128,17 +128,24 @@ export function resolveCoursesRequestState(items = []) {
 }
 
 function mapCourseRow(course) {
-  return [
-    course.courseName || course.courseId || '-',
-    course.status || '-',
-    `${Number(course.parsedMaterialCount ?? 0)}/${Number(course.materialCount ?? 0)} done`
-      + failedSuffix(course.failedMaterialCount),
-    `${Number(course.activeKnowledgeBaseCount ?? 0)}/${Number(course.knowledgeBaseCount ?? 0)} active`,
-    course.latestIndexRunId
-      ? `#${course.latestIndexRunId} ${course.latestIndexRunStatus || ''}`.trim()
-      : '-',
-    course.updatedAt || '-',
-  ]
+  const courseId = course.courseId ?? course.id
+
+  return {
+    id: courseId ?? course.courseName,
+    to: courseId ? `/app/courses/${encodeURIComponent(courseId)}` : '',
+    subtitle: courseId ? `#${courseId}` : '',
+    cells: [
+      course.courseName || course.courseId || '-',
+      course.status || '-',
+      `${Number(course.parsedMaterialCount ?? 0)}/${Number(course.materialCount ?? 0)} done`
+        + failedSuffix(course.failedMaterialCount),
+      `${Number(course.activeKnowledgeBaseCount ?? 0)}/${Number(course.knowledgeBaseCount ?? 0)} active`,
+      course.latestIndexRunId
+        ? `#${course.latestIndexRunId} ${course.latestIndexRunStatus || ''}`.trim()
+        : '-',
+      course.updatedAt || '-',
+    ],
+  }
 }
 
 async function loadKnowledgeBases(query, services) {
@@ -446,6 +453,7 @@ export function buildKnowledgeBaseWorkflowSteps({
       detail: activeIndexRunId ? `激活索引 #${activeIndexRunId} 可进入 Phase 4 冒烟验证` : '缺少激活索引，暂不可验证',
       conditions: ['索引运行成功并激活', 'Phase 4 接入真实问答冒烟'],
       actionLabel: '发起冒烟验证',
+      actionDisabled: !activeIndexRunId,
       logLabel: '查看验证会话',
     }),
   ]

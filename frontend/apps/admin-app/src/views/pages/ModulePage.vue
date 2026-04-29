@@ -4,11 +4,13 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { createApiError } from '../../api/client.js'
 import { http } from '../../axios/index.js'
+import { createQaSession, getQaTask, sendQaMessage } from '../../api/qa.js'
 import {
   createIndexRun,
   getKnowledgeBase,
   listIndexRuns,
 } from '../../api/knowledge-bases.js'
+import { authStore } from '../../stores/auth.js'
 import {
   exportGraphRag,
   getMaterial,
@@ -34,10 +36,21 @@ import {
   buildPageQuery,
   createRouteSnapshot,
   createStaleRequestGuard,
+  resolveApiErrorAction,
   resolveCleanMaterialQuery,
   resolveMaterialQuery,
+  resolveOperationFeedback,
   selectLatestRunningOrSuccess,
 } from './module-page-model.js'
+import {
+  isQaFailedState,
+  isQaSuccessState,
+  resolveQaPollingInterval,
+  resolveQaStaleTimeout,
+} from './qa-polling.js'
+
+const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
+const DEFAULT_SMOKE_MODE = 'basic'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,8 +62,12 @@ const loadError = ref(null)
 const requestState = ref('idle')
 const activeStepKey = ref('')
 const actionState = ref('idle')
-const actionMessage = ref('')
+const actionSnapshot = ref(null)
+const activeOperationKey = ref('')
 const blockLoadingKey = ref('')
+const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
+const smokeQuestionEdited = ref(false)
+const smokeResult = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -77,6 +94,20 @@ const actionRunning = computed(() => ['running', 'confirming'].includes(actionSt
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
 const primaryActionLabel = computed(() => config.value.primaryAction?.label ?? config.value.primaryAction)
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
+const operationFeedback = computed(() => resolveOperationFeedback(
+  activeOperationKey.value,
+  actionState.value,
+  actionSnapshot.value,
+))
+const materialOperationFeedback = computed(() => (
+  operationFeedback.value?.scope === 'material' ? operationFeedback.value : null
+))
+const indexOperationFeedback = computed(() => (
+  operationFeedback.value?.scope === 'index' ? operationFeedback.value : null
+))
+const qaOperationFeedback = computed(() => (
+  operationFeedback.value?.scope === 'qa' ? operationFeedback.value : null
+))
 const courseBlock = computed(() => config.value.blocks?.course)
 const materialsBlock = computed(() => config.value.blocks?.materials)
 const knowledgeBasesBlock = computed(() => config.value.blocks?.knowledgeBases)
@@ -91,6 +122,11 @@ const knowledgeBaseRows = computed(() => {
 
 async function loadPage(query = route.query) {
   cancelLongTask()
+  if (route.name !== 'knowledge-base-build') {
+    smokeResult.value = null
+    smokeQuestionEdited.value = false
+    smokeQuestion.value = DEFAULT_SMOKE_QUESTION
+  }
   const requestId = requestGuard.next()
   const routeSnapshot = createRouteSnapshot(route, query)
   requestState.value = 'loading'
@@ -121,6 +157,20 @@ async function loadPage(query = route.query) {
   liveState.value = result
   requestState.value = result.requestState
   loadError.value = result.error ? createApiError(result.error) : null
+
+  if (loadError.value) {
+    const action = resolveApiErrorAction(loadError.value, { route: routeSnapshot })
+    if (action.type === 'redirect') {
+      await router.replace(action.to)
+      return
+    }
+    if (action.type === 'block') {
+      loadError.value = {
+        ...loadError.value,
+        message: action.message,
+      }
+    }
+  }
 
   if (
     route.name === 'knowledge-base-build'
@@ -185,6 +235,7 @@ async function runMaterialParse() {
   }
 
   startLongTask({
+    operationKey: 'material-parse',
     limits: LONG_TASK_LIMITS.parse,
     trigger: ({ signal }) => startParse(materialId, { signal }),
     poll: ({ signal }) => getMaterial(materialId, { signal }),
@@ -211,6 +262,7 @@ async function runMaterialExport() {
   }
 
   startLongTask({
+    operationKey: 'material-export',
     limits: LONG_TASK_LIMITS.export,
     ...createMaterialExportTaskOptions({
       materialId,
@@ -221,8 +273,10 @@ async function runMaterialExport() {
   })
 }
 
-function startLongTask({ trigger, poll, isSuccess, isFailed, limits }) {
+function startLongTask({ operationKey, trigger, poll, isSuccess, isFailed, limits }) {
   cancelLongTask()
+  activeOperationKey.value = operationKey
+  actionSnapshot.value = null
   activeLongTaskController = createLongTaskController({
     trigger,
     poll,
@@ -230,12 +284,12 @@ function startLongTask({ trigger, poll, isSuccess, isFailed, limits }) {
     isFailed: isFailed ?? ((snapshot) => resolveLongTaskState(snapshot) === 'failed'),
     onState: (state, snapshot) => {
       actionState.value = state
-      actionMessage.value = resolveActionMessage(state, snapshot)
+      actionSnapshot.value = snapshot ?? null
     },
     onSuccess: () => loadPage(),
     limits,
   })
-  void activeLongTaskController.start().catch(() => {})
+  startActiveLongTask(activeLongTaskController)
 }
 
 async function selectBuildMaterial(materialId) {
@@ -255,6 +309,8 @@ async function runKnowledgeBaseIndex() {
   }
 
   cancelLongTask()
+  activeOperationKey.value = 'index-build'
+  actionSnapshot.value = null
   activeLongTaskController = createLongTaskController({
     trigger: ({ signal }) => createIndexRun(kbId, { post: (url) => http.post(url, null, { signal }) }),
     poll: async ({ signal }) => selectLatestRunningOrSuccess(
@@ -265,7 +321,7 @@ async function runKnowledgeBaseIndex() {
     isFailed: (snapshot) => resolveLongTaskState(snapshot) === 'failed',
     onState: (state, snapshot) => {
       actionState.value = state
-      actionMessage.value = resolveActionMessage(state, snapshot)
+      actionSnapshot.value = snapshot ?? null
     },
     onSuccess: async () => {
       await getKnowledgeBase(kbId)
@@ -273,7 +329,91 @@ async function runKnowledgeBaseIndex() {
     },
     limits: LONG_TASK_LIMITS.index,
   })
-  void activeLongTaskController.start().catch(() => {})
+  startActiveLongTask(activeLongTaskController)
+}
+
+function updateSmokeQuestion(event) {
+  smokeQuestionEdited.value = true
+  smokeQuestion.value = event.target.value
+}
+
+async function runQaSmoke() {
+  const knowledgeBase = knowledgeBaseBlock.value?.item
+  const activeIndexRunId = knowledgeBase?.activeIndexRunId ?? knowledgeBase?.activeIndexId
+  const question = smokeQuestionEdited.value ? smokeQuestion.value.trim() : DEFAULT_SMOKE_QUESTION
+
+  if (!activeIndexRunId || !question || actionRunning.value) {
+    return
+  }
+
+  cancelLongTask()
+  activeOperationKey.value = 'qa-smoke'
+  actionSnapshot.value = null
+  smokeResult.value = null
+
+  let sessionId = null
+  let taskId = null
+  const limits = {
+    ...resolveQaPollingInterval({ mode: DEFAULT_SMOKE_MODE }, DEFAULT_SMOKE_MODE),
+    ...resolveQaStaleTimeout({ mode: DEFAULT_SMOKE_MODE }, DEFAULT_SMOKE_MODE),
+  }
+
+  activeLongTaskController = createLongTaskController({
+    trigger: async ({ signal }) => {
+      const session = await createQaSession({
+        userId: authStore.state.currentUser?.id ?? 1,
+        courseId: knowledgeBase.courseId,
+        knowledgeBaseId: knowledgeBase.id ?? route.params.kbId,
+        sessionType: 'smoke',
+        title: '知识库构建冒烟验证',
+      }, { post: (url, payload) => http.post(url, payload, { signal }) })
+      sessionId = session.id
+
+      const submission = await sendQaMessage(sessionId, {
+        mode: DEFAULT_SMOKE_MODE,
+        content: question,
+      }, { post: (url, payload) => http.post(url, payload, { signal }) })
+      taskId = submission.taskId
+      Object.assign(limits, {
+        ...resolveQaPollingInterval(submission, DEFAULT_SMOKE_MODE),
+        ...resolveQaStaleTimeout(submission, DEFAULT_SMOKE_MODE),
+      })
+
+      return {
+        ...submission,
+        sessionId,
+      }
+    },
+    poll: async ({ signal }) => ({
+      ...(await getQaTask(sessionId, taskId, { get: (url) => http.get(url, { signal }) })),
+      sessionId,
+    }),
+    isSuccess: (snapshot) => isQaSuccessState(snapshot?.taskStatus ?? snapshot?.status),
+    isFailed: (snapshot) => isQaFailedState(snapshot?.taskStatus ?? snapshot?.status),
+    onState: (state, snapshot) => {
+      actionState.value = state
+      actionSnapshot.value = snapshot ?? null
+    },
+    onSuccess: (snapshot) => {
+      smokeResult.value = {
+        state: 'success',
+        sessionId: snapshot.sessionId ?? sessionId,
+        taskId: snapshot.taskId ?? taskId,
+        content: snapshot.assistantMessage?.content ?? snapshot.answer ?? '问答任务已完成，后端未返回助手摘要。',
+      }
+    },
+    onFailure: (snapshot) => {
+      const error = createApiError(snapshot)
+      smokeResult.value = {
+        state: 'failed',
+        sessionId,
+        taskId,
+        message: snapshot?.errorMessage ?? snapshot?.timeoutMessage ?? error.message,
+      }
+    },
+    limits,
+  })
+  startActiveLongTask(activeLongTaskController)
 }
 
 function cancelLongTask() {
@@ -283,23 +423,15 @@ function cancelLongTask() {
   }
 
   actionState.value = 'idle'
-  actionMessage.value = ''
+  actionSnapshot.value = null
+  activeOperationKey.value = ''
 }
 
-function resolveActionMessage(state, snapshot) {
-  if (state === 'confirming') {
-    return '请求可能仍在后端执行，正在确认最新状态。'
-  }
-
-  if (state === 'failed') {
-    return snapshot?.message ?? '操作失败'
-  }
-
-  if (state === 'success') {
-    return '操作完成'
-  }
-
-  return '任务已提交'
+function startActiveLongTask(controller) {
+  void controller.start().catch((error) => {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+  })
 }
 
 function renderFactValue(field) {
@@ -344,14 +476,6 @@ onBeforeUnmount(() => cancelLongTask())
         {{ secondaryActionLabel }}
       </button>
     </div>
-  </section>
-
-  <section v-if="actionMessage" class="panel">
-    <div class="panel-heading">
-      <h2>任务状态</h2>
-      <StatusBadge :status="actionState === 'confirming' ? 'running' : actionState" />
-    </div>
-    <p>{{ actionMessage }}</p>
   </section>
 
   <section v-if="loadError" class="panel">
@@ -401,6 +525,19 @@ onBeforeUnmount(() => cancelLongTask())
           开始构建索引
         </button>
       </div>
+      <div
+        v-if="indexOperationFeedback"
+        class="operation-feedback"
+        :data-status="indexOperationFeedback.status"
+      >
+        <div class="operation-feedback__heading">
+          <strong>{{ indexOperationFeedback.title }}</strong>
+          <StatusBadge :status="indexOperationFeedback.status" />
+        </div>
+        <p>{{ indexOperationFeedback.message }}</p>
+        <small>{{ indexOperationFeedback.detail }}</small>
+        <small v-if="indexOperationFeedback.meta">{{ indexOperationFeedback.meta }}</small>
+      </div>
       <ol class="timeline-list">
         <li v-for="item in indexRunsBlock?.items" :key="item.id">
           <StatusBadge :status="item.meta" />
@@ -409,6 +546,55 @@ onBeforeUnmount(() => cancelLongTask())
         </li>
       </ol>
       <p v-if="indexRunsBlock?.state === 'empty'">暂无索引运行。</p>
+    </article>
+
+    <article class="panel wide-panel">
+      <div class="panel-heading">
+        <h2>问答冒烟验证</h2>
+        <button
+          class="primary-button compact"
+          type="button"
+          :disabled="config.workflowSteps?.find((step) => step.key === 'smoke')?.status !== 'ready' || actionRunning || !smokeQuestion.trim()"
+          @click="runQaSmoke"
+        >
+          发起冒烟验证
+        </button>
+      </div>
+      <label class="field-label" for="smoke-question">验证问题</label>
+      <input
+        id="smoke-question"
+        class="text-input"
+        type="text"
+        :value="smokeQuestion"
+        :disabled="actionRunning"
+        @input="updateSmokeQuestion"
+      />
+      <p v-if="config.workflowSteps?.find((step) => step.key === 'smoke')?.status !== 'ready'" class="inline-error">
+        缺少激活索引，暂不可验证。
+      </p>
+      <div
+        v-if="qaOperationFeedback"
+        class="operation-feedback"
+        :data-status="qaOperationFeedback.status"
+      >
+        <div class="operation-feedback__heading">
+          <strong>{{ qaOperationFeedback.title }}</strong>
+          <StatusBadge :status="qaOperationFeedback.status" />
+        </div>
+        <p>{{ qaOperationFeedback.message }}</p>
+        <small>{{ qaOperationFeedback.detail }}</small>
+        <small v-if="qaOperationFeedback.meta">{{ qaOperationFeedback.meta }}</small>
+      </div>
+      <div v-if="smokeResult?.state === 'success'" class="result-box">
+        <strong>助手摘要</strong>
+        <p>{{ smokeResult.content }}</p>
+        <RouterLink class="text-link" :to="`/app/qa-sessions/${smokeResult.sessionId}`">
+          查看问答会话
+        </RouterLink>
+      </div>
+      <p v-else-if="smokeResult?.state === 'failed' && !qaOperationFeedback" class="inline-error">
+        {{ smokeResult.message }}
+      </p>
     </article>
   </section>
 
@@ -505,7 +691,7 @@ onBeforeUnmount(() => cancelLongTask())
       <p v-if="materialsBlock?.state === 'error'" class="inline-error">{{ materialsBlock.error.message }}</p>
       <ol v-else class="timeline-list">
         <li v-for="item in materialsBlock?.items" :key="item.id">
-          <StatusBadge :status="item.status ?? item.state" />
+          <StatusBadge :status="item.meta" />
           <RouterLink :to="item.to">{{ item.title }}</RouterLink>
           <small>{{ item.meta }} {{ item.detail }}</small>
         </li>
@@ -552,6 +738,19 @@ onBeforeUnmount(() => cancelLongTask())
         </div>
       </div>
       <p v-if="config.actions?.parseHint">{{ config.actions.parseHint }}</p>
+      <div
+        v-if="materialOperationFeedback"
+        class="operation-feedback"
+        :data-status="materialOperationFeedback.status"
+      >
+        <div class="operation-feedback__heading">
+          <strong>{{ materialOperationFeedback.title }}</strong>
+          <StatusBadge :status="materialOperationFeedback.status" />
+        </div>
+        <p>{{ materialOperationFeedback.message }}</p>
+        <small>{{ materialOperationFeedback.detail }}</small>
+        <small v-if="materialOperationFeedback.meta">{{ materialOperationFeedback.meta }}</small>
+      </div>
     </article>
 
     <article class="panel">

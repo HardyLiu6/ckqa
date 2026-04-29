@@ -8,6 +8,24 @@
 
 **Tech Stack:** Vue 3、Vite、Node `node --test`、Axios、Spring Boot 4.0.5、Java 21、MyBatis-Plus、Maven Wrapper、MySQL。
 
+## 2026-04-29 Completion Audit Snapshot
+
+- [x] Phase 1 的健康检查、课程列表/详情后端接口、前端 API client、课程 live loader、CORS 配置和对应测试已落地。
+- [x] Phase 2 的课程详情 live block、资料详情 API、解析/导出动作、长任务 fallback 和后端导出幂等测试已落地。
+- [x] Phase 3 的知识库列表/详情后端接口、前端知识库列表/详情、索引运行详情和五步构建向导主体已落地。
+- [x] Phase 4 的前端 QA API、QA 轮询模型、构建向导 smoke 步骤真实发起/轮询/失败展示已落地；后端已有 QA session、message、task 查询接口。
+- [x] 本轮补齐：课程列表 live row 可进入课程详情；通用表格支持 `{ cells, to }` live row；课程详情资料状态徽标使用真实 `meta`；后端 WebMvc 覆盖 `4096/4097` 标准响应。
+- [x] 本轮验证：`frontend/apps/admin-app pnpm test`、`pnpm build`、`backend/ckqa-back ./mvnw test`、`./mvnw -DskipTests compile` 均通过。
+- [x] 2026-04-29 follow-up：`qa_sessions.session_type` 已加入 SQL schema、幂等 migration、Java entity、Mapper、创建请求与响应 DTO；`sessionType=smoke` 现在是稳定后端契约。
+- [x] 2026-04-29 follow-up：前端页面级错误动作已覆盖 `401 -> /login`、`403 -> /403`、主资源 `404/4044-4048 -> 列表页`、`4096/4097 -> 阻塞提示`；`4093` 已进入长任务 fallback，避免重复 POST 解析。
+- [x] 2026-04-29 follow-up 验证：`frontend/apps/admin-app pnpm test`、`pnpm build`、`backend/ckqa-back ./mvnw test`、`./mvnw -DskipTests compile`、`pdf_ingest conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.py -q` 均通过。
+- [x] 2026-04-29 runtime acceptance：`docker ps` 确认 MySQL 容器运行并映射 `23306->3306`；后端以容器 root 密码注入 `MYSQL_PASSWORD` 后临时启动在 `18080`，`/api/v1/courses` 与 `/api/v1/knowledge-bases` 均返回 HTTP 200 和真实分页数据。
+- [x] 2026-04-29 GraphRAG runtime acceptance：在同一终端/本机网络环境临时启动 GraphRAG API 于 `127.0.0.1:18012`，并为后端注入 `PDF_INGEST_ROOT`、`GRAPHRAG_ROOT`、`GRAPHRAG_OUTPUT_DIR`、`GRAPHRAG_LANCEDB_URI`、`GRAPHRAG_API_BASE_URL` 后重测；GraphRAG `/health` 返回 `local/global/drift/basic_search_ready=true`，`/v1/models` 返回 4 个模型，后端 `/api/v1/system/health` 返回 `up=true`，MySQL、pdf-ingest-root、graphrag-root、graphrag-output、graphrag-api、graphrag-ready 全部 `reachable=true` 且 `ready=true`。
+- [x] 2026-04-29 frontend route acceptance：同时临时启动后端 `18080` 与 `pnpm dev --host 127.0.0.1 --port 15173`，`/app/courses`、`/app/knowledge-bases/1/build` 均返回 SPA HTML/HTTP 200；从前端 origin 到后端 `/api/v1/courses` 的 CORS preflight 返回 HTTP 200 和 `Access-Control-Allow-Origin: http://127.0.0.1:15173`。
+- [x] 2026-04-29 frontend local operation errors：资料解析、GraphRAG 导出、索引构建、QA 冒烟验证已拆分为局部操作反馈；对应面板就地显示操作标题、后端错误消息、HTTP/业务码和下一步处理建议，顶部泛化“任务状态”不再承载所有操作错误。
+- [x] 2026-04-29 frontend local operation errors 验证：新增模型单测覆盖 `material-parse`、`material-export`、`index-build`、`qa-smoke` 四类操作反馈；`frontend/apps/admin-app pnpm test` 与 `pnpm build` 均通过。
+- [x] 2026-04-29 Playwright browser fault-injection acceptance：新增 `frontend/apps/admin-app/e2e/local-operation-errors.spec.js` 和 `pnpm test:e2e`；Chromium 自动启动 Vite 并拦截 `/api/v1`，分别注入资料解析失败、GraphRAG 导出冲突、索引构建失败、QA 冒烟验证失败，验证三个业务面板内的 `.operation-feedback` 局部视觉状态、标题、错误消息和 HTTP/业务码。`pnpm test:e2e` 4 个浏览器用例通过。
+
 ---
 
 ## 0. Source Of Truth

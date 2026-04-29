@@ -248,6 +248,14 @@ export function getModulePageConfig(routeName) {
   return configs[routeName] ?? fallbackConfig
 }
 
+export function getRowCells(row = []) {
+  if (Array.isArray(row)) {
+    return row
+  }
+
+  return Array.isArray(row?.cells) ? row.cells : []
+}
+
 export function filterRowsByFilters(rows = [], filters = [], values = {}) {
   return rows.filter((row) =>
     filters.every((filter) => {
@@ -261,7 +269,7 @@ export function filterRowsByFilters(rows = [], filters = [], values = {}) {
         return true
       }
 
-      return String(row[filter.columnIndex] ?? '') === String(selected)
+      return String(getRowCells(row)[filter.columnIndex] ?? '') === String(selected)
     }),
   )
 }

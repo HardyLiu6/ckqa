@@ -352,6 +352,7 @@ CREATE TABLE `qa_sessions` (
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
   `course_membership_id` bigint NULL DEFAULT NULL COMMENT '课程成员ID',
   `knowledge_base_id` bigint NULL DEFAULT NULL COMMENT '知识库ID',
+  `session_type` enum('formal','smoke') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'formal' COMMENT '会话类型：formal正式问答，smoke构建冒烟验证',
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '会话标题',
   `status` enum('active','archived','deleted') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '会话状态',
   `last_message_at` timestamp NULL DEFAULT NULL COMMENT '最后消息时间',

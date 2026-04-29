@@ -8,7 +8,7 @@ import {
   resolveTableError,
   resolveTableRecordCount,
 } from './data-table-shell-model.js'
-import { filterRowsByFilters } from '../../views/pages/module-content.js'
+import { filterRowsByFilters, getRowCells } from '../../views/pages/module-content.js'
 
 const STATUS_VALUES = new Set([
   'active',
@@ -53,6 +53,10 @@ function isStatusCell(column, cell) {
 function emitPageChange(direction) {
   emit('pageChange', resolvePageChangeTarget(paginationState.value, direction))
 }
+
+function resolveRowKey(row, index) {
+  return row?.id ?? getRowCells(row).join('-') ?? index
+}
 </script>
 
 <template>
@@ -83,11 +87,15 @@ function emitPageChange(direction) {
           </tr>
         </thead>
         <tbody v-if="filteredRows.length">
-          <tr v-for="row in filteredRows" :key="row.join('-')">
-            <td v-for="(cell, index) in row" :key="`${row.join('-')}-${index}`">
+          <tr v-for="(row, rowIndex) in filteredRows" :key="resolveRowKey(row, rowIndex)">
+            <td
+              v-for="(cell, index) in getRowCells(row)"
+              :key="`${resolveRowKey(row, rowIndex)}-${index}`"
+            >
               <template v-if="index === 0">
-                <strong>{{ cell }}</strong>
-                <small v-if="row[1]">#{{ row[1] }}</small>
+                <RouterLink v-if="row.to" :to="row.to"><strong>{{ cell }}</strong></RouterLink>
+                <strong v-else>{{ cell }}</strong>
+                <small v-if="row.subtitle">{{ row.subtitle }}</small>
               </template>
               <StatusBadge v-else-if="isStatusCell(columns[index] ?? '', cell)" :status="String(cell)" />
               <span v-else>{{ cell }}</span>

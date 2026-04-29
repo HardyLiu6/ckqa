@@ -10,6 +10,11 @@ import {
 } from './api/client.js'
 import { getSystemHealth } from './api/system.js'
 import {
+  createQaSession,
+  getQaTask,
+  sendQaMessage,
+} from './api/qa.js'
+import {
   buildNavigationGroups,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
@@ -37,17 +42,24 @@ import {
 } from './views/dashboard/production-track-model.js'
 import {
   filterRowsByFilters,
+  getRowCells,
   getModulePageConfig,
   isWorkflowPrimaryActionDisabled,
   resolveActiveWorkflowStep,
 } from './views/pages/module-content.js'
 import {
   buildCourseListParams,
+  buildKnowledgeBaseWorkflowSteps,
   createCoursesLoaderResult,
   loadCourseDetailBlock,
   loadModulePage,
   resolveCoursesRequestState,
 } from './views/pages/module-loaders.js'
+import {
+  isQaTerminalState,
+  resolveQaPollingInterval,
+  resolveQaStaleTimeout,
+} from './views/pages/qa-polling.js'
 import {
   exportGraphRag,
   getMaterial,
@@ -76,6 +88,8 @@ import {
   buildPageQuery,
   createRouteSnapshot,
   createStaleRequestGuard,
+  resolveOperationFeedback,
+  resolveApiErrorAction,
   resolveCleanMaterialQuery,
   selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
@@ -179,7 +193,70 @@ test('分页响应兼容 current 字段并归一为前端 page', () => {
   assert.equal(defaults.pagination.total, 0)
 })
 
-test('课程 live loader 显式归一查询参数并区分空列表状态', () => {
+test('业务页错误动作按 HTTP 状态和资源类型解析', () => {
+  assert.deepEqual(
+    resolveApiErrorAction({ status: 401 }, { route: { fullPath: '/app/courses/os' } }),
+    { type: 'redirect', to: { path: '/login', query: { redirect: '/app/courses/os' } } },
+  )
+  assert.deepEqual(
+    resolveApiErrorAction({ status: 403 }, { route: { fullPath: '/app/courses/os' } }),
+    { type: 'redirect', to: '/403' },
+  )
+  assert.deepEqual(
+    resolveApiErrorAction({ status: 404 }, { route: { name: 'course-detail' } }),
+    { type: 'redirect', to: '/app/courses' },
+  )
+  assert.deepEqual(
+    resolveApiErrorAction({ code: 4046 }, { route: { name: 'knowledge-base-build' } }),
+    { type: 'redirect', to: '/app/knowledge-bases' },
+  )
+  assert.deepEqual(resolveApiErrorAction({ code: 4097 }, { route: { name: 'knowledge-base-build' } }), {
+    type: 'block',
+    message: '知识库当前没有可用索引',
+  })
+})
+
+test('局部操作反馈按资料、索引和 QA 操作拆分标题与处理建议', () => {
+  assert.equal(resolveOperationFeedback('', 'failed', { message: '失败' }), null)
+  assert.equal(resolveOperationFeedback('material-parse', 'idle', null), null)
+
+  const parseFeedback = resolveOperationFeedback('material-parse', 'failed', {
+    status: 502,
+    message: 'MinerU 服务不可用',
+  })
+  assert.equal(parseFeedback.scope, 'material')
+  assert.equal(parseFeedback.title, '资料解析失败')
+  assert.equal(parseFeedback.message, 'MinerU 服务不可用')
+  assert.match(parseFeedback.detail, /MinerU/)
+  assert.match(parseFeedback.meta, /HTTP 502/)
+
+  const exportFeedback = resolveOperationFeedback('material-export', 'confirming', {
+    code: 4094,
+    message: '导出任务已在执行',
+  })
+  assert.equal(exportFeedback.scope, 'material')
+  assert.equal(exportFeedback.title, 'GraphRAG 导出确认中')
+  assert.match(exportFeedback.detail, /解析产物/)
+  assert.match(exportFeedback.meta, /业务码 4094/)
+
+  const indexFeedback = resolveOperationFeedback('index-build', 'failed', {
+    code: 4095,
+    message: '当前知识库已有索引任务在运行',
+  })
+  assert.equal(indexFeedback.scope, 'index')
+  assert.equal(indexFeedback.title, '索引构建失败')
+  assert.match(indexFeedback.detail, /GraphRAG API/)
+
+  const qaFeedback = resolveOperationFeedback('qa-smoke', 'failed', {
+    errorMessage: '问答任务超时',
+  })
+  assert.equal(qaFeedback.scope, 'qa')
+  assert.equal(qaFeedback.title, '问答冒烟验证失败')
+  assert.equal(qaFeedback.message, '问答任务超时')
+  assert.match(qaFeedback.detail, /激活索引/)
+})
+
+test('课程 live loader 显式归一查询参数并区分空列表状态', async () => {
   assert.deepEqual(buildCourseListParams({ page: '2', keyword: 'os' }), {
     page: '2',
     size: 20,
@@ -194,6 +271,23 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', () =
   assert.deepEqual(contract.workflowSteps, [])
   assert.deepEqual(contract.blocks, {})
   assert.equal(Array.isArray(contract.blocks), false)
+
+  const liveResult = await loadModulePage(
+    { name: 'courses', query: {}, params: {} },
+    {},
+    {
+      listCourses: async () => ({
+        items: [{ courseId: 'os', courseName: '操作系统', status: 'active' }],
+        current: 1,
+        size: 20,
+        total: 1,
+        pages: 1,
+      }),
+    },
+  )
+
+  assert.equal(liveResult.rows[0].to, '/app/courses/os')
+  assert.deepEqual(getRowCells(liveResult.rows[0]).slice(0, 2), ['操作系统', 'active'])
 })
 
 test('课程详情 loader 只在主资源失败时进入页面级错误', async () => {
@@ -294,6 +388,7 @@ test('资料详情 loader 根据解析状态推导可执行按钮', async () => 
 test('长任务 fallback 识别超时/冲突并支持取消轮询', async () => {
   assert.deepEqual(LONG_TASK_LIMITS.parse, { intervalMs: 10000, timeoutMs: 900000 })
   assert.equal(shouldStartFallback({ status: 504 }), true)
+  assert.equal(shouldStartFallback({ code: 4093 }), true)
   assert.equal(shouldStartFallback({ code: 4094 }), true)
   assert.equal(shouldStartFallback({ code: 4000 }), false)
 
@@ -474,6 +569,48 @@ test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运�
   ])
 })
 
+test('QA API 通过 Java /api/v1 边界创建会话、发送消息并查询任务', async () => {
+  const calls = []
+  const client = {
+    get: async (url) => {
+      calls.push(['get', url, null])
+      return { data: { code: 200, message: 'ok', data: { url } } }
+    },
+    post: async (url, payload) => {
+      calls.push(['post', url, payload])
+      return { data: { code: 200, message: 'ok', data: { url, payload } } }
+    },
+  }
+
+  await createQaSession({ knowledgeBaseId: 7, sessionType: 'smoke' }, client)
+  await sendQaMessage(12, { content: '请用一句话概括当前知识库的主要内容。', mode: 'basic' }, client)
+  await getQaTask(12, 99, client)
+
+  assert.deepEqual(calls, [
+    ['post', '/qa-sessions', { knowledgeBaseId: 7, sessionType: 'smoke' }],
+    ['post', '/qa-sessions/12/messages', { content: '请用一句话概括当前知识库的主要内容。', mode: 'basic' }],
+    ['get', '/qa-sessions/12/tasks/99', null],
+  ])
+})
+
+test('QA 轮询模型优先使用后端提示并按模式提供默认值', () => {
+  assert.equal(resolveQaPollingInterval({ recommendedPollingIntervalSeconds: 4 }, 'global').intervalMs, 4000)
+  assert.equal(resolveQaStaleTimeout({ staleTimeoutSeconds: 45 }, 'drift').timeoutMs, 45000)
+  assert.equal(resolveQaPollingInterval({ mode: 'drift' }, 'basic').intervalMs, 30000)
+  assert.equal(resolveQaStaleTimeout({}, 'global').timeoutMs, 1800000)
+  assert.equal(resolveQaPollingInterval({}, 'basic').intervalMs, 10000)
+  assert.equal(resolveQaStaleTimeout({}, undefined).timeoutMs, 300000)
+})
+
+test('QA 终态识别覆盖成功、失败和超时状态', () => {
+  assert.equal(isQaTerminalState('success'), true)
+  assert.equal(isQaTerminalState('completed'), true)
+  assert.equal(isQaTerminalState('failed'), true)
+  assert.equal(isQaTerminalState('timeout'), true)
+  assert.equal(isQaTerminalState('running'), false)
+  assert.equal(isQaTerminalState('queued'), false)
+})
+
 test('知识库列表和详情 loader 映射实时字段与构建入口', async () => {
   const listResult = await loadModulePage(
     { name: 'knowledge-bases', query: { page: 1 }, params: {} },
@@ -595,6 +732,24 @@ test('知识库构建五步状态使用长任务状态和激活索引映射', as
     ['index', 'done'],
     ['smoke', 'ready'],
   ])
+})
+
+test('知识库构建 smoke 步骤必须等待激活索引并暴露真实问答动作状态', () => {
+  const blockedSteps = buildKnowledgeBaseWorkflowSteps({
+    knowledgeBase: { id: 7, activeIndexRunId: null },
+  })
+  const readySteps = buildKnowledgeBaseWorkflowSteps({
+    knowledgeBase: { id: 7, activeIndexRunId: 15 },
+  })
+  const blockedSmoke = blockedSteps.find((step) => step.key === 'smoke')
+  const readySmoke = readySteps.find((step) => step.key === 'smoke')
+
+  assert.equal(blockedSmoke.status, 'blocked')
+  assert.equal(blockedSmoke.actionDisabled, true)
+  assert.match(blockedSmoke.detail, /缺少激活索引/)
+  assert.equal(readySmoke.status, 'ready')
+  assert.equal(readySmoke.actionDisabled, false)
+  assert.equal(readySmoke.actionLabel, '发起冒烟验证')
 })
 
 test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {

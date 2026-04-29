@@ -47,6 +47,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
         session.setUserId(request.getUserId());
         session.setCourseId(StringUtils.hasText(request.getCourseId()) ? request.getCourseId() : null);
         session.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        session.setSessionType(StringUtils.hasText(request.getSessionType()) ? request.getSessionType() : "formal");
         session.setTitle(StringUtils.hasText(request.getTitle()) ? request.getTitle() : "新建问答会话");
         session.setStatus("active");
         session.setCreatedAt(now);

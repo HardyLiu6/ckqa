@@ -14,6 +14,7 @@ export function shouldStartFallback(error) {
     || message.includes('timeout')
     || message.includes('network')
     || apiError.status === 504
+    || apiError.code === 4093
     || apiError.code === 4094
     || apiError.code === 4095
 }
@@ -70,6 +71,20 @@ export function createLongTaskController(options = {}) {
       clearTimeout(deadlineTimer)
       deadlineTimer = null
     }
+  }
+
+  function startDeadlineTimer() {
+    if (deadlineTimer) {
+      clearTimeout(deadlineTimer)
+    }
+
+    deadlineTimer = setTimeout(() => {
+      if (!cancelled) {
+        cancel()
+        onState('failed', { message: '长任务确认超时' })
+        onFailure({ message: '长任务确认超时' })
+      }
+    }, limits.timeoutMs)
   }
 
   function cancel() {
@@ -135,14 +150,7 @@ export function createLongTaskController(options = {}) {
     cancelled = false
     controller = new AbortController()
     onState('running')
-
-    deadlineTimer = setTimeout(() => {
-      if (!cancelled) {
-        cancel()
-        onState('failed', { message: '长任务确认超时' })
-        onFailure({ message: '长任务确认超时' })
-      }
-    }, limits.timeoutMs)
+    startDeadlineTimer()
 
     try {
       const result = await trigger({ signal: controller.signal })
@@ -165,6 +173,7 @@ export function createLongTaskController(options = {}) {
         return result
       }
 
+      startDeadlineTimer()
       onState('confirming', result)
       schedulePoll(resolveIntervalMs())
       return result
@@ -174,6 +183,7 @@ export function createLongTaskController(options = {}) {
       }
 
       if (shouldStartFallback(error)) {
+        startDeadlineTimer()
         onState('confirming', createApiError(error))
         schedulePoll(resolveIntervalMs())
         return null

@@ -1340,6 +1340,42 @@ select {
   font-weight: 800;
 }
 
+.operation-feedback {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 14px;
+  padding: 12px;
+  border: 1px solid rgb(37 99 235 / 22%);
+  border-radius: var(--ckqa-radius-sm);
+  background: rgb(37 99 235 / 6%);
+}
+
+.operation-feedback[data-status='failed'] {
+  border-color: rgb(194 65 61 / 22%);
+  background: rgb(194 65 61 / 6%);
+}
+
+.operation-feedback[data-status='success'] {
+  border-color: rgb(15 118 110 / 24%);
+  background: rgb(15 118 110 / 8%);
+}
+
+.operation-feedback__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.operation-feedback p,
+.operation-feedback small {
+  margin: 0;
+}
+
+.operation-feedback small {
+  color: var(--ckqa-text-muted);
+}
+
 .json-view {
   max-height: 520px;
   overflow: auto;

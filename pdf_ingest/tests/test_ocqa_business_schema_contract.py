@@ -10,6 +10,12 @@ MIGRATION_PATH = (
     / "migrations"
     / "20260423_course_materials.sql"
 )
+SESSION_TYPE_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "sql"
+    / "migrations"
+    / "20260429_qa_session_type.sql"
+)
 
 
 class TestOCQABusinessSchemaContract(unittest.TestCase):
@@ -47,7 +53,16 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
 
     def test_session_and_retrieval_indexes_exist(self):
         self.assertIn("UNIQUE INDEX `uk_session_code`(`session_code` ASC)", self.text)
+        self.assertIn("`session_type` enum('formal','smoke')", self.text)
         self.assertIn("INDEX `idx_retrieval_course_created`(`course_id` ASC, `created_at` ASC)", self.text)
+
+    def test_qa_session_type_migration_is_idempotent(self):
+        migration = SESSION_TYPE_MIGRATION_PATH.read_text(encoding="utf-8")
+        self.assertIn("CREATE PROCEDURE `ckqa_add_qa_session_type_if_missing`", migration)
+        self.assertIn("TABLE_NAME = 'qa_sessions'", migration)
+        self.assertIn("COLUMN_NAME = 'session_type'", migration)
+        self.assertIn("ALTER TABLE `qa_sessions` ADD COLUMN `session_type` enum('formal','smoke')", migration)
+        self.assertIn("DROP PROCEDURE IF EXISTS `ckqa_add_qa_session_type_if_missing`", migration)
 
     def test_audit_decision_columns_exist(self):
         self.assertIn("`decision` enum('allow','deny')", self.text)

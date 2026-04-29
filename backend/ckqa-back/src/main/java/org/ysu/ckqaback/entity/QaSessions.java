@@ -64,6 +64,12 @@ public class QaSessions implements Serializable {
     private Long knowledgeBaseId;
 
     /**
+     * 会话类型：formal正式问答，smoke构建冒烟验证
+     */
+    @TableField("session_type")
+    private String sessionType;
+
+    /**
      * 会话标题
      */
     @TableField("title")

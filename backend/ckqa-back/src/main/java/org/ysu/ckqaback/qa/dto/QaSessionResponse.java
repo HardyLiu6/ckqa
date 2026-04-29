@@ -16,6 +16,7 @@ public class QaSessionResponse {
     private final Long userId;
     private final String courseId;
     private final Long knowledgeBaseId;
+    private final String sessionType;
     private final String title;
     private final String status;
     private final LocalDateTime lastMessageAt;
@@ -27,6 +28,7 @@ public class QaSessionResponse {
             Long userId,
             String courseId,
             Long knowledgeBaseId,
+            String sessionType,
             String title,
             String status,
             LocalDateTime lastMessageAt,
@@ -37,6 +39,7 @@ public class QaSessionResponse {
         this.userId = userId;
         this.courseId = courseId;
         this.knowledgeBaseId = knowledgeBaseId;
+        this.sessionType = sessionType;
         this.title = title;
         this.status = status;
         this.lastMessageAt = lastMessageAt;
@@ -49,12 +52,13 @@ public class QaSessionResponse {
             Long userId,
             String courseId,
             Long knowledgeBaseId,
+            String sessionType,
             String title,
             String status,
             LocalDateTime lastMessageAt,
             LocalDateTime createdAt
     ) {
-        return new QaSessionResponse(id, sessionCode, userId, courseId, knowledgeBaseId, title, status, lastMessageAt, createdAt);
+        return new QaSessionResponse(id, sessionCode, userId, courseId, knowledgeBaseId, sessionType, title, status, lastMessageAt, createdAt);
     }
 
     public static QaSessionResponse fromEntity(QaSessions session) {
@@ -64,6 +68,7 @@ public class QaSessionResponse {
                 session.getUserId(),
                 session.getCourseId(),
                 session.getKnowledgeBaseId(),
+                session.getSessionType(),
                 session.getTitle(),
                 session.getStatus(),
                 session.getLastMessageAt(),

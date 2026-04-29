@@ -3,11 +3,14 @@ package org.ysu.ckqaback.controller;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
@@ -19,8 +22,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +55,7 @@ class QaSessionsControllerWebMvcTest {
                 7L,
                 "os",
                 3L,
+                "smoke",
                 "操作系统问答",
                 "active",
                 null,
@@ -64,12 +70,16 @@ class QaSessionsControllerWebMvcTest {
                                   "userId": 7,
                                   "courseId": "os",
                                   "knowledgeBaseId": 3,
+                                  "sessionType": "smoke",
                                   "title": "操作系统问答"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(5))
+                .andExpect(jsonPath("$.data.sessionType").value("smoke"))
                 .andExpect(jsonPath("$.data.status").value("active"));
+
+        then(qaWorkflowService).should().createSession(argThat(request -> "smoke".equals(request.getSessionType())));
     }
 
     @Test
@@ -104,6 +114,44 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(1800))
                 .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"))
                 .andExpect(jsonPath("$.data.assistantMessage").doesNotExist());
+    }
+
+    @Test
+    void shouldReturnQaSessionNotActiveWhenSendingMessageToClosedSession() throws Exception {
+        given(qaWorkflowService.sendMessage(eq(5L), any()))
+                .willThrow(new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "mode": "drift",
+                                  "content": "请概括这套图谱的主题"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(4096))
+                .andExpect(jsonPath("$.message").value("问答会话已关闭"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void shouldReturnKnowledgeBaseNotReadyWhenSessionKnowledgeBaseHasNoActiveIndex() throws Exception {
+        given(qaWorkflowService.sendMessage(eq(5L), any()))
+                .willThrow(new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "mode": "drift",
+                                  "content": "请概括这套图谱的主题"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(4097))
+                .andExpect(jsonPath("$.message").value("知识库当前没有可用索引"))
+                .andExpect(jsonPath("$.data").doesNotExist());
     }
 
     @Test
