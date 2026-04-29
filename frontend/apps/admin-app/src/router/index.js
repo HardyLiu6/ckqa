@@ -10,7 +10,8 @@ import DashboardView from '../views/dashboard/DashboardView.vue'
 import HealthView from '../views/system/HealthView.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
 import RouteState from '../views/status/RouteState.vue'
-import { authStore } from '../stores/auth.js'
+import { getAdminPinia } from '../stores/pinia.js'
+import { useAuthStore } from '../stores/auth.js'
 import { routeRecords } from './routes.js'
 
 const componentMap = {
@@ -57,6 +58,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  const authStore = useAuthStore(getAdminPinia())
+
   if (to.meta.public) {
     return true
   }

@@ -1,4 +1,7 @@
+import { createPinia, defineStore } from 'pinia'
 import { reactive, readonly } from 'vue'
+
+import { getAdminPinia } from './pinia.js'
 
 export const ROLE_PROFILES = {
   admin: {
@@ -32,7 +35,7 @@ export const ROLE_PROFILES = {
   },
 }
 
-function cloneProfile(profile) {
+export function cloneProfile(profile) {
   return {
     id: profile.id,
     name: profile.name,
@@ -42,7 +45,7 @@ function cloneProfile(profile) {
   }
 }
 
-export function createAuthStore() {
+export const useAuthStore = defineStore('auth', () => {
   const state = reactive({
     currentUser: null,
     token: null,
@@ -87,6 +90,10 @@ export function createAuthStore() {
     logout,
     canAccess,
   }
+})
+
+export function createAuthStore(pinia = createPinia()) {
+  return useAuthStore(pinia)
 }
 
-export const authStore = createAuthStore()
+export const authStore = useAuthStore(getAdminPinia())

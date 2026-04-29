@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createAuthStore } from './stores/auth.js'
+import { createPinia } from 'pinia'
+
+import { createAuthStore, useAuthStore } from './stores/auth.js'
 import { API_BASE_URL, createHttpClient } from './axios/index.js'
 import {
   createApiError,
@@ -139,6 +141,21 @@ test('认证状态支持开发态管理员和教师身份切换', () => {
   auth.logout()
   assert.equal(auth.state.isAuthenticated, false)
   assert.equal(auth.state.currentUser, null)
+})
+
+test('认证 store 迁移到 Pinia 后保留旧兼容 API', () => {
+  const pinia = createPinia()
+  const auth = createAuthStore(pinia)
+  const sameAuth = useAuthStore(pinia)
+
+  auth.loginAs('teacher')
+
+  assert.equal(sameAuth.state.currentUser.role, 'teacher')
+  assert.equal(auth.state.isAuthenticated, true)
+  assert.equal(auth.canAccess(['material:parse']), true)
+
+  auth.logout()
+  assert.equal(sameAuth.state.currentUser, null)
 })
 
 test('请求层默认使用同源 /api/v1 并保留认证头注入入口', async () => {
