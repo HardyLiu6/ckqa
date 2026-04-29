@@ -161,6 +161,17 @@ test('开发服务器把同源 /api/v1 代理到 Java 后端', () => {
   assert.equal(devConfig.server.proxy['/api/v1'].changeOrigin, true)
 })
 
+test('Vite 配置启用 Element Plus 自动导入插件且保留 API 代理', () => {
+  const devConfig = createViteConfig({})
+  const pluginNames = devConfig.plugins.map((plugin) => plugin.name)
+
+  assert.ok(pluginNames.includes('vite:vue'))
+  assert.ok(pluginNames.includes('unplugin-auto-import'))
+  assert.ok(pluginNames.includes('unplugin-vue-components'))
+  assert.equal(devConfig.server.proxy['/api/v1'].target, 'http://127.0.0.1:8080')
+  assert.equal(devConfig.server.proxy['/api/v1'].changeOrigin, true)
+})
+
 test('ApiResponse 解包只接受 CKQA envelope 和业务成功码 200', () => {
   assert.deepEqual(unwrapApiResponse({ status: 200, data: { code: 200, message: 'ok', data: { ok: true } } }), {
     ok: true,
