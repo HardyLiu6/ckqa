@@ -10,6 +10,7 @@ import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.index.IndexWorkflowService;
 import org.ysu.ckqaback.index.KnowledgeBaseLookupService;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,6 +48,13 @@ public class KnowledgeBasesController {
             @Valid @ModelAttribute KnowledgeBaseQueryRequest request
     ) {
         return ApiResponseUtils.success(knowledgeBaseLookupService.listKnowledgeBases(request));
+    }
+
+    @PostMapping
+    public ApiResponse<KnowledgeBaseDetailResponse> createKnowledgeBase(
+            @Valid @RequestBody KnowledgeBaseCreateRequest request
+    ) {
+        return ApiResponseUtils.success(knowledgeBaseLookupService.createKnowledgeBase(request));
     }
 
     @GetMapping("/{id}")

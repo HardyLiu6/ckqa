@@ -7,8 +7,10 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
+import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 
@@ -17,6 +19,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,13 +29,15 @@ class KnowledgeBaseLookupServiceTest {
 
     private KnowledgeBasesService knowledgeBasesService;
     private IndexRunsService indexRunsService;
+    private CoursesService coursesService;
     private KnowledgeBaseLookupService service;
 
     @BeforeEach
     void setUp() {
         knowledgeBasesService = mock(KnowledgeBasesService.class);
         indexRunsService = mock(IndexRunsService.class);
-        service = new KnowledgeBaseLookupService(knowledgeBasesService, indexRunsService);
+        coursesService = mock(CoursesService.class);
+        service = new KnowledgeBaseLookupService(knowledgeBasesService, indexRunsService, coursesService);
     }
 
     @Test
@@ -110,6 +115,48 @@ class KnowledgeBaseLookupServiceTest {
                 .hasMessage("知识库不存在")
                 .extracting("code")
                 .isEqualTo(ApiResultCode.KNOWLEDGE_BASE_NOT_FOUND.getCode());
+    }
+
+    @Test
+    void shouldCreateKnowledgeBaseWithDraftDefault() {
+        KnowledgeBaseCreateRequest request = new KnowledgeBaseCreateRequest();
+        request.setCourseId("os");
+        request.setKbCode("os-review");
+        request.setName("操作系统复习库");
+        request.setDescription("复习资料知识库");
+        when(coursesService.count(any())).thenReturn(1L);
+        when(knowledgeBasesService.count(any())).thenReturn(0L);
+        when(knowledgeBasesService.save(any(KnowledgeBases.class))).thenAnswer(invocation -> {
+            KnowledgeBases saved = invocation.getArgument(0);
+            saved.setId(8L);
+            return true;
+        });
+        when(indexRunsService.listByKnowledgeBaseId(8L)).thenReturn(List.of());
+
+        var detail = service.createKnowledgeBase(request);
+
+        assertThat(detail.getId()).isEqualTo(8L);
+        assertThat(detail.getCourseId()).isEqualTo("os");
+        assertThat(detail.getKbCode()).isEqualTo("os-review");
+        assertThat(detail.getStatus()).isEqualTo("draft");
+        assertThat(detail.getIndexRunCount()).isZero();
+        verify(knowledgeBasesService).save(any(KnowledgeBases.class));
+    }
+
+    @Test
+    void shouldRejectKnowledgeBaseCreationWhenCourseMissing() {
+        KnowledgeBaseCreateRequest request = new KnowledgeBaseCreateRequest();
+        request.setCourseId("missing");
+        request.setKbCode("missing-main");
+        request.setName("缺失课程知识库");
+        when(coursesService.count(any())).thenReturn(0L);
+
+        assertThatThrownBy(() -> service.createKnowledgeBase(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("课程不存在")
+                .extracting("code")
+                .isEqualTo(ApiResultCode.COURSE_NOT_FOUND.getCode());
+        verify(knowledgeBasesService, never()).save(any(KnowledgeBases.class));
     }
 
     private KnowledgeBases knowledgeBase(Long id, String courseId, String kbCode, String name, String status) {

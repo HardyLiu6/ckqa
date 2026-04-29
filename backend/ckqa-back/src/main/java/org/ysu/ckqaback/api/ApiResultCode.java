@@ -36,6 +36,11 @@ public enum ApiResultCode {
     INTERNAL_ERROR(5000, "服务器内部错误"),
 
     /**
+     * 课程不存在。
+     */
+    COURSE_NOT_FOUND(4043, "课程不存在"),
+
+    /**
      * 用户不存在。
      */
     USER_NOT_FOUND(4044, "用户不存在"),
@@ -59,6 +64,11 @@ public enum ApiResultCode {
      * 问答会话不存在。
      */
     QA_SESSION_NOT_FOUND(4048, "问答会话不存在"),
+
+    /**
+     * courseId 已存在。
+     */
+    COURSE_ID_EXISTS(4090, "课程ID已存在"),
 
     /**
      * userCode 已存在。
@@ -94,6 +104,11 @@ public enum ApiResultCode {
      * 知识库当前没有可用索引。
      */
     KNOWLEDGE_BASE_NOT_READY(4097, "知识库当前没有可用索引"),
+
+    /**
+     * 同一课程下知识库编码已存在。
+     */
+    KNOWLEDGE_BASE_CODE_EXISTS(4098, "知识库编码已存在"),
 
     /**
      * PDF 解析执行失败。

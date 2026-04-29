@@ -134,6 +134,9 @@ function mapCourseRow(course) {
     id: courseId ?? course.courseName,
     to: courseId ? `/app/courses/${encodeURIComponent(courseId)}` : '',
     subtitle: courseId ? `#${courseId}` : '',
+    actions: courseId ? [
+      { label: '详情', to: `/app/courses/${encodeURIComponent(courseId)}` },
+    ] : [],
     cells: [
       course.courseName || course.courseId || '-',
       course.status || '-',
@@ -201,6 +204,10 @@ function mapKnowledgeBaseRow(knowledgeBase = {}) {
     id,
     to: id ? `/app/knowledge-bases/${id}` : '',
     buildTo: id ? `/app/knowledge-bases/${id}/build` : '',
+    actions: id ? [
+      { label: '详情', to: `/app/knowledge-bases/${id}` },
+      { label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' },
+    ] : [],
     cells: [
       knowledgeBase.name ?? knowledgeBase.kbCode ?? `知识库 ${id ?? '-'}`,
       knowledgeBase.courseId ?? '-',

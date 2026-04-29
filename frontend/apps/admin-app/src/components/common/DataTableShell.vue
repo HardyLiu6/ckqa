@@ -40,11 +40,12 @@ const emit = defineEmits(['pageChange'])
 const filterValues = reactive({})
 
 const paginationState = computed(() => resolvePaginationState(props.pagination))
-const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
 const tableError = computed(() => resolveTableError(props.error))
 const filteredRows = computed(() => {
   return filterRowsByFilters(props.rows, props.filters, filterValues)
 })
+const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
+const hasRowActions = computed(() => filteredRows.value.some((row) => getRowActions(row).length > 0))
 
 function isStatusCell(column, cell) {
   return column.includes('状态') || STATUS_VALUES.has(String(cell))
@@ -56,6 +57,18 @@ function emitPageChange(direction) {
 
 function resolveRowKey(row, index) {
   return row?.id ?? getRowCells(row).join('-') ?? index
+}
+
+function getRowActions(row) {
+  return Array.isArray(row?.actions) ? row.actions.filter((action) => action?.label && action?.to) : []
+}
+
+function resolveActionClass(action) {
+  return [
+    action.variant === 'primary' ? 'primary-button' : 'secondary-button',
+    'compact',
+    'table-action-button',
+  ]
 }
 </script>
 
@@ -84,6 +97,7 @@ function resolveRowKey(row, index) {
         <thead>
           <tr>
             <th v-for="column in columns" :key="column" scope="col">{{ column }}</th>
+            <th v-if="hasRowActions" scope="col">操作</th>
           </tr>
         </thead>
         <tbody v-if="filteredRows.length">
@@ -99,6 +113,18 @@ function resolveRowKey(row, index) {
               </template>
               <StatusBadge v-else-if="isStatusCell(columns[index] ?? '', cell)" :status="String(cell)" />
               <span v-else>{{ cell }}</span>
+            </td>
+            <td v-if="hasRowActions">
+              <div class="data-table__actions">
+                <RouterLink
+                  v-for="action in getRowActions(row)"
+                  :key="`${resolveRowKey(row, rowIndex)}-${action.label}`"
+                  :class="resolveActionClass(action)"
+                  :to="action.to"
+                >
+                  {{ action.label }}
+                </RouterLink>
+              </div>
             </td>
           </tr>
         </tbody>

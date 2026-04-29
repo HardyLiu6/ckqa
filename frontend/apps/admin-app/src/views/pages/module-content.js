@@ -13,10 +13,10 @@ const configs = {
     primaryAction: {
       label: '新建课程',
       permission: 'course:write',
-      disabled: true,
-      title: '课程创建接口未开放，当前仅支持读取已有课程。',
+      disabled: false,
+      title: '创建课程',
     },
-    secondaryAction: { label: '筛选状态' },
+    secondaryAction: null,
     filters: [
       { key: 'status', label: '课程状态', columnIndex: 1, options: ['全部', 'active', 'archived'] },
     ],
@@ -65,10 +65,10 @@ const configs = {
     primaryAction: {
       label: '新建知识库',
       permission: 'kb:write',
-      disabled: true,
-      title: '知识库创建接口未开放，当前请使用已有知识库完成构建联调。',
+      disabled: false,
+      title: '创建知识库',
     },
-    secondaryAction: { label: '查看激活版本', permission: 'kb:read' },
+    secondaryAction: null,
     filters: [
       { key: 'status', label: '知识库状态', columnIndex: 2, options: ['全部', 'draft', 'active', 'archived'] },
     ],

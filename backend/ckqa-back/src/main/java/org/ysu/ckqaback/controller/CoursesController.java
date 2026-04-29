@@ -7,6 +7,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.course.CourseLookupService;
+import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
@@ -15,6 +16,8 @@ import org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -38,6 +41,11 @@ public class CoursesController {
     @GetMapping
     public ApiResponse<ApiPageData<CourseSummaryResponse>> listCourses(@Valid @ModelAttribute CourseQueryRequest request) {
         return ApiResponseUtils.success(courseLookupService.listCourses(request));
+    }
+
+    @PostMapping
+    public ApiResponse<CourseDetailResponse> createCourse(@Valid @RequestBody CourseCreateRequest request) {
+        return ApiResponseUtils.success(courseLookupService.createCourse(request));
     }
 
     @GetMapping("/{courseId}")

@@ -3,12 +3,16 @@ package org.ysu.ckqaback.course;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.api.ApiPageData;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
+import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
@@ -19,6 +23,9 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -129,6 +136,43 @@ class CourseLookupServiceTest {
         assertThat(summary.getActiveKnowledgeBaseCount()).isZero();
         assertThat(summary.getLatestIndexRunId()).isNull();
         assertThat(summary.getLatestIndexRunStatus()).isNull();
+    }
+
+    @Test
+    void shouldCreateCourseWithDefaultsAndReturnDetail() {
+        CourseCreateRequest request = new CourseCreateRequest();
+        request.setCourseId("db");
+        request.setCourseName("数据库系统");
+        request.setDescription("数据库课程资料");
+        when(coursesService.count(any())).thenReturn(0L);
+        when(coursesService.save(any(Courses.class))).thenAnswer(invocation -> {
+            Courses saved = invocation.getArgument(0);
+            saved.setId(3L);
+            return true;
+        });
+
+        CourseDetailResponse response = service.createCourse(request);
+
+        assertThat(response.getId()).isEqualTo(3L);
+        assertThat(response.getCourseId()).isEqualTo("db");
+        assertThat(response.getCourseName()).isEqualTo("数据库系统");
+        assertThat(response.getStatus()).isEqualTo("active");
+        assertThat(response.getAccessPolicy()).isEqualTo("restricted");
+        verify(coursesService).save(any(Courses.class));
+    }
+
+    @Test
+    void shouldRejectDuplicateCourseIdWhenCreatingCourse() {
+        CourseCreateRequest request = new CourseCreateRequest();
+        request.setCourseId("os");
+        request.setCourseName("操作系统");
+        when(coursesService.count(any())).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.createCourse(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("课程ID已存在")
+                .extracting("code")
+                .isEqualTo(ApiResultCode.COURSE_ID_EXISTS.getCode());
     }
 
     private Courses course(Long id, String courseId, String courseName, String status, LocalDateTime updatedAt) {

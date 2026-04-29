@@ -1,11 +1,13 @@
 package org.ysu.ckqaback.course;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
@@ -95,6 +97,45 @@ public class CourseLookupService {
                 .build();
     }
 
+    public CourseDetailResponse createCourse(CourseCreateRequest request) {
+        String courseId = normalizeText(request.getCourseId());
+        if (coursesService.count(new LambdaQueryWrapper<Courses>().eq(Courses::getCourseId, courseId)) > 0) {
+            throw new BusinessException(ApiResultCode.COURSE_ID_EXISTS, HttpStatus.CONFLICT);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Courses course = new Courses();
+        course.setIsDeleted(false);
+        course.setCourseId(courseId);
+        course.setCourseName(normalizeText(request.getCourseName()));
+        course.setDescription(normalizeNullableText(request.getDescription()));
+        course.setStatus(defaultIfBlank(request.getStatus(), "active"));
+        course.setAccessPolicy(defaultIfBlank(request.getAccessPolicy(), "restricted"));
+        course.setCreatedAt(now);
+        course.setUpdatedAt(now);
+        coursesService.save(course);
+
+        return CourseDetailResponse.builder()
+                .id(course.getId())
+                .courseId(course.getCourseId())
+                .courseName(course.getCourseName())
+                .description(course.getDescription())
+                .status(course.getStatus())
+                .accessPolicy(course.getAccessPolicy())
+                .materialCount(0L)
+                .parsedMaterialCount(0L)
+                .failedMaterialCount(0L)
+                .knowledgeBaseCount(0L)
+                .activeKnowledgeBaseCount(0L)
+                .latestIndexRunId(null)
+                .latestIndexRunStatus(null)
+                .createdAt(course.getCreatedAt())
+                .updatedAt(course.getUpdatedAt())
+                .accessPolicyDescription(null)
+                .memberCount(null)
+                .build();
+    }
+
     public List<CoursePdfFileSummaryResponse> listCoursePdfFiles(String courseId) {
         return courseMaterialsService.listByCourseId(courseId).stream()
                 .map(CoursePdfFileSummaryResponse::fromEntity)
@@ -160,5 +201,17 @@ public class CourseLookupService {
         return materials.stream()
                 .filter(material -> status.equalsIgnoreCase(material.getParseStatus()))
                 .count();
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return StringUtils.hasText(value) ? normalizeText(value) : fallback;
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String normalizeNullableText(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

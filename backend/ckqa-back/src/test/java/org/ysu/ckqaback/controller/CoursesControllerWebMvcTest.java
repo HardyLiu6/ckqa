@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.ysu.ckqaback.api.ApiResultCode;
@@ -24,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -88,6 +90,34 @@ class CoursesControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courseId").value("os"))
                 .andExpect(jsonPath("$.data.courseName").value("操作系统"));
+    }
+
+    @Test
+    void shouldCreateCourse() throws Exception {
+        given(courseLookupService.createCourse(any())).willReturn(CourseDetailResponse.builder()
+                .id(3L)
+                .courseId("db")
+                .courseName("数据库系统")
+                .status("active")
+                .accessPolicy("restricted")
+                .materialCount(0L)
+                .knowledgeBaseCount(0L)
+                .build());
+
+        mockMvc.perform(post(ApiPaths.COURSES)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "db",
+                                  "courseName": "数据库系统",
+                                  "description": "数据库课程资料",
+                                  "accessPolicy": "restricted"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courseId").value("db"))
+                .andExpect(jsonPath("$.data.courseName").value("数据库系统"))
+                .andExpect(jsonPath("$.data.status").value("active"));
     }
 
     @Test

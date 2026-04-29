@@ -1,14 +1,21 @@
 package org.ysu.ckqaback.index;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
+import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
+import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 
@@ -27,6 +34,7 @@ public class KnowledgeBaseLookupService {
 
     private final KnowledgeBasesService knowledgeBasesService;
     private final IndexRunsService indexRunsService;
+    private final CoursesService coursesService;
 
     public ApiPageData<KnowledgeBaseSummaryResponse> listKnowledgeBases(KnowledgeBaseQueryRequest request) {
         long page = request.getPage() == null ? 1L : request.getPage();
@@ -74,6 +82,32 @@ public class KnowledgeBaseLookupService {
         );
     }
 
+    public KnowledgeBaseDetailResponse createKnowledgeBase(KnowledgeBaseCreateRequest request) {
+        String courseId = normalizeText(request.getCourseId());
+        String kbCode = normalizeText(request.getKbCode());
+        if (coursesService.count(new LambdaQueryWrapper<Courses>().eq(Courses::getCourseId, courseId)) == 0) {
+            throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND);
+        }
+        if (knowledgeBasesService.count(new LambdaQueryWrapper<KnowledgeBases>()
+                .eq(KnowledgeBases::getCourseId, courseId)
+                .eq(KnowledgeBases::getKbCode, kbCode)) > 0) {
+            throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_CODE_EXISTS, HttpStatus.CONFLICT);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setCourseId(courseId);
+        knowledgeBase.setKbCode(kbCode);
+        knowledgeBase.setName(normalizeText(request.getName()));
+        knowledgeBase.setDescription(normalizeNullableText(request.getDescription()));
+        knowledgeBase.setStatus(defaultIfBlank(request.getStatus(), "draft"));
+        knowledgeBase.setCreatedAt(now);
+        knowledgeBase.setUpdatedAt(now);
+        knowledgeBasesService.save(knowledgeBase);
+
+        return KnowledgeBaseDetailResponse.fromEntity(knowledgeBase, null, 0L, 0L);
+    }
+
     private IndexRuns latestIndexRun(List<IndexRuns> indexRuns) {
         return indexRuns.stream()
                 .max(Comparator
@@ -104,5 +138,17 @@ public class KnowledgeBaseLookupService {
 
     private String normalize(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        return StringUtils.hasText(value) ? normalizeText(value) : fallback;
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private String normalizeNullableText(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

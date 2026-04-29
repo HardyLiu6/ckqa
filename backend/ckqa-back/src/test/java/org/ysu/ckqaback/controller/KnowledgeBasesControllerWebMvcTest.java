@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -91,6 +92,35 @@ class KnowledgeBasesControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(5))
                 .andExpect(jsonPath("$.data.activeIndexRunId").value(18));
+    }
+
+    @Test
+    void shouldCreateKnowledgeBase() throws Exception {
+        given(knowledgeBaseLookupService.createKnowledgeBase(Mockito.any())).willReturn(KnowledgeBaseDetailResponse.builder()
+                .id(8L)
+                .courseId("os")
+                .kbCode("os-review")
+                .name("操作系统复习库")
+                .status("draft")
+                .description("复习资料知识库")
+                .indexRunCount(0L)
+                .successIndexRunCount(0L)
+                .build());
+
+        mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASES)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "os",
+                                  "kbCode": "os-review",
+                                  "name": "操作系统复习库",
+                                  "description": "复习资料知识库"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(8))
+                .andExpect(jsonPath("$.data.kbCode").value("os-review"))
+                .andExpect(jsonPath("$.data.status").value("draft"));
     }
 
     @Test

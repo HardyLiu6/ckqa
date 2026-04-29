@@ -5,6 +5,10 @@ export async function listKnowledgeBases(params = {}, client = http) {
   return unwrapApiResponse(await client.get('/knowledge-bases', { params }))
 }
 
+export async function createKnowledgeBase(payload, client = http) {
+  return unwrapApiResponse(await client.post('/knowledge-bases', payload))
+}
+
 export async function getKnowledgeBase(id, client = http) {
   return unwrapApiResponse(await client.get(`/knowledge-bases/${encodeURIComponent(id)}`))
 }

@@ -1,11 +1,14 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { Plus } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 
-import { createApiError } from '../../api/client.js'
+import { createApiError, normalizePageData } from '../../api/client.js'
+import { createCourse, listCourses } from '../../api/courses.js'
 import { http } from '../../axios/index.js'
 import { createQaSession, getQaTask, sendQaMessage } from '../../api/qa.js'
 import {
+  createKnowledgeBase,
   createIndexRun,
   getKnowledgeBase,
   listIndexRuns,
@@ -27,6 +30,13 @@ import {
   resolveLongTaskState,
 } from './long-task-state.js'
 import { getModulePageConfig } from './module-content.js'
+import {
+  ACCESS_POLICY_OPTIONS,
+  COURSE_STATUS_OPTIONS,
+  KNOWLEDGE_BASE_STATUS_OPTIONS,
+  createCreationForm,
+  resolveCourseSelectOptions,
+} from './creation-form-model.js'
 import {
   createMaterialExportTaskOptions,
   resolveMaterialExportPayload,
@@ -68,6 +78,13 @@ const blockLoadingKey = ref('')
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
+const creationDialog = ref('')
+const creationState = ref('idle')
+const creationError = ref(null)
+const creationForm = ref(createCreationForm('course'))
+const creationCourseOptions = ref([])
+const creationCourseState = ref('idle')
+const creationCourseError = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -91,9 +108,18 @@ const config = computed(() => {
 })
 const loading = computed(() => requestState.value === 'loading')
 const actionRunning = computed(() => ['running', 'confirming'].includes(actionState.value))
+const creationSubmitting = computed(() => creationState.value === 'running')
+const creationCourseLoading = computed(() => creationCourseState.value === 'loading')
+const creationSubmitDisabled = computed(() => (
+  creationSubmitting.value
+  || (creationDialog.value === 'knowledge-base' && (!creationForm.value.courseId || creationCourseLoading.value))
+))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
 const primaryActionLabel = computed(() => config.value.primaryAction?.label ?? config.value.primaryAction)
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
+const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
+const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
+const creationDialogTitle = computed(() => creationDialog.value === 'knowledge-base' ? '新建知识库' : '新建课程')
 const operationFeedback = computed(() => resolveOperationFeedback(
   activeOperationKey.value,
   actionState.value,
@@ -116,9 +142,6 @@ const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
 const buildSelectionBlock = computed(() => config.value.blocks?.selection)
-const knowledgeBaseRows = computed(() => {
-  return route.name === 'knowledge-bases' ? (config.value.rows ?? []) : []
-})
 
 async function loadPage(query = route.query) {
   cancelLongTask()
@@ -208,6 +231,11 @@ async function retryCourseBlock(key) {
 }
 
 async function handlePrimaryAction() {
+  if (route.name === 'courses' || route.name === 'knowledge-bases') {
+    openCreationDialog()
+    return
+  }
+
   if (route.name === 'material-detail') {
     await runMaterialParse()
     return
@@ -224,6 +252,101 @@ async function handleSecondaryAction() {
   }
 
   await runMaterialExport()
+}
+
+function openCreationDialog() {
+  const type = route.name === 'knowledge-bases' ? 'knowledge-base' : 'course'
+  creationDialog.value = type
+  creationForm.value = createCreationForm(type, { courseOptions: creationCourseOptions.value })
+  creationState.value = 'idle'
+  creationError.value = null
+  creationCourseError.value = null
+
+  if (type === 'knowledge-base') {
+    void loadCreationCourses()
+  }
+}
+
+function closeCreationDialog() {
+  if (creationSubmitting.value) {
+    return
+  }
+
+  creationDialog.value = ''
+  creationError.value = null
+}
+
+async function loadCreationCourses() {
+  creationCourseState.value = 'loading'
+  creationCourseError.value = null
+  creationCourseOptions.value = []
+
+  try {
+    const pageData = normalizePageData(await listCourses({ page: 1, size: 200, keyword: '', status: '' }))
+    const options = resolveCourseSelectOptions(pageData.items)
+    creationCourseOptions.value = options
+    if (options.length === 0) {
+      creationForm.value = {
+        ...creationForm.value,
+        courseId: '',
+      }
+    } else if (!options.some((option) => option.value === creationForm.value.courseId)) {
+      creationForm.value = {
+        ...creationForm.value,
+        courseId: options[0].value,
+      }
+    }
+    creationCourseState.value = options.length > 0 ? 'success' : 'empty'
+  } catch (error) {
+    creationCourseState.value = 'failed'
+    creationCourseError.value = createApiError(error)
+  }
+}
+
+async function submitCreation() {
+  creationState.value = 'running'
+  creationError.value = null
+
+  try {
+    if (creationDialog.value === 'knowledge-base') {
+      const payload = {
+        courseId: creationForm.value.courseId.trim(),
+        kbCode: creationForm.value.kbCode.trim(),
+        name: creationForm.value.name.trim(),
+        description: creationForm.value.description.trim() || undefined,
+        status: creationForm.value.status,
+      }
+      const knowledgeBase = await createKnowledgeBase(payload)
+      creationDialog.value = ''
+      creationState.value = 'success'
+      if (knowledgeBase?.id) {
+        await router.push(`/app/knowledge-bases/${knowledgeBase.id}`)
+      } else {
+        await loadPage()
+      }
+      return
+    }
+
+    const payload = {
+      courseId: creationForm.value.courseId.trim(),
+      courseName: creationForm.value.courseName.trim(),
+      description: creationForm.value.description.trim() || undefined,
+      status: creationForm.value.status,
+      accessPolicy: creationForm.value.accessPolicy,
+    }
+    const course = await createCourse(payload)
+    creationDialog.value = ''
+    creationState.value = 'success'
+    const courseId = course?.courseId ?? payload.courseId
+    if (courseId) {
+      await router.push(`/app/courses/${encodeURIComponent(courseId)}`)
+    } else {
+      await loadPage()
+    }
+  } catch (error) {
+    creationState.value = 'failed'
+    creationError.value = createApiError(error)
+  }
 }
 
 async function runMaterialParse() {
@@ -465,9 +588,11 @@ onBeforeUnmount(() => cancelLongTask())
         :title="config.primaryAction?.title"
         @click="handlePrimaryAction"
       >
+        <Plus v-if="canOpenCreationDialog" :size="16" aria-hidden="true" />
         {{ primaryActionLabel }}
       </button>
       <button
+        v-if="hasSecondaryAction"
         class="secondary-button compact"
         type="button"
         :disabled="route.name === 'material-detail' && (!config.actions?.canExport || actionRunning)"
@@ -477,6 +602,170 @@ onBeforeUnmount(() => cancelLongTask())
       </button>
     </div>
   </section>
+
+  <div v-if="creationDialog" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="`${creationDialog}-dialog-title`"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Create</p>
+          <h2 :id="`${creationDialog}-dialog-title`">{{ creationDialogTitle }}</h2>
+        </div>
+        <button class="plain-button compact" type="button" :disabled="creationSubmitting" @click="closeCreationDialog">
+          关闭
+        </button>
+      </div>
+
+      <form class="creation-form" @submit.prevent="submitCreation">
+        <template v-if="creationDialog === 'course'">
+          <label class="field-label">
+            <span>课程 ID</span>
+            <input
+              v-model.trim="creationForm.courseId"
+              class="text-input"
+              type="text"
+              name="courseId"
+              pattern="[A-Za-z0-9_-]+"
+              maxlength="64"
+              required
+            />
+          </label>
+          <label class="field-label">
+            <span>课程名称</span>
+            <input
+              v-model.trim="creationForm.courseName"
+              class="text-input"
+              type="text"
+              name="courseName"
+              maxlength="255"
+              required
+            />
+          </label>
+          <label class="field-label">
+            <span>访问策略</span>
+            <select v-model="creationForm.accessPolicy" name="accessPolicy">
+              <option
+                v-for="option in ACCESS_POLICY_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+          <label class="field-label">
+            <span>课程状态</span>
+            <select v-model="creationForm.status" name="status">
+              <option
+                v-for="option in COURSE_STATUS_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+        </template>
+
+        <template v-else>
+          <label class="field-label">
+            <span>所属课程</span>
+            <select
+              v-model.trim="creationForm.courseId"
+              name="courseId"
+              :disabled="creationCourseLoading || !creationCourseOptions.length"
+              required
+            >
+              <option value="" disabled>
+                {{ creationCourseLoading ? '正在加载课程' : '请选择课程' }}
+              </option>
+              <option
+                v-for="option in creationCourseOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+          <label class="field-label">
+            <span>知识库编码</span>
+            <input
+              v-model.trim="creationForm.kbCode"
+              class="text-input"
+              type="text"
+              name="kbCode"
+              pattern="[A-Za-z0-9_-]+"
+              maxlength="128"
+              required
+            />
+          </label>
+          <label class="field-label">
+            <span>知识库名称</span>
+            <input
+              v-model.trim="creationForm.name"
+              class="text-input"
+              type="text"
+              name="name"
+              maxlength="255"
+              required
+            />
+          </label>
+          <label class="field-label">
+            <span>知识库状态</span>
+            <select v-model="creationForm.status" name="status">
+              <option
+                v-for="option in KNOWLEDGE_BASE_STATUS_OPTIONS"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+        </template>
+
+        <p
+          v-if="creationDialog === 'knowledge-base' && creationCourseState === 'empty'"
+          class="inline-error creation-form__wide"
+        >
+          暂无可选课程，请先创建课程。
+        </p>
+        <p
+          v-if="creationDialog === 'knowledge-base' && creationCourseError"
+          class="inline-error creation-form__wide"
+        >
+          {{ creationCourseError.message }}
+        </p>
+
+        <label class="field-label creation-form__wide">
+          <span>说明</span>
+          <textarea
+            v-model.trim="creationForm.description"
+            class="text-input"
+            name="description"
+            rows="3"
+            maxlength="2000"
+          />
+        </label>
+
+        <p v-if="creationError" class="inline-error creation-form__wide">{{ creationError.message }}</p>
+
+        <div class="creation-form__actions">
+          <button class="secondary-button compact" type="button" :disabled="creationSubmitting" @click="closeCreationDialog">
+            取消
+          </button>
+          <button class="primary-button compact" type="submit" :disabled="creationSubmitDisabled">
+            {{ creationSubmitting ? '创建中' : '创建' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <section v-if="loadError" class="panel">
     <div class="panel-heading">
@@ -596,57 +885,6 @@ onBeforeUnmount(() => cancelLongTask())
         {{ smokeResult.message }}
       </p>
     </article>
-  </section>
-
-  <section v-else-if="route.name === 'knowledge-bases'" class="panel data-table-shell">
-    <div class="panel-heading">
-      <h2>{{ pageTitle }}</h2>
-      <span class="record-count">{{ config.pagination?.total ?? knowledgeBaseRows.length }} 条</span>
-    </div>
-    <p v-if="loadError" class="inline-error">{{ loadError.message }}</p>
-    <div v-if="loading" class="empty-state">正在加载列表。</div>
-    <div v-else class="table-scroll">
-      <table class="data-table" :aria-label="pageTitle">
-        <thead>
-          <tr>
-            <th v-for="column in config.columns" :key="column" scope="col">{{ column }}</th>
-            <th scope="col">操作</th>
-          </tr>
-        </thead>
-        <tbody v-if="knowledgeBaseRows.length">
-          <tr v-for="row in knowledgeBaseRows" :key="row.id">
-            <td v-for="(cell, index) in row.cells" :key="`${row.id}-${index}`">
-              <RouterLink v-if="index === 0" :to="row.to"><strong>{{ cell }}</strong></RouterLink>
-              <StatusBadge v-else-if="index === 2" :status="cell" />
-              <span v-else>{{ cell }}</span>
-            </td>
-            <td>
-              <RouterLink class="text-link" :to="row.buildTo">构建</RouterLink>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p v-if="!loading && !knowledgeBaseRows.length" class="empty-state">暂无知识库。</p>
-    <div v-if="config.pagination" class="pagination-bar" aria-label="分页">
-      <button
-        class="secondary-button compact"
-        type="button"
-        :disabled="Number(config.pagination.page ?? 1) <= 1 || loading"
-        @click="handlePageChange(Number(config.pagination.page ?? 1) - 1)"
-      >
-        上一页
-      </button>
-      <span>第 {{ config.pagination.page }} / {{ Math.max(config.pagination.pages, 1) }} 页</span>
-      <button
-        class="secondary-button compact"
-        type="button"
-        :disabled="Number(config.pagination.page ?? 1) >= Math.max(Number(config.pagination.pages ?? 1), 1) || loading"
-        @click="handlePageChange(Number(config.pagination.page ?? 1) + 1)"
-      >
-        下一页
-      </button>
-    </div>
   </section>
 
   <DataTableShell

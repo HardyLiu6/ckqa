@@ -1,8 +1,12 @@
 import { http } from '../axios/index.js'
 import { unwrapApiResponse } from './client.js'
 
-export async function listCourses(params = {}) {
-  return unwrapApiResponse(await http.get('/courses', { params }))
+export async function listCourses(params = {}, client = http) {
+  return unwrapApiResponse(await client.get('/courses', { params }))
+}
+
+export async function createCourse(payload, client = http) {
+  return unwrapApiResponse(await client.post('/courses', payload))
 }
 
 export async function getCourse(courseId) {
