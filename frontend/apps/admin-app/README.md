@@ -49,6 +49,7 @@
 ```bash
 cd frontend/apps/admin-app
 pnpm install
+pnpm dev:local
 pnpm test
 pnpm test:e2e
 pnpm build
@@ -60,7 +61,7 @@ pnpm preview
 
 ```bash
 cd frontend/apps/admin-app
-VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1 pnpm dev --host 127.0.0.1 --port 5173
+pnpm dev:local
 ```
 
 浏览器入口：
@@ -73,12 +74,15 @@ http://127.0.0.1:5173/app/knowledge-bases
 
 ## 环境变量
 
-默认请求 Java 后端：
+开发态默认从浏览器请求同源 `/api/v1`，再由 Vite 代理到 Java 后端，避免远程开发或端口转发场景下浏览器把 `127.0.0.1:8080` 解析成本机地址。
 
 ```bash
-VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1
+VITE_API_BASE_URL=/api/v1
+VITE_API_PROXY_TARGET=http://127.0.0.1:8080
 VITE_API_TIMEOUT=15000
 ```
+
+如果前端静态产物部署在独立域名下，也可以把 `VITE_API_BASE_URL` 显式设置为浏览器可访问的完整 Java 后端地址。
 
 正式业务代码不应直接请求 GraphRAG Python `/v1`。GraphRAG Python 服务仍由 Java 后端编排。
 

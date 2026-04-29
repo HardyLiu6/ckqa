@@ -4,7 +4,7 @@ import { authStore } from '../stores/auth.js'
 
 const viteEnv = import.meta.env ?? {}
 
-export const API_BASE_URL = viteEnv.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080/api/v1'
+export const API_BASE_URL = viteEnv.VITE_API_BASE_URL ?? '/api/v1'
 export const API_TIMEOUT = Number(viteEnv.VITE_API_TIMEOUT ?? 15000)
 
 export function createHttpClient({ authStore: activeAuthStore = authStore } = {}) {

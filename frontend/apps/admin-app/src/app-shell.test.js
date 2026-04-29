@@ -94,6 +94,7 @@ import {
   selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
 import { normalizeHealthResponse } from './views/system/health-model.js'
+import { createViteConfig, resolveApiProxyTarget } from '../vite.config.js'
 
 test('路由骨架包含首版关键入口和后续页面状态', () => {
   const paths = routeRecords.map((route) => route.path)
@@ -131,8 +132,8 @@ test('认证状态支持开发态管理员和教师身份切换', () => {
   assert.equal(auth.state.currentUser, null)
 })
 
-test('请求层默认指向 Java /api/v1 并保留认证头注入入口', async () => {
-  assert.equal(API_BASE_URL, 'http://127.0.0.1:8080/api/v1')
+test('请求层默认使用同源 /api/v1 并保留认证头注入入口', async () => {
+  assert.equal(API_BASE_URL, '/api/v1')
 
   const auth = createAuthStore()
   auth.loginAs('teacher')
@@ -141,6 +142,14 @@ test('请求层默认指向 Java /api/v1 并保留认证头注入入口', async 
   const requestConfig = await client.interceptors.request.handlers[0].fulfilled({ headers: {} })
 
   assert.equal(requestConfig.headers.Authorization, 'Bearer dev-teacher-token')
+})
+
+test('开发服务器把同源 /api/v1 代理到 Java 后端', () => {
+  assert.equal(resolveApiProxyTarget({}), 'http://127.0.0.1:8080')
+  assert.equal(resolveApiProxyTarget({ VITE_API_PROXY_TARGET: 'http://backend.local:18080/' }), 'http://backend.local:18080')
+  const devConfig = createViteConfig({})
+  assert.equal(devConfig.server.proxy['/api/v1'].target, 'http://127.0.0.1:8080')
+  assert.equal(devConfig.server.proxy['/api/v1'].changeOrigin, true)
 })
 
 test('ApiResponse 解包只接受 CKQA envelope 和业务成功码 200', () => {
