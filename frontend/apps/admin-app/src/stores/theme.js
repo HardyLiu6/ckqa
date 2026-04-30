@@ -14,6 +14,7 @@ export const THEME_ACCENTS = [
 ]
 
 const STORAGE_KEY = 'ckqa-admin-theme'
+const LEGACY_STORAGE_KEY = 'ckqa-theme'
 const LEGACY_ACCENT_ALIASES = {
   purple: 'violet',
 }
@@ -61,9 +62,13 @@ export const useThemeStore = defineStore('theme', () => {
   function load() {
     if (!isBrowser) return
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+      const savedTheme = localStorage.getItem(STORAGE_KEY)
+      const legacyTheme = savedTheme === null ? localStorage.getItem(LEGACY_STORAGE_KEY) : null
+      const saved = JSON.parse(savedTheme ?? legacyTheme ?? '{}')
+
       if (isValidMode(saved.mode)) state.mode = saved.mode
       if (isValidAccent(saved.accent)) state.accent = normalizeAccent(saved.accent)
+      if (legacyTheme !== null) save()
     } catch {
       state.mode = 'auto'
       state.accent = 'indigo'

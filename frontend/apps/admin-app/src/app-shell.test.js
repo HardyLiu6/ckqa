@@ -1022,6 +1022,44 @@ test('主题 store 迁移到 Pinia 后保留旧兼容 API', () => {
   assert.equal(themeStore.state.mode, 'auto')
 })
 
+test('主题 store 从旧 storage key 迁移 purple 到新 violet 配置', async () => {
+  const storage = new Map([
+    ['ckqa-theme', JSON.stringify({ mode: 'dark', accent: 'purple' })],
+  ])
+  const originalWindow = globalThis.window
+  const originalDocument = globalThis.document
+  const originalLocalStorage = globalThis.localStorage
+
+  globalThis.window = { matchMedia: () => ({ matches: true, addEventListener() {} }) }
+  globalThis.document = {
+    documentElement: {
+      setAttribute() {},
+    },
+  }
+  globalThis.localStorage = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, value),
+  }
+
+  try {
+    const { createThemeStore } = await import(`./stores/theme.js?legacy-storage=${Date.now()}`)
+    const theme = createThemeStore(createPinia())
+
+    theme.initTheme()
+
+    assert.equal(theme.state.mode, 'dark')
+    assert.equal(theme.state.accent, 'violet')
+    assert.deepEqual(
+      JSON.parse(storage.get('ckqa-admin-theme')),
+      { mode: 'dark', accent: 'violet' },
+    )
+  } finally {
+    globalThis.window = originalWindow
+    globalThis.document = originalDocument
+    globalThis.localStorage = originalLocalStorage
+  }
+})
+
 test('控制台导航按权限过滤并保留模块分组', () => {
   const canAccessWithoutUserWrite = (permissions = []) => {
     return !permissions.includes('user:write')
