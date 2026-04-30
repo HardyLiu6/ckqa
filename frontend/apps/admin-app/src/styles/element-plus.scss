@@ -25,7 +25,7 @@
     --el-border-color: color-mix(in srgb, var(--ckqa-border) 86%, var(--ckqa-text-muted));
     --el-border-color-light: color-mix(in srgb, var(--ckqa-border-subtle) 90%, var(--ckqa-bg));
     --ckqa-el-focus-border: color-mix(in srgb, var(--ckqa-accent) 56%, var(--ckqa-border));
-    --ckqa-el-focus-ring: 0 0 0 3px color-mix(in srgb, var(--ckqa-accent) 24%, transparent);
+    --ckqa-el-focus-ring: 0 0 0 1px var(--ckqa-surface), 0 0 0 4px color-mix(in srgb, var(--ckqa-accent) 24%, transparent);
   }
 }
 
@@ -44,8 +44,8 @@
   --el-button-text-color: var(--ckqa-accent-contrast);
 }
 
-.el-input__wrapper,
-.el-select__wrapper {
+:root .el-input__wrapper,
+:root .el-select__wrapper {
   min-height: 38px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-sm);
@@ -53,15 +53,15 @@
   box-shadow: none;
 }
 
-.el-input__wrapper:hover,
-.el-select__wrapper:hover {
+:root .el-input__wrapper:hover,
+:root .el-select__wrapper:hover {
   border-color: var(--ckqa-border-strong);
   box-shadow: none;
 }
 
-.el-input__wrapper.is-focus,
-.el-select__wrapper.is-focused,
-.el-select__wrapper.is-focus {
+:root .el-input__wrapper.is-focus,
+:root .el-select__wrapper.is-focused,
+:root .el-select__wrapper.is-focus {
   border-color: var(--ckqa-el-focus-border);
   box-shadow: var(--ckqa-el-focus-ring);
 }
