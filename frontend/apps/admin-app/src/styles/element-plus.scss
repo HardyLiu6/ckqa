@@ -95,6 +95,14 @@
   background: var(--ckqa-surface);
 }
 
+.el-select__popper,
+.el-dropdown__popper,
+.el-picker__popper {
+  --el-bg-color-overlay: var(--ckqa-surface);
+  --el-border-color-light: var(--ckqa-border-subtle);
+  color: var(--ckqa-text);
+}
+
 .el-select-dropdown__item {
   color: var(--ckqa-text);
 }

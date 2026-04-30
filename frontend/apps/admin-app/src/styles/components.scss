@@ -121,9 +121,13 @@
   background: rgb(15 118 110 / 8%);
 }
 
-.primary-button:disabled {
+.primary-button:disabled,
+.secondary-button:disabled,
+.plain-button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
+  transform: none;
+  box-shadow: none;
 }
 
 .auth-layout {
@@ -518,6 +522,7 @@ select:focus {
   color: var(--ckqa-accent-strong);
   border-color: color-mix(in srgb, var(--ckqa-accent) 36%, transparent);
   background: var(--ckqa-surface);
+  box-shadow: 0 0 0 2px var(--ckqa-surface), 0 0 0 4px var(--ckqa-accent);
 }
 
 .swatch-button {
@@ -754,10 +759,14 @@ select:focus {
 .status-badge,
 .record-count,
 .step-state {
-  min-height: 24px;
   font-size: 12px;
   font-weight: 800;
   overflow-wrap: anywhere;
+}
+
+.record-count,
+.step-state {
+  min-height: 24px;
 }
 
 .status-badge,
@@ -765,6 +774,11 @@ select:focus {
   padding: 0 10px;
   color: var(--ckqa-accent-strong);
   background: color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
+}
+
+.status-badge {
+  min-height: 26px;
+  padding: 0 9px;
 }
 
 .status-badge[data-status="upcoming"] {
@@ -1153,9 +1167,11 @@ select:focus {
   font-size: 12px;
 }
 
-.data-table-shell {
+.data-table-shell,
+.table-shell {
   display: grid;
   gap: 14px;
+  color: var(--ckqa-text);
 }
 
 .table-scroll {
@@ -1173,6 +1189,13 @@ select:focus {
   min-width: 720px;
   border-collapse: separate;
   border-spacing: 0;
+  color: var(--ckqa-text);
+}
+
+.data-table thead,
+.table-shell thead,
+.data-table-shell thead {
+  background: var(--ckqa-surface-muted);
 }
 
 .data-table th,
