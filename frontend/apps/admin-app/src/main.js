@@ -1,8 +1,15 @@
 import { createApp } from 'vue'
-import './style.css'
+import './styles/index.scss'
 import App from './App.vue'
 import router from './router/index.js'
-import { themeStore } from './stores/theme.js'
+import { getAdminPinia } from './stores/pinia.js'
+import { useThemeStore } from './stores/theme.js'
 
-themeStore.initTheme()
-createApp(App).use(router).mount('#app')
+const app = createApp(App)
+const pinia = getAdminPinia()
+
+app.use(pinia)
+const themeStore = useThemeStore(pinia)
+themeStore.init()
+app.use(router)
+app.mount('#app')

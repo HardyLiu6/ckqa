@@ -108,6 +108,7 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     state: readonly(state),
+    init: initTheme,
     initTheme,
     setMode,
     setAccent,
