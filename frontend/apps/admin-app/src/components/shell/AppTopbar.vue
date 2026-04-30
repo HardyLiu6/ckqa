@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { LogOut, Search, Server } from 'lucide-vue-next'
+import { LogOut, Search, Server, ShieldCheck } from 'lucide-vue-next'
 import { RouterLink } from 'vue-router'
 
 import ThemeControl from './ThemeControl.vue'
@@ -11,7 +11,7 @@ const props = defineProps({
   dataScopeLabel: { type: String, default: '未登录' },
 })
 
-const emit = defineEmits(['logout', 'role-change'])
+const emit = defineEmits(['logout'])
 
 function formatApiBaseline(apiBaseUrl) {
   try {
@@ -24,10 +24,6 @@ function formatApiBaseline(apiBaseUrl) {
 
 const apiBaseline = computed(() => formatApiBaseline(props.apiBaseUrl))
 const identityLabel = computed(() => props.currentUser?.name || '未登录')
-
-function handleRoleChange(event) {
-  emit('role-change', event.target.value)
-}
 </script>
 
 <template>
@@ -40,16 +36,19 @@ function handleRoleChange(event) {
       </span>
     </RouterLink>
 
-    <label class="topbar-search" aria-disabled="true">
-      <Search :size="16" aria-hidden="true" />
-      <input
-        type="search"
-        value="搜索待接入"
-        aria-label="全局搜索待接入"
-        aria-disabled="true"
-        disabled
-      />
-    </label>
+    <el-input
+      class="topbar-search-input"
+      model-value="搜索待接入"
+      type="search"
+      aria-disabled="true"
+      disabled
+      readonly
+      aria-label="全局搜索待接入"
+    >
+      <template #prefix>
+        <Search :size="16" aria-hidden="true" />
+      </template>
+    </el-input>
 
     <span class="runtime-chip" title="当前请求基线">
       <Server :size="15" aria-hidden="true" />
@@ -60,21 +59,19 @@ function handleRoleChange(event) {
 
     <div class="identity-cluster">
       <span class="identity-chip" title="当前身份和数据范围">
+        <ShieldCheck :size="15" aria-hidden="true" />
         <strong>{{ identityLabel }}</strong>
         <span>{{ dataScopeLabel }}</span>
       </span>
-      <label class="role-switch">
-        <span>身份</span>
-        <select :value="currentUser?.role" aria-label="切换开发态身份" @change="handleRoleChange">
-          <option value="admin">平台管理员</option>
-          <option value="teacher">教师</option>
-        </select>
-      </label>
     </div>
 
-    <button class="plain-button" type="button" @click="emit('logout')">
-      <LogOut :size="16" aria-hidden="true" />
+    <el-button
+      class="ckqa-el-button ckqa-el-button--ghost"
+      native-type="button"
+      @click="emit('logout')"
+    >
+      <LogOut class="button-icon" :size="16" aria-hidden="true" />
       退出
-    </button>
+    </el-button>
   </header>
 </template>

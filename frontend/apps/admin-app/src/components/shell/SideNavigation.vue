@@ -1,7 +1,19 @@
 <script setup>
 import { computed } from 'vue'
-import { ChevronRight } from 'lucide-vue-next'
-import { RouterLink } from 'vue-router'
+import {
+  BookOpen,
+  Boxes,
+  CircleHelp,
+  DatabaseZap,
+  Gauge,
+  MessageSquareText,
+  ScrollText,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  UserCog,
+  Wrench,
+} from 'lucide-vue-next'
 
 import { findActiveNavigationPath } from './navigation-model.js'
 
@@ -15,60 +27,83 @@ const props = defineProps({
 const activePath = computed(() =>
   findActiveNavigationPath(props.groups, props.activeGroup, props.currentPath),
 )
+
+const groupIcons = {
+  dashboard: Gauge,
+  courses: BookOpen,
+  knowledge: DatabaseZap,
+  qa: MessageSquareText,
+  users: ShieldCheck,
+  system: Server,
+}
+
+function resolveGroupIcon(key) {
+  return groupIcons[key] ?? Boxes
+}
+
+function resolveItemIcon(item) {
+  if (item.name === 'health' || item.path?.includes('/health')) return Wrench
+  if (item.name?.includes('audit') || item.title?.includes('审计')) return ScrollText
+  if (item.name?.includes('user') || item.title?.includes('用户')) return UserCog
+  if (item.name?.includes('qa') || item.title?.includes('问答')) return MessageSquareText
+  if (item.name?.includes('knowledge') || item.title?.includes('知识库')) return Sparkles
+  if (item.name?.includes('course') || item.title?.includes('课程')) return BookOpen
+  if (item.name?.includes('material') || item.title?.includes('资料')) return Boxes
+  return CircleHelp
+}
 </script>
 
 <template>
   <aside class="side-navigation" :class="{ compact }" aria-label="一级导航">
     <nav class="side-nav-scroll">
-      <section
-        v-for="group in groups"
-        :key="group.key"
-        class="nav-group"
-        :class="`nav-group--${group.presentation}`"
+      <el-menu
+        class="side-menu"
+        :default-active="activePath"
+        :collapse="compact"
+        router
       >
-        <RouterLink
-          v-if="group.presentation === 'single' && group.primaryItem"
-          class="nav-link nav-link--single"
-          :class="{ active: group.key === activeGroup && group.primaryItem.path === activePath }"
-          :to="group.primaryItem.path"
-        >
-          <span class="nav-link-main">
-            <span class="nav-link-title">{{ group.label }}</span>
-            <span v-if="group.primaryItem.displayState === 'coming-soon'" class="nav-state">未开放</span>
-            <ChevronRight v-else :size="14" aria-hidden="true" />
-          </span>
-          <small v-if="!compact">{{ group.hint }}</small>
-        </RouterLink>
-
-        <details v-else class="nav-folder" :open="group.key === activeGroup">
-          <summary
-            class="nav-folder-trigger"
-            :class="{ active: group.key === activeGroup }"
+        <template v-for="group in groups" :key="group.key">
+          <el-menu-item
+            v-if="group.presentation === 'single' && group.primaryItem"
+            class="side-menu-item side-menu-item--single"
+            :index="group.primaryItem.path"
           >
-            <span class="nav-folder-copy">
-              <span class="nav-folder-title">{{ group.label }}</span>
+            <component :is="resolveGroupIcon(group.key)" class="nav-icon" :size="18" aria-hidden="true" />
+            <span class="nav-copy">
+              <span class="nav-title">{{ group.label }}</span>
               <small v-if="!compact">{{ group.hint }}</small>
             </span>
-            <ChevronRight class="nav-folder-icon" :size="15" aria-hidden="true" />
-          </summary>
+            <span v-if="group.primaryItem.displayState === 'coming-soon' && !compact" class="nav-state">
+              未开放
+            </span>
+          </el-menu-item>
 
-          <ul class="nav-items">
-            <li v-for="item in group.items" :key="item.path">
-              <RouterLink
-                class="nav-link"
-                :class="{ active: group.key === activeGroup && item.path === activePath }"
-                :to="item.path"
-              >
-                <span class="nav-link-main">
-                  <span class="nav-link-title">{{ item.title }}</span>
-                  <span v-if="item.displayState === 'coming-soon'" class="nav-state">未开放</span>
-                  <ChevronRight v-else :size="14" aria-hidden="true" />
-                </span>
-              </RouterLink>
-            </li>
-          </ul>
-        </details>
-      </section>
+          <el-sub-menu
+            v-else
+            class="side-sub-menu"
+            :index="group.key"
+          >
+            <template #title>
+              <component :is="resolveGroupIcon(group.key)" class="nav-icon" :size="18" aria-hidden="true" />
+              <span class="nav-copy">
+                <span class="nav-title">{{ group.label }}</span>
+                <small v-if="!compact">{{ group.hint }}</small>
+              </span>
+            </template>
+
+            <el-menu-item
+              v-for="item in group.items"
+              :key="item.path"
+              class="side-menu-item"
+              :index="item.path"
+            >
+              <component :is="resolveItemIcon(item)" class="nav-icon nav-icon--item" :size="16" aria-hidden="true" />
+              <span class="nav-title">{{ item.title }}</span>
+              <span v-if="item.displayState === 'coming-soon'" class="nav-state">未开放</span>
+            </el-menu-item>
+          </el-sub-menu>
+        </template>
+      </el-menu>
     </nav>
   </aside>
 </template>

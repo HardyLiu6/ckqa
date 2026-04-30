@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { LogIn } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 
 import { ROLE_PROFILES, authStore } from '../../stores/auth.js'
@@ -88,7 +89,14 @@ function submit() {
           </div>
         </dl>
 
-        <button class="primary-button" type="submit">进入平台</button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="submit"
+        >
+          <LogIn class="button-icon" :size="16" aria-hidden="true" />
+          进入平台
+        </el-button>
       </form>
     </section>
   </div>

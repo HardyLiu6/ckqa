@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { RefreshCw } from 'lucide-vue-next'
 
 import { createApiError } from '../../api/client.js'
 import { getSystemHealth } from '../../api/system.js'
@@ -56,9 +57,16 @@ onMounted(loadHealth)
     </div>
     <div class="page-title-actions">
       <DataSourceChip source="live" :refreshed-at="refreshedAt" />
-      <button class="primary-button compact" type="button" :disabled="loading" @click="loadHealth">
+      <el-button
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        native-type="button"
+        :disabled="loading"
+        @click="loadHealth"
+      >
+        <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
         {{ loading ? '刷新中' : '刷新健康' }}
-      </button>
+      </el-button>
     </div>
   </section>
 

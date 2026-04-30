@@ -1,6 +1,18 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Plus } from 'lucide-vue-next'
+import {
+  Check,
+  DatabaseZap,
+  FileText,
+  FlaskConical,
+  Hammer,
+  Play,
+  Plus,
+  RefreshCw,
+  UploadCloud,
+  WandSparkles,
+  X,
+} from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 
 import { createApiError, normalizePageData } from '../../api/client.js'
@@ -119,6 +131,16 @@ const primaryActionLabel = computed(() => config.value.primaryAction?.label ?? c
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
 const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
 const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
+const primaryActionIcon = computed(() => {
+  if (canOpenCreationDialog.value) return Plus
+  if (route.name === 'material-detail') return Play
+  if (route.name === 'knowledge-base-build') return Hammer
+  return WandSparkles
+})
+const secondaryActionIcon = computed(() => {
+  if (route.name === 'material-detail') return UploadCloud
+  return DatabaseZap
+})
 const creationDialogTitle = computed(() => creationDialog.value === 'knowledge-base' ? '新建知识库' : '新建课程')
 const operationFeedback = computed(() => resolveOperationFeedback(
   activeOperationKey.value,
@@ -455,9 +477,9 @@ async function runKnowledgeBaseIndex() {
   startActiveLongTask(activeLongTaskController)
 }
 
-function updateSmokeQuestion(event) {
+function updateSmokeQuestion(value) {
   smokeQuestionEdited.value = true
-  smokeQuestion.value = event.target.value
+  smokeQuestion.value = value
 }
 
 async function runQaSmoke() {
@@ -581,25 +603,27 @@ onBeforeUnmount(() => cancelLongTask())
     </div>
 
     <div class="button-row">
-      <button
-        class="primary-button compact"
-        type="button"
+      <el-button
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        native-type="button"
         :disabled="Boolean(config.primaryAction?.disabled) || (route.name === 'material-detail' && (!config.actions?.canParse || actionRunning))"
         :title="config.primaryAction?.title"
         @click="handlePrimaryAction"
       >
-        <Plus v-if="canOpenCreationDialog" :size="16" aria-hidden="true" />
+        <component :is="primaryActionIcon" class="button-icon" :size="16" aria-hidden="true" />
         {{ primaryActionLabel }}
-      </button>
-      <button
+      </el-button>
+      <el-button
         v-if="hasSecondaryAction"
-        class="secondary-button compact"
-        type="button"
+        class="ckqa-el-button ckqa-el-button--secondary"
+        native-type="button"
         :disabled="route.name === 'material-detail' && (!config.actions?.canExport || actionRunning)"
         @click="handleSecondaryAction"
       >
+        <component :is="secondaryActionIcon" class="button-icon" :size="16" aria-hidden="true" />
         {{ secondaryActionLabel }}
-      </button>
+      </el-button>
     </div>
   </section>
 
@@ -615,118 +639,106 @@ onBeforeUnmount(() => cancelLongTask())
           <p class="eyebrow">Create</p>
           <h2 :id="`${creationDialog}-dialog-title`">{{ creationDialogTitle }}</h2>
         </div>
-        <button class="plain-button compact" type="button" :disabled="creationSubmitting" @click="closeCreationDialog">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="creationSubmitting"
+          @click="closeCreationDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
           关闭
-        </button>
+        </el-button>
       </div>
 
-      <form class="creation-form" @submit.prevent="submitCreation">
+      <el-form class="creation-form" label-position="top" @submit.prevent="submitCreation">
         <template v-if="creationDialog === 'course'">
-          <label class="field-label">
-            <span>课程 ID</span>
-            <input
+          <el-form-item class="creation-field" label="课程 ID" required>
+            <el-input
               v-model.trim="creationForm.courseId"
-              class="text-input"
-              type="text"
               name="courseId"
               pattern="[A-Za-z0-9_-]+"
               maxlength="64"
+              show-word-limit
               required
             />
-          </label>
-          <label class="field-label">
-            <span>课程名称</span>
-            <input
+          </el-form-item>
+          <el-form-item class="creation-field" label="课程名称" required>
+            <el-input
               v-model.trim="creationForm.courseName"
-              class="text-input"
-              type="text"
               name="courseName"
               maxlength="255"
+              show-word-limit
               required
             />
-          </label>
-          <label class="field-label">
-            <span>访问策略</span>
-            <select v-model="creationForm.accessPolicy" name="accessPolicy">
-              <option
+          </el-form-item>
+          <el-form-item class="creation-field" label="访问策略">
+            <el-select v-model="creationForm.accessPolicy" name="accessPolicy">
+              <el-option
                 v-for="option in ACCESS_POLICY_OPTIONS"
                 :key="option.value"
+                :label="option.label"
                 :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label">
-            <span>课程状态</span>
-            <select v-model="creationForm.status" name="status">
-              <option
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="creation-field" label="课程状态">
+            <el-select v-model="creationForm.status" name="status">
+              <el-option
                 v-for="option in COURSE_STATUS_OPTIONS"
                 :key="option.value"
+                :label="option.label"
                 :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
+              />
+            </el-select>
+          </el-form-item>
         </template>
 
         <template v-else>
-          <label class="field-label">
-            <span>所属课程</span>
-            <select
+          <el-form-item class="creation-field" label="所属课程" required>
+            <el-select
               v-model.trim="creationForm.courseId"
               name="courseId"
+              :placeholder="creationCourseLoading ? '正在加载课程' : '请选择课程'"
               :disabled="creationCourseLoading || !creationCourseOptions.length"
               required
             >
-              <option value="" disabled>
-                {{ creationCourseLoading ? '正在加载课程' : '请选择课程' }}
-              </option>
-              <option
+              <el-option
                 v-for="option in creationCourseOptions"
                 :key="option.value"
+                :label="option.label"
                 :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-          <label class="field-label">
-            <span>知识库编码</span>
-            <input
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="creation-field" label="知识库编码" required>
+            <el-input
               v-model.trim="creationForm.kbCode"
-              class="text-input"
-              type="text"
               name="kbCode"
               pattern="[A-Za-z0-9_-]+"
               maxlength="128"
+              show-word-limit
               required
             />
-          </label>
-          <label class="field-label">
-            <span>知识库名称</span>
-            <input
+          </el-form-item>
+          <el-form-item class="creation-field" label="知识库名称" required>
+            <el-input
               v-model.trim="creationForm.name"
-              class="text-input"
-              type="text"
               name="name"
               maxlength="255"
+              show-word-limit
               required
             />
-          </label>
-          <label class="field-label">
-            <span>知识库状态</span>
-            <select v-model="creationForm.status" name="status">
-              <option
+          </el-form-item>
+          <el-form-item class="creation-field" label="知识库状态">
+            <el-select v-model="creationForm.status" name="status">
+              <el-option
                 v-for="option in KNOWLEDGE_BASE_STATUS_OPTIONS"
                 :key="option.value"
+                :label="option.label"
                 :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
+              />
+            </el-select>
+          </el-form-item>
         </template>
 
         <p
@@ -742,37 +754,55 @@ onBeforeUnmount(() => cancelLongTask())
           {{ creationCourseError.message }}
         </p>
 
-        <label class="field-label creation-form__wide">
-          <span>说明</span>
-          <textarea
+        <el-form-item class="creation-field creation-form__wide" label="说明">
+          <el-input
             v-model.trim="creationForm.description"
-            class="text-input"
+            type="textarea"
             name="description"
-            rows="3"
+            :rows="3"
             maxlength="2000"
+            show-word-limit
           />
-        </label>
+        </el-form-item>
 
         <p v-if="creationError" class="inline-error creation-form__wide">{{ creationError.message }}</p>
 
         <div class="creation-form__actions">
-          <button class="secondary-button compact" type="button" :disabled="creationSubmitting" @click="closeCreationDialog">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="creationSubmitting"
+            @click="closeCreationDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
             取消
-          </button>
-          <button class="primary-button compact" type="submit" :disabled="creationSubmitDisabled">
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            native-type="submit"
+            :disabled="creationSubmitDisabled"
+          >
+            <Check class="button-icon" :size="16" aria-hidden="true" />
             {{ creationSubmitting ? '创建中' : '创建' }}
-          </button>
+          </el-button>
         </div>
-      </form>
+      </el-form>
     </section>
   </div>
 
   <section v-if="loadError" class="panel">
     <div class="panel-heading">
       <h2>实时数据加载失败</h2>
-      <button class="secondary-button compact" type="button" :disabled="loading" @click="loadPage()">
+      <el-button
+        class="ckqa-el-button ckqa-el-button--secondary"
+        native-type="button"
+        :disabled="loading"
+        @click="loadPage()"
+      >
+        <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
         重试
-      </button>
+      </el-button>
     </div>
     <p class="inline-error">{{ loadError.message }}</p>
   </section>
@@ -792,9 +822,16 @@ onBeforeUnmount(() => cancelLongTask())
       <ol class="timeline-list">
         <li v-for="item in materialsBlock?.items" :key="item.id">
           <StatusBadge :status="item.meta" />
-          <button class="text-button" type="button" @click="selectBuildMaterial(item.id)">
+          <el-button
+            class="ckqa-link-button"
+            link
+            type="primary"
+            native-type="button"
+            @click="selectBuildMaterial(item.id)"
+          >
+            <FileText class="button-icon" :size="15" aria-hidden="true" />
             {{ item.title }}
-          </button>
+          </el-button>
           <small>{{ item.detail }}</small>
         </li>
       </ol>
@@ -805,14 +842,16 @@ onBeforeUnmount(() => cancelLongTask())
     <article class="panel">
       <div class="panel-heading">
         <h2>索引运行</h2>
-        <button
-          class="primary-button compact"
-          type="button"
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="button"
           :disabled="config.workflowSteps?.find((step) => step.key === 'index')?.status !== 'ready' || actionRunning"
           @click="runKnowledgeBaseIndex"
         >
+          <Hammer class="button-icon" :size="16" aria-hidden="true" />
           开始构建索引
-        </button>
+        </el-button>
       </div>
       <div
         v-if="indexOperationFeedback"
@@ -840,21 +879,22 @@ onBeforeUnmount(() => cancelLongTask())
     <article class="panel wide-panel">
       <div class="panel-heading">
         <h2>问答冒烟验证</h2>
-        <button
-          class="primary-button compact"
-          type="button"
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="button"
           :disabled="config.workflowSteps?.find((step) => step.key === 'smoke')?.status !== 'ready' || actionRunning || !smokeQuestion.trim()"
           @click="runQaSmoke"
         >
+          <FlaskConical class="button-icon" :size="16" aria-hidden="true" />
           发起冒烟验证
-        </button>
+        </el-button>
       </div>
       <label class="field-label" for="smoke-question">验证问题</label>
-      <input
+      <el-input
         id="smoke-question"
-        class="text-input"
-        type="text"
-        :value="smokeQuestion"
+        class="smoke-question-input"
+        :model-value="smokeQuestion"
         :disabled="actionRunning"
         @input="updateSmokeQuestion"
       />
@@ -916,15 +956,16 @@ onBeforeUnmount(() => cancelLongTask())
     <article class="panel">
       <div class="panel-heading">
         <h2>资料区块</h2>
-        <button
+        <el-button
           v-if="materialsBlock?.state === 'error'"
-          class="secondary-button compact"
-          type="button"
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
           :disabled="blockLoadingKey === 'materials'"
           @click="retryCourseBlock('materials')"
         >
+          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
           重试
-        </button>
+        </el-button>
       </div>
       <p v-if="materialsBlock?.state === 'error'" class="inline-error">{{ materialsBlock.error.message }}</p>
       <ol v-else class="timeline-list">
@@ -940,15 +981,16 @@ onBeforeUnmount(() => cancelLongTask())
     <article class="panel wide-panel">
       <div class="panel-heading">
         <h2>知识库区块</h2>
-        <button
+        <el-button
           v-if="knowledgeBasesBlock?.state === 'error'"
-          class="secondary-button compact"
-          type="button"
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
           :disabled="blockLoadingKey === 'knowledgeBases'"
           @click="retryCourseBlock('knowledgeBases')"
         >
+          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
           重试
-        </button>
+        </el-button>
       </div>
       <p v-if="knowledgeBasesBlock?.state === 'error'" class="inline-error">{{ knowledgeBasesBlock.error.message }}</p>
       <ol v-else class="timeline-list">
@@ -994,9 +1036,15 @@ onBeforeUnmount(() => cancelLongTask())
     <article class="panel">
       <div class="panel-heading">
         <h2>解析结果</h2>
-        <button v-if="parseResultsBlock?.state === 'error'" class="secondary-button compact" type="button" @click="loadPage()">
+        <el-button
+          v-if="parseResultsBlock?.state === 'error'"
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          @click="loadPage()"
+        >
+          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
           重试
-        </button>
+        </el-button>
       </div>
       <p v-if="parseResultsBlock?.state === 'error'" class="inline-error">{{ parseResultsBlock.error.message }}</p>
       <ol v-else class="timeline-list">
@@ -1026,13 +1074,16 @@ onBeforeUnmount(() => cancelLongTask())
           <strong>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
-      <RouterLink
+      <el-button
         v-if="config.actions?.buildTo"
-        class="primary-button compact"
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        tag="router-link"
         :to="config.actions.buildTo"
       >
+        <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
         进入构建向导
-      </RouterLink>
+      </el-button>
     </article>
 
     <article v-if="indexRunsBlock" class="panel">

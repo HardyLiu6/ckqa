@@ -1038,6 +1038,136 @@ test('登录页身份选择使用 Element Plus Select 并保留满宽样式', ()
   assert.match(componentsCss, /\.login-role-select\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
 })
 
+test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
+  const tableShell = readFileSync(new URL('./components/common/DataTableShell.vue', import.meta.url), 'utf8')
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(tableShell, /<el-table\s/)
+  assert.match(tableShell, /<el-table-column[\s\S]*v-for="\([^"]*column[^"]*\) in columns"/)
+  assert.match(tableShell, /<el-table-column[\s\S]*label="操作"/)
+  assert.match(tableShell, /<el-select\s+v-model="filterValues\[filter\.key\]"/)
+  assert.match(tableShell, /<el-pagination[\s\S]*@current-change="handlePageChange"/)
+  assert.doesNotMatch(tableShell, /<table\s/)
+  assert.doesNotMatch(tableShell, /<select\s/)
+  assert.doesNotMatch(tableShell, /<thead>/)
+  assert.doesNotMatch(tableShell, /<tbody/)
+  assert.match(elementPlusCss, /\.ckqa-el-table/)
+  assert.match(elementPlusCss, /--el-table-header-bg-color:\s*var\(--ckqa-surface-muted\)/)
+  assert.match(componentsCss, /\.pagination-bar\s*\{[\s\S]*justify-content:\s*center;[\s\S]*\}/)
+})
+
+test('表格操作列按钮使用紧凑横排避免图标按钮换行堆叠', () => {
+  const tableShell = readFileSync(new URL('./components/common/DataTableShell.vue', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(tableShell, /label="操作"[\s\S]*min-width="220"/)
+  assert.match(componentsCss, /\.data-table__actions\s*\{[\s\S]*flex-wrap:\s*nowrap;[\s\S]*\}/)
+  assert.match(componentsCss, /\.data-table__actions\s+\.el-button\s*\+\s*\.el-button\s*\{[\s\S]*margin-left:\s*0;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*min-width:\s*82px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*8px;[\s\S]*\}/)
+})
+
+test('构建向导步骤按钮适配 Element Plus 内容包裹层避免徽标压字和列表拉伸', () => {
+  const workflowStepper = readFileSync(new URL('./components/common/WorkflowStepper.vue', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(workflowStepper, /class="workflow-stepper__step-button"/)
+  assert.match(componentsCss, /\.workflow-stepper__steps\s*\{[\s\S]*align-self:\s*start;[\s\S]*align-content:\s*start;[\s\S]*\}/)
+  assert.match(componentsCss, /\.workflow-stepper__step-button\.el-button\s*>\s*span\s*\{[\s\S]*grid-template-columns:\s*34px minmax\(0,\s*1fr\) auto;[\s\S]*\}/)
+  assert.match(componentsCss, /\.workflow-stepper__step-button\s+\.status-badge\s*\{[\s\S]*justify-self:\s*end;[\s\S]*white-space:\s*nowrap;[\s\S]*\}/)
+})
+
+test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
+  const consoleLayout = readFileSync(new URL('./layouts/ConsoleLayout.vue', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(modulePage, /<el-form\s+class="creation-form"/)
+  assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseId"/)
+  assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseName"/)
+  assert.match(modulePage, /<el-select\s+v-model="creationForm\.accessPolicy"/)
+  assert.match(modulePage, /<el-select\s+v-model="creationForm\.status"/)
+  assert.match(modulePage, /<el-select\s+v-model\.trim="creationForm\.courseId"/)
+  assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.description"[\s\S]*type="textarea"/)
+  assert.match(modulePage, /<el-input[\s\S]*id="smoke-question"[\s\S]*@input="updateSmokeQuestion"/)
+  assert.doesNotMatch(modulePage, /<input[\s\S]*(creationForm|smoke-question)/)
+  assert.doesNotMatch(modulePage, /<select[\s\S]*creationForm/)
+  assert.doesNotMatch(modulePage, /<textarea/)
+
+  assert.match(topbar, /<el-input[\s\S]*class="topbar-search-input"/)
+  assert.doesNotMatch(topbar, /role-switch/)
+  assert.doesNotMatch(topbar, /role-switch-select/)
+  assert.doesNotMatch(topbar, /role-change/)
+  assert.doesNotMatch(topbar, /<el-select/)
+  assert.doesNotMatch(topbar, /<select/)
+  assert.doesNotMatch(consoleLayout, /@role-change/)
+  assert.doesNotMatch(consoleLayout, /function switchRole/)
+  assert.match(componentsCss, /\.creation-field\s+\.el-input,\s*[\s\S]*\.creation-field\s+\.el-select/)
+})
+
+test('按钮和菜单图标与文字保留舒展间距', () => {
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(elementPlusCss, /\.ckqa-el-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*10px;/)
+  assert.match(elementPlusCss, /\.ckqa-link-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*8px;/)
+  assert.match(elementPlusCss, /\.side-menu\s+\.el-menu-item,\s*[\s\S]*\.side-menu\s+\.el-sub-menu__title\s*\{[\s\S]*gap:\s*14px;/)
+  assert.match(componentsCss, /\.button-icon\s*\{[\s\S]*margin-inline-end:\s*2px;/)
+  assert.match(componentsCss, /\.nav-copy\s*\{[\s\S]*gap:\s*4px;/)
+})
+
+test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级态样式', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const tableShell = readFileSync(new URL('./components/common/DataTableShell.vue', import.meta.url), 'utf8')
+  const workflowStepper = readFileSync(new URL('./components/common/WorkflowStepper.vue', import.meta.url), 'utf8')
+  const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
+  const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
+  const routeState = readFileSync(new URL('./views/status/RouteState.vue', import.meta.url), 'utf8')
+  const healthView = readFileSync(new URL('./views/system/HealthView.vue', import.meta.url), 'utf8')
+  const dashboardView = readFileSync(new URL('./views/dashboard/DashboardView.vue', import.meta.url), 'utf8')
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  for (const source of [modulePage, tableShell, workflowStepper, topbar, loginView, routeState, healthView, dashboardView]) {
+    assert.doesNotMatch(source, /<button[\s\S]*(primary-button|secondary-button|plain-button|text-button)/)
+    assert.doesNotMatch(source, /<RouterLink[\s\S]*(primary-button|secondary-button)/)
+  }
+
+  assert.match(modulePage, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
+  assert.match(modulePage, /<component\s+:is="primaryActionIcon"/)
+  assert.match(tableShell, /<el-button[\s\S]*tag="router-link"[\s\S]*:to="action\.to"/)
+  assert.match(workflowStepper, /<el-button[\s\S]*class="workflow-stepper__step-button"/)
+  assert.match(topbar, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--ghost"/)
+  assert.match(loginView, /<el-button[\s\S]*native-type="submit"/)
+  assert.match(routeState, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
+  assert.match(healthView, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
+  assert.match(dashboardView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/knowledge-bases"/)
+  assert.match(elementPlusCss, /\.ckqa-el-button[\s\S]*backdrop-filter:\s*blur\(16px\)/)
+  assert.match(elementPlusCss, /\.ckqa-el-button--primary[\s\S]*box-shadow:[\s\S]*var\(--ckqa-accent\)/)
+  assert.match(componentsCss, /\.button-icon/)
+})
+
+test('侧边导航统一迁移到 Element Plus Menu 并为菜单项配置图标', () => {
+  const sideNavigation = readFileSync(new URL('./components/shell/SideNavigation.vue', import.meta.url), 'utf8')
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(sideNavigation, /<el-menu[\s\S]*class="side-menu"/)
+  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-if="group\.presentation === 'single' && group\.primaryItem"/)
+  assert.match(sideNavigation, /<el-sub-menu[\s\S]*v-else/)
+  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-for="item in group\.items"/)
+  assert.match(sideNavigation, /resolveGroupIcon\(group\.key\)/)
+  assert.match(sideNavigation, /resolveItemIcon\(item\)/)
+  assert.doesNotMatch(sideNavigation, /<details/)
+  assert.doesNotMatch(sideNavigation, /<summary/)
+  assert.doesNotMatch(sideNavigation, /<ul class="nav-items"/)
+  assert.match(elementPlusCss, /\.side-menu\.el-menu/)
+  assert.match(elementPlusCss, /\.side-menu\s+\.el-menu-item\.is-active/)
+  assert.match(componentsCss, /\.nav-icon/)
+})
+
 test('主题 token 样式兼容 violet 和 legacy purple', () => {
   const tokensCss = readFileSync(new URL('./styles/tokens/_colors.scss', import.meta.url), 'utf8')
 

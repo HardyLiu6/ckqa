@@ -1,9 +1,15 @@
 <script setup>
+import { ArrowRight } from 'lucide-vue-next'
+
 defineProps({
   title: { type: String, required: true },
   lines: { type: Array, default: () => [] },
   actions: { type: Array, default: () => [] },
 })
+
+function resolveActionIcon(action) {
+  return action.icon ?? ArrowRight
+}
 </script>
 
 <template>
@@ -11,14 +17,18 @@ defineProps({
     <div class="diagnostic-log-panel__heading">
       <h2>{{ title }}</h2>
       <div v-if="actions.length" class="diagnostic-log-panel__actions">
-        <RouterLink
+        <el-button
           v-for="action in actions"
           :key="action.label"
-          class="diagnostic-log-panel__action"
+          class="ckqa-link-button diagnostic-log-panel__action"
+          link
+          type="primary"
+          tag="router-link"
           :to="action.to"
         >
+          <component :is="resolveActionIcon(action)" class="button-icon" :size="15" aria-hidden="true" />
           {{ action.label }}
-        </RouterLink>
+        </el-button>
       </div>
     </div>
     <ol class="diagnostic-log-panel__lines">

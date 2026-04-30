@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { Gauge, HeartPulse, RefreshCw } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 
 import { authStore } from '../../stores/auth.js'
@@ -139,13 +140,33 @@ function refreshPage() {
     </dl>
 
     <div class="button-row">
-      <RouterLink class="primary-button" to="/app/dashboard">返回工作台</RouterLink>
-      <button v-if="currentState === 'server-error'" class="secondary-button" type="button" @click="refreshPage">
+      <el-button
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        tag="router-link"
+        to="/app/dashboard"
+      >
+        <Gauge class="button-icon" :size="16" aria-hidden="true" />
+        返回工作台
+      </el-button>
+      <el-button
+        v-if="currentState === 'server-error'"
+        class="ckqa-el-button ckqa-el-button--secondary"
+        native-type="button"
+        @click="refreshPage"
+      >
+        <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
         刷新页面
-      </button>
-      <RouterLink v-if="currentState === 'server-error'" class="secondary-button" to="/app/health">
+      </el-button>
+      <el-button
+        v-if="currentState === 'server-error'"
+        class="ckqa-el-button ckqa-el-button--secondary"
+        tag="router-link"
+        to="/app/health"
+      >
+        <HeartPulse class="button-icon" :size="16" aria-hidden="true" />
         系统健康
-      </RouterLink>
+      </el-button>
     </div>
   </section>
 </template>

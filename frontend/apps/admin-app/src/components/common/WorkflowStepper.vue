@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { Play, ScrollText } from 'lucide-vue-next'
 
 import StatusBadge from './StatusBadge.vue'
 import {
@@ -34,14 +35,18 @@ function selectStep(step) {
         :key="step.key"
         :class="{ active: step.key === activeStep?.key }"
       >
-        <button type="button" @click="selectStep(step)">
+        <el-button
+          class="workflow-stepper__step-button"
+          native-type="button"
+          @click="selectStep(step)"
+        >
           <span class="workflow-stepper__index">{{ String(index + 1).padStart(2, '0') }}</span>
           <span>
             <strong>{{ step.label }}</strong>
             <small>{{ step.detail }}</small>
           </span>
           <StatusBadge :status="step.status" />
-        </button>
+        </el-button>
       </li>
     </ol>
 
@@ -58,10 +63,22 @@ function selectStep(step) {
       </div>
 
       <div class="workflow-actions">
-        <button class="primary-button compact" type="button" :disabled="isBlocked">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="button"
+          :disabled="isBlocked"
+        >
+          <Play class="button-icon" :size="16" aria-hidden="true" />
           {{ activeStep.actionLabel }}
-        </button>
-        <button class="secondary-button compact" type="button">{{ activeStep.logLabel }}</button>
+        </el-button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+        >
+          <ScrollText class="button-icon" :size="16" aria-hidden="true" />
+          {{ activeStep.logLabel }}
+        </el-button>
       </div>
 
       <p v-if="isBlocked" class="workflow-stepper__blocked">阻塞：{{ blockedReason }}</p>

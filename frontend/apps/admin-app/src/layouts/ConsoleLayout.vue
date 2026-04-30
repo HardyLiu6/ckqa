@@ -17,14 +17,6 @@ const activeGroup = computed(() => route.meta.navGroup)
 const currentUser = computed(() => authStore.state.currentUser)
 const dataScopeLabel = computed(() => currentUser.value?.dataScope || '未登录')
 
-function switchRole(role) {
-  authStore.loginAs(role)
-
-  if (!authStore.canAccess(route.meta.permissions)) {
-    router.push('/app/dashboard')
-  }
-}
-
 function logout() {
   authStore.logout()
   router.push('/login')
@@ -38,7 +30,6 @@ function logout() {
       :api-base-url="API_BASE_URL"
       :current-user="currentUser"
       :data-scope-label="dataScopeLabel"
-      @role-change="switchRole"
       @logout="logout"
     />
 

@@ -1,4 +1,6 @@
 <script setup>
+import { ArrowRight, DatabaseZap, Server } from 'lucide-vue-next'
+
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DiagnosticLogPanel from '../../components/common/DiagnosticLogPanel.vue'
 import MetricTile from '../../components/common/MetricTile.vue'
@@ -43,7 +45,15 @@ const diagnosticLines = [
     </div>
     <div class="page-title-actions">
       <DataSourceChip source="mock" />
-      <RouterLink class="primary-button compact" to="/app/knowledge-bases">进入构建</RouterLink>
+      <el-button
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        tag="router-link"
+        to="/app/knowledge-bases"
+      >
+        <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
+        进入构建
+      </el-button>
     </div>
   </section>
 
@@ -64,7 +74,10 @@ const diagnosticLines = [
     <article class="panel">
       <div class="panel-heading">
         <h2>最近索引与解析</h2>
-        <RouterLink to="/app/knowledge-bases">查看知识库</RouterLink>
+        <el-button class="ckqa-link-button" link type="primary" tag="router-link" to="/app/knowledge-bases">
+          <DatabaseZap class="button-icon" :size="15" aria-hidden="true" />
+          查看知识库
+        </el-button>
       </div>
       <ul class="event-list">
         <li v-for="item in recentRuns" :key="item.title">
@@ -78,7 +91,10 @@ const diagnosticLines = [
     <article class="panel">
       <div class="panel-heading">
         <h2>系统摘要</h2>
-        <RouterLink to="/app/system">进入系统页</RouterLink>
+        <el-button class="ckqa-link-button" link type="primary" tag="router-link" to="/app/system">
+          <Server class="button-icon" :size="15" aria-hidden="true" />
+          进入系统页
+        </el-button>
       </div>
       <dl class="health-summary">
         <div>
@@ -100,6 +116,6 @@ const diagnosticLines = [
   <DiagnosticLogPanel
     title="异常摘要"
     :lines="diagnosticLines"
-    :actions="[{ label: '查看问答会话', to: '/app/qa-sessions' }]"
+    :actions="[{ label: '查看问答会话', to: '/app/qa-sessions', icon: ArrowRight }]"
   />
 </template>

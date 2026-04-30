@@ -34,6 +34,68 @@
   font-weight: 800;
 }
 
+.ckqa-el-button {
+  min-height: 36px;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--ckqa-border) 84%, transparent);
+  background: color-mix(in srgb, var(--ckqa-surface) 82%, transparent);
+  box-shadow: 0 10px 28px rgb(15 23 42 / 8%);
+  backdrop-filter: blur(16px);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.ckqa-el-button.el-button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ckqa-el-button:hover,
+.ckqa-el-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 34%, var(--ckqa-border));
+  box-shadow:
+    0 12px 30px rgb(15 23 42 / 12%),
+    0 0 0 1px color-mix(in srgb, var(--ckqa-accent) 18%, transparent);
+}
+
+.ckqa-el-button--primary {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 62%, transparent);
+  background:
+    linear-gradient(135deg, var(--ckqa-accent-strong), var(--ckqa-accent)),
+    var(--ckqa-accent-strong);
+  box-shadow:
+    0 14px 34px color-mix(in srgb, var(--ckqa-accent) 32%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 24%);
+}
+
+.ckqa-el-button--secondary {
+  color: var(--ckqa-text);
+  background: color-mix(in srgb, var(--ckqa-surface) 78%, transparent);
+}
+
+.ckqa-el-button--ghost {
+  color: var(--ckqa-text-muted);
+  background: color-mix(in srgb, var(--ckqa-surface) 52%, transparent);
+}
+
+.ckqa-link-button.el-button {
+  min-height: 28px;
+  padding: 0;
+  color: var(--ckqa-accent-strong);
+  font-weight: 800;
+}
+
+.ckqa-link-button.el-button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .el-button--primary {
   --el-button-bg-color: var(--ckqa-accent-strong);
   --el-button-border-color: var(--ckqa-accent-strong);
@@ -45,7 +107,8 @@
 }
 
 :root .el-input__wrapper,
-:root .el-select__wrapper {
+:root .el-select__wrapper,
+:root .el-textarea__inner {
   min-height: 38px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-sm);
@@ -54,19 +117,22 @@
 }
 
 :root .el-input__wrapper:hover,
-:root .el-select__wrapper:hover {
+:root .el-select__wrapper:hover,
+:root .el-textarea__inner:hover {
   border-color: var(--ckqa-border-strong);
   box-shadow: none;
 }
 
 :root .el-input__wrapper.is-focus,
 :root .el-select__wrapper.is-focused,
-:root .el-select__wrapper.is-focus {
+:root .el-select__wrapper.is-focus,
+:root .el-textarea__inner:focus {
   border-color: var(--ckqa-el-focus-border);
   box-shadow: var(--ckqa-el-focus-ring);
 }
 
 .el-input__inner,
+.el-textarea__inner,
 .el-select__placeholder,
 .el-select__selected-item {
   color: var(--ckqa-text);
@@ -74,8 +140,20 @@
 }
 
 .el-input__inner::placeholder,
+.el-textarea__inner::placeholder,
 .el-select__placeholder.is-transparent {
   color: var(--ckqa-text-muted);
+}
+
+.el-form-item__label {
+  color: var(--ckqa-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left > .el-form-item__label::before,
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left > .el-form-item__label-wrap > .el-form-item__label::before {
+  color: var(--ckqa-danger);
 }
 
 .el-popper,
@@ -125,6 +203,62 @@
   color: var(--ckqa-text);
 }
 
+.side-menu.el-menu {
+  border-right: 0;
+  background: transparent;
+  --el-menu-bg-color: transparent;
+  --el-menu-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+  --el-menu-active-color: var(--ckqa-accent-strong);
+  --el-menu-text-color: var(--ckqa-text-muted);
+  --el-menu-hover-text-color: var(--ckqa-accent-strong);
+}
+
+.side-menu .el-menu-item,
+.side-menu .el-sub-menu__title {
+  min-height: 46px;
+  height: auto;
+  gap: 14px;
+  margin: 2px 0;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--ckqa-radius-md);
+  line-height: 1.2;
+  backdrop-filter: blur(16px);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.side-menu .el-menu-item:hover,
+.side-menu .el-sub-menu__title:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+}
+
+.side-menu .el-menu-item.is-active {
+  color: var(--ckqa-accent-strong);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 30%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 15%, transparent), transparent),
+    color-mix(in srgb, var(--ckqa-surface) 68%, transparent);
+  box-shadow:
+    0 14px 34px color-mix(in srgb, var(--ckqa-accent) 18%, transparent),
+    inset 0 1px 0 rgb(255 255 255 / 18%);
+}
+
+.side-menu .el-sub-menu.is-active > .el-sub-menu__title {
+  color: var(--ckqa-accent-strong);
+}
+
+.side-menu .el-menu {
+  padding-left: 10px;
+  border-left: 1px solid color-mix(in srgb, var(--ckqa-border) 82%, transparent);
+  background: transparent;
+}
+
 .el-dialog,
 .el-drawer {
   --el-dialog-bg-color: var(--ckqa-surface);
@@ -139,4 +273,82 @@
 .el-drawer__footer {
   color: var(--ckqa-text);
   background: var(--ckqa-surface);
+}
+
+.ckqa-el-table {
+  --el-table-bg-color: var(--ckqa-surface);
+  --el-table-tr-bg-color: var(--ckqa-surface);
+  --el-table-header-bg-color: var(--ckqa-surface-muted);
+  --el-table-header-text-color: var(--ckqa-text-muted);
+  --el-table-text-color: var(--ckqa-text);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
+  --el-table-border-color: var(--ckqa-border);
+  --el-table-border: 1px solid var(--ckqa-border);
+  width: 100%;
+  min-width: 720px;
+  border-radius: var(--ckqa-radius-md);
+  color: var(--ckqa-text);
+  font-family: var(--ckqa-font-sans);
+}
+
+.ckqa-el-table.el-table {
+  background: var(--ckqa-surface);
+}
+
+.ckqa-el-table .el-table__header-wrapper th.el-table__cell {
+  height: 44px;
+  color: color-mix(in srgb, var(--ckqa-text) 74%, var(--ckqa-text-muted));
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 84%, var(--ckqa-surface));
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ckqa-el-table .el-table__body-wrapper td.el-table__cell {
+  height: 48px;
+  background: var(--ckqa-surface);
+}
+
+.ckqa-el-table .el-table__cell {
+  padding: 10px 0;
+}
+
+.ckqa-el-table .cell {
+  display: block;
+  min-width: 0;
+  color: var(--ckqa-text);
+  line-height: 1.45;
+}
+
+.ckqa-el-table .el-table__row:hover td.el-table__cell {
+  background: color-mix(in srgb, var(--ckqa-accent) 5%, var(--ckqa-surface));
+}
+
+.ckqa-el-table .ckqa-el-table__action-column .cell {
+  overflow: visible;
+}
+
+.el-pagination {
+  --el-pagination-bg-color: var(--ckqa-surface);
+  --el-pagination-button-bg-color: var(--ckqa-surface);
+  --el-pagination-button-color: var(--ckqa-text);
+  --el-pagination-button-disabled-bg-color: var(--ckqa-surface-muted);
+  --el-pagination-button-disabled-color: var(--ckqa-text-weak);
+  --el-pagination-hover-color: var(--ckqa-accent-strong);
+  color: var(--ckqa-text);
+  font-family: var(--ckqa-font-sans);
+}
+
+.el-pagination.is-background .el-pager li,
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next {
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface);
+  font-weight: 800;
+}
+
+.el-pagination.is-background .el-pager li.is-active {
+  border-color: var(--ckqa-accent-strong);
+  color: var(--ckqa-accent-contrast);
+  background: var(--ckqa-accent-strong);
 }
