@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { createPinia } from 'pinia'
 
@@ -995,6 +996,16 @@ test('主题色只允许固定枚举并提供强色阶', () => {
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'violet').strong, '#7e22ce')
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'violet').contrast, '#ffffff')
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'amber').strong, '#b45309')
+})
+
+test('主题 token 样式兼容 violet 和 legacy purple', () => {
+  const tokensCss = readFileSync(new URL('./styles/tokens.css', import.meta.url), 'utf8')
+
+  assert.match(tokensCss, /\[data-accent="violet"\]/)
+  assert.match(tokensCss, /\[data-accent="purple"\]/)
+  assert.match(tokensCss, /--ckqa-accent:\s*#9333ea/)
+  assert.match(tokensCss, /--ckqa-accent-strong:\s*#7e22ce/)
+  assert.match(tokensCss, /--ckqa-accent-contrast:\s*#ffffff/)
 })
 
 test('主题 store 迁移到 Pinia 后保留旧兼容 API', () => {

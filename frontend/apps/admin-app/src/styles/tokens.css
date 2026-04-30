@@ -64,5 +64,6 @@
 [data-accent="indigo"] { --ckqa-accent: #6366f1; --ckqa-accent-strong: #4f46e5; --ckqa-accent-contrast: #ffffff; }
 [data-accent="blue"] { --ckqa-accent: #2563eb; --ckqa-accent-strong: #1d4ed8; --ckqa-accent-contrast: #ffffff; }
 [data-accent="teal"] { --ckqa-accent: #0d9488; --ckqa-accent-strong: #0f766e; --ckqa-accent-contrast: #ffffff; }
+[data-accent="violet"],
 [data-accent="purple"] { --ckqa-accent: #9333ea; --ckqa-accent-strong: #7e22ce; --ckqa-accent-contrast: #ffffff; }
 [data-accent="amber"] { --ckqa-accent: #d97706; --ckqa-accent-strong: #b45309; --ckqa-accent-contrast: #ffffff; }
