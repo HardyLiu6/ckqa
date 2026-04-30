@@ -63,11 +63,14 @@ function submit() {
       <form class="login-form" @submit.prevent="submit">
         <label>
           <span>开发态身份</span>
-          <select v-model="selectedRole">
-            <option v-for="role in roleOptions" :key="role.value" :value="role.value">
-              {{ role.label }}
-            </option>
-          </select>
+          <el-select v-model="selectedRole" class="login-role-select" aria-label="开发态身份">
+            <el-option
+              v-for="role in roleOptions"
+              :key="role.value"
+              :label="role.label"
+              :value="role.value"
+            />
+          </el-select>
         </label>
 
         <dl class="login-role-facts">

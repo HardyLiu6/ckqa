@@ -1005,6 +1005,36 @@ test('全局样式入口迁移到 Sass 并移除旧 CSS 文件', () => {
   assert.equal(existsSync(new URL('./styles/tokens/_colors.scss', import.meta.url)), true)
 })
 
+test('全局样式入口在 base 和 components 之间加载 Element Plus 覆盖', () => {
+  const indexCss = readFileSync(new URL('./styles/index.scss', import.meta.url), 'utf8')
+  const baseIndex = indexCss.indexOf("@use './base';")
+  const elementPlusIndex = indexCss.indexOf("@use './element-plus';")
+  const componentsIndex = indexCss.indexOf("@use './components';")
+
+  assert.ok(baseIndex >= 0)
+  assert.ok(elementPlusIndex > baseIndex)
+  assert.ok(componentsIndex > elementPlusIndex)
+
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
+  assert.match(elementPlusCss, /--el-color-primary:\s*var\(--ckqa-accent\)/)
+  assert.match(elementPlusCss, /\.el-button--primary/)
+  assert.match(elementPlusCss, /\.el-input__wrapper/)
+  assert.match(elementPlusCss, /\.el-select__wrapper/)
+  assert.match(elementPlusCss, /\.el-popper/)
+  assert.match(elementPlusCss, /\.el-dialog/)
+  assert.match(elementPlusCss, /\.el-drawer/)
+})
+
+test('登录页身份选择使用 Element Plus Select 并保留满宽样式', () => {
+  const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
+  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+
+  assert.match(loginView, /<el-select\s+v-model="selectedRole"[\s\S]*aria-label="开发态身份"/)
+  assert.match(loginView, /<el-option[\s\S]*v-for="role in roleOptions"[\s\S]*:value="role\.value"/)
+  assert.doesNotMatch(loginView, /<select\s+v-model="selectedRole"/)
+  assert.match(componentsCss, /\.login-role-select\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
+})
+
 test('主题 token 样式兼容 violet 和 legacy purple', () => {
   const tokensCss = readFileSync(new URL('./styles/tokens/_colors.scss', import.meta.url), 'utf8')
 

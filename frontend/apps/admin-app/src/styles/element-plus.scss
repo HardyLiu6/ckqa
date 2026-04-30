@@ -1,0 +1,134 @@
+@use "./tokens/shadow" as *;
+
+:root {
+  --el-color-primary: var(--ckqa-accent);
+  --el-color-success: var(--ckqa-success);
+  --el-color-warning: var(--ckqa-warning);
+  --el-color-danger: var(--ckqa-danger);
+  --el-color-info: var(--ckqa-running);
+  --el-bg-color: var(--ckqa-surface);
+  --el-bg-color-page: var(--ckqa-bg);
+  --el-bg-color-overlay: var(--ckqa-surface);
+  --el-text-color-primary: var(--ckqa-text);
+  --el-text-color-regular: var(--ckqa-text);
+  --el-text-color-secondary: var(--ckqa-text-muted);
+  --el-border-color: var(--ckqa-border);
+  --el-border-color-light: var(--ckqa-border-subtle);
+  --el-border-radius-base: var(--ckqa-radius-md);
+  --el-font-family: var(--ckqa-font-sans);
+  --ckqa-el-focus-border: var(--ckqa-accent);
+  --ckqa-el-focus-ring: 0 0 0 3px rgb(99 102 241 / 22%);
+}
+
+@supports (color: color-mix(in srgb, white, black)) {
+  :root {
+    --el-border-color: color-mix(in srgb, var(--ckqa-border) 86%, var(--ckqa-text-muted));
+    --el-border-color-light: color-mix(in srgb, var(--ckqa-border-subtle) 90%, var(--ckqa-bg));
+    --ckqa-el-focus-border: color-mix(in srgb, var(--ckqa-accent) 56%, var(--ckqa-border));
+    --ckqa-el-focus-ring: 0 0 0 3px color-mix(in srgb, var(--ckqa-accent) 24%, transparent);
+  }
+}
+
+.el-button {
+  border-radius: var(--ckqa-radius-sm);
+  font-weight: 800;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--ckqa-accent-strong);
+  --el-button-border-color: var(--ckqa-accent-strong);
+  --el-button-hover-bg-color: var(--ckqa-accent);
+  --el-button-hover-border-color: var(--ckqa-accent);
+  --el-button-active-bg-color: var(--ckqa-accent-strong);
+  --el-button-active-border-color: var(--ckqa-accent-strong);
+  --el-button-text-color: var(--ckqa-accent-contrast);
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: 38px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface);
+  box-shadow: none;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover {
+  border-color: var(--ckqa-border-strong);
+  box-shadow: none;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-select__wrapper.is-focus {
+  border-color: var(--ckqa-el-focus-border);
+  box-shadow: var(--ckqa-el-focus-ring);
+}
+
+.el-input__inner,
+.el-select__placeholder,
+.el-select__selected-item {
+  color: var(--ckqa-text);
+  font-family: var(--ckqa-font-sans);
+}
+
+.el-input__inner::placeholder,
+.el-select__placeholder.is-transparent {
+  color: var(--ckqa-text-muted);
+}
+
+.el-popper,
+.el-message,
+.el-dialog,
+.el-drawer {
+  border-color: var(--ckqa-border);
+  border-radius: var(--ckqa-radius-md);
+  color: var(--ckqa-text);
+  background: var(--ckqa-surface);
+  font-family: var(--ckqa-font-sans);
+}
+
+.el-popper.is-light,
+.el-select__popper.el-popper {
+  border: 1px solid var(--ckqa-border);
+  background: var(--ckqa-surface);
+}
+
+.el-select-dropdown__item {
+  color: var(--ckqa-text);
+}
+
+.el-select-dropdown__item.is-hovering,
+.el-select-dropdown__item:hover {
+  background: var(--ckqa-surface-muted);
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--ckqa-accent-strong);
+  font-weight: 800;
+}
+
+.el-message {
+  box-shadow: $shadow-md;
+}
+
+.el-message__content {
+  color: var(--ckqa-text);
+}
+
+.el-dialog,
+.el-drawer {
+  --el-dialog-bg-color: var(--ckqa-surface);
+  --el-drawer-bg-color: var(--ckqa-surface);
+}
+
+.el-dialog__header,
+.el-dialog__body,
+.el-dialog__footer,
+.el-drawer__header,
+.el-drawer__body,
+.el-drawer__footer {
+  color: var(--ckqa-text);
+  background: var(--ckqa-surface);
+}
