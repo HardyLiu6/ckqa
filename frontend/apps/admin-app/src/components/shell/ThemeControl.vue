@@ -1,7 +1,10 @@
 <script setup>
 import { Monitor, Moon, Sun } from 'lucide-vue-next'
 
-import { THEME_ACCENTS, themeStore } from '../../stores/theme.js'
+import { getAdminPinia } from '../../stores/pinia.js'
+import { THEME_ACCENTS, useThemeStore } from '../../stores/theme.js'
+
+const themeStore = useThemeStore(getAdminPinia())
 
 const modeOptions = [
   { key: 'light', label: '亮色', icon: Sun },

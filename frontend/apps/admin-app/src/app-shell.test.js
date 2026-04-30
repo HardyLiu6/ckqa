@@ -35,8 +35,10 @@ import { routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
   isValidAccent,
+  normalizeAccent,
   resolveTheme,
   themeStore,
+  useThemeStore,
 } from './stores/theme.js'
 import {
   deriveTrackNodeState,
@@ -983,12 +985,30 @@ test('主题 store 可在 Node 环境安全导入并解析主题', () => {
 test('主题色只允许固定枚举并提供强色阶', () => {
   assert.deepEqual(
     THEME_ACCENTS.map((item) => item.key),
-    ['indigo', 'blue', 'teal', 'purple', 'amber'],
+    ['indigo', 'blue', 'teal', 'violet', 'amber'],
   )
+  assert.equal(normalizeAccent('purple'), 'violet')
   assert.equal(isValidAccent('teal'), true)
   assert.equal(isValidAccent('custom'), false)
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'teal').strong, '#0f766e')
+  assert.equal(THEME_ACCENTS.find((item) => item.key === 'violet').color, '#9333ea')
+  assert.equal(THEME_ACCENTS.find((item) => item.key === 'violet').strong, '#7e22ce')
+  assert.equal(THEME_ACCENTS.find((item) => item.key === 'violet').contrast, '#ffffff')
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'amber').strong, '#b45309')
+})
+
+test('主题 store 迁移到 Pinia 后保留旧兼容 API', () => {
+  const pinia = createPinia()
+  const theme = useThemeStore(pinia)
+
+  assert.equal(theme.state.mode, 'auto')
+  assert.equal(theme.state.accent, 'indigo')
+  theme.setMode('dark')
+  theme.setAccent('violet')
+
+  assert.equal(theme.state.mode, 'dark')
+  assert.equal(theme.state.accent, 'violet')
+  assert.equal(themeStore.state.mode, 'auto')
 })
 
 test('控制台导航按权限过滤并保留模块分组', () => {
