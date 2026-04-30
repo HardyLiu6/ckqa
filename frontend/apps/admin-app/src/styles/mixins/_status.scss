@@ -1,0 +1,5 @@
+@mixin status-tone($color, $background-alpha: 10%, $border-alpha: 24%) {
+  color: $color;
+  border-color: color-mix(in srgb, #{$color} $border-alpha, transparent);
+  background: color-mix(in srgb, #{$color} $background-alpha, transparent);
+}

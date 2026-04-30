@@ -1,7 +1,4 @@
-@import "@fontsource/dm-sans/400.css";
-@import "@fontsource/dm-sans/700.css";
-@import "@fontsource/dm-sans/800.css";
-@import "@fontsource/dm-mono/400.css";
+@use './mixins/focus' as *;
 
 * {
   box-sizing: border-box;
@@ -39,7 +36,7 @@ body {
 
 *::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   background: color-mix(in srgb, var(--ckqa-text-weak) 70%, transparent);
   background-clip: content-box;
 }
@@ -70,8 +67,7 @@ input {
 }
 
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--ckqa-accent-strong) 70%, white);
-  outline-offset: 2px;
+  @include focus-ring;
 }
 
 a {
@@ -110,8 +106,9 @@ small {
   *,
   *::before,
   *::after {
-    animation-duration: 1ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 1ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

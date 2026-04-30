@@ -1,3 +1,5 @@
+@use "./tokens/shadow" as *;
+
 .skip-link {
   position: fixed;
   top: 10px;
@@ -26,9 +28,9 @@
 .route-state,
 .workflow-panel {
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface);
-  box-shadow: var(--ckqa-shadow-soft);
+  box-shadow: $shadow-md;
 }
 
 .ckqa-chip,
@@ -40,7 +42,7 @@
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   white-space: normal;
 }
 
@@ -84,7 +86,7 @@
 .ckqa-button:hover,
 .primary-button:hover {
   transform: translateY(-1px);
-  box-shadow: var(--ckqa-shadow-hover);
+  box-shadow: $shadow-lg;
 }
 
 .primary-button.compact,
@@ -139,9 +141,9 @@
   width: min(1040px, 100%);
   padding: 32px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: color-mix(in srgb, var(--ckqa-surface) 94%, transparent);
-  box-shadow: var(--ckqa-shadow-soft);
+  box-shadow: $shadow-md;
 }
 
 .login-view {
@@ -170,7 +172,7 @@
 .login-card {
   padding: 22px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
 }
 
@@ -210,7 +212,7 @@
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   color: var(--ckqa-accent-strong);
   background: color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
   font-family: var(--ckqa-font-mono);
@@ -338,9 +340,9 @@ select:focus {
   overflow: auto;
   padding: 22px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface);
-  box-shadow: var(--ckqa-shadow-soft);
+  box-shadow: $shadow-md;
 }
 
 .creation-form {
@@ -396,7 +398,7 @@ select:focus {
   height: 40px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   color: var(--ckqa-accent-contrast);
   background: var(--ckqa-accent-strong);
   font-weight: 900;
@@ -420,7 +422,7 @@ select:focus {
   min-height: 38px;
   padding: 0 12px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   color: var(--ckqa-text-muted);
   background: var(--ckqa-surface-muted);
 }
@@ -486,7 +488,7 @@ select:focus {
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
 }
 
@@ -565,7 +567,7 @@ select:focus {
   gap: 8px;
   padding: 10px;
   border: 1px solid transparent;
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   color: var(--ckqa-text);
   cursor: pointer;
   list-style: none;
@@ -635,7 +637,7 @@ select:focus {
   gap: 4px;
   padding: 10px;
   border: 1px solid transparent;
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   color: var(--ckqa-text-muted);
   text-decoration: none;
 }
@@ -683,7 +685,7 @@ select:focus {
 .nav-state {
   min-height: 20px;
   padding: 0 7px;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   color: #b45309;
   background: rgb(245 158 11 / 12%);
   font-size: 11px;
@@ -716,7 +718,7 @@ select:focus {
   margin-top: 14px;
   padding: 12px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
 }
 
@@ -799,7 +801,7 @@ select:focus {
   gap: 4px;
   padding: 0 10px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   color: var(--ckqa-text-muted);
   background: var(--ckqa-surface);
   font-size: 13px;
@@ -880,9 +882,9 @@ select:focus {
 
 .metric-tile {
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface);
-  box-shadow: var(--ckqa-shadow-soft);
+  box-shadow: $shadow-md;
 }
 
 .metric-tile__label,
@@ -944,7 +946,7 @@ select:focus {
   padding: 0;
   margin: 0;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-border);
   list-style: none;
 }
@@ -968,7 +970,7 @@ select:focus {
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   color: var(--ckqa-text-muted);
   background: var(--ckqa-surface-muted);
   font-family: var(--ckqa-font-mono);
@@ -997,7 +999,7 @@ select:focus {
   margin-bottom: 18px;
   overflow: hidden;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-border);
 }
 
@@ -1155,7 +1157,7 @@ select:focus {
 .table-scroll {
   overflow: hidden;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
 }
 
 .table-scroll {
@@ -1365,7 +1367,7 @@ select:focus {
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   color: var(--ckqa-text-muted);
   background: var(--ckqa-surface-muted);
   font-family: var(--ckqa-font-mono);
@@ -1481,7 +1483,7 @@ select:focus {
   padding: 18px;
   background: #020617;
   border: 1px solid #1e293b;
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   color: #e2e8f0;
   font-family: var(--ckqa-font-mono);
 }
@@ -1557,7 +1559,7 @@ select:focus {
   min-height: 178px;
   padding: 14px;
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius);
+  border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
 }
 
@@ -1631,7 +1633,7 @@ select:focus {
 
 .skeleton-row {
   min-height: 14px;
-  border-radius: var(--ckqa-radius-pill);
+  border-radius: var(--ckqa-radius-full);
   background:
     linear-gradient(
       90deg,

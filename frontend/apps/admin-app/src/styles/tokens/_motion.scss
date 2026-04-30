@@ -1,0 +1,10 @@
+:root {
+  --ckqa-duration-fast: 160ms;
+  --ckqa-duration-base: 220ms;
+  --ckqa-duration-slow: 320ms;
+}
+
+$duration-fast: 160ms;
+$duration-base: 220ms;
+$duration-slow: 320ms;
+$ease-standard: cubic-bezier(0.2, 0, 0, 1);

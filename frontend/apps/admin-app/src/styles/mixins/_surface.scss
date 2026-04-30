@@ -1,0 +1,8 @@
+@use '../tokens/shadow' as *;
+
+@mixin surface($shadow: $shadow-md) {
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-md);
+  background: var(--ckqa-surface);
+  box-shadow: $shadow;
+}

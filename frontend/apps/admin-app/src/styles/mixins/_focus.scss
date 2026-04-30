@@ -1,0 +1,8 @@
+@mixin focus-ring($offset: 2px) {
+  outline: 3px solid var(--ckqa-accent);
+  outline-offset: $offset;
+
+  @supports (color: color-mix(in srgb, black, white)) {
+    outline-color: color-mix(in srgb, var(--ckqa-accent-strong) 70%, white);
+  }
+}

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 import { createPinia } from 'pinia'
 
@@ -998,11 +998,18 @@ test('主题色只允许固定枚举并提供强色阶', () => {
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'amber').strong, '#b45309')
 })
 
-test('主题 token 样式兼容 violet 和 legacy purple', () => {
-  const tokensCss = readFileSync(new URL('./styles/tokens.css', import.meta.url), 'utf8')
+test('全局样式入口迁移到 Sass 并移除旧 CSS 文件', () => {
+  assert.equal(existsSync(new URL('./style.css', import.meta.url)), false)
+  assert.equal(existsSync(new URL('./styles/index.scss', import.meta.url)), true)
+  assert.equal(existsSync(new URL('./styles/tokens.css', import.meta.url)), false)
+  assert.equal(existsSync(new URL('./styles/tokens/_colors.scss', import.meta.url)), true)
+})
 
-  assert.match(tokensCss, /\[data-accent="violet"\]/)
-  assert.match(tokensCss, /\[data-accent="purple"\]/)
+test('主题 token 样式兼容 violet 和 legacy purple', () => {
+  const tokensCss = readFileSync(new URL('./styles/tokens/_colors.scss', import.meta.url), 'utf8')
+
+  assert.match(tokensCss, /\[data-accent=['"]violet['"]\]/)
+  assert.match(tokensCss, /\[data-accent=['"]purple['"]\]/)
   assert.match(tokensCss, /--ckqa-accent:\s*#9333ea/)
   assert.match(tokensCss, /--ckqa-accent-strong:\s*#7e22ce/)
   assert.match(tokensCss, /--ckqa-accent-contrast:\s*#ffffff/)

@@ -19,15 +19,6 @@
   --ckqa-warning: #f59e0b;
   --ckqa-blocked: #64748b;
   --ckqa-danger: #ef4444;
-  --ckqa-radius: 8px;
-  --ckqa-radius-sm: 6px;
-  --ckqa-radius-pill: 999px;
-  --ckqa-shadow-soft: 0 16px 40px rgb(15 23 42 / 10%);
-  --ckqa-shadow-hover: 0 18px 42px rgb(15 23 42 / 14%);
-  --ckqa-font-sans: "DM Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-  --ckqa-font-mono: "DM Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
-  --ckqa-duration-fast: 160ms;
-  --ckqa-duration-base: 220ms;
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
   --surface-muted: var(--ckqa-surface-muted);
@@ -40,13 +31,12 @@
   --amber: #b7791f;
   --red: #c2413d;
   --ink: var(--ckqa-ink);
-  --shadow: var(--ckqa-shadow-soft);
-  --radius: var(--ckqa-radius);
+  --radius: var(--ckqa-radius-md);
   --sans: var(--ckqa-font-sans);
   --mono: var(--ckqa-font-mono);
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   color-scheme: dark;
   --ckqa-bg: #020617;
   --ckqa-bg-elevated: #0f172a;
@@ -61,9 +51,33 @@
   --ckqa-ink: #f8fafc;
 }
 
-[data-accent="indigo"] { --ckqa-accent: #6366f1; --ckqa-accent-strong: #4f46e5; --ckqa-accent-contrast: #ffffff; }
-[data-accent="blue"] { --ckqa-accent: #2563eb; --ckqa-accent-strong: #1d4ed8; --ckqa-accent-contrast: #ffffff; }
-[data-accent="teal"] { --ckqa-accent: #0d9488; --ckqa-accent-strong: #0f766e; --ckqa-accent-contrast: #ffffff; }
-[data-accent="violet"],
-[data-accent="purple"] { --ckqa-accent: #9333ea; --ckqa-accent-strong: #7e22ce; --ckqa-accent-contrast: #ffffff; }
-[data-accent="amber"] { --ckqa-accent: #d97706; --ckqa-accent-strong: #b45309; --ckqa-accent-contrast: #ffffff; }
+[data-accent='indigo'] {
+  --ckqa-accent: #6366f1;
+  --ckqa-accent-strong: #4f46e5;
+  --ckqa-accent-contrast: #ffffff;
+}
+
+[data-accent='blue'] {
+  --ckqa-accent: #2563eb;
+  --ckqa-accent-strong: #1d4ed8;
+  --ckqa-accent-contrast: #ffffff;
+}
+
+[data-accent='teal'] {
+  --ckqa-accent: #0d9488;
+  --ckqa-accent-strong: #0f766e;
+  --ckqa-accent-contrast: #ffffff;
+}
+
+[data-accent='violet'],
+[data-accent='purple'] {
+  --ckqa-accent: #9333ea;
+  --ckqa-accent-strong: #7e22ce;
+  --ckqa-accent-contrast: #ffffff;
+}
+
+[data-accent='amber'] {
+  --ckqa-accent: #d97706;
+  --ckqa-accent-strong: #b45309;
+  --ckqa-accent-contrast: #ffffff;
+}

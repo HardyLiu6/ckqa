@@ -1,0 +1,13 @@
+@use '../tokens/breakpoints' as *;
+
+@mixin media-up($breakpoint) {
+  @media (min-width: $breakpoint) {
+    @content;
+  }
+}
+
+@mixin compact-screen {
+  @media (max-width: ($breakpoint-md - 1px)) {
+    @content;
+  }
+}

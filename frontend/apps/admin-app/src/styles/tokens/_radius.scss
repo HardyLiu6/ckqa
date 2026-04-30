@@ -1,0 +1,9 @@
+:root {
+  --ckqa-radius-sm: 6px;
+  --ckqa-radius-md: 8px;
+  --ckqa-radius-lg: 12px;
+  --ckqa-radius-xl: 16px;
+  --ckqa-radius-full: 999px;
+  --ckqa-radius: var(--ckqa-radius-md);
+  --ckqa-radius-pill: var(--ckqa-radius-full);
+}
