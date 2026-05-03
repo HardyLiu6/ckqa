@@ -50,7 +50,9 @@ import {
   resolveCourseSelectOptions,
 } from './creation-form-model.js'
 import {
+  createExportMissingTaskOptions,
   createMaterialExportTaskOptions,
+  createParallelParseTaskOptions,
   resolveMaterialExportPayload,
 } from './material-lifecycle-actions.js'
 import { loadCourseDetailBlock, loadModulePage } from './module-loaders.js'
@@ -59,6 +61,7 @@ import {
   createRouteSnapshot,
   createStaleRequestGuard,
   resolveApiErrorAction,
+  resolveBuildStepQuery,
   resolveCleanMaterialQuery,
   resolveMaterialQuery,
   resolveOperationFeedback,
@@ -127,7 +130,21 @@ const creationSubmitDisabled = computed(() => (
   || (creationDialog.value === 'knowledge-base' && (!creationForm.value.courseId || creationCourseLoading.value))
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
-const primaryActionLabel = computed(() => config.value.primaryAction?.label ?? config.value.primaryAction)
+const activeBuildStep = computed(() => {
+  const steps = config.value.workflowSteps ?? []
+  return steps.find((step) => step.key === activeStepKey.value)
+    ?? steps.find((step) => step.key === config.value.actions?.activeStepKey)
+    ?? steps[0]
+    ?? null
+})
+const buildPrimaryAction = computed(() => (
+  activeBuildStep.value?.primaryAction ?? { label: '刷新状态', operationKey: 'reload', disabled: false }
+))
+const primaryActionLabel = computed(() => (
+  route.name === 'knowledge-base-build'
+    ? buildPrimaryAction.value.label
+    : config.value.primaryAction?.label ?? config.value.primaryAction
+))
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
 const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
 const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
@@ -203,6 +220,13 @@ async function loadPage(query = route.query) {
   requestState.value = result.requestState
   loadError.value = result.error ? createApiError(result.error) : null
 
+  if (route.name === 'knowledge-base-build') {
+    const stepKeys = result.workflowSteps?.map((step) => step.key) ?? []
+    if (!activeStepKey.value || !stepKeys.includes(activeStepKey.value)) {
+      activeStepKey.value = result.actions?.activeStepKey ?? stepKeys[0] ?? ''
+    }
+  }
+
   if (loadError.value) {
     const action = resolveApiErrorAction(loadError.value, { route: routeSnapshot })
     if (action.type === 'redirect') {
@@ -264,8 +288,58 @@ async function handlePrimaryAction() {
   }
 
   if (route.name === 'knowledge-base-build') {
-    await runKnowledgeBaseIndex()
+    await handleBuildPrimaryAction()
   }
+}
+
+async function handleBuildPrimaryAction() {
+  const action = buildPrimaryAction.value
+
+  if (action.disabled || actionRunning.value) {
+    return
+  }
+
+  if (action.operationKey?.startsWith('step-')) {
+    await router.replace({
+      query: action.nextQuery ?? resolveBuildStepQuery(route.query, action.nextStepKey),
+    })
+    return
+  }
+
+  if (action.operationKey === 'parse-batch') {
+    await runBuildBatchParse()
+    return
+  }
+
+  if (action.operationKey === 'export-missing') {
+    await runBuildExportMissing()
+    return
+  }
+
+  if (
+    action.operationKey === 'material-confirm'
+    || action.operationKey === 'export-confirm'
+    || action.operationKey === 'prompt-confirm'
+  ) {
+    if (!action.nextQuery) {
+      throw new Error(`构建向导确认动作缺少 nextQuery: ${action.operationKey}`)
+    }
+
+    await router.replace({ query: action.nextQuery })
+    return
+  }
+
+  if (action.operationKey === 'index-build') {
+    await runKnowledgeBaseIndex()
+    return
+  }
+
+  if (action.operationKey === 'qa-smoke') {
+    await runQaSmoke()
+    return
+  }
+
+  await loadPage()
 }
 
 async function handleSecondaryAction() {
@@ -414,6 +488,43 @@ async function runMaterialExport() {
       payload,
       exportGraphRagRequest: exportGraphRag,
       listParseResultsRequest: listParseResults,
+    }),
+  })
+}
+
+async function runBuildBatchParse() {
+  const rows = config.value.blocks?.parseTasks?.items ?? []
+  const runnableRows = rows.filter((row) => ['pending', 'failed', 'todo'].includes(row.status))
+
+  if (runnableRows.length === 0 || actionRunning.value) {
+    return
+  }
+
+  startLongTask({
+    operationKey: 'material-parse',
+    limits: LONG_TASK_LIMITS.parse,
+    ...createParallelParseTaskOptions({
+      rows,
+      startParseRequest: startParse,
+    }),
+  })
+}
+
+async function runBuildExportMissing() {
+  const rows = config.value.blocks?.exportArtifacts?.items ?? []
+  const missingRows = rows.filter((row) => row.status === 'missing' || row.status === '待导出')
+
+  if (missingRows.length === 0 || actionRunning.value) {
+    return
+  }
+
+  startLongTask({
+    operationKey: 'material-export',
+    limits: LONG_TASK_LIMITS.export,
+    ...createExportMissingTaskOptions({
+      rows,
+      payload: { mode: 'section', withPageDocs: true, force: false },
+      exportGraphRagRequest: exportGraphRag,
     }),
   })
 }
@@ -607,7 +718,9 @@ onBeforeUnmount(() => cancelLongTask())
         class="ckqa-el-button ckqa-el-button--primary"
         type="primary"
         native-type="button"
-        :disabled="Boolean(config.primaryAction?.disabled) || (route.name === 'material-detail' && (!config.actions?.canParse || actionRunning))"
+        :disabled="Boolean(config.primaryAction?.disabled)
+          || (route.name === 'material-detail' && (!config.actions?.canParse || actionRunning))
+          || (route.name === 'knowledge-base-build' && (buildPrimaryAction.disabled || actionRunning))"
         :title="config.primaryAction?.title"
         @click="handlePrimaryAction"
       >

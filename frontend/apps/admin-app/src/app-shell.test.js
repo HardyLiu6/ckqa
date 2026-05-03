@@ -97,7 +97,9 @@ import {
   shouldStartFallback,
 } from './views/pages/long-task-state.js'
 import {
+  createExportMissingTaskOptions,
   createMaterialExportTaskOptions,
+  createParallelParseTaskOptions,
   resolveMaterialExportPayload,
 } from './views/pages/material-lifecycle-actions.js'
 import {
@@ -603,6 +605,55 @@ test('资料导出覆盖确认取消时不生成请求 payload', () => {
     withPageDocs: true,
     force: false,
   })
+})
+
+test('构建向导批量解析只提交待解析和失败资料且单项失败不阻断整体', async () => {
+  const calls = []
+  const options = createParallelParseTaskOptions({
+    rows: [
+      { id: '9', status: 'done' },
+      { id: '10', status: 'pending' },
+      { id: '11', status: 'failed' },
+    ],
+    startParseRequest: async (id) => {
+      calls.push(id)
+      if (id === '11') throw new Error('parse failed')
+      return { id }
+    },
+  })
+
+  const result = await options.trigger({})
+  assert.deepEqual(calls, ['10', '11'])
+  assert.equal(result.total, 2)
+  assert.equal(result.submitted, 1)
+  assert.equal(result.failed, 1)
+  assert.equal(options.isSuccess(result), true)
+  assert.equal(options.isFailed(result), false)
+})
+
+test('构建向导缺失导出只提交缺失资料且单项失败不阻断整体', async () => {
+  const calls = []
+  const options = createExportMissingTaskOptions({
+    rows: [
+      { id: '9', status: 'complete' },
+      { id: '10', status: 'missing' },
+      { id: '11', status: '待导出' },
+    ],
+    payload: { mode: 'section', withPageDocs: true },
+    exportGraphRagRequest: async (id, payload) => {
+      calls.push([id, payload])
+      if (id === '11') throw new Error('export failed')
+      return { id }
+    },
+  })
+
+  const result = await options.trigger({})
+  assert.deepEqual(calls.map(([id]) => id), ['10', '11'])
+  assert.equal(result.total, 2)
+  assert.equal(result.submitted, 1)
+  assert.equal(result.failed, 1)
+  assert.equal(options.isSuccess(result), true)
+  assert.equal(options.isFailed(result), false)
 })
 
 test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运行', async () => {
@@ -1389,6 +1440,20 @@ test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义',
     ['material', 'parse', 'export', 'index', 'smoke'],
   )
   assert.equal(config.workflowSteps.at(-1).label, '问答冒烟验证')
+})
+
+test('构建页主操作统一走模型 operationKey 分发', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+
+  assert.match(modulePage, /async function handleBuildPrimaryAction\(\)/)
+  assert.match(modulePage, /operationKey === 'parse-batch'/)
+  assert.match(modulePage, /operationKey === 'export-missing'/)
+  assert.match(modulePage, /operationKey === 'material-confirm'/)
+  assert.match(modulePage, /operationKey === 'export-confirm'/)
+  assert.match(modulePage, /operationKey === 'prompt-confirm'/)
+  assert.match(modulePage, /operationKey === 'index-build'/)
+  assert.match(modulePage, /operationKey === 'qa-smoke'/)
+  assert.doesNotMatch(modulePage, /if \(route\.name === 'knowledge-base-build'\) \{\n\s+await runKnowledgeBaseIndex\(\)/)
 })
 
 test('业务页模型显式声明数据来源和主操作', () => {
