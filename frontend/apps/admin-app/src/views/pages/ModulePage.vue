@@ -1,10 +1,9 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import {
+  ChevronLeft,
   Check,
   DatabaseZap,
-  FileText,
-  FlaskConical,
   Hammer,
   Play,
   Plus,
@@ -36,12 +35,21 @@ import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DataTableShell from '../../components/common/DataTableShell.vue'
 import StatusBadge from '../../components/common/StatusBadge.vue'
 import WorkflowStepper from '../../components/common/WorkflowStepper.vue'
+import BuildStepExport from '../../components/build-wizard/BuildStepExport.vue'
+import BuildStepIndex from '../../components/build-wizard/BuildStepIndex.vue'
+import BuildStepMaterial from '../../components/build-wizard/BuildStepMaterial.vue'
+import BuildStepParse from '../../components/build-wizard/BuildStepParse.vue'
+import BuildStepPrompt from '../../components/build-wizard/BuildStepPrompt.vue'
+import BuildStepQaCheck from '../../components/build-wizard/BuildStepQaCheck.vue'
 import {
   LONG_TASK_LIMITS,
   createLongTaskController,
   resolveLongTaskState,
 } from './long-task-state.js'
-import { getModulePageConfig } from './module-content.js'
+import {
+  getModulePageConfig,
+  resolveBuildStepNavigation,
+} from './module-content.js'
 import {
   ACCESS_POLICY_OPTIONS,
   COURSE_STATUS_OPTIONS,
@@ -61,9 +69,10 @@ import {
   createRouteSnapshot,
   createStaleRequestGuard,
   resolveApiErrorAction,
+  resolveBuildConfirmQuery,
+  resolveBuildSelectionQuery,
   resolveBuildStepQuery,
-  resolveCleanMaterialQuery,
-  resolveMaterialQuery,
+  resolveCleanBuildStepQuery,
   resolveOperationFeedback,
   selectLatestRunningOrSuccess,
 } from './module-page-model.js'
@@ -76,6 +85,14 @@ import {
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
+const buildStepComponents = {
+  material: BuildStepMaterial,
+  parse: BuildStepParse,
+  export: BuildStepExport,
+  prompt: BuildStepPrompt,
+  index: BuildStepIndex,
+  qa_check: BuildStepQaCheck,
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -140,6 +157,43 @@ const activeBuildStep = computed(() => {
 const buildPrimaryAction = computed(() => (
   activeBuildStep.value?.primaryAction ?? { label: '刷新状态', operationKey: 'reload', disabled: false }
 ))
+const activeBuildStepComponent = computed(() => buildStepComponents[activeBuildStep.value?.key] ?? BuildStepMaterial)
+const buildNavigation = computed(() => resolveBuildStepNavigation(config.value.workflowSteps ?? [], activeBuildStep.value?.key))
+const buildStepIndexLabel = computed(() => {
+  const index = (config.value.workflowSteps ?? []).findIndex((step) => step.key === activeBuildStep.value?.key)
+  return index >= 0 ? String(index + 1).padStart(2, '0') : '01'
+})
+const buildSummaryChips = computed(() => {
+  const materialCount = config.value.blocks?.selection?.materialIds?.length ?? 0
+  const parseRows = config.value.blocks?.parseTasks?.items ?? []
+  const exportSummary = config.value.blocks?.exportArtifacts?.summary
+  const indexAvailability = config.value.blocks?.indexAvailability
+
+  return [
+    { label: '已选资料', value: `${materialCount} 个`, tone: materialCount > 0 ? 'ok' : 'warn' },
+    { label: '解析完成', value: `${countRowsByStatus(parseRows, 'done')}/${parseRows.length}`, tone: 'info' },
+    { label: '缺失产物', value: `${exportSummary?.missingCount ?? 0} 个`, tone: Number(exportSummary?.missingCount ?? 0) > 0 ? 'warn' : 'ok' },
+    { label: '可用索引', value: indexAvailability?.availability === 'available' ? '已就绪' : '暂无', tone: indexAvailability?.availability === 'available' ? 'ok' : 'info' },
+  ]
+})
+const activeBuildOperationFeedback = computed(() => {
+  if (['parse', 'export'].includes(activeBuildStep.value?.key)) {
+    return materialOperationFeedback.value
+  }
+  if (activeBuildStep.value?.key === 'index') {
+    return indexOperationFeedback.value
+  }
+  if (activeBuildStep.value?.key === 'qa_check') {
+    return qaOperationFeedback.value
+  }
+  return null
+})
+const buildPrimaryActionIcon = computed(() => {
+  if (buildPrimaryAction.value.operationKey === 'qa-smoke') return WandSparkles
+  if (buildPrimaryAction.value.operationKey?.includes('refresh')) return RefreshCw
+  if (buildPrimaryAction.value.operationKey?.includes('confirm')) return Check
+  return Hammer
+})
 const primaryActionLabel = computed(() => (
   route.name === 'knowledge-base-build'
     ? buildPrimaryAction.value.label
@@ -180,7 +234,6 @@ const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
-const buildSelectionBlock = computed(() => config.value.blocks?.selection)
 
 async function loadPage(query = route.query) {
   cancelLongTask()
@@ -222,8 +275,9 @@ async function loadPage(query = route.query) {
 
   if (route.name === 'knowledge-base-build') {
     const stepKeys = result.workflowSteps?.map((step) => step.key) ?? []
-    if (!activeStepKey.value || !stepKeys.includes(activeStepKey.value)) {
-      activeStepKey.value = result.actions?.activeStepKey ?? stepKeys[0] ?? ''
+    const resolvedActiveStepKey = result.actions?.activeStepKey ?? stepKeys[0] ?? ''
+    if (resolvedActiveStepKey && activeStepKey.value !== resolvedActiveStepKey) {
+      activeStepKey.value = resolvedActiveStepKey
     }
   }
 
@@ -241,17 +295,65 @@ async function loadPage(query = route.query) {
     }
   }
 
-  if (
-    route.name === 'knowledge-base-build'
-    && result.blocks?.selection?.shouldCleanMaterialQuery
-    && route.query.materialId
-  ) {
-    await router.replace({ query: resolveCleanMaterialQuery(route.query) })
+  if (route.name === 'knowledge-base-build') {
+    const stepKeys = result.workflowSteps?.map((step) => step.key) ?? []
+    let nextQuery = route.query
+
+    if (result.blocks?.selection?.shouldCleanSelectionQuery) {
+      nextQuery = resolveBuildSelectionQuery(nextQuery, result.blocks.selection.materialIds)
+    }
+
+    if (Number(result.blocks?.exportArtifacts?.summary?.missingCount ?? 0) > 0) {
+      nextQuery = resolveBuildConfirmQuery(
+        resolveBuildConfirmQuery(nextQuery, 'exportConfirmed', false),
+        'promptConfirmed',
+        false,
+      )
+    } else if (result.blocks?.prompt?.shouldCleanPromptConfirmed) {
+      nextQuery = resolveBuildConfirmQuery(nextQuery, 'promptConfirmed', false)
+    }
+
+    if (route.query.step && stepKeys.length > 0) {
+      nextQuery = resolveCleanBuildStepQuery(nextQuery, stepKeys)
+    }
+
+    if (!isSameQuery(route.query, nextQuery)) {
+      await router.replace({ query: nextQuery })
+    }
   }
+}
+
+function isSameQuery(left = {}, right = {}) {
+  const leftKeys = Object.keys(left).sort()
+  const rightKeys = Object.keys(right).sort()
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false
+  }
+
+  return leftKeys.every((key, index) => (
+    key === rightKeys[index]
+    && JSON.stringify(left[key]) === JSON.stringify(right[key])
+  ))
 }
 
 function handlePageChange(page) {
   router.replace({ query: buildPageQuery(route.query, page) })
+}
+
+async function updateBuildActiveStep(stepKey) {
+  activeStepKey.value = stepKey
+  if (route.name === 'knowledge-base-build') {
+    await router.replace({ query: resolveBuildStepQuery(route.query, stepKey) })
+  }
+}
+
+async function goBuildPreviousStep() {
+  if (!buildNavigation.value || buildNavigation.value.disabled) {
+    return
+  }
+
+  await updateBuildActiveStep(buildNavigation.value.previousKey)
 }
 
 async function retryCourseBlock(key) {
@@ -548,12 +650,10 @@ function startLongTask({ operationKey, trigger, poll, isSuccess, isFailed, limit
   startActiveLongTask(activeLongTaskController)
 }
 
-async function selectBuildMaterial(materialId) {
-  if (route.name !== 'knowledge-base-build') {
-    return
-  }
-
-  await router.replace({ query: resolveMaterialQuery(route.query, materialId) })
+async function updateBuildMaterialSelection(materialIds) {
+  await router.replace({
+    query: resolveBuildSelectionQuery(route.query, materialIds),
+  })
 }
 
 async function runKnowledgeBaseIndex() {
@@ -698,6 +798,10 @@ function renderFactLabel(field) {
   return typeof field === 'string' ? field : field.label
 }
 
+function countRowsByStatus(rows = [], status) {
+  return rows.filter((row) => row.status === status).length
+}
+
 watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
 onBeforeUnmount(() => cancelLongTask())
 </script>
@@ -715,6 +819,7 @@ onBeforeUnmount(() => cancelLongTask())
 
     <div class="button-row">
       <el-button
+        v-if="route.name !== 'knowledge-base-build'"
         class="ckqa-el-button ckqa-el-button--primary"
         type="primary"
         native-type="button"
@@ -922,122 +1027,72 @@ onBeforeUnmount(() => cancelLongTask())
 
   <WorkflowStepper
     v-if="config.variant === 'workflow'"
-    v-model:active-key="activeStepKey"
+    :active-key="activeStepKey"
     :steps="config.workflowSteps"
+    @update:active-key="updateBuildActiveStep"
   />
 
-  <section v-if="route.name === 'knowledge-base-build'" class="content-grid two-columns">
-    <article class="panel">
-      <div class="panel-heading">
-        <h2>本次构建主资料</h2>
-        <span class="record-count">{{ buildSelectionBlock?.selectedMaterialId || '未选择' }}</span>
-      </div>
-      <ol class="timeline-list">
-        <li v-for="item in materialsBlock?.items" :key="item.id">
-          <StatusBadge :status="item.meta" />
-          <el-button
-            class="ckqa-link-button"
-            link
-            type="primary"
-            native-type="button"
-            @click="selectBuildMaterial(item.id)"
-          >
-            <FileText class="button-icon" :size="15" aria-hidden="true" />
-            {{ item.title }}
-          </el-button>
-          <small>{{ item.detail }}</small>
-        </li>
-      </ol>
-      <p v-if="materialsBlock?.state === 'empty'">当前课程暂无资料。</p>
-      <p v-if="buildSelectionBlock?.error" class="inline-error">{{ buildSelectionBlock.error.message }}</p>
-    </article>
-
-    <article class="panel">
-      <div class="panel-heading">
-        <h2>索引运行</h2>
-        <el-button
-          class="ckqa-el-button ckqa-el-button--primary"
-          type="primary"
-          native-type="button"
-          :disabled="config.workflowSteps?.find((step) => step.key === 'index')?.status !== 'ready' || actionRunning"
-          @click="runKnowledgeBaseIndex"
-        >
-          <Hammer class="button-icon" :size="16" aria-hidden="true" />
-          开始构建索引
-        </el-button>
-      </div>
-      <div
-        v-if="indexOperationFeedback"
-        class="operation-feedback"
-        :data-status="indexOperationFeedback.status"
+  <section v-if="route.name === 'knowledge-base-build'" class="build-step-stage">
+    <header class="build-step-stage__header">
+      <el-button
+        v-if="buildNavigation && !buildNavigation.disabled"
+        class="ckqa-el-button ckqa-el-button--ghost build-step-stage__back"
+        native-type="button"
+        :aria-label="buildNavigation.previousLabel"
+        @click="goBuildPreviousStep"
       >
-        <div class="operation-feedback__heading">
-          <strong>{{ indexOperationFeedback.title }}</strong>
-          <StatusBadge :status="indexOperationFeedback.status" />
-        </div>
-        <p>{{ indexOperationFeedback.message }}</p>
-        <small>{{ indexOperationFeedback.detail }}</small>
-        <small v-if="indexOperationFeedback.meta">{{ indexOperationFeedback.meta }}</small>
+        <ChevronLeft class="button-icon" :size="18" aria-hidden="true" />
+      </el-button>
+      <div>
+        <p class="eyebrow">STEP {{ buildStepIndexLabel }}</p>
+        <h2>{{ activeBuildStep?.label }}</h2>
+        <p>{{ activeBuildStep?.detail }}</p>
       </div>
-      <ol class="timeline-list">
-        <li v-for="item in indexRunsBlock?.items" :key="item.id">
-          <StatusBadge :status="item.meta" />
-          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
-          <small>{{ item.detail }}</small>
-        </li>
-      </ol>
-      <p v-if="indexRunsBlock?.state === 'empty'">暂无索引运行。</p>
-    </article>
-
-    <article class="panel wide-panel">
-      <div class="panel-heading">
-        <h2>问答冒烟验证</h2>
-        <el-button
-          class="ckqa-el-button ckqa-el-button--primary"
-          type="primary"
-          native-type="button"
-          :disabled="config.workflowSteps?.find((step) => step.key === 'smoke')?.status !== 'ready' || actionRunning || !smokeQuestion.trim()"
-          @click="runQaSmoke"
-        >
-          <FlaskConical class="button-icon" :size="16" aria-hidden="true" />
-          发起冒烟验证
-        </el-button>
-      </div>
-      <label class="field-label" for="smoke-question">验证问题</label>
-      <el-input
-        id="smoke-question"
-        class="smoke-question-input"
-        :model-value="smokeQuestion"
-        :disabled="actionRunning"
-        @input="updateSmokeQuestion"
+      <StatusBadge
+        :status="activeBuildStep?.status"
+        :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
       />
-      <p v-if="config.workflowSteps?.find((step) => step.key === 'smoke')?.status !== 'ready'" class="inline-error">
-        缺少激活索引，暂不可验证。
-      </p>
-      <div
-        v-if="qaOperationFeedback"
-        class="operation-feedback"
-        :data-status="qaOperationFeedback.status"
+    </header>
+
+    <div class="build-summary-strip">
+      <span
+        v-for="chip in buildSummaryChips"
+        :key="chip.label"
+        class="build-summary-chip"
+        :data-tone="chip.tone"
       >
-        <div class="operation-feedback__heading">
-          <strong>{{ qaOperationFeedback.title }}</strong>
-          <StatusBadge :status="qaOperationFeedback.status" />
-        </div>
-        <p>{{ qaOperationFeedback.message }}</p>
-        <small>{{ qaOperationFeedback.detail }}</small>
-        <small v-if="qaOperationFeedback.meta">{{ qaOperationFeedback.meta }}</small>
-      </div>
-      <div v-if="smokeResult?.state === 'success'" class="result-box">
-        <strong>助手摘要</strong>
-        <p>{{ smokeResult.content }}</p>
-        <RouterLink class="text-link" :to="`/app/qa-sessions/${smokeResult.sessionId}`">
-          查看问答会话
-        </RouterLink>
-      </div>
-      <p v-else-if="smokeResult?.state === 'failed' && !qaOperationFeedback" class="inline-error">
-        {{ smokeResult.message }}
-      </p>
-    </article>
+        <strong>{{ chip.label }}</strong>
+        <span>{{ chip.value }}</span>
+      </span>
+    </div>
+
+    <div class="build-step-stage__body">
+      <component
+        :is="activeBuildStepComponent"
+        :blocks="config.blocks"
+        :step="activeBuildStep"
+        :action-running="actionRunning"
+        :operation-feedback="activeBuildOperationFeedback"
+        :smoke-question="smokeQuestion"
+        :smoke-result="smokeResult"
+        @select-materials="updateBuildMaterialSelection"
+        @update-smoke-question="updateSmokeQuestion"
+      />
+    </div>
+
+    <footer class="build-step-stage__actions">
+      <el-button
+        class="ckqa-el-button ckqa-el-button--primary"
+        type="primary"
+        native-type="button"
+        :disabled="buildPrimaryAction.disabled || actionRunning"
+        @click="handleBuildPrimaryAction"
+      >
+        <component :is="buildPrimaryActionIcon" class="button-icon" :size="16" aria-hidden="true" />
+        {{ buildPrimaryAction.label }}
+      </el-button>
+      <p v-if="buildPrimaryAction.disabledReason" class="inline-error">{{ buildPrimaryAction.disabledReason }}</p>
+    </footer>
   </section>
 
   <DataTableShell

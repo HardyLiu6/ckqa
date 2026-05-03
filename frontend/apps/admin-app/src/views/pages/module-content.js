@@ -122,36 +122,46 @@ const configs = {
       {
         key: 'material',
         label: '选择课程资料',
-        state: 'done',
-        status: 'done',
-        detail: '选择已解析或待解析资料',
+        state: 'ready',
+        status: 'ready',
+        detail: '选择本次构建的课程资料',
         conditions: ['课程已创建', '当前用户具备课程资料读取权限'],
-        actionLabel: '确认课程资料',
+        actionLabel: '确认勾选',
         logLabel: '查看资料记录',
       },
       {
         key: 'parse',
         label: '解析状态检查',
-        state: 'done',
-        status: 'done',
+        state: 'blocked',
+        status: 'blocked',
         detail: '资料需达到 done 后才能建索引',
         conditions: ['资料对象已上传', 'MinerU 解析状态为 done'],
-        actionLabel: '刷新解析状态',
+        actionLabel: '并行解析未完成资料',
         logLabel: '查看解析日志',
       },
       {
         key: 'export',
-        label: '导出 GraphRAG 输入',
+        label: '导出图谱输入',
         state: 'ready',
         status: 'ready',
-        detail: '生成 section_docs.json / page_docs.json',
+        detail: '生成 normalized / section / page 图谱输入',
         conditions: ['解析结果存在', '标准化文档通过导出校验'],
-        actionLabel: '导出输入文件',
+        actionLabel: '导出缺失输入',
         logLabel: '查看导出记录',
       },
       {
+        key: 'prompt',
+        label: '提示词调优',
+        state: 'blocked',
+        status: 'blocked',
+        detail: '确认本次索引沿用当前活动提示词',
+        conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
+        actionLabel: '确认提示词策略',
+        logLabel: '查看提示词策略',
+      },
+      {
         key: 'index',
-        label: '创建索引运行',
+        label: '创建索引',
         state: 'blocked',
         status: 'blocked',
         detail: '等待导出输入确认',
@@ -160,13 +170,13 @@ const configs = {
         logLabel: '查看索引日志',
       },
       {
-        key: 'smoke',
-        label: '问答冒烟验证',
+        key: 'qa_check',
+        label: '问答效果验证',
         state: 'blocked',
         status: 'blocked',
         detail: '验证会话进入问答列表并可过滤',
         conditions: ['索引运行成功', 'Java /api/v1 问答入口可用'],
-        actionLabel: '发起冒烟验证',
+        actionLabel: '发起问答验证',
         logLabel: '查看验证会话',
       },
     ],
@@ -680,6 +690,15 @@ function resolvePromptPrimaryAction(context = {}) {
 }
 
 function resolveIndexPrimaryAction(context = {}) {
+  if (context.canBuildIndex === false) {
+    return createBuildAction({
+      label: '开始构建索引',
+      operationKey: 'index-blocked',
+      disabled: true,
+      disabledReason: context.disabledReason ?? '请先确认图谱输入和提示词策略',
+    })
+  }
+
   const indexState = context.indexState ?? resolveIndexAvailabilityState(
     context.knowledgeBase ?? {},
     context.indexRuns ?? [],

@@ -544,6 +544,8 @@ export function buildKnowledgeBaseWorkflowSteps({
       primaryAction: resolveBuildPrimaryAction('index', {
         query,
         indexState: indexAvailability,
+        canBuildIndex: indexStatus !== 'blocked',
+        disabledReason: '请先确认图谱输入和提示词策略',
       }),
     }),
     createWorkflowStep({

@@ -3,6 +3,8 @@ import { reactive, readonly } from 'vue'
 
 import { getAdminPinia } from './pinia.js'
 
+const AUTH_STORAGE_KEY = 'ckqa-admin-auth-role'
+
 export const ROLE_PROFILES = {
   admin: {
     id: 1,
@@ -46,10 +48,11 @@ export function cloneProfile(profile) {
 }
 
 export const useAuthStore = defineStore('auth', () => {
+  const initialProfile = readStoredProfile()
   const state = reactive({
-    currentUser: null,
-    token: null,
-    isAuthenticated: false,
+    currentUser: initialProfile ? cloneProfile(initialProfile) : null,
+    token: initialProfile?.token ?? null,
+    isAuthenticated: Boolean(initialProfile),
   })
 
   function loginAs(role) {
@@ -62,12 +65,14 @@ export const useAuthStore = defineStore('auth', () => {
     state.currentUser = cloneProfile(profile)
     state.token = profile.token
     state.isAuthenticated = true
+    writeStoredRole(role)
   }
 
   function logout() {
     state.currentUser = null
     state.token = null
     state.isAuthenticated = false
+    clearStoredRole()
   }
 
   function canAccess(requiredPermissions = []) {
@@ -97,3 +102,37 @@ export function createAuthStore(pinia = createPinia()) {
 }
 
 export const authStore = useAuthStore(getAdminPinia())
+
+function readStoredProfile() {
+  const storage = safeLocalStorage()
+  try {
+    const role = storage?.getItem(AUTH_STORAGE_KEY)
+    return ROLE_PROFILES[role] ?? null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredRole(role) {
+  try {
+    safeLocalStorage()?.setItem(AUTH_STORAGE_KEY, role)
+  } catch {
+    // localStorage 不可用时保持内存态登录，不阻断开发态联调。
+  }
+}
+
+function clearStoredRole() {
+  try {
+    safeLocalStorage()?.removeItem(AUTH_STORAGE_KEY)
+  } catch {
+    // localStorage 不可用时无需额外处理。
+  }
+}
+
+function safeLocalStorage() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null
+  } catch {
+    return null
+  }
+}
