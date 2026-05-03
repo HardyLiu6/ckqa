@@ -50,6 +50,15 @@ import {
   getRowCells,
   getModulePageConfig,
   isWorkflowPrimaryActionDisabled,
+  resolveBuildDefaultStepKey,
+  resolveBuildPrimaryAction,
+  resolveBuildProgress,
+  resolveBuildStepNavigation,
+  resolveExportArtifactRows,
+  resolveIndexAvailabilityState,
+  resolveMaterialConfirmTarget,
+  resolveParseTaskRows,
+  resolvePromptConfirmState,
   resolveActiveWorkflowStep,
 } from './views/pages/module-content.js'
 import {
@@ -1005,6 +1014,197 @@ test('step 与确认态 query 独立更新', () => {
   assert.deepEqual(resolveCleanBuildStepQuery({ step: 'parse', materialConfirmed: '1' }), {
     step: 'parse',
     materialConfirmed: '1',
+  })
+})
+
+test('六步构建工作流进度、默认步骤和返回目标保持稳定语义', () => {
+  const steps = [
+    { key: 'material', label: '选择课程资料', status: 'done' },
+    { key: 'parse', label: '解析状态检查', status: 'done' },
+    { key: 'export', label: '导出图谱输入', status: 'ready' },
+    { key: 'prompt', label: '提示词调优', status: 'blocked' },
+    { key: 'index', label: '创建索引', status: 'blocked' },
+    { key: 'qa_check', label: '问答效果验证', status: 'blocked' },
+  ]
+
+  assert.deepEqual(resolveBuildProgress(steps), {
+    done: 2,
+    total: 6,
+    percent: 33,
+    counts: { done: 2, running: 0, failed: 0, ready: 1, blocked: 3 },
+    summary: '已完成 2/6 · 33%',
+    detail: '1 个步骤可执行 · 3 个步骤阻塞',
+  })
+  assert.equal(resolveBuildDefaultStepKey(steps), 'export')
+  assert.equal(resolveBuildDefaultStepKey(steps.map((step) => ({ ...step, status: 'done' }))), 'qa_check')
+
+  assert.deepEqual(resolveBuildStepNavigation(steps, 'export'), {
+    previousKey: 'parse',
+    previousLabel: '返回第 02 步：解析状态检查',
+    disabled: false,
+  })
+  assert.deepEqual(resolveBuildStepNavigation(steps, 'material'), {
+    previousKey: '',
+    previousLabel: '',
+    disabled: true,
+  })
+})
+
+test('资料确认目标按解析状态跳转解析或导出步骤', () => {
+  assert.equal(
+    resolveMaterialConfirmTarget([
+      { id: 9, parseState: 'success' },
+      { id: 10, parseStatus: 'done' },
+    ]),
+    'export',
+  )
+  assert.equal(resolveMaterialConfirmTarget([{ id: 9, parseStatus: 'running' }]), 'parse')
+  assert.equal(resolveMaterialConfirmTarget([{ id: 9, parseStatus: 'pending' }]), 'parse')
+  assert.equal(resolveMaterialConfirmTarget([{ id: 9, parseStatus: 'failed' }]), 'parse')
+})
+
+test('解析任务行和多资料导出产物矩阵使用纯数据模型', () => {
+  const materials = [
+    { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+    { id: 10, displayName: 'slides.pdf', parseStatus: 'processing', parseProgress: 72 },
+    { id: 11, title: 'lab.pdf', parseStatus: 'failed', parseProgress: 20, failureReason: 'MinerU 超时' },
+  ]
+
+  assert.deepEqual(resolveParseTaskRows(materials), [
+    { id: '9', title: 'book.pdf', status: 'done', percent: 100, detail: '解析完成' },
+    { id: '10', title: 'slides.pdf', status: 'running', percent: 72, detail: '解析进行中' },
+    { id: '11', title: 'lab.pdf', status: 'failed', percent: 20, detail: 'MinerU 超时' },
+  ])
+
+  assert.deepEqual(
+    resolveExportArtifactRows(materials.slice(0, 2), {
+      9: [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ],
+      10: [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+      ],
+    }),
+    {
+      completeCount: 1,
+      missingCount: 1,
+      rows: [
+        {
+          id: '9',
+          title: 'book.pdf',
+          status: 'complete',
+          requiredFiles: [
+            { fileName: 'graphrag_normalized_docs.json', status: 'complete' },
+            { fileName: 'graphrag_section_docs.json', status: 'complete' },
+            { fileName: 'graphrag_page_docs.json', status: 'complete' },
+          ],
+        },
+        {
+          id: '10',
+          title: 'slides.pdf',
+          status: 'missing',
+          requiredFiles: [
+            { fileName: 'graphrag_normalized_docs.json', status: 'complete' },
+            { fileName: 'graphrag_section_docs.json', status: 'complete' },
+            { fileName: 'graphrag_page_docs.json', status: 'missing' },
+          ],
+        },
+      ],
+    },
+  )
+})
+
+test('提示词确认状态和索引可用性覆盖阻塞、确认、同步超时', () => {
+  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1' }, { complete: true }), {
+    status: 'ready',
+    confirmed: false,
+    shouldCleanPromptConfirmed: false,
+  })
+  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1', promptConfirmed: '1' }, { complete: false }), {
+    status: 'blocked',
+    confirmed: false,
+    shouldCleanPromptConfirmed: true,
+  })
+  assert.deepEqual(resolvePromptConfirmState({ promptConfirmed: '1' }, { status: 'complete' }), {
+    status: 'done',
+    confirmed: true,
+    shouldCleanPromptConfirmed: false,
+  })
+  assert.deepEqual(resolvePromptConfirmState({}, { status: 'complete' }), {
+    status: 'ready',
+    confirmed: false,
+    shouldCleanPromptConfirmed: false,
+  })
+
+  assert.deepEqual(
+    resolveIndexAvailabilityState(
+      { activeIndexRunId: 12, latestIndexRunId: 13, latestIndexRunStatus: 'success' },
+      [{ id: 13, status: 'success' }],
+      { syncPollTimedOut: true },
+    ),
+    {
+      status: 'running',
+      availability: 'sync-timeout',
+      warning: '可用状态同步超时',
+      primaryAction: { label: '手动刷新', operationKey: 'index-refresh', disabled: false },
+    },
+  )
+  assert.deepEqual(
+    resolveIndexAvailabilityState({ activeIndexRunId: 13 }, [{ id: 13, status: 'success' }]),
+    { status: 'done', availability: 'available' },
+  )
+})
+
+test('构建向导主操作映射生成下一步和确认 query', () => {
+  assert.equal(resolveBuildPrimaryAction({ key: 'parse', status: 'ready' }, {
+    parseSummary: { pending: 0, failed: 0, running: 0, done: 2 },
+  }).label, '检查图谱输入')
+  assert.equal(
+    resolveBuildPrimaryAction({ key: 'export', status: 'ready' }, {
+      exportSummary: { missing: 1, complete: 1 },
+    }).operationKey,
+    'export-missing',
+  )
+
+  const confirmAction = resolveBuildPrimaryAction({ key: 'material', status: 'ready' }, {
+    materialIds: ['9', '10'],
+    parseSummary: { done: 2, pending: 0, failed: 0, running: 0 },
+    query: { materialIds: '9,10' },
+  })
+  assert.equal(confirmAction.label, '确认勾选')
+  assert.equal(confirmAction.operationKey, 'material-confirm')
+  assert.deepEqual(confirmAction.nextQuery, { materialIds: '9,10', materialConfirmed: '1', step: 'export' })
+
+  assert.deepEqual(resolveBuildPrimaryAction('export', {
+    parseRows: [{ id: '9', status: 'done' }],
+    exportState: { status: 'complete' },
+    query: { materialIds: '9', exportConfirmed: '1', promptConfirmed: '1' },
+  }).nextQuery, {
+    materialIds: '9',
+    exportConfirmed: '1',
+    promptConfirmed: '1',
+    step: 'prompt',
+  })
+  assert.deepEqual(resolveBuildPrimaryAction('export', {
+    parseRows: [{ id: '9', status: 'done' }],
+    exportState: { status: 'complete' },
+    query: { materialIds: '9', promptConfirmed: '1' },
+  }).nextQuery, {
+    materialIds: '9',
+    exportConfirmed: '1',
+    step: 'prompt',
+  })
+  assert.deepEqual(resolveBuildPrimaryAction('prompt', {
+    promptState: { status: 'ready', confirmed: false },
+    query: { materialIds: '9', exportConfirmed: '1' },
+  }).nextQuery, {
+    materialIds: '9',
+    exportConfirmed: '1',
+    promptConfirmed: '1',
+    step: 'index',
   })
 })
 

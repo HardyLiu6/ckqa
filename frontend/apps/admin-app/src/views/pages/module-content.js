@@ -1,3 +1,25 @@
+import {
+  resolveBuildConfirmQuery,
+  resolveBuildStepQuery,
+} from './module-page-model.js'
+
+export const BUILD_STEP_LABELS = {
+  material: '选择课程资料',
+  parse: '解析状态检查',
+  export: '导出图谱输入',
+  prompt: '提示词调优',
+  index: '创建索引',
+  qa_check: '问答效果验证',
+}
+
+export const BUILD_STEP_KEYS = Object.keys(BUILD_STEP_LABELS)
+
+const REQUIRED_EXPORT_FILES = [
+  'graphrag_normalized_docs.json',
+  'graphrag_section_docs.json',
+  'graphrag_page_docs.json',
+]
+
 const defaultTimeline = [
   { label: '数据同步', state: 'ready', detail: '等待真实接口接入' },
   { label: '权限检查', state: 'ready', detail: '已按路由元信息保护' },
@@ -280,4 +302,569 @@ export function resolveActiveWorkflowStep(steps = [], activeKey = '') {
 
 export function isWorkflowPrimaryActionDisabled(step) {
   return step?.status === 'blocked'
+}
+
+export function resolveBuildProgress(steps = []) {
+  const total = steps.length
+  const counts = {
+    done: 0,
+    running: 0,
+    failed: 0,
+    ready: 0,
+    blocked: 0,
+  }
+
+  for (const step of steps) {
+    const status = normalizeWorkflowStatus(step?.status ?? step?.state)
+
+    if (Object.prototype.hasOwnProperty.call(counts, status)) {
+      counts[status] += 1
+    }
+  }
+
+  const percent = total > 0 ? Math.round((counts.done / total) * 100) : 0
+  const detail = [
+    ['running', '个步骤执行中'],
+    ['ready', '个步骤可执行'],
+    ['blocked', '个步骤阻塞'],
+    ['failed', '个步骤失败'],
+  ]
+    .filter(([key]) => counts[key] > 0)
+    .map(([key, label]) => `${counts[key]} ${label}`)
+    .join(' · ')
+
+  return {
+    done: counts.done,
+    total,
+    percent,
+    counts,
+    summary: `已完成 ${counts.done}/${total} · ${percent}%`,
+    detail,
+  }
+}
+
+export function resolveBuildDefaultStepKey(steps = []) {
+  const actionableStep = steps.find((step) =>
+    ['failed', 'running', 'ready'].includes(normalizeWorkflowStatus(step?.status ?? step?.state)),
+  )
+
+  return actionableStep?.key ?? steps.at(-1)?.key ?? 'material'
+}
+
+export function resolveBuildStepNavigation(steps = [], activeKey = '') {
+  const keys = steps.length > 0 ? steps.map((step) => step.key) : BUILD_STEP_KEYS
+  const activeIndex = Math.max(0, keys.indexOf(activeKey))
+  const previousKey = activeIndex > 0 ? keys[activeIndex - 1] : ''
+
+  if (!previousKey) {
+    return {
+      previousKey: '',
+      previousLabel: '',
+      disabled: true,
+    }
+  }
+
+  const previous = steps.find((step) => step.key === previousKey)
+
+  return {
+    previousKey,
+    previousLabel: `返回第 ${String(activeIndex).padStart(2, '0')} 步：${previous?.label ?? BUILD_STEP_LABELS[previousKey] ?? previousKey}`,
+    disabled: false,
+  }
+}
+
+export function resolveMaterialConfirmTarget(materials = []) {
+  return materials.length > 0 && materials.every((material) => isParseComplete(material))
+    ? 'export'
+    : 'parse'
+}
+
+export function resolveParseTaskRows(materials = []) {
+  return materials.map((material) => {
+    const status = normalizeParseStatus(material.parseState ?? material.parseStatus ?? material.status)
+    const rawProgress = Number(material.parseProgress ?? material.progress)
+    const hasProgress = Number.isFinite(rawProgress)
+    const percentByStatus = {
+      done: 100,
+      pending: 0,
+      running: hasProgress ? rawProgress : 50,
+      failed: hasProgress ? rawProgress : 0,
+    }
+    const detailByStatus = {
+      done: '解析完成',
+      pending: '等待解析',
+      running: '解析进行中',
+      failed: material.failureReason ?? material.errorMessage ?? material.message ?? '解析失败',
+    }
+
+    return {
+      id: String(material.id ?? material.materialId ?? material.pdfFileId ?? ''),
+      title: resolveMaterialTitle(material),
+      status,
+      percent: clampPercent(percentByStatus[status] ?? 0),
+      detail: detailByStatus[status] ?? '状态未知',
+    }
+  })
+}
+
+export function resolveExportArtifactRows(materials = [], parseResultsByMaterialId = {}) {
+  const rows = materials.map((material) => {
+    const id = String(material.id ?? material.materialId ?? material.pdfFileId ?? '')
+    const parseResults = parseResultsByMaterialId instanceof Map
+      ? parseResultsByMaterialId.get(id) ?? parseResultsByMaterialId.get(material.id)
+      : parseResultsByMaterialId[id] ?? parseResultsByMaterialId[material.id]
+    const fileNames = new Set(resolveParseResultFiles(parseResults))
+    const requiredFiles = REQUIRED_EXPORT_FILES.map((fileName) => ({
+      fileName,
+      status: fileNames.has(fileName) ? 'complete' : 'missing',
+    }))
+    const status = requiredFiles.every((file) => file.status === 'complete') ? 'complete' : 'missing'
+
+    return {
+      id,
+      title: resolveMaterialTitle(material),
+      status,
+      requiredFiles,
+    }
+  })
+
+  return {
+    completeCount: rows.filter((row) => row.status === 'complete').length,
+    missingCount: rows.filter((row) => row.status === 'missing').length,
+    rows,
+  }
+}
+
+export function resolvePromptConfirmState(query = {}, exportState = {}) {
+  const exportComplete = isExportStateComplete(exportState)
+  const confirmed = exportComplete && isQueryConfirmed(query.promptConfirmed)
+
+  if (!exportComplete) {
+    return {
+      status: 'blocked',
+      confirmed: false,
+      shouldCleanPromptConfirmed: isQueryConfirmed(query.promptConfirmed),
+    }
+  }
+
+  return {
+    status: confirmed ? 'done' : 'ready',
+    confirmed,
+    shouldCleanPromptConfirmed: false,
+  }
+}
+
+export function resolveIndexAvailabilityState(knowledgeBase = {}, indexRuns = [], options = {}) {
+  const latestIndexRun = resolveLatestIndexRun(knowledgeBase, indexRuns)
+  const activeIndexRunId = firstPresent(
+    knowledgeBase.activeIndexRunId,
+    knowledgeBase.activeIndexId,
+    knowledgeBase.activeIndex?.id,
+  )
+  const latestIndexRunId = firstPresent(
+    knowledgeBase.latestIndexRunId,
+    latestIndexRun?.id,
+    latestIndexRun?.indexRunId,
+  )
+  const latestIndexRunStatus = normalizeIndexStatus(
+    knowledgeBase.latestIndexRunStatus ?? latestIndexRun?.status ?? latestIndexRun?.state,
+  )
+  const activeMatchesLatest = Boolean(activeIndexRunId && latestIndexRunId)
+    && String(activeIndexRunId) === String(latestIndexRunId)
+
+  if (latestIndexRunStatus === 'success' && activeMatchesLatest) {
+    return { status: 'done', availability: 'available' }
+  }
+
+  if (latestIndexRunStatus === 'running') {
+    return { status: 'running', availability: 'building' }
+  }
+
+  if (latestIndexRunStatus === 'success') {
+    if (options.syncPollTimedOut) {
+      return {
+        status: 'running',
+        availability: 'sync-timeout',
+        warning: '可用状态同步超时',
+        primaryAction: { label: '手动刷新', operationKey: 'index-refresh', disabled: false },
+      }
+    }
+
+    return {
+      status: 'running',
+      availability: 'syncing',
+      warning: '等待后端激活最新索引',
+      primaryAction: { label: '刷新可用状态', operationKey: 'index-refresh', disabled: false },
+    }
+  }
+
+  if (latestIndexRunStatus === 'failed') {
+    return { status: 'failed', availability: 'failed' }
+  }
+
+  return { status: 'ready', availability: 'no-run' }
+}
+
+export function resolveBuildPrimaryAction(step, context = {}) {
+  const stepKey = typeof step === 'string' ? step : step?.key
+
+  if (stepKey === 'material') {
+    return resolveMaterialPrimaryAction(context)
+  }
+
+  if (stepKey === 'parse') {
+    return resolveParsePrimaryAction(context)
+  }
+
+  if (stepKey === 'export') {
+    return resolveExportPrimaryAction(context)
+  }
+
+  if (stepKey === 'prompt') {
+    return resolvePromptPrimaryAction(context)
+  }
+
+  if (stepKey === 'index') {
+    return resolveIndexPrimaryAction(context)
+  }
+
+  if (stepKey === 'qa_check') {
+    return resolveQaCheckPrimaryAction(context)
+  }
+
+  return createBuildAction({
+    label: '继续下一步',
+    operationKey: 'step-material',
+    nextStepKey: 'material',
+    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'material'),
+  })
+}
+
+function resolveMaterialPrimaryAction(context = {}) {
+  const materialIds = normalizeMaterialIds(context.materialIds ?? context.selectedMaterialIds)
+
+  if (materialIds.length === 0) {
+    return createBuildAction({
+      label: '确认勾选',
+      operationKey: 'material-confirm',
+      disabled: true,
+      disabledReason: '请先选择课程资料',
+    })
+  }
+
+  const nextStepKey = context.parseSummary
+    ? (resolveParseSummaryHasWork(context.parseSummary) ? 'parse' : 'export')
+    : resolveMaterialConfirmTarget(context.materials ?? [])
+  const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'materialConfirmed', true)
+
+  return createBuildAction({
+    label: '确认勾选',
+    operationKey: 'material-confirm',
+    nextStepKey,
+    nextQuery: resolveBuildStepQuery(queryWithConfirm, nextStepKey),
+  })
+}
+
+function resolveParsePrimaryAction(context = {}) {
+  const rows = context.parseRows ?? resolveParseTaskRows(context.materials ?? [])
+  const parseSummary = context.parseSummary
+
+  if (parseSummary && Number(parseSummary.running ?? 0) > 0) {
+    return createBuildAction({ label: '刷新解析进度', operationKey: 'parse-refresh' })
+  }
+
+  if (parseSummary && (Number(parseSummary.pending ?? 0) > 0 || Number(parseSummary.failed ?? 0) > 0)) {
+    return createBuildAction({ label: '并行解析未完成资料', operationKey: 'parse-batch' })
+  }
+
+  const statuses = rows.map((row) => normalizeParseStatus(row.status))
+  if (statuses.includes('running')) {
+    return createBuildAction({ label: '刷新解析进度', operationKey: 'parse-refresh' })
+  }
+
+  if (statuses.some((status) => ['pending', 'failed'].includes(status))) {
+    return createBuildAction({ label: '并行解析未完成资料', operationKey: 'parse-batch' })
+  }
+
+  return createBuildAction({
+    label: '检查图谱输入',
+    operationKey: 'step-export',
+    nextStepKey: 'export',
+    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'export'),
+  })
+}
+
+function resolveExportPrimaryAction(context = {}) {
+  const parseRows = context.parseRows ?? resolveParseTaskRows(context.materials ?? [])
+  const parseSummary = context.parseSummary
+
+  if (parseSummary && resolveParseSummaryHasWork(parseSummary)) {
+    return createBuildAction({
+      label: '导出图谱输入',
+      operationKey: 'export-blocked',
+      disabled: true,
+      disabledReason: '请先完成所有资料解析',
+    })
+  }
+
+  const parseStatuses = parseRows.map((row) => normalizeParseStatus(row.status))
+
+  if (parseStatuses.some((status) => ['running', 'pending', 'failed'].includes(status))) {
+    return createBuildAction({
+      label: '导出图谱输入',
+      operationKey: 'export-blocked',
+      disabled: true,
+      disabledReason: '请先完成所有资料解析',
+    })
+  }
+
+  const exportState = context.exportState ?? {}
+  const exportSummary = context.exportSummary
+  const exportIncomplete = exportSummary
+    ? Number(exportSummary.missing ?? 0) > 0
+    : !isExportStateComplete(exportState)
+
+  if (exportIncomplete) {
+    return createBuildAction({ label: '导出缺失输入', operationKey: 'export-missing' })
+  }
+
+  if (!isQueryConfirmed(context.query?.exportConfirmed)) {
+    const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'exportConfirmed', true)
+    const { promptConfirmed, ...queryWithoutPromptConfirm } = queryWithConfirm
+
+    return createBuildAction({
+      label: '确认图谱输入',
+      operationKey: 'export-confirm',
+      nextStepKey: 'prompt',
+      nextQuery: resolveBuildStepQuery(queryWithoutPromptConfirm, 'prompt'),
+    })
+  }
+
+  return createBuildAction({
+    label: '进入提示词调优',
+    operationKey: 'step-prompt',
+    nextStepKey: 'prompt',
+    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'prompt'),
+  })
+}
+
+function resolvePromptPrimaryAction(context = {}) {
+  const promptState = context.promptState ?? resolvePromptConfirmState(context.query ?? {}, context.exportState ?? {})
+
+  if (promptState.status === 'blocked') {
+    return createBuildAction({
+      label: '确认提示词策略',
+      operationKey: 'prompt-blocked',
+      disabled: true,
+      disabledReason: '请先确认导出产物',
+    })
+  }
+
+  if (!promptState.confirmed) {
+    const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'promptConfirmed', true)
+
+    return createBuildAction({
+      label: '确认提示词策略',
+      operationKey: 'prompt-confirm',
+      nextStepKey: 'index',
+      nextQuery: resolveBuildStepQuery(queryWithConfirm, 'index'),
+    })
+  }
+
+  return createBuildAction({
+    label: '进入创建索引',
+    operationKey: 'step-index',
+    nextStepKey: 'index',
+    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'index'),
+  })
+}
+
+function resolveIndexPrimaryAction(context = {}) {
+  const indexState = context.indexState ?? resolveIndexAvailabilityState(
+    context.knowledgeBase ?? {},
+    context.indexRuns ?? [],
+    context.options ?? {},
+  )
+
+  if (indexState.status === 'running') {
+    return createBuildAction(indexState.primaryAction ?? { label: '刷新状态', operationKey: 'index-refresh' })
+  }
+
+  if (indexState.status === 'done') {
+    return createBuildAction({
+      label: '进入问答验证',
+      operationKey: 'step-qa_check',
+      nextStepKey: 'qa_check',
+      nextQuery: resolveBuildStepQuery(context.query ?? {}, 'qa_check'),
+    })
+  }
+
+  return createBuildAction({ label: '开始构建索引', operationKey: 'index-build' })
+}
+
+function resolveQaCheckPrimaryAction(context = {}) {
+  const activeIndexRunId = firstPresent(
+    context.activeIndexRunId,
+    context.knowledgeBase?.activeIndexRunId,
+    context.knowledgeBase?.activeIndexId,
+  )
+
+  if (!activeIndexRunId) {
+    return createBuildAction({
+      label: '发起问答验证',
+      operationKey: 'qa-smoke',
+      disabled: true,
+      disabledReason: '缺少激活索引',
+    })
+  }
+
+  return createBuildAction({
+    label: context.qaCheckState?.status === 'done' ? '重新验证效果' : '发起问答验证',
+    operationKey: 'qa-smoke',
+  })
+}
+
+function createBuildAction({
+  label,
+  operationKey,
+  disabled = false,
+  disabledReason = '',
+  nextStepKey = '',
+  nextQuery,
+}) {
+  return {
+    label,
+    operationKey,
+    disabled,
+    disabledReason,
+    nextStepKey,
+    nextQuery,
+  }
+}
+
+function normalizeWorkflowStatus(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'done'
+  }
+
+  if (['running', 'processing', 'building', 'syncing'].includes(normalized)) {
+    return 'running'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  if (['ready', 'pending', 'todo'].includes(normalized)) {
+    return 'ready'
+  }
+
+  if (normalized === 'blocked') {
+    return 'blocked'
+  }
+
+  return normalized || 'blocked'
+}
+
+function normalizeParseStatus(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'done'
+  }
+
+  if (['running', 'processing'].includes(normalized)) {
+    return 'running'
+  }
+
+  if (['pending', 'todo', 'ready'].includes(normalized)) {
+    return 'pending'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  return normalized || 'pending'
+}
+
+function normalizeIndexStatus(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'success'
+  }
+
+  if (['running', 'processing', 'building', 'syncing', 'pending'].includes(normalized)) {
+    return 'running'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  return normalized
+}
+
+function isParseComplete(material) {
+  return normalizeParseStatus(material.parseState ?? material.parseStatus ?? material.status) === 'done'
+}
+
+function resolveMaterialTitle(material = {}) {
+  return material.title ?? material.displayName ?? material.fileName ?? material.name ?? `资料 ${material.id ?? material.materialId ?? ''}`.trim()
+}
+
+function resolveParseResultFiles(parseResults = []) {
+  const items = Array.isArray(parseResults)
+    ? parseResults
+    : parseResults.items ?? parseResults.results ?? parseResults.files ?? []
+
+  return items
+    .map((item) => typeof item === 'string' ? item : item.fileName ?? item.name ?? item.path ?? item.objectName ?? '')
+    .map((fileName) => String(fileName).split('/').at(-1))
+    .filter(Boolean)
+}
+
+function resolveLatestIndexRun(knowledgeBase = {}, indexRuns = []) {
+  if (knowledgeBase.latestIndexRun) {
+    return knowledgeBase.latestIndexRun
+  }
+
+  return indexRuns[0] ?? null
+}
+
+function normalizeMaterialIds(ids = []) {
+  const values = Array.isArray(ids) ? ids : String(ids ?? '').split(',')
+
+  return values.map((id) => String(id).trim()).filter(Boolean)
+}
+
+function isQueryConfirmed(value) {
+  return String(value ?? '') === '1' || value === true
+}
+
+function isExportStateComplete(exportState = {}) {
+  return exportState?.complete === true
+    || exportState?.status === 'complete'
+    || exportState?.status === 'done'
+}
+
+function resolveParseSummaryHasWork(summary = {}) {
+  return Number(summary.pending ?? 0) > 0
+    || Number(summary.failed ?? 0) > 0
+    || Number(summary.running ?? 0) > 0
+}
+
+function firstPresent(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== '')
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, Math.round(value)))
 }
