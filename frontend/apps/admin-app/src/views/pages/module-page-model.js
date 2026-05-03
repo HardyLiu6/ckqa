@@ -321,9 +321,10 @@ export function resolveBuildSelectionFromQuery(query = {}, storage = safeSession
   return createBuildSelectionResult({ source: 'empty', materialIds: [] })
 }
 
-export function resolveBuildMaterialIdsQuery(query = {}, materialIds = []) {
-  const nextQuery = cleanBuildSelectionQuery(query)
+export function resolveBuildMaterialIdsQuery(query = {}, materialIds = [], storage = safeSessionStorage()) {
   const normalizedMaterialIds = normalizeBuildMaterialIds(materialIds)
+  const shouldCleanConfirmQuery = hasBuildSelectionChanged(query, normalizedMaterialIds, storage)
+  const nextQuery = cleanBuildSelectionQuery(query, { cleanConfirmQuery: shouldCleanConfirmQuery })
 
   if (normalizedMaterialIds.length > 0) {
     nextQuery.materialIds = normalizedMaterialIds.join(',')
@@ -343,13 +344,18 @@ export function resolveBuildSelectionQuery(query = {}, materialIds = [], options
   const canInline = normalizedMaterialIds.length <= maxInlineItems && inlineValue.length <= maxInlineLength
 
   if (canInline || !storage) {
-    return resolveBuildMaterialIdsQuery(query, normalizedMaterialIds)
+    return resolveBuildMaterialIdsQuery(query, normalizedMaterialIds, storage)
   }
 
-  const nextQuery = cleanBuildSelectionQuery(query)
+  const shouldCleanConfirmQuery = hasBuildSelectionChanged(query, normalizedMaterialIds, storage)
+  const nextQuery = cleanBuildSelectionQuery(query, { cleanConfirmQuery: shouldCleanConfirmQuery })
   const selectionKey = createBuildSelectionKey(normalizedMaterialIds)
 
-  storage.setItem(`${BUILD_SELECTION_STORAGE_PREFIX}${selectionKey}`, JSON.stringify(normalizedMaterialIds))
+  try {
+    storage.setItem(`${BUILD_SELECTION_STORAGE_PREFIX}${selectionKey}`, JSON.stringify(normalizedMaterialIds))
+  } catch {
+    return resolveBuildMaterialIdsQuery(query, normalizedMaterialIds, storage)
+  }
 
   return {
     ...nextQuery,
@@ -392,19 +398,49 @@ export function resolveCleanBuildStepQuery(query = {}, validSteps = DEFAULT_BUIL
   return rest
 }
 
-function cleanBuildSelectionQuery(query = {}) {
+function cleanBuildSelectionQuery(query = {}, { cleanConfirmQuery = true } = {}) {
   const {
     materialId,
     materialIds,
     selectionKey,
     selectionCount,
+    ...restWithConfirm
+  } = query
+
+  if (!cleanConfirmQuery) {
+    return restWithConfirm
+  }
+
+  const {
     materialConfirmed,
     exportConfirmed,
     promptConfirmed,
     ...rest
-  } = query
+  } = restWithConfirm
 
   return rest
+}
+
+function hasBuildSelectionChanged(query, materialIds, storage) {
+  const selection = resolveBuildSelectionFromQuery(query, storage)
+
+  if (selection.source === 'empty') {
+    return materialIds.length > 0
+  }
+
+  if (selection.invalid) {
+    return true
+  }
+
+  return !isSameBuildMaterialIds(selection.materialIds, materialIds)
+}
+
+function isSameBuildMaterialIds(left, right) {
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((item, index) => item === right[index])
 }
 
 function createBuildSelectionResult({
