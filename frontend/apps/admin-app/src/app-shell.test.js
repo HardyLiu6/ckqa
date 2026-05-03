@@ -860,12 +860,17 @@ test('selectionKey 优先于 materialIds，缺失本地选择集时降级', () =
   })
 
   assert.deepEqual(
-    resolveBuildSelectionFromQuery({ selectionKey: 'abc123', materialIds: '9,10', materialId: '4' }, storage),
+    resolveBuildSelectionFromQuery({
+      selectionKey: 'abc123',
+      selectionCount: '4',
+      materialIds: '9,10',
+      materialId: '4',
+    }, storage),
     {
       source: 'selectionKey',
       materialIds: ['2', '3'],
       selectionKey: 'abc123',
-      selectionCount: 2,
+      selectionCount: 4,
       shouldCleanQuery: true,
       invalid: false,
     },
@@ -890,6 +895,18 @@ test('selectionKey 优先于 materialIds，缺失本地选择集时降级', () =
       materialIds: [],
       selectionKey: 'missing',
       selectionCount: 0,
+      shouldCleanQuery: true,
+      invalid: true,
+    },
+  )
+
+  assert.deepEqual(
+    resolveBuildSelectionFromQuery({ selectionKey: 'missing', selectionCount: '55' }, storage),
+    {
+      source: 'selectionKey',
+      materialIds: [],
+      selectionKey: 'missing',
+      selectionCount: 55,
       shouldCleanQuery: true,
       invalid: true,
     },

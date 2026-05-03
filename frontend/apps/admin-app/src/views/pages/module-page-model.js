@@ -257,6 +257,7 @@ export function normalizeBuildMaterialIds(value) {
 
 export function resolveBuildSelectionFromQuery(query = {}, storage = safeSessionStorage()) {
   const selectionKey = firstQueryValue(query.selectionKey)
+  const querySelectionCount = normalizeBuildSelectionCount(query.selectionCount)
   const materialIds = normalizeBuildMaterialIds(query.materialIds)
   const legacyMaterialIds = normalizeBuildMaterialIds(query.materialId)
 
@@ -268,6 +269,7 @@ export function resolveBuildSelectionFromQuery(query = {}, storage = safeSession
         source: 'selectionKey',
         materialIds: storedMaterialIds,
         selectionKey,
+        selectionCount: querySelectionCount ?? storedMaterialIds.length,
         shouldCleanQuery: materialIds.length > 0 || legacyMaterialIds.length > 0,
       })
     }
@@ -294,6 +296,7 @@ export function resolveBuildSelectionFromQuery(query = {}, storage = safeSession
       source: 'selectionKey',
       materialIds: [],
       selectionKey,
+      selectionCount: querySelectionCount ?? 0,
       shouldCleanQuery: true,
       invalid: true,
     })
@@ -408,6 +411,7 @@ function createBuildSelectionResult({
   source,
   materialIds,
   selectionKey = '',
+  selectionCount = materialIds.length,
   shouldCleanQuery = false,
   invalid = false,
 }) {
@@ -415,7 +419,7 @@ function createBuildSelectionResult({
     source,
     materialIds,
     selectionKey,
-    selectionCount: materialIds.length,
+    selectionCount,
     shouldCleanQuery,
     invalid,
   }
@@ -459,4 +463,14 @@ function safeSessionStorage() {
 function firstQueryValue(value) {
   const firstValue = Array.isArray(value) ? value[0] : value
   return String(firstValue ?? '').trim()
+}
+
+function normalizeBuildSelectionCount(value) {
+  const rawValue = firstQueryValue(value)
+
+  if (!/^\d+$/.test(rawValue)) {
+    return null
+  }
+
+  return Number(rawValue)
 }
