@@ -18,6 +18,12 @@
 - [../../pdf_ingest/README.md](../../pdf_ingest/README.md)
 - [../../graphrag_pipeline/README.md](../../graphrag_pipeline/README.md)
 
+如果你需要回看已经完成并归档的实现背景，请优先查看：
+
+- [../../docs/superpowers/archive/specs/2026-04-22-ckqa-back-async-qa-task-design.md](../../docs/superpowers/archive/specs/2026-04-22-ckqa-back-async-qa-task-design.md)
+- [../../docs/superpowers/archive/plans/2026-04-22-ckqa-back-async-qa-task-implementation.md](../../docs/superpowers/archive/plans/2026-04-22-ckqa-back-async-qa-task-implementation.md)
+- [../../docs/superpowers/archive/plans/2026-04-23-course-materials-material-objects-impl.md](../../docs/superpowers/archive/plans/2026-04-23-course-materials-material-objects-impl.md)
+
 ## 一期编排接口
 
 当前已经落地的核心接口如下：

@@ -4,6 +4,12 @@
 
 ## 当前归档
 
+- `specs/2026-04-22-ckqa-back-async-qa-task-design.md`
+  - Java `/api/v1` 异步 QA 任务化设计稿，已落地为 `qa_retrieval_logs + /v1/query-tasks` 编排闭环。
+- `plans/2026-04-22-ckqa-back-async-qa-task-implementation.md`
+  - 异步 QA 实施计划，已完成并合并到 `main`。
+- `plans/2026-04-23-course-materials-material-objects-impl.md`
+  - `course_materials + material_objects` 课程资料模型实施计划，已完成 schema、CLI、Java 编排与兼容收口。
 - `specs/2026-04-26-admin-app-ui-redesign-design.md`
   - 管理员端前端美化重构设计稿，已完成落地。
 - `plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md`
@@ -12,6 +18,10 @@
   - 管理端真实数据接入设计稿，已完成并合并到 `main`。
 - `plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md`
   - 管理端真实数据接入实施计划，已完成课程、资料、知识库、QA 冒烟验证和 Playwright 故障注入验收。
+- `specs/2026-04-29-element-plus-frontend-style-design.md`
+  - 管理端 Element Plus + Pinia + Sass 样式重构设计稿，已完成并落到当前 admin-app 样式基座。
+- `plans/2026-04-29-element-plus-frontend-style-impl.md`
+  - 管理端 Element Plus + Pinia + Sass 样式重构实施计划，已完成依赖、Pinia、SCSS 分层与组件样式迁移。
 
 ## 使用约定
 

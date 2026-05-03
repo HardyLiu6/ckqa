@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-04-29
+> 审计日期：2026-05-03
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -13,7 +13,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 其余目录目前属于编排入口或配套前端/后端工作区：
 
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
@@ -25,7 +25,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
+| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本机启动前后端服务
@@ -203,7 +203,7 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
 - `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
-- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和 Playwright 浏览器级故障注入验收。
+- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
 ## 人类与机器入口
@@ -420,4 +420,4 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 - [docs/superpowers/archive/README.md](docs/superpowers/archive/README.md)（已完成设计/计划归档索引）
-  - 已归档：管理员端 UI 重构、管理端真实数据接入设计稿与实施计划。
+  - 已归档：异步 QA 任务化设计/计划、课程资料模型实施计划、管理员端 UI 重构、管理端真实数据接入、Element Plus 样式重构。

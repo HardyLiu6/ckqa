@@ -1,10 +1,10 @@
 # admin-app
 
-`frontend/apps/admin-app/` 是 CKQA 管理员端/教师端共用平台的前端骨架，用于承载课程资料、知识库构建、问答运维、用户权限和系统审计页面。
+`frontend/apps/admin-app/` 是 CKQA 管理员端/教师端共用平台的前端控制台，用于承载课程资料、知识库构建、问答运维、用户权限和系统审计页面。
 
 ## 当前状态
 
-- 技术栈：Vue 3 + Vite + Vue Router + Axios + Playwright
+- 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
 - 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
@@ -15,13 +15,15 @@
 - [../../../pdf_ingest/README.md](../../../pdf_ingest/README.md)
 - [../../../graphrag_pipeline/README.md](../../../graphrag_pipeline/README.md)
 
-本次已完成的结构设计、视觉重构与真实数据接入文档已归档，可按需回看：
+本次已完成的结构设计、视觉重构、真实数据接入与样式基座重构文档已归档，可按需回看：
 
 - [../../../docs/admin-teacher-frontend-structure.md](../../../docs/admin-teacher-frontend-structure.md)
 - [../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md](../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md)
 - [../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md)
 - [../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md](../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md)
 - [../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md)
+- [../../../docs/superpowers/archive/specs/2026-04-29-element-plus-frontend-style-design.md](../../../docs/superpowers/archive/specs/2026-04-29-element-plus-frontend-style-design.md)
+- [../../../docs/superpowers/archive/plans/2026-04-29-element-plus-frontend-style-impl.md](../../../docs/superpowers/archive/plans/2026-04-29-element-plus-frontend-style-impl.md)
 
 ## 目录与入口
 
@@ -36,13 +38,14 @@
 | `src/components/system/` | 系统健康矩阵 |
 | `src/stores/auth.js` | 开发态认证状态、角色和权限判断 |
 | `src/stores/theme.js` | `light / dark / auto` 主题模式和固定主题色 |
+| `src/stores/pinia.js` | admin-app 共享 Pinia 实例 |
 | `src/axios/index.js` | Axios 实例、认证头注入和错误收敛 |
 | `src/api/` | Java `/api/v1` 业务 API 边界和 ApiResponse 解包 |
 | `src/views/pages/module-loaders.js` | 按路由加载 live 数据并映射页面状态 |
 | `e2e/local-operation-errors.spec.js` | Playwright 浏览器级故障注入验收 |
 | `src/views/` | 登录、工作台、系统健康、通用页面和状态页 |
 | `src/main.js` | Vue 应用挂载入口 |
-| `src/style.css` | 样式入口，导入 `styles/tokens.css`、`base.css`、`components.css` |
+| `src/styles/index.scss` | 唯一全局样式入口，聚合 token、base、Element Plus 覆盖和组件样式 |
 
 ## 常用命令
 
@@ -99,8 +102,9 @@ VITE_API_TIMEOUT=15000
 9. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
 10. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
 11. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
-12. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
-13. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
+12. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
+13. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
+14. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 

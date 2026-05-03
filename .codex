@@ -5,7 +5,7 @@
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
 - `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API。
 - `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，已有最小 Axios 请求层，但尚未接入稳定业务契约。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成运维台壳层、主题系统、工作台、系统健康页和通用业务页模板，但仍不是知识生产主链路入口。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页和核心运维页真实接入，但仍不是知识生产主链路入口。
 - `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
 
 ## 必读顺序
@@ -67,8 +67,8 @@
 - `pip install -e .`
 - `pip install -e ".[dev]"`
 - `python scripts/pdf_processor/mineru_parser.py upload <course_id> -f <pdf> --parse`
-- `python scripts/pdf_processor/mineru_parser.py parse <course_id> --file-id <id>`
-- `python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --file-id <id> --mode section`
+- `python scripts/pdf_processor/mineru_parser.py parse <course_id> --material-id <id>`
+- `python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <id> --mode section`
 - `python -m pytest tests/`
 
 实现注意事项：
@@ -76,7 +76,7 @@
 - 运行配置主要来自 `pdf_ingest/.env`，由 `Config.from_env()` 自动查找加载。
 - 当前共享开发环境里的 `courseKg` 已安装 `pytest`，因此仓库内日常验证可直接运行测试；如果重建环境，仍建议使用 `pip install -e ".[dev]"` 保持可复现。
 - 解析状态依赖 MySQL：`pending -> processing -> done/failed`。
-- 同一课程可绑定多份 PDF；多文件课程下优先传 `--file-id` 或 `--file-name`。
+- 同一课程可绑定多份 PDF；多文件课程下优先传 `--material-id`，`--file-id` / `--file-name` 仅保留兼容入口。
 - `export-graphrag` 是对下游最重要的接口，改字段、命名或 MinIO 路径时必须检查 `graphrag_pipeline` 兼容性。
 
 ### 2. `graphrag_pipeline/`
@@ -138,14 +138,14 @@
 
 ### 4. `frontend/apps/admin-app/`
 
-- 当前是独立的 Vue 3 + Vite 管理员/教师控制台前端。
+- 当前是独立的 Vue 3 + Vite 管理员/教师控制台前端，技术栈已包含 Element Plus、Pinia 与 Sass。
 - 常用命令：
   - `cd frontend/apps/admin-app`
   - `pnpm install`
   - `pnpm test`
   - `pnpm build`
   - `pnpm dev`
-- 目前已完成控制台壳层、主题系统、工作台、健康页、通用业务页模板、登录页与状态页；正式浏览器接口边界仍是 Java `/api/v1`，除系统健康外多数页面仍使用示例数据。
+- 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证等核心运维页的 Java `/api/v1` 真实接入；正式浏览器接口边界仍是 Java `/api/v1`。
 - `node_modules/` 已出现在仓库中，但它不是源码，不要把依赖目录当成改动目标。
 
 ### 5. `backend/ckqa-back/`

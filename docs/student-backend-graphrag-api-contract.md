@@ -1,6 +1,6 @@
 # Student App 到后端与 GraphRAG API 契约
 
-> 审查日期：2026-04-23
+> 审查日期：2026-05-03
 > 适用范围：`frontend/apps/student-app/`、`backend/ckqa-back/`、`graphrag_pipeline/`
 
 本文档定义学员端前端、Java 编排后端和 GraphRAG Python 服务之间的最小稳定契约。当前约定是：`student-app` 只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
@@ -28,7 +28,7 @@
 student-app
   -> GET/POST ${VITE_API_BASE_URL}/...
   -> backend/ckqa-back /api/v1
-  -> MySQL: users / courses / pdf_files / knowledge_bases / qa_sessions / qa_messages / qa_retrieval_logs
+  -> MySQL: users / courses / course_materials / material_objects / knowledge_bases / qa_sessions / qa_messages / qa_retrieval_logs
   -> graphrag_pipeline /v1/query-tasks
   -> graphrag query --root . --method <local|global|drift|basic> "问题"
 ```
@@ -117,12 +117,19 @@ GET /api/v1/courses/{courseId}/pdf-files
 GET /api/v1/courses/{courseId}/knowledge-bases
 ```
 
+说明：
+
+- `/api/v1/courses/{courseId}/pdf-files` 仍保留旧路径名作为兼容入口。
+- 后端内部真实数据源已经切到 `course_materials + material_objects`。
+
 PDF 摘要：
 
 ```json
 [
   {
     "id": 3,
+    "materialId": 3,
+    "materialObjectId": 11,
     "fileName": "book.pdf",
     "parseStatus": "done"
   }
@@ -161,6 +168,8 @@ PDF 摘要：
 | `POST` | `/api/v1/knowledge-bases/{id}/index-runs` | 创建索引任务，当前是同步长任务 |
 | `GET` | `/api/v1/knowledge-bases/{id}/index-runs` | 查看知识库索引任务列表 |
 | `GET` | `/api/v1/index-runs/{id}` | 查看单个索引任务 |
+
+这些 `/api/v1/pdf-files/*` 路径同样是兼容保留名；`{id}` 当前实际对应 `course_materials.id`，响应体会额外补出 `materialId` 与 `materialObjectId`。
 
 导出请求体：
 

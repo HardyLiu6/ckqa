@@ -1,5 +1,7 @@
 # CKQA Back Async QA Task Implementation Plan
 
+> 归档说明：本计划已执行完成，对应成果已进入 `backend/ckqa-back/` 与 `graphrag_pipeline/`。当前启动、验证和接口边界请优先查看仓库根 [README.md](../../../../README.md)、[backend/ckqa-back/README.md](../../../../backend/ckqa-back/README.md) 与 [docs/student-backend-graphrag-api-contract.md](../../../../docs/student-backend-graphrag-api-contract.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把现有同步问答链路改成“提交即返回 taskId、后台持续轮询 Python 任务状态、最终落库 assistant 消息”的异步任务闭环，并清理此前偏离正确方向的 global 调参残留代码。

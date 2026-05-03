@@ -116,11 +116,11 @@ http://127.0.0.1:5174
 - `package.json` 当前包名已经调整为 `student-app`，与目录语义保持一致
 - 当前目录已由 CKQA 根仓库直接管理，不再作为独立嵌套 Git 仓库使用
 - `node_modules/` 是生成依赖，不应当作文档、审计或提交的主对象
-- 如果你要把它正式接入 CKQA，需要先明确是直连 `graphrag_pipeline`，还是通过 `backend/ckqa-back` 做统一编排
+- 如果你要把它正式接入 CKQA，浏览器正式业务边界应统一走 `backend/ckqa-back` 的 Java `/api/v1`，不要把 student-app 直接接到 `graphrag_pipeline` 的 Python `/v1`
 
 ## 后续接入前建议先补齐什么
 
-1. 明确问答、课程、用户体系的接口契约。
+1. 以 `docs/student-backend-graphrag-api-contract.md` 为准，按 Java `/api/v1` 收口问答、课程和用户侧接口契约。
 2. 在组件里逐步把示例数据切换到 `src/axios/index.js` 导出的请求方法。
 3. 为登录态、鉴权失败和接口错误补一层真实的业务跳转与提示。
 4. 在真正联调前补齐 API 契约、Mock 数据和请求失败恢复策略。

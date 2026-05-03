@@ -1,5 +1,7 @@
 # CKQA 管理端 Element Plus + Pinia + Sass 样式重构设计稿
 
+> 归档说明：本设计已完成并合并到 `main`。当前活跃入口请优先查看仓库根 [README.md](../../../../README.md)、[frontend/apps/admin-app/README.md](../../../../frontend/apps/admin-app/README.md) 与 [docs/admin-teacher-frontend-structure.md](../../../../docs/admin-teacher-frontend-structure.md)。
+
 - 日期：2026-04-29
 - 范围：`frontend/apps/admin-app/`
 - 参考：`frontend/apps/student-app/src/styles/`、`docs/superpowers/specs/2026-04-21-student-app-ui-redesign-design.md`、`docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md`

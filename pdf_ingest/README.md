@@ -12,6 +12,10 @@
 
 如果你只想先跑通 CKQA，优先从这个模块开始。
 
+如果你需要回看当前课程资料模型的历史实施背景，请优先查看：
+
+- [../docs/superpowers/archive/plans/2026-04-23-course-materials-material-objects-impl.md](../docs/superpowers/archive/plans/2026-04-23-course-materials-material-objects-impl.md)
+
 ## 当前状态
 
 - 属于主链路模块

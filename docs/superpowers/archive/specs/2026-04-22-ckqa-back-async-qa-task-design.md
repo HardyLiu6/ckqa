@@ -1,5 +1,7 @@
 # CKQA Back Async QA Task Design
 
+> 归档说明：本设计已完成并合并到 `main`。当前活跃入口请优先查看仓库根 [README.md](../../../../README.md)、[backend/ckqa-back/README.md](../../../../backend/ckqa-back/README.md) 与 [docs/student-backend-graphrag-api-contract.md](../../../../docs/student-backend-graphrag-api-contract.md)。
+
 日期：2026-04-22
 
 ## 1. 背景

@@ -1,5 +1,7 @@
 # Course Materials And Material Objects Implementation Plan
 
+> 归档说明：本计划已执行完成，对应 schema、CLI、GraphRAG 抓取和 Java 编排兼容实现已进入主分支。当前活跃入口请优先查看仓库根 [README.md](../../../../README.md)、[pdf_ingest/README.md](../../../../pdf_ingest/README.md) 与 [backend/ckqa-back/README.md](../../../../backend/ckqa-back/README.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将课程资料接入模型从 `courses -> pdf_files` 演进为 `courses <-> course_materials <-> material_objects`，支持同一份教材资料被多门课程复用，同时保持现有解析、导出、Java 编排和 GraphRAG 下游能力完整。
