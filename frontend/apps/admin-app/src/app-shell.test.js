@@ -120,7 +120,6 @@ import {
   resolveCleanBuildStepQuery,
   resolveOperationFeedback,
   resolveApiErrorAction,
-  resolveCleanMaterialQuery,
   selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
 import { normalizeHealthResponse } from './views/system/health-model.js'
@@ -785,13 +784,54 @@ test('知识库列表和详情 loader 映射实时字段与构建入口', async 
   assert.equal(detailResult.actions.buildTo, '/app/knowledge-bases/7/build')
 })
 
-test('知识库构建 loader 以 materialId query 恢复选择并清理非法资料', async () => {
-  const baseRoute = { name: 'knowledge-base-build', query: { materialId: '9' }, params: { kbId: '7' } }
-  const result = await loadModulePage(baseRoute, baseRoute.query, {
+test('知识库构建 loader 以 materialIds query 恢复多资料选择', async () => {
+  const route = {
+    name: 'knowledge-base-build',
+    query: { materialIds: '9,10', materialConfirmed: '1' },
+    params: { kbId: '7' },
+  }
+  const result = await loadModulePage(route, route.query, {
     getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
     listCourseMaterials: async () => [
       { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
       { id: 10, fileName: 'slides.pdf', parseStatus: 'pending' },
+    ],
+    listIndexRuns: async () => [],
+    getMaterial: async (id) => ({
+      id: Number(id),
+      courseId: 'os',
+      fileName: id === '9' ? 'book.pdf' : 'slides.pdf',
+      parseStatus: id === '9' ? 'done' : 'pending',
+    }),
+    listParseResults: async (id) => id === '9'
+      ? [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ]
+      : [],
+  })
+
+  assert.deepEqual(result.blocks.selection.materialIds, ['9', '10'])
+  assert.equal(result.blocks.selection.selectionSource, 'materialIds')
+  assert.equal(result.blocks.selection.shouldCleanSelectionQuery, false)
+  assert.equal(result.blocks.parseTasks.items.length, 2)
+  assert.equal(result.blocks.exportArtifacts.items.length, 2)
+  assert.deepEqual(result.workflowSteps.map((step) => step.key), ['material', 'parse', 'export', 'prompt', 'index', 'qa_check'])
+  assert.equal(result.workflowSteps.find((step) => step.key === 'material').status, 'done')
+  assert.equal(result.workflowSteps.find((step) => step.key === 'parse').status, 'ready')
+})
+
+test('知识库构建 loader 在 selectionKey 本地缺失时降级读取 materialIds', async () => {
+  const route = {
+    name: 'knowledge-base-build',
+    query: { selectionKey: 'missing', materialIds: '9', materialConfirmed: '1' },
+    params: { kbId: '7' },
+  }
+  const result = await loadModulePage(route, route.query, {
+    getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
     ],
     listIndexRuns: async () => [],
     getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
@@ -802,27 +842,10 @@ test('知识库构建 loader 以 materialId query 恢复选择并清理非法资
     ],
   })
 
-  assert.equal(result.blocks.selection.selectedMaterialId, '9')
-  assert.equal(result.blocks.selection.shouldCleanMaterialQuery, false)
-  assert.equal(result.workflowSteps.find((step) => step.key === 'material').status, 'done')
-  assert.equal(result.workflowSteps.find((step) => step.key === 'export').status, 'done')
-  assert.equal(result.workflowSteps.find((step) => step.key === 'smoke').status, 'blocked')
-
-  const invalidResult = await loadModulePage(
-    { name: 'knowledge-base-build', query: { materialId: '404' }, params: { kbId: '7' } },
-    { materialId: '404' },
-    {
-      getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
-      listCourseMaterials: async () => [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }],
-      listIndexRuns: async () => [],
-      getMaterial: async () => ({ id: 404, courseId: 'other', fileName: 'other.pdf', parseStatus: 'done' }),
-      listParseResults: async () => [],
-    },
-  )
-
-  assert.equal(invalidResult.blocks.selection.selectedMaterialId, '')
-  assert.equal(invalidResult.blocks.selection.shouldCleanMaterialQuery, true)
-  assert.deepEqual(resolveCleanMaterialQuery({ page: '1', materialId: '404' }), { page: '1' })
+  assert.deepEqual(result.blocks.selection.materialIds, ['9'])
+  assert.equal(result.blocks.selection.selectionSource, 'materialIds')
+  assert.equal(result.blocks.selection.shouldCleanSelectionQuery, true)
+  assert.equal(result.workflowSteps.find((step) => step.key === 'export').status, 'ready')
 })
 
 test('构建向导资料集合 query 支持小集合、旧 materialId 兼容和确认态清理', () => {
@@ -1208,8 +1231,17 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
   })
 })
 
-test('知识库构建五步状态使用长任务状态和激活索引映射', async () => {
-  const route = { name: 'knowledge-base-build', query: { materialId: '9' }, params: { kbId: '7' } }
+test('知识库构建六步状态使用确认态、长任务状态和激活索引映射', async () => {
+  const route = {
+    name: 'knowledge-base-build',
+    query: {
+      materialIds: '9',
+      materialConfirmed: '1',
+      exportConfirmed: '1',
+      promptConfirmed: '1',
+    },
+    params: { kbId: '7' },
+  }
   const result = await loadModulePage(route, route.query, {
     getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: 15 }),
     listCourseMaterials: async () => [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }],
@@ -1226,8 +1258,9 @@ test('知识库构建五步状态使用长任务状态和激活索引映射', as
     ['material', 'done'],
     ['parse', 'done'],
     ['export', 'done'],
+    ['prompt', 'done'],
     ['index', 'done'],
-    ['smoke', 'ready'],
+    ['qa_check', 'ready'],
   ])
 })
 
@@ -1281,22 +1314,22 @@ function withThrowingWindowSessionStorage(run) {
   }
 }
 
-test('知识库构建 smoke 步骤必须等待激活索引并暴露真实问答动作状态', () => {
+test('知识库构建问答验证步骤必须等待激活索引并暴露真实问答动作状态', () => {
   const blockedSteps = buildKnowledgeBaseWorkflowSteps({
     knowledgeBase: { id: 7, activeIndexRunId: null },
   })
   const readySteps = buildKnowledgeBaseWorkflowSteps({
     knowledgeBase: { id: 7, activeIndexRunId: 15 },
   })
-  const blockedSmoke = blockedSteps.find((step) => step.key === 'smoke')
-  const readySmoke = readySteps.find((step) => step.key === 'smoke')
+  const blockedSmoke = blockedSteps.find((step) => step.key === 'qa_check')
+  const readySmoke = readySteps.find((step) => step.key === 'qa_check')
 
   assert.equal(blockedSmoke.status, 'blocked')
   assert.equal(blockedSmoke.actionDisabled, true)
   assert.match(blockedSmoke.detail, /缺少激活索引/)
   assert.equal(readySmoke.status, 'ready')
   assert.equal(readySmoke.actionDisabled, false)
-  assert.equal(readySmoke.actionLabel, '发起冒烟验证')
+  assert.equal(readySmoke.actionLabel, '发起问答验证')
 })
 
 test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {

@@ -16,7 +16,16 @@ import {
   listIndexRuns,
   listKnowledgeBases,
 } from '../../api/knowledge-bases.js'
-import { resolveLongTaskState } from './long-task-state.js'
+import {
+  BUILD_STEP_LABELS,
+  resolveBuildDefaultStepKey,
+  resolveBuildPrimaryAction,
+  resolveExportArtifactRows,
+  resolveIndexAvailabilityState,
+  resolveParseTaskRows,
+  resolvePromptConfirmState,
+} from './module-content.js'
+import { resolveBuildSelectionFromQuery } from './module-page-model.js'
 
 const COURSE_COLUMNS = ['课程', '状态', '资料', '知识库', '最近索引', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
@@ -301,19 +310,31 @@ async function loadKnowledgeBaseBuild(route, query, services) {
     ? indexRunsResult.value
     : []
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
-  const materialId = query.materialId ? String(query.materialId) : ''
+  const selectionQuery = resolveBuildSelectionFromQuery(query)
   const selection = await resolveBuildSelection({
-    materialId,
+    selectionQuery,
     knowledgeBase,
     materials: materialsResult.status === 'fulfilled' ? materialsResult.value : [],
     services,
   })
-  const workflowSteps = buildKnowledgeBaseWorkflowSteps({
-    knowledgeBase,
-    selectedMaterial: selection.material,
-    parseResults: selection.parseResults,
-    latestIndexRun: resolveLatestIndexRun(indexRuns),
+  const parseTaskRows = resolveParseTaskRows(selection.materials)
+  const exportArtifacts = resolveExportArtifactRows(selection.materials, selection.parseResultsByMaterialId)
+  const promptState = resolvePromptConfirmState(query, {
+    complete: selection.materials.length > 0 && exportArtifacts.missingCount === 0,
   })
+  const indexState = resolveIndexAvailabilityState(knowledgeBase, indexRuns)
+  const workflowSteps = buildKnowledgeBaseWorkflowSteps({
+    query,
+    knowledgeBase,
+    selection,
+    parseTaskRows,
+    exportArtifacts,
+    promptState,
+    indexState,
+  })
+  const activeStepKey = query.step && workflowSteps.some((step) => step.key === query.step)
+    ? String(query.step)
+    : resolveBuildDefaultStepKey(workflowSteps)
 
   return createOverviewLoaderResult({
     requestState: 'success',
@@ -323,6 +344,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
     actions: {
       canCreateIndex: workflowSteps.find((step) => step.key === 'index')?.status === 'ready',
       indexRunLimit: 'index',
+      activeStepKey,
     },
     blocks: {
       knowledgeBase: {
@@ -333,184 +355,296 @@ async function loadKnowledgeBaseBuild(route, query, services) {
       materials: materialsBlock,
       indexRuns: indexRunsBlock,
       selection,
+      parseTasks: {
+        state: parseTaskRows.length > 0 ? 'success' : 'empty',
+        items: parseTaskRows,
+      },
+      exportArtifacts: {
+        state: exportArtifacts.rows.length > 0 ? 'success' : 'empty',
+        items: exportArtifacts.rows,
+        summary: exportArtifacts,
+      },
+      prompt: promptState,
+      indexAvailability: indexState,
     },
     raw: {
       knowledgeBase,
       materials: materialsBlock.raw,
       indexRuns: indexRunsBlock.raw,
-      selectedMaterial: selection.material,
-      parseResults: selection.parseResults,
+      selectedMaterials: selection.materials,
+      parseResultsByMaterialId: selection.parseResultsByMaterialId,
     },
   })
 }
 
-async function resolveBuildSelection({ materialId, knowledgeBase, materials, services }) {
-  const materialIds = new Set(materials.map((item) => String(item.id ?? item.materialId ?? item.pdfFileId)))
+async function resolveBuildSelection({ selectionQuery, knowledgeBase, materials, services }) {
+  const availableIds = new Set(materials.map((item) => String(item.id ?? item.materialId ?? item.pdfFileId)))
+  const requestedIds = selectionQuery.materialIds.filter((id) => availableIds.has(String(id)))
+  const shouldCleanSelectionQuery = selectionQuery.shouldCleanQuery
+    || requestedIds.length !== selectionQuery.materialIds.length
+  const settledPairs = await Promise.allSettled(requestedIds.map(async (id) => {
+    const [materialResult, parseResultsResult] = await Promise.allSettled([
+      services.getMaterial(id),
+      services.listParseResults(id),
+    ])
 
-  if (!materialId || !materialIds.has(materialId)) {
-    return {
-      selectedMaterialId: '',
-      shouldCleanMaterialQuery: Boolean(materialId),
-      material: null,
-      parseResults: [],
-      parseResultsBlock: { state: 'empty', items: [], raw: [] },
+    if (materialResult.status === 'rejected') {
+      return {
+        id,
+        material: null,
+        parseResults: [],
+        error: createApiError(materialResult.reason),
+      }
     }
-  }
 
-  const [materialResult, parseResultsResult] = await Promise.allSettled([
-    services.getMaterial(materialId),
-    services.listParseResults(materialId),
-  ])
-
-  if (materialResult.status === 'rejected') {
-    return {
-      selectedMaterialId: '',
-      shouldCleanMaterialQuery: true,
-      material: null,
-      parseResults: [],
-      error: createApiError(materialResult.reason),
-      parseResultsBlock: { state: 'empty', items: [], raw: [] },
+    const material = materialResult.value
+    if (material.courseId && knowledgeBase.courseId && material.courseId !== knowledgeBase.courseId) {
+      return {
+        id,
+        material: null,
+        parseResults: [],
+        error: createApiError({ message: '资料不属于当前知识库课程' }),
+      }
     }
-  }
 
-  const material = materialResult.value
-  if (material.courseId && knowledgeBase.courseId && material.courseId !== knowledgeBase.courseId) {
     return {
-      selectedMaterialId: '',
-      shouldCleanMaterialQuery: true,
-      material: null,
-      parseResults: [],
-      parseResultsBlock: { state: 'empty', items: [], raw: [] },
+      id,
+      material,
+      parseResults: parseResultsResult.status === 'fulfilled' && Array.isArray(parseResultsResult.value)
+        ? parseResultsResult.value
+        : [],
+      parseResultsBlock: createSettledListBlock(parseResultsResult, mapParseResultItem),
     }
-  }
+  }))
+  const pairs = settledPairs
+    .filter((item) => item.status === 'fulfilled')
+    .map((item) => item.value)
+  const validPairs = pairs.filter((item) => item.material)
+  const materialIds = validPairs.map((item) => String(item.id))
+  const parseResultsByMaterialId = Object.fromEntries(
+    validPairs.map((item) => [String(item.id), item.parseResults]),
+  )
+  const firstPair = validPairs[0] ?? null
 
-  const parseResultsBlock = createSettledListBlock(parseResultsResult, mapParseResultItem)
   return {
-    selectedMaterialId: materialId,
-    shouldCleanMaterialQuery: false,
-    material,
-    parseResults: parseResultsResult.status === 'fulfilled' && Array.isArray(parseResultsResult.value)
-      ? parseResultsResult.value
-      : [],
-    parseResultsBlock,
+    materialIds,
+    selectionSource: selectionQuery.source,
+    selectionKey: selectionQuery.selectionKey,
+    selectionCount: selectionQuery.selectionCount,
+    shouldCleanSelectionQuery,
+    invalid: selectionQuery.invalid || materialIds.length !== selectionQuery.materialIds.length,
+    materials: validPairs.map((item) => item.material),
+    parseResultsByMaterialId,
+    errors: pairs.filter((item) => item.error).map((item) => item.error),
+    selectedMaterialId: materialIds[0] ?? '',
+    shouldCleanMaterialQuery: selectionQuery.source === 'materialId' && shouldCleanSelectionQuery,
+    material: firstPair?.material ?? null,
+    parseResults: firstPair?.parseResults ?? [],
+    parseResultsBlock: firstPair?.parseResultsBlock ?? { state: 'empty', items: [], raw: [] },
   }
 }
 
 export function buildKnowledgeBaseWorkflowSteps({
+  query = {},
   knowledgeBase = {},
-  selectedMaterial = null,
-  parseResults = [],
-  latestIndexRun = null,
+  selection = {},
+  parseTaskRows = [],
+  exportArtifacts = { rows: [], missingCount: 0, completeCount: 0 },
+  promptState = null,
+  indexState = null,
 } = {}) {
-  const hasMaterial = Boolean(selectedMaterial)
-  const parseState = hasMaterial ? resolveLongTaskState({ parseStatus: selectedMaterial.parseStatus }) : 'unknown'
-  const hasExport = hasMaterial
-    && parseState === 'success'
-    && hasCompleteGraphRagExport(parseResults, { mode: 'section', withPageDocs: true })
-  const latestIndexState = latestIndexRun ? resolveLongTaskState(latestIndexRun) : 'unknown'
-  const latestIndexId = latestIndexRun?.id ?? latestIndexRun?.indexRunId
   const activeIndexRunId = knowledgeBase.activeIndexRunId ?? knowledgeBase.activeIndexId
-  const isActiveSuccessIndex = latestIndexState === 'success'
-    && activeIndexRunId
-    && String(activeIndexRunId) === String(latestIndexId)
-  const indexStatus = resolveIndexStepStatus({ hasExport, latestIndexState, isActiveSuccessIndex })
-  const smokeStatus = activeIndexRunId ? 'ready' : 'blocked'
+  const materialIds = selection.materialIds ?? []
+  const hasMaterialSelection = materialIds.length > 0
+  const parseSummary = summarizeParseRows(parseTaskRows)
+  const allParsed = hasMaterialSelection
+    && parseTaskRows.length === materialIds.length
+    && parseSummary.done === parseTaskRows.length
+  const exportComplete = hasMaterialSelection
+    && exportArtifacts.rows?.length === materialIds.length
+    && Number(exportArtifacts.missingCount ?? 0) === 0
+  const materialConfirmed = isBuildQueryConfirmed(query.materialConfirmed)
+  const exportConfirmed = isBuildQueryConfirmed(query.exportConfirmed)
+  const promptConfirmed = isBuildQueryConfirmed(query.promptConfirmed)
+  const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete })
+  const indexAvailability = indexState ?? resolveIndexAvailabilityState(knowledgeBase, [])
+  const materialStatus = hasMaterialSelection && materialConfirmed ? 'done' : 'ready'
+  const parseStatus = resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed })
+  const exportStatus = resolveExportStepStatus({ allParsed, exportComplete, exportConfirmed })
+  const promptStatus = !exportConfirmed || !exportComplete ? 'blocked' : prompt.status
+  const indexStatus = !exportConfirmed || !promptConfirmed || !exportComplete
+    ? 'blocked'
+    : indexAvailability.status
+  const qaStatus = activeIndexRunId ? 'ready' : 'blocked'
 
   return [
     createWorkflowStep({
       key: 'material',
-      label: '选择课程资料',
-      status: hasMaterial ? 'done' : 'ready',
-      detail: hasMaterial ? selectedMaterial.fileName ?? selectedMaterial.displayName ?? '已选择课程资料' : '选择本次构建的主资料',
+      status: materialStatus,
+      detail: hasMaterialSelection ? `已选择 ${materialIds.length} 个课程资料` : '选择本次构建的课程资料',
       conditions: ['知识库已绑定课程', '选择一个课程资料'],
-      actionLabel: '确认课程资料',
+      actionLabel: '确认勾选',
       logLabel: '查看资料记录',
+      primaryAction: resolveBuildPrimaryAction('material', {
+        query,
+        materialIds,
+        materials: selection.materials,
+        parseSummary,
+      }),
     }),
     createWorkflowStep({
       key: 'parse',
-      label: '解析状态检查',
-      status: !hasMaterial ? 'blocked' : mapTaskStateToStepStatus(parseState),
-      detail: hasMaterial ? `解析状态：${selectedMaterial.parseStatus ?? 'unknown'}` : '请先选择课程资料',
+      status: parseStatus,
+      detail: hasMaterialSelection ? `解析完成 ${parseSummary.done}/${parseTaskRows.length}` : '请先选择课程资料',
       conditions: ['资料对象已上传', 'MinerU 解析状态为 done'],
-      actionLabel: '刷新解析状态',
+      actionLabel: parseSummary.pending > 0 || parseSummary.failed > 0 ? '并行解析未完成资料' : '检查图谱输入',
       logLabel: '查看解析日志',
+      primaryAction: resolveBuildPrimaryAction('parse', {
+        query,
+        parseRows: parseTaskRows,
+        parseSummary,
+      }),
     }),
     createWorkflowStep({
       key: 'export',
-      label: '导出 GraphRAG 输入',
-      status: hasExport ? 'done' : parseState === 'success' ? 'ready' : 'blocked',
-      detail: hasExport ? 'section/page GraphRAG 产物已完整' : '需要 normalized、section 与 page 导出产物',
+      status: exportStatus,
+      detail: exportComplete ? 'GraphRAG 必需输入产物已完整' : '需要 normalized、section 与 page 导出产物',
       conditions: ['解析结果存在', 'section_docs/page_docs 已导出'],
-      actionLabel: '导出输入文件',
+      actionLabel: exportComplete ? '确认图谱输入' : '导出缺失输入',
       logLabel: '查看导出记录',
+      primaryAction: resolveBuildPrimaryAction('export', {
+        query,
+        parseRows: parseTaskRows,
+        exportSummary: {
+          complete: exportArtifacts.completeCount,
+          missing: exportArtifacts.missingCount,
+        },
+        exportState: { complete: exportComplete },
+      }),
+    }),
+    createWorkflowStep({
+      key: 'prompt',
+      status: promptStatus,
+      detail: promptConfirmed ? '已确认沿用当前活动提示词' : '确认本次索引沿用 GraphRAG 当前活动提示词',
+      conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
+      actionLabel: promptConfirmed ? '进入创建索引' : '确认提示词策略',
+      logLabel: '查看提示词策略',
+      primaryAction: resolveBuildPrimaryAction('prompt', {
+        query,
+        promptState: prompt,
+      }),
     }),
     createWorkflowStep({
       key: 'index',
-      label: '创建索引运行',
       status: indexStatus,
-      detail: latestIndexRun ? `最近索引运行：#${latestIndexId} ${latestIndexRun.status ?? ''}`.trim() : '等待导出输入确认',
+      detail: indexAvailability.warning ?? (activeIndexRunId ? `激活索引 #${activeIndexRunId}` : '等待创建索引运行'),
       conditions: ['GraphRAG 导出产物存在', 'Java 后端可创建索引运行'],
       actionLabel: '开始构建索引',
       logLabel: '查看索引日志',
+      primaryAction: resolveBuildPrimaryAction('index', {
+        query,
+        indexState: indexAvailability,
+      }),
     }),
     createWorkflowStep({
-      key: 'smoke',
-      label: '问答冒烟验证',
-      status: smokeStatus,
-      detail: activeIndexRunId ? `激活索引 #${activeIndexRunId} 可进入 Phase 4 冒烟验证` : '缺少激活索引，暂不可验证',
-      conditions: ['索引运行成功并激活', 'Phase 4 接入真实问答冒烟'],
-      actionLabel: '发起冒烟验证',
+      key: 'qa_check',
+      status: qaStatus,
+      detail: activeIndexRunId ? `激活索引 #${activeIndexRunId} 可进入问答验证` : '缺少激活索引，暂不可验证',
+      conditions: ['索引运行成功并激活', 'Java /api/v1 问答入口可用'],
+      actionLabel: '发起问答验证',
       actionDisabled: !activeIndexRunId,
       logLabel: '查看验证会话',
+      primaryAction: resolveBuildPrimaryAction('qa_check', {
+        query,
+        knowledgeBase,
+      }),
     }),
   ]
 }
 
 function createWorkflowStep(step) {
+  const label = step.label ?? BUILD_STEP_LABELS[step.key] ?? step.key
+  const primaryAction = step.primaryAction ?? resolveBuildPrimaryAction(step.key)
+
   return {
     ...step,
+    label,
     state: step.status,
+    displayStatus: resolveStepDisplayStatus(step.status),
+    primaryAction,
   }
 }
 
-function mapTaskStateToStepStatus(state) {
-  if (state === 'success') {
-    return 'done'
+function summarizeParseRows(rows = []) {
+  return rows.reduce((summary, row) => {
+    const status = normalizeBuildParseStatus(row.status)
+    summary[status] += 1
+    return summary
+  }, { done: 0, running: 0, failed: 0, pending: 0 })
+}
+
+function resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed }) {
+  if (!hasMaterialSelection) {
+    return 'blocked'
   }
 
-  if (state === 'running') {
-    return 'running'
-  }
-
-  if (state === 'failed') {
+  if (parseSummary.failed > 0) {
     return 'failed'
   }
 
-  return 'blocked'
-}
-
-function resolveIndexStepStatus({ hasExport, latestIndexState, isActiveSuccessIndex }) {
-  if (isActiveSuccessIndex) {
-    return 'done'
-  }
-
-  if (latestIndexState === 'running') {
+  if (parseSummary.running > 0) {
     return 'running'
   }
 
-  if (latestIndexState === 'failed') {
+  if (parseSummary.pending > 0) {
+    return 'ready'
+  }
+
+  return allParsed ? 'done' : 'blocked'
+}
+
+function resolveExportStepStatus({ allParsed, exportComplete, exportConfirmed }) {
+  if (!allParsed) {
+    return 'blocked'
+  }
+
+  if (!exportComplete) {
+    return 'ready'
+  }
+
+  return exportConfirmed ? 'done' : 'ready'
+}
+
+function normalizeBuildParseStatus(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'done'
+  }
+
+  if (['running', 'processing'].includes(normalized)) {
+    return 'running'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
     return 'failed'
   }
 
-  return hasExport ? 'ready' : 'blocked'
+  return 'pending'
 }
 
-function resolveLatestIndexRun(indexRuns = []) {
-  return [...indexRuns].sort((left, right) => {
-    const leftTime = Date.parse(left.createdAt ?? left.startedAt ?? left.updatedAt ?? '') || 0
-    const rightTime = Date.parse(right.createdAt ?? right.startedAt ?? right.updatedAt ?? '') || 0
-    return rightTime - leftTime || Number(right.id ?? 0) - Number(left.id ?? 0)
-  })[0] ?? null
+function isBuildQueryConfirmed(value) {
+  return String(value ?? '') === '1' || value === true
+}
+
+function resolveStepDisplayStatus(status) {
+  return {
+    done: '已完成',
+    ready: '可执行',
+    running: '执行中',
+    failed: '失败',
+    blocked: '未满足条件',
+  }[status] ?? status
 }
 
 function failedSuffix(value) {
