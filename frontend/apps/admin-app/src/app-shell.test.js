@@ -960,6 +960,26 @@ test('大集合写入 sessionStorage，URL 不保留 materialIds，生成 16 位
   assert.equal(fallbackQuery.materialConfirmed, undefined)
 })
 
+test('构建向导默认 storage 访问受限时不抛错并回退 URL 选择集', () => {
+  withThrowingWindowSessionStorage(() => {
+    assert.deepEqual(resolveBuildSelectionFromQuery({ materialIds: '1' }), {
+      source: 'materialIds',
+      materialIds: ['1'],
+      selectionKey: '',
+      selectionCount: 1,
+      shouldCleanQuery: false,
+      invalid: false,
+    })
+
+    const ids = Array.from({ length: 55 }, (_, index) => String(index + 1))
+    const query = resolveBuildSelectionQuery({}, ids)
+
+    assert.equal(query.selectionKey, undefined)
+    assert.equal(query.selectionCount, undefined)
+    assert.equal(query.materialIds, ids.join(','))
+  })
+})
+
 test('step 与确认态 query 独立更新', () => {
   const baseQuery = { materialIds: '1,2', step: 'material', materialConfirmed: '1' }
 
@@ -1032,6 +1052,32 @@ function createThrowingStorage() {
     setItem() {
       throw new Error('storage disabled')
     },
+  }
+}
+
+function withThrowingWindowSessionStorage(run) {
+  const hadWindow = Object.hasOwn(globalThis, 'window')
+  const previousWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {},
+  })
+  Object.defineProperty(globalThis.window, 'sessionStorage', {
+    configurable: true,
+    get() {
+      throw new Error('storage disabled')
+    },
+  })
+
+  try {
+    run()
+  } finally {
+    if (hadWindow) {
+      Object.defineProperty(globalThis, 'window', previousWindowDescriptor)
+    } else {
+      delete globalThis.window
+    }
   }
 }
 

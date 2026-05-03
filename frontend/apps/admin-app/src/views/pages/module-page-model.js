@@ -489,11 +489,15 @@ function createBuildSelectionKey(ids) {
 }
 
 function safeSessionStorage() {
-  if (typeof window === 'undefined' || !window.sessionStorage) {
+  if (typeof window === 'undefined') {
     return null
   }
 
-  return window.sessionStorage
+  try {
+    return window.sessionStorage ?? null
+  } catch {
+    return null
+  }
 }
 
 function firstQueryValue(value) {
