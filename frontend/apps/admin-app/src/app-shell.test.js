@@ -99,9 +99,16 @@ import {
   resolveCourseSelectOptions,
 } from './views/pages/creation-form-model.js'
 import {
+  BUILD_SELECTION_STORAGE_PREFIX,
   buildPageQuery,
   createRouteSnapshot,
   createStaleRequestGuard,
+  resolveBuildConfirmQuery,
+  resolveBuildMaterialIdsQuery,
+  resolveBuildSelectionFromQuery,
+  resolveBuildSelectionQuery,
+  resolveBuildStepQuery,
+  resolveCleanBuildStepQuery,
   resolveOperationFeedback,
   resolveApiErrorAction,
   resolveCleanMaterialQuery,
@@ -809,6 +816,133 @@ test('知识库构建 loader 以 materialId query 恢复选择并清理非法资
   assert.deepEqual(resolveCleanMaterialQuery({ page: '1', materialId: '404' }), { page: '1' })
 })
 
+test('构建向导资料集合 query 支持小集合、旧 materialId 兼容和确认态清理', () => {
+  assert.deepEqual(resolveBuildSelectionFromQuery({ materialIds: '10, 9, bad,9' }), {
+    source: 'materialIds',
+    materialIds: ['9', '10'],
+    selectionKey: '',
+    selectionCount: 2,
+    shouldCleanQuery: false,
+    invalid: false,
+  })
+
+  assert.deepEqual(resolveBuildSelectionFromQuery({ materialId: '9' }), {
+    source: 'materialId',
+    materialIds: ['9'],
+    selectionKey: '',
+    selectionCount: 1,
+    shouldCleanQuery: true,
+    invalid: false,
+  })
+
+  assert.deepEqual(
+    resolveBuildMaterialIdsQuery({
+      page: '1',
+      step: 'parse',
+      materialId: '8',
+      materialIds: '7',
+      selectionKey: 'legacy',
+      selectionCount: '2',
+      materialConfirmed: '1',
+      exportConfirmed: '1',
+      promptConfirmed: '1',
+    }, ['10', '9', 'bad', '9']),
+    { page: '1', step: 'parse', materialIds: '9,10' },
+  )
+  assert.deepEqual(resolveBuildSelectionQuery({ materialConfirmed: '1' }, ['3', '1']), {
+    materialIds: '1,3',
+  })
+})
+
+test('selectionKey 优先于 materialIds，缺失本地选择集时降级', () => {
+  const storage = createMemoryStorage({
+    [`${BUILD_SELECTION_STORAGE_PREFIX}abc123`]: JSON.stringify(['3', '2', 'bad', '3']),
+  })
+
+  assert.deepEqual(
+    resolveBuildSelectionFromQuery({ selectionKey: 'abc123', materialIds: '9,10', materialId: '4' }, storage),
+    {
+      source: 'selectionKey',
+      materialIds: ['2', '3'],
+      selectionKey: 'abc123',
+      selectionCount: 2,
+      shouldCleanQuery: true,
+      invalid: false,
+    },
+  )
+
+  assert.deepEqual(
+    resolveBuildSelectionFromQuery({ selectionKey: 'missing', materialIds: '9,10' }, storage),
+    {
+      source: 'materialIds',
+      materialIds: ['9', '10'],
+      selectionKey: 'missing',
+      selectionCount: 2,
+      shouldCleanQuery: true,
+      invalid: false,
+    },
+  )
+
+  assert.deepEqual(
+    resolveBuildSelectionFromQuery({ selectionKey: 'missing' }, storage),
+    {
+      source: 'selectionKey',
+      materialIds: [],
+      selectionKey: 'missing',
+      selectionCount: 0,
+      shouldCleanQuery: true,
+      invalid: true,
+    },
+  )
+})
+
+test('大集合写入 sessionStorage，URL 不保留 materialIds，生成 16 位 hex selectionKey', () => {
+  const storage = createMemoryStorage()
+  const ids = Array.from({ length: 55 }, (_, index) => String(index + 1))
+  const query = resolveBuildSelectionQuery(
+    { step: 'material', materialIds: '1', materialConfirmed: '1' },
+    ids,
+    { storage },
+  )
+
+  assert.equal(query.step, 'material')
+  assert.equal(query.materialIds, undefined)
+  assert.equal(query.materialConfirmed, undefined)
+  assert.equal(query.selectionCount, '55')
+  assert.match(query.selectionKey, /^[0-9a-f]{16}$/)
+
+  const storedIds = JSON.parse(storage.getItem(`${BUILD_SELECTION_STORAGE_PREFIX}${query.selectionKey}`))
+  assert.deepEqual(storedIds, ids)
+})
+
+test('step 与确认态 query 独立更新', () => {
+  const baseQuery = { materialIds: '1,2', step: 'material', materialConfirmed: '1' }
+
+  assert.deepEqual(resolveBuildConfirmQuery(baseQuery, 'exportConfirmed', true), {
+    materialIds: '1,2',
+    step: 'material',
+    materialConfirmed: '1',
+    exportConfirmed: '1',
+  })
+  assert.deepEqual(resolveBuildConfirmQuery(baseQuery, 'materialConfirmed', false), {
+    materialIds: '1,2',
+    step: 'material',
+  })
+  assert.deepEqual(resolveBuildConfirmQuery(baseQuery, 'unknownConfirmed', true), baseQuery)
+  assert.deepEqual(resolveBuildStepQuery(baseQuery, 'export'), {
+    materialIds: '1,2',
+    step: 'export',
+    materialConfirmed: '1',
+  })
+  assert.deepEqual(resolveCleanBuildStepQuery({ step: 'bogus', materialConfirmed: '1' }), {
+    materialConfirmed: '1',
+  })
+  assert.deepEqual(resolveCleanBuildStepQuery({ step: 'parse', materialConfirmed: '1' }), {
+    step: 'parse',
+    materialConfirmed: '1',
+  })
+})
+
 test('知识库构建五步状态使用长任务状态和激活索引映射', async () => {
   const route = { name: 'knowledge-base-build', query: { materialId: '9' }, params: { kbId: '7' } }
   const result = await loadModulePage(route, route.query, {
@@ -831,6 +965,19 @@ test('知识库构建五步状态使用长任务状态和激活索引映射', as
     ['smoke', 'ready'],
   ])
 })
+
+function createMemoryStorage(initialState = {}) {
+  const state = new Map(Object.entries(initialState))
+
+  return {
+    getItem(key) {
+      return state.has(key) ? state.get(key) : null
+    },
+    setItem(key, value) {
+      state.set(key, String(value))
+    },
+  }
+}
 
 test('知识库构建 smoke 步骤必须等待激活索引并暴露真实问答动作状态', () => {
   const blockedSteps = buildKnowledgeBaseWorkflowSteps({

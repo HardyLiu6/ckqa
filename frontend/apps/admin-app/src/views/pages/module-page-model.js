@@ -226,3 +226,237 @@ function resolveBusinessMessage(apiError, fallback) {
 function nonGenericMessage(message) {
   return message && message !== '请求失败' ? message : ''
 }
+
+export const BUILD_SELECTION_STORAGE_PREFIX = 'ckqa:admin:kb-build-selection:'
+
+const BUILD_CONFIRM_QUERY_KEYS = new Set([
+  'materialConfirmed',
+  'exportConfirmed',
+  'promptConfirmed',
+])
+
+const DEFAULT_BUILD_STEPS = [
+  'material',
+  'parse',
+  'export',
+  'prompt',
+  'index',
+  'qa_check',
+]
+
+export function normalizeBuildMaterialIds(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  const ids = rawValues
+    .flatMap((item) => String(item ?? '').split(','))
+    .map((item) => item.trim())
+    .filter((item) => /^\d+$/.test(item))
+    .map((item) => String(Number(item)))
+
+  return [...new Set(ids)].sort((left, right) => Number(left) - Number(right))
+}
+
+export function resolveBuildSelectionFromQuery(query = {}, storage = safeSessionStorage()) {
+  const selectionKey = firstQueryValue(query.selectionKey)
+  const materialIds = normalizeBuildMaterialIds(query.materialIds)
+  const legacyMaterialIds = normalizeBuildMaterialIds(query.materialId)
+
+  if (selectionKey) {
+    const storedMaterialIds = readStoredBuildSelection(storage, selectionKey)
+
+    if (storedMaterialIds.length > 0) {
+      return createBuildSelectionResult({
+        source: 'selectionKey',
+        materialIds: storedMaterialIds,
+        selectionKey,
+        shouldCleanQuery: materialIds.length > 0 || legacyMaterialIds.length > 0,
+      })
+    }
+
+    if (materialIds.length > 0) {
+      return createBuildSelectionResult({
+        source: 'materialIds',
+        materialIds,
+        selectionKey,
+        shouldCleanQuery: true,
+      })
+    }
+
+    if (legacyMaterialIds.length > 0) {
+      return createBuildSelectionResult({
+        source: 'materialId',
+        materialIds: legacyMaterialIds,
+        selectionKey,
+        shouldCleanQuery: true,
+      })
+    }
+
+    return createBuildSelectionResult({
+      source: 'selectionKey',
+      materialIds: [],
+      selectionKey,
+      shouldCleanQuery: true,
+      invalid: true,
+    })
+  }
+
+  if (materialIds.length > 0) {
+    return createBuildSelectionResult({
+      source: 'materialIds',
+      materialIds,
+      shouldCleanQuery: false,
+    })
+  }
+
+  if (legacyMaterialIds.length > 0) {
+    return createBuildSelectionResult({
+      source: 'materialId',
+      materialIds: legacyMaterialIds,
+      shouldCleanQuery: true,
+    })
+  }
+
+  return createBuildSelectionResult({ source: 'empty', materialIds: [] })
+}
+
+export function resolveBuildMaterialIdsQuery(query = {}, materialIds = []) {
+  const nextQuery = cleanBuildSelectionQuery(query)
+  const normalizedMaterialIds = normalizeBuildMaterialIds(materialIds)
+
+  if (normalizedMaterialIds.length > 0) {
+    nextQuery.materialIds = normalizedMaterialIds.join(',')
+  }
+
+  return nextQuery
+}
+
+export function resolveBuildSelectionQuery(query = {}, materialIds = [], options = {}) {
+  const {
+    maxInlineItems = 50,
+    maxInlineLength = 1200,
+    storage = safeSessionStorage(),
+  } = options
+  const normalizedMaterialIds = normalizeBuildMaterialIds(materialIds)
+  const inlineValue = normalizedMaterialIds.join(',')
+  const canInline = normalizedMaterialIds.length <= maxInlineItems && inlineValue.length <= maxInlineLength
+
+  if (canInline || !storage) {
+    return resolveBuildMaterialIdsQuery(query, normalizedMaterialIds)
+  }
+
+  const nextQuery = cleanBuildSelectionQuery(query)
+  const selectionKey = createBuildSelectionKey(normalizedMaterialIds)
+
+  storage.setItem(`${BUILD_SELECTION_STORAGE_PREFIX}${selectionKey}`, JSON.stringify(normalizedMaterialIds))
+
+  return {
+    ...nextQuery,
+    selectionKey,
+    selectionCount: String(normalizedMaterialIds.length),
+  }
+}
+
+export function resolveBuildConfirmQuery(query = {}, confirmKey, enabled) {
+  if (!BUILD_CONFIRM_QUERY_KEYS.has(confirmKey)) {
+    return { ...query }
+  }
+
+  const nextQuery = { ...query }
+
+  if (enabled) {
+    nextQuery[confirmKey] = '1'
+  } else {
+    delete nextQuery[confirmKey]
+  }
+
+  return nextQuery
+}
+
+export function resolveBuildStepQuery(query = {}, stepKey) {
+  return {
+    ...query,
+    step: stepKey,
+  }
+}
+
+export function resolveCleanBuildStepQuery(query = {}, validSteps = DEFAULT_BUILD_STEPS) {
+  const validStepSet = new Set(validSteps)
+
+  if (validStepSet.has(firstQueryValue(query.step))) {
+    return { ...query }
+  }
+
+  const { step, ...rest } = query
+  return rest
+}
+
+function cleanBuildSelectionQuery(query = {}) {
+  const {
+    materialId,
+    materialIds,
+    selectionKey,
+    selectionCount,
+    materialConfirmed,
+    exportConfirmed,
+    promptConfirmed,
+    ...rest
+  } = query
+
+  return rest
+}
+
+function createBuildSelectionResult({
+  source,
+  materialIds,
+  selectionKey = '',
+  shouldCleanQuery = false,
+  invalid = false,
+}) {
+  return {
+    source,
+    materialIds,
+    selectionKey,
+    selectionCount: materialIds.length,
+    shouldCleanQuery,
+    invalid,
+  }
+}
+
+function readStoredBuildSelection(storage, selectionKey) {
+  if (!storage) {
+    return []
+  }
+
+  try {
+    const storedValue = storage.getItem(`${BUILD_SELECTION_STORAGE_PREFIX}${selectionKey}`)
+    const parsedValue = JSON.parse(storedValue)
+    return Array.isArray(parsedValue) ? normalizeBuildMaterialIds(parsedValue) : []
+  } catch {
+    return []
+  }
+}
+
+function createBuildSelectionKey(ids) {
+  const source = `${ids.join(',')}|${Date.now()}|${Math.random()}`
+  let hash = 0xcbf29ce484222325n
+  const prime = 0x100000001b3n
+
+  for (const char of source) {
+    hash ^= BigInt(char.charCodeAt(0))
+    hash = BigInt.asUintN(64, hash * prime)
+  }
+
+  return hash.toString(16).padStart(16, '0').slice(-16)
+}
+
+function safeSessionStorage() {
+  if (typeof window === 'undefined' || !window.sessionStorage) {
+    return null
+  }
+
+  return window.sessionStorage
+}
+
+function firstQueryValue(value) {
+  const firstValue = Array.isArray(value) ? value[0] : value
+  return String(firstValue ?? '').trim()
+}
