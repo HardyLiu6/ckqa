@@ -24,6 +24,8 @@
 - [../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-28-admin-app-live-api-integration-implementation-plan.md)
 - [../../../docs/superpowers/archive/specs/2026-04-29-element-plus-frontend-style-design.md](../../../docs/superpowers/archive/specs/2026-04-29-element-plus-frontend-style-design.md)
 - [../../../docs/superpowers/archive/plans/2026-04-29-element-plus-frontend-style-impl.md](../../../docs/superpowers/archive/plans/2026-04-29-element-plus-frontend-style-impl.md)
+- [../../../docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md](../../../docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md)
+- [../../../docs/superpowers/archive/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md)
 
 ## 目录与入口
 

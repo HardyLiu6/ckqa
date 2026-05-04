@@ -503,7 +503,7 @@ class GraphRAGExporter:
         out_path = tmp_dir / out_name
         serializer(docs, out_path)
 
-        relative_path = f"{output_prefix}/pdf_{file_id}/{out_name}"
+        relative_path = f"{output_prefix}/material_{file_id}/{out_name}"
         upload_result = self.storage.upload_artifact(course_id, str(out_path), relative_path)
 
         if force:

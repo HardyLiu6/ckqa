@@ -616,7 +616,7 @@ class PDFParserApp:
             batch_result = self.parser.get_batch_results(batch_id)
             
             # 下载结果到临时目录
-            artifact_prefix = f"pdf_{resolved_file_id}"
+            artifact_prefix = f"material_{resolved_file_id}"
             temp_output = self.config.get_temp_path(course_id, artifact_prefix, "output")
             results = self.parser.download_results(batch_result, temp_output)
             

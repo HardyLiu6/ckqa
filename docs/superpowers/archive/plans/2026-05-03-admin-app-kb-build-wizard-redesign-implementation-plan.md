@@ -1,8 +1,11 @@
 # admin-app 知识库构建向导页面逻辑重设计 Implementation Plan
 
+> 归档说明：该实施计划已完成并归档；当前代码以 `frontend/apps/admin-app/` 中的构建向导模型、loader、页面组件和 `build-wizard` 子组件为准。
+> 原设计稿归档位置：`docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 按 `docs/superpowers/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md` 落地 `/app/knowledge-bases/:kbId/build` 的六步主舞台式构建向导，支持多资料选择、URL 恢复、显式确认态、解析 / 导出 / 提示词 / 索引 / 问答验证的清晰状态流。
+**Goal:** 按 `docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md` 落地 `/app/knowledge-bases/:kbId/build` 的六步主舞台式构建向导，支持多资料选择、URL 恢复、显式确认态、解析 / 导出 / 提示词 / 索引 / 问答验证的清晰状态流。
 
 **Architecture:** 先把构建向导的 URL、选择集、确认态、步骤状态和主操作都收口到纯函数模型，保证 Node 单测覆盖后再改 Vue 模板。`loadKnowledgeBaseBuild()` 继续复用现有 Java `/api/v1` loader，不新增后端接口，不让浏览器访问 GraphRAG Python `/v1`。`WorkflowStepper.vue` 保留文件名但重构为顶部进度轨，`ModulePage.vue` 的构建页分支改为单一主舞台，根据 `activeStepKey` 渲染当前步骤。
 
@@ -62,7 +65,7 @@
 ## Task 0: 准备与基线确认
 
 **Files:**
-- Read: `docs/superpowers/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`
+- Read: `docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`
 - Read: `frontend/apps/admin-app/src/views/pages/module-content.js`
 - Read: `frontend/apps/admin-app/src/views/pages/module-page-model.js`
 - Read: `frontend/apps/admin-app/src/views/pages/module-loaders.js`
@@ -1456,8 +1459,8 @@ git commit -m "test(admin-app): cover build wizard focused stage errors"
 ## Task 7: 最终验证与文档对齐
 
 **Files:**
-- Modify if needed: `docs/superpowers/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`
-- Modify if needed: `docs/superpowers/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md`
+- Modify if needed: `docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`
+- Modify if needed: `docs/superpowers/archive/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md`
 
 - [ ] **Step 1: 跑完整前端验证**
 
@@ -1483,7 +1486,7 @@ Expected: 不包含 `frontend/apps/admin-app/dist/`、`frontend/apps/admin-app/t
 用以下 grep 快速确认关键规则仍在设计稿中：
 
 ```bash
-rg -n "资料集合发生变化|selectionKey.*materialIds|检查图谱输入|可用状态同步超时|同步超时状态" docs/superpowers/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md
+rg -n "资料集合发生变化|selectionKey.*materialIds|检查图谱输入|可用状态同步超时|同步超时状态" docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md
 ```
 
 Expected: 每个关键词都有命中。
@@ -1491,7 +1494,7 @@ Expected: 每个关键词都有命中。
 - [ ] **Step 4: 最终提交**
 
 ```bash
-git add docs/superpowers/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md docs/superpowers/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md frontend/apps/admin-app
+git add docs/superpowers/archive/specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md docs/superpowers/archive/plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md frontend/apps/admin-app
 git commit -m "feat(admin-app): redesign knowledge-base build wizard"
 ```
 

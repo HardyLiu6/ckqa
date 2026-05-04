@@ -78,6 +78,16 @@ SHOW TABLES LIKE 'qa_sessions';
 
 当前这套 schema 只负责数据库结构和基础种子，不代表运行态 API 已经接入这些表。
 
+如果本机 MinIO 中已经保留了操作系统教材 PDF、MinerU 解析产物和 GraphRAG 导出，但 MySQL 被重置，可以执行幂等修复脚本恢复课程资料元数据：
+
+```bash
+cd pdf_ingest
+python scripts/repair_course_material_seed.py --dry-run
+python scripts/repair_course_material_seed.py
+```
+
+默认参数对应当前本机 `os` 课程的 `计算机操作系统.pdf` 种子数据；其它课程可通过 `--course-id`、`--material-id`、`--display-name`、`--file-md5`、`--pdf-object-key` 等参数覆盖。脚本会优先使用 `material_<id>` 新命名空间，也能在旧 `pdf_<id>` 对象仍存在时补齐新路径；只有显式传入 `--cleanup-legacy` 才会删除旧对象。
+
 ## 常用命令
 
 ### 上传 PDF

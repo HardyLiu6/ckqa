@@ -22,6 +22,10 @@
   - 管理端 Element Plus + Pinia + Sass 样式重构设计稿，已完成并落到当前 admin-app 样式基座。
 - `plans/2026-04-29-element-plus-frontend-style-impl.md`
   - 管理端 Element Plus + Pinia + Sass 样式重构实施计划，已完成依赖、Pinia、SCSS 分层与组件样式迁移。
+- `specs/2026-05-03-admin-app-kb-build-wizard-redesign-design.md`
+  - 管理端知识库构建向导主舞台式重设计稿，已落地为六步资料选择、解析、导出、提示词确认、索引和 QA 验证流程。
+- `plans/2026-05-03-admin-app-kb-build-wizard-redesign-implementation-plan.md`
+  - 知识库构建向导实施计划，已完成 URL 选择态、多资料 loader、顶部进度轨、步骤子组件、主操作和浏览器故障注入验收。
 
 ## 使用约定
 

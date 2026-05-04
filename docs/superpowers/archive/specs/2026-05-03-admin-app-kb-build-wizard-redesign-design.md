@@ -1,5 +1,8 @@
 # admin-app 知识库构建向导页面逻辑重设计稿
 
+> 归档说明：该设计稿已在 `frontend/apps/admin-app/` 的知识库构建向导实现中落地，当前活跃入口见 `frontend/apps/admin-app/README.md`。
+> 当前代码以 `frontend/apps/admin-app/src/views/pages/module-page-model.js`、`module-loaders.js`、`module-content.js`、`ModulePage.vue` 和 `src/components/build-wizard/` 为准。
+
 > 日期：2026-05-03
 > 适用范围：`frontend/apps/admin-app/`
 > 相关路由：`/app/knowledge-bases/:kbId/build`
