@@ -27,7 +27,7 @@ import {
 } from './module-content.js'
 import { resolveBuildSelectionFromQuery } from './module-page-model.js'
 
-const COURSE_COLUMNS = ['课程', '状态', '资料进度', '知识库', '最近索引', '更新时间']
+const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
 const COURSE_STATUS_LABELS = {
   active: '开课中',
@@ -162,12 +162,35 @@ function mapCourseRow(course) {
     ] : [],
     cells: [
       course.courseName || course.courseId || '-',
+      createTeacherCell(course),
       createCourseStatusCell(course.status),
       createMaterialProgressCell(course),
       createKnowledgeBaseProgressCell(course),
       createLatestIndexCell(course),
       course.updatedAt || '-',
     ],
+  }
+}
+
+function createTeacherCell(course = {}) {
+  const teachers = Array.isArray(course.teachers) ? course.teachers : []
+  const teacherCount = Number(course.teacherCount ?? teachers.length)
+
+  if (teachers.length === 0 || teacherCount <= 0) {
+    return {
+      kind: 'empty',
+      label: '未绑定教师',
+      filterValue: 'unbound',
+    }
+  }
+
+  const firstTeacher = teachers[0]
+  const firstName = firstTeacher.displayName ?? firstTeacher.username ?? firstTeacher.userCode ?? '教师'
+  return {
+    kind: 'text',
+    label: teacherCount > 1 ? `${firstName} 等 ${teacherCount} 人` : firstName,
+    detail: firstTeacher.userCode ?? firstTeacher.username ?? '',
+    filterValue: 'bound',
   }
 }
 

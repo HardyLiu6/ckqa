@@ -110,7 +110,9 @@ import {
   KNOWLEDGE_BASE_STATUS_OPTIONS,
   createCreationForm,
   resolveCourseSelectOptions,
+  resolveTeacherSelectOptions,
 } from './views/pages/creation-form-model.js'
+import { listUsers } from './api/users.js'
 import {
   BUILD_SELECTION_STORAGE_PREFIX,
   buildPageQuery,
@@ -391,7 +393,8 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', asyn
 
   assert.equal(liveResult.rows[0].to, '/app/courses/os')
   assert.equal(getRowCells(liveResult.rows[0])[0], '操作系统')
-  assert.equal(getCellText(getRowCells(liveResult.rows[0])[1]), '开课中')
+  assert.equal(getCellText(getRowCells(liveResult.rows[0])[1]), '未绑定教师')
+  assert.equal(getCellText(getRowCells(liveResult.rows[0])[2]), '开课中')
 })
 
 test('课程列表行使用教师可读状态、进度和索引摘要', async () => {
@@ -403,6 +406,10 @@ test('课程列表行使用教师可读状态、进度和索引摘要', async ()
         items: [{
           courseId: 'os',
           courseName: '操作系统',
+          teachers: [
+            { userId: 8, userCode: 'T008', displayName: '张老师' },
+          ],
+          teacherCount: 1,
           status: 'active',
           materialCount: 2,
           parsedMaterialCount: 1,
@@ -419,19 +426,25 @@ test('课程列表行使用教师可读状态、进度和索引摘要', async ()
 
   const cells = getRowCells(liveResult.rows[0])
   assert.deepEqual(cells[1], {
+    kind: 'text',
+    label: '张老师',
+    detail: 'T008',
+    filterValue: 'bound',
+  })
+  assert.deepEqual(cells[2], {
     kind: 'status',
     status: 'active',
     label: '开课中',
     filterValue: 'active',
   })
-  assert.equal(cells[2].kind, 'progress')
-  assert.equal(cells[2].summary, '已解析 1/2')
-  assert.equal(cells[2].detail, '1 份解析失败')
-  assert.equal(cells[2].percent, 50)
-  assert.equal(cells[2].filterValue, 'hasFailed')
-  assert.equal(cells[3].summary, '已激活 1/2')
-  assert.equal(cells[4].label, '最近索引成功')
-  assert.equal(cells[4].detail, '运行 9')
+  assert.equal(cells[3].kind, 'progress')
+  assert.equal(cells[3].summary, '已解析 1/2')
+  assert.equal(cells[3].detail, '1 份解析失败')
+  assert.equal(cells[3].percent, 50)
+  assert.equal(cells[3].filterValue, 'hasFailed')
+  assert.equal(cells[4].summary, '已激活 1/2')
+  assert.equal(cells[5].label, '最近索引成功')
+  assert.equal(cells[5].detail, '运行 9')
 })
 
 test('课程详情 loader 只在主资源失败时进入页面级错误', async () => {
@@ -765,17 +778,23 @@ test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运�
 test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   const calls = []
   const client = {
+    get: async (url, config) => {
+      calls.push(['get', url, config?.params ?? null])
+      return { data: { code: 200, message: 'ok', data: { items: [], current: 1, size: 20, total: 0, pages: 0 } } }
+    },
     post: async (url, payload) => {
       calls.push(['post', url, payload])
       return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
     },
   }
 
-  await createCourse({ courseId: 'os', courseName: '操作系统', accessPolicy: 'restricted' }, client)
+  await createCourse({ courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }, client)
+  await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
   await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)
 
   assert.deepEqual(calls, [
-    ['post', '/courses', { courseId: 'os', courseName: '操作系统', accessPolicy: 'restricted' }],
+    ['post', '/courses', { courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }],
+    ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
     ['post', '/knowledge-bases', { courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }],
   ])
 })
@@ -792,6 +811,48 @@ test('知识库创建表单使用课程列表生成下拉选项并默认选中�
   ])
   assert.equal(createCreationForm('knowledge-base', { courseOptions: options }).courseId, 'os')
   assert.equal(createCreationForm('knowledge-base', { courseOptions: [] }).courseId, '')
+})
+
+test('课程创建表单移除手填课程标识并使用教师候选选项', () => {
+  assert.deepEqual(createCreationForm('course'), {
+    courseName: '',
+    teacherUserId: '',
+    description: '',
+    status: 'active',
+    accessPolicy: 'restricted',
+  })
+
+  const options = resolveTeacherSelectOptions([
+    { id: 8, userCode: 'T008', displayName: '张老师' },
+    { userId: 9, username: 'li', displayName: '李老师' },
+  ])
+
+  assert.deepEqual(options, [
+    { value: 8, label: '张老师（T008）' },
+    { value: 9, label: '李老师（li）' },
+  ])
+})
+
+test('教师候选 API 返回规范化分页数据', async () => {
+  const pageData = await listUsers(
+    { roleCode: 'teacher', status: 'active', page: 1, size: 20 },
+    {
+      get: async (url, config) => {
+        assert.equal(url, '/users')
+        assert.deepEqual(config.params, { roleCode: 'teacher', status: 'active', page: 1, size: 20 })
+        return {
+          data: {
+            code: 200,
+            message: 'ok',
+            data: { items: [{ id: 8 }], current: 1, size: 20, total: 1, pages: 1 },
+          },
+        }
+      },
+    },
+  )
+
+  assert.equal(pageData.items.length, 1)
+  assert.equal(pageData.pagination.total, 1)
 })
 
 test('创建表单枚举选项显示中文但保留后端英文值', () => {
@@ -1620,6 +1681,7 @@ test('业务页列表筛选只按显式列匹配', () => {
       subtitle: '#os',
       cells: [
         '操作系统',
+        { kind: 'text', label: '张老师', filterValue: 'bound' },
         { kind: 'status', label: '开课中', status: 'active', filterValue: 'active' },
         { kind: 'progress', summary: '已解析 1/2', filterValue: 'hasFailed' },
         { kind: 'progress', summary: '已激活 1/1', filterValue: 'complete' },
@@ -1632,6 +1694,7 @@ test('业务页列表筛选只按显式列匹配', () => {
       subtitle: '#ds',
       cells: [
         '数据结构',
+        { kind: 'empty', label: '未绑定教师', filterValue: 'unbound' },
         { kind: 'status', label: '草稿', status: 'draft', filterValue: 'draft' },
         { kind: 'progress', summary: '已解析 0/1', filterValue: 'incomplete' },
         { kind: 'progress', summary: '暂无知识库', filterValue: 'empty' },
@@ -1656,7 +1719,7 @@ test('业务页列表筛选只按显式列匹配', () => {
       .map((row) => getCellText(getRowCells(row)[0])),
     ['操作系统'],
   )
-  assert.equal(getCellText(getRowCells(liveCourseRows[0])[2]), '已解析 1/2')
+  assert.equal(getCellText(getRowCells(liveCourseRows[0])[3]), '已解析 1/2')
   assert.deepEqual(
     filterRowsByFilters(qaSessions.rows, qaSessions.filters, { sessionType: '冒烟验证' }).map((row) => row[0]),
     ['构建后冒烟验证', '索引切换验证'],
@@ -1830,9 +1893,11 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
   assert.match(modulePage, /<el-form\s+class="creation-form"/)
-  assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseId"/)
-  assert.match(modulePage, /placeholder="例如：os-2026"/)
+  assert.doesNotMatch(modulePage, /label="课程 ID"/)
+  assert.doesNotMatch(modulePage, /placeholder="例如：os-2026"/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseName"/)
+  assert.match(modulePage, /<el-select[\s\S]*v-model="creationForm\.teacherUserId"[\s\S]*filterable[\s\S]*remote[\s\S]*:remote-method="loadCreationTeachers"/)
+  assert.match(modulePage, /暂无可用教师，请先创建或启用教师账号。/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.accessPolicy"/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.status"/)
   assert.match(modulePage, /<el-select\s+v-model\.trim="creationForm\.courseId"/)

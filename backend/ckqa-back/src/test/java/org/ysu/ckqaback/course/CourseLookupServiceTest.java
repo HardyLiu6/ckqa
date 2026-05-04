@@ -2,31 +2,33 @@ package org.ysu.ckqaback.course;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.ysu.ckqaback.api.ApiPageData;
-import org.ysu.ckqaback.api.ApiResultCode;
-import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
-import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
+import org.ysu.ckqaback.entity.CourseMemberships;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
-import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.entity.Users;
+import org.ysu.ckqaback.service.CourseMembershipsService;
 import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.UsersService;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CourseLookupServiceTest {
@@ -35,6 +37,8 @@ class CourseLookupServiceTest {
     private CourseMaterialsService courseMaterialsService;
     private KnowledgeBasesService knowledgeBasesService;
     private IndexRunsService indexRunsService;
+    private CourseMembershipsService courseMembershipsService;
+    private UsersService usersService;
     private CourseLookupService service;
 
     @BeforeEach
@@ -43,7 +47,16 @@ class CourseLookupServiceTest {
         courseMaterialsService = mock(CourseMaterialsService.class);
         knowledgeBasesService = mock(KnowledgeBasesService.class);
         indexRunsService = mock(IndexRunsService.class);
-        service = new CourseLookupService(coursesService, courseMaterialsService, knowledgeBasesService, indexRunsService);
+        courseMembershipsService = mock(CourseMembershipsService.class);
+        usersService = mock(UsersService.class);
+        service = new CourseLookupService(
+                coursesService,
+                courseMaterialsService,
+                knowledgeBasesService,
+                indexRunsService,
+                courseMembershipsService,
+                usersService
+        );
     }
 
     @Test
@@ -61,6 +74,10 @@ class CourseLookupServiceTest {
         when(courseMaterialsService.listByCourseId("ds")).thenReturn(List.of());
         when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of(osKb, osDraftKb));
         when(knowledgeBasesService.listByCourseId("ds")).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of(
+                teacherMembership(21L, 8L, "os", "active")
+        ));
+        when(usersService.listByIds(anyCollection())).thenReturn(List.of(user(8L, "t008", "zhang", "张老师")));
         when(indexRunsService.listByKnowledgeBaseId(10L)).thenReturn(List.of(
                 indexRun(7L, "success", LocalDateTime.of(2026, 4, 28, 10, 0))
         ));
@@ -83,8 +100,19 @@ class CourseLookupServiceTest {
         assertThat(summary.getKnowledgeBaseCount()).isEqualTo(2L);
         assertThat(summary.getActiveKnowledgeBaseCount()).isEqualTo(1L);
         assertThat(summary.getLatestIndexRunId()).isEqualTo(7L);
+        assertThat(summary.getTeacherCount()).isEqualTo(1L);
+        assertThat(summary.getTeachers()).singleElement()
+                .satisfies(teacher -> {
+                    assertThat(teacher.getUserId()).isEqualTo(8L);
+                    assertThat(teacher.getUserCode()).isEqualTo("t008");
+                    assertThat(teacher.getDisplayName()).isEqualTo("张老师");
+                });
         assertThat(page.getTotal()).isEqualTo(2L);
         assertThat(page.getPages()).isEqualTo(2L);
+
+        ArgumentCaptor<Collection<String>> courseIdsCaptor = ArgumentCaptor.forClass(Collection.class);
+        verify(courseMembershipsService).listActiveTeachersByCourseIds(courseIdsCaptor.capture());
+        assertThat(courseIdsCaptor.getValue()).containsExactly("os");
     }
 
     @Test
@@ -92,14 +120,14 @@ class CourseLookupServiceTest {
         when(coursesService.list()).thenReturn(List.of(
                 course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30))
         ));
-        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
-        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
         CourseQueryRequest request = new CourseQueryRequest();
         request.setPage(Integer.MAX_VALUE);
         request.setSize(100);
 
-        assertThatCode(() -> service.listCourses(request)).doesNotThrowAnyException();
-        assertThat(service.listCourses(request).getItems()).isEmpty();
+        ApiPageData<CourseSummaryResponse> page = service.listCourses(request);
+
+        assertThat(page.getItems()).isEmpty();
+        verify(courseMembershipsService, never()).listActiveTeachersByCourseIds(anyCollection());
     }
 
     @Test
@@ -109,6 +137,7 @@ class CourseLookupServiceTest {
         when(coursesService.list()).thenReturn(List.of(os));
         when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
         when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of(kb));
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of());
         when(indexRunsService.listByKnowledgeBaseId(10L)).thenReturn(List.of(
                 indexRun(100L, "running", null),
                 indexRun(7L, "success", LocalDateTime.of(2026, 4, 28, 10, 0))
@@ -126,6 +155,7 @@ class CourseLookupServiceTest {
         when(coursesService.list()).thenReturn(List.of(os));
         when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
         when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of());
 
         CourseSummaryResponse summary = service.listCourses(new CourseQueryRequest()).getItems().getFirst();
 
@@ -136,43 +166,75 @@ class CourseLookupServiceTest {
         assertThat(summary.getActiveKnowledgeBaseCount()).isZero();
         assertThat(summary.getLatestIndexRunId()).isNull();
         assertThat(summary.getLatestIndexRunStatus()).isNull();
+        assertThat(summary.getTeachers()).isEmpty();
+        assertThat(summary.getTeacherCount()).isZero();
     }
 
     @Test
-    void shouldCreateCourseWithDefaultsAndReturnDetail() {
-        CourseCreateRequest request = new CourseCreateRequest();
-        request.setCourseId("db");
-        request.setCourseName("数据库系统");
-        request.setDescription("数据库课程资料");
-        when(coursesService.count(any())).thenReturn(0L);
-        when(coursesService.save(any(Courses.class))).thenAnswer(invocation -> {
-            Courses saved = invocation.getArgument(0);
-            saved.setId(3L);
-            return true;
-        });
+    void shouldFilterInactiveTeacherMembershipsWhenAggregatingTeachers() {
+        Courses os = course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30));
+        when(coursesService.list()).thenReturn(List.of(os));
+        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of(
+                teacherMembership(21L, 8L, "os", "inactive"),
+                teacherMembership(22L, 9L, "os", "disabled"),
+                studentMembership(23L, 10L, "os", "active")
+        ));
 
-        CourseDetailResponse response = service.createCourse(request);
+        CourseSummaryResponse summary = service.listCourses(new CourseQueryRequest()).getItems().getFirst();
 
-        assertThat(response.getId()).isEqualTo(3L);
-        assertThat(response.getCourseId()).isEqualTo("db");
-        assertThat(response.getCourseName()).isEqualTo("数据库系统");
-        assertThat(response.getStatus()).isEqualTo("active");
-        assertThat(response.getAccessPolicy()).isEqualTo("restricted");
-        verify(coursesService).save(any(Courses.class));
+        assertThat(summary.getTeachers()).isEmpty();
+        assertThat(summary.getTeacherCount()).isZero();
     }
 
     @Test
-    void shouldRejectDuplicateCourseIdWhenCreatingCourse() {
-        CourseCreateRequest request = new CourseCreateRequest();
-        request.setCourseId("os");
-        request.setCourseName("操作系统");
-        when(coursesService.count(any())).thenReturn(1L);
+    void shouldReturnTeachersInStableOrderWhenCourseHasMultipleActiveTeachers() {
+        Courses os = course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30));
+        when(coursesService.list()).thenReturn(List.of(os));
+        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of(
+                teacherMembership(30L, 9L, "os", "active"),
+                teacherMembership(20L, 8L, "os", "active")
+        ));
+        when(usersService.listByIds(anyCollection())).thenReturn(List.of(
+                user(8L, "t008", "zhang", "张老师"),
+                user(9L, "t009", "li", "李老师")
+        ));
 
-        assertThatThrownBy(() -> service.createCourse(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessage("课程ID已存在")
-                .extracting("code")
-                .isEqualTo(ApiResultCode.COURSE_ID_EXISTS.getCode());
+        CourseSummaryResponse summary = service.listCourses(new CourseQueryRequest()).getItems().getFirst();
+
+        assertThat(summary.getTeacherCount()).isEqualTo(2L);
+        assertThat(summary.getTeachers())
+                .extracting("userId")
+                .containsExactly(8L, 9L);
+    }
+
+    @Test
+    void shouldIgnoreMissingAndInactiveTeacherUsersWhenAggregatingTeachers() {
+        Courses os = course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30));
+        when(coursesService.list()).thenReturn(List.of(os));
+        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of(
+                teacherMembership(20L, 8L, "os", "active"),
+                teacherMembership(21L, 9L, "os", "active"),
+                teacherMembership(22L, 10L, "os", "active")
+        ));
+        Users disabledUser = user(9L, "t009", "li", "李老师");
+        disabledUser.setStatus("disabled");
+        when(usersService.listByIds(anyCollection())).thenReturn(List.of(
+                user(8L, "t008", "zhang", "张老师"),
+                disabledUser
+        ));
+
+        CourseSummaryResponse summary = service.listCourses(new CourseQueryRequest()).getItems().getFirst();
+
+        assertThat(summary.getTeacherCount()).isEqualTo(1L);
+        assertThat(summary.getTeachers())
+                .extracting("userId")
+                .containsExactly(8L);
     }
 
     private Courses course(Long id, String courseId, String courseName, String status, LocalDateTime updatedAt) {
@@ -189,6 +251,34 @@ class CourseLookupServiceTest {
         CourseMaterials material = new CourseMaterials();
         material.setParseStatus(status);
         return material;
+    }
+
+    private CourseMemberships teacherMembership(Long id, Long userId, String courseId, String status) {
+        return membership(id, userId, courseId, "teacher", status);
+    }
+
+    private CourseMemberships studentMembership(Long id, Long userId, String courseId, String status) {
+        return membership(id, userId, courseId, "student", status);
+    }
+
+    private CourseMemberships membership(Long id, Long userId, String courseId, String role, String status) {
+        CourseMemberships membership = new CourseMemberships();
+        membership.setId(id);
+        membership.setUserId(userId);
+        membership.setCourseId(courseId);
+        membership.setMembershipRole(role);
+        membership.setStatus(status);
+        return membership;
+    }
+
+    private Users user(Long id, String userCode, String username, String displayName) {
+        Users user = new Users();
+        user.setId(id);
+        user.setUserCode(userCode);
+        user.setUsername(username);
+        user.setDisplayName(displayName);
+        user.setStatus("active");
+        return user;
     }
 
     private KnowledgeBases knowledgeBase(Long id, String courseId, String status) {

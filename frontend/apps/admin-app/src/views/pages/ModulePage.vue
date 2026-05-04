@@ -18,6 +18,7 @@ import { createApiError, normalizePageData } from '../../api/client.js'
 import { createCourse, listCourses } from '../../api/courses.js'
 import { http } from '../../axios/index.js'
 import { createQaSession, getQaTask, sendQaMessage } from '../../api/qa.js'
+import { listUsers } from '../../api/users.js'
 import {
   createKnowledgeBase,
   createIndexRun,
@@ -56,6 +57,7 @@ import {
   KNOWLEDGE_BASE_STATUS_OPTIONS,
   createCreationForm,
   resolveCourseSelectOptions,
+  resolveTeacherSelectOptions,
 } from './creation-form-model.js'
 import {
   createExportMissingTaskOptions,
@@ -117,6 +119,9 @@ const creationForm = ref(createCreationForm('course'))
 const creationCourseOptions = ref([])
 const creationCourseState = ref('idle')
 const creationCourseError = ref(null)
+const creationTeacherOptions = ref([])
+const creationTeacherState = ref('idle')
+const creationTeacherError = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -142,8 +147,16 @@ const loading = computed(() => requestState.value === 'loading')
 const actionRunning = computed(() => ['running', 'confirming'].includes(actionState.value))
 const creationSubmitting = computed(() => creationState.value === 'running')
 const creationCourseLoading = computed(() => creationCourseState.value === 'loading')
+const creationTeacherLoading = computed(() => creationTeacherState.value === 'loading')
 const creationSubmitDisabled = computed(() => (
   creationSubmitting.value
+  || (creationDialog.value === 'course' && (
+    !creationForm.value.courseName?.trim()
+    || !creationForm.value.teacherUserId
+    || creationTeacherState.value === 'loading'
+    || creationTeacherState.value === 'failed'
+    || creationTeacherState.value === 'empty'
+  ))
   || (creationDialog.value === 'knowledge-base' && (!creationForm.value.courseId || creationCourseLoading.value))
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
@@ -519,9 +532,12 @@ function openCreationDialog(typeOverride = '', defaults = {}) {
   creationState.value = 'idle'
   creationError.value = null
   creationCourseError.value = null
+  creationTeacherError.value = null
 
   if (type === 'knowledge-base') {
     void loadCreationCourses()
+  } else {
+    void loadCreationTeachers('')
   }
 }
 
@@ -561,6 +577,37 @@ async function loadCreationCourses() {
   }
 }
 
+async function loadCreationTeachers(keyword = '') {
+  creationTeacherState.value = 'loading'
+  creationTeacherError.value = null
+  creationTeacherOptions.value = []
+
+  try {
+    const pageData = await listUsers({
+      roleCode: 'teacher',
+      status: 'active',
+      keyword: String(keyword ?? '').trim(),
+      page: 1,
+      size: 20,
+    })
+    const options = resolveTeacherSelectOptions(pageData.items)
+    creationTeacherOptions.value = options
+    if (
+      options.length === 0
+      || !options.some((option) => option.value === Number(creationForm.value.teacherUserId))
+    ) {
+      creationForm.value = {
+        ...creationForm.value,
+        teacherUserId: '',
+      }
+    }
+    creationTeacherState.value = options.length > 0 ? 'success' : 'empty'
+  } catch (error) {
+    creationTeacherState.value = 'failed'
+    creationTeacherError.value = createApiError(error)
+  }
+}
+
 async function submitCreation() {
   creationState.value = 'running'
   creationError.value = null
@@ -586,20 +633,22 @@ async function submitCreation() {
     }
 
     const payload = {
-      courseId: creationForm.value.courseId.trim(),
       courseName: creationForm.value.courseName.trim(),
+      teacherUserId: creationForm.value.teacherUserId
+        ? Number(creationForm.value.teacherUserId)
+        : undefined,
       description: creationForm.value.description.trim() || undefined,
       status: creationForm.value.status,
       accessPolicy: creationForm.value.accessPolicy,
     }
     const course = await createCourse(payload)
-    creationDialog.value = ''
-    creationState.value = 'success'
-    const courseId = course?.courseId ?? payload.courseId
+    const courseId = course?.courseId
     if (courseId) {
+      creationDialog.value = ''
+      creationState.value = 'success'
       await router.push(`/app/courses/${encodeURIComponent(courseId)}`)
     } else {
-      await loadPage()
+      throw { message: '课程创建响应缺少系统生成的课程标识' }
     }
   } catch (error) {
     creationState.value = 'failed'
@@ -964,17 +1013,6 @@ onBeforeUnmount(() => cancelLongTask())
 
       <el-form class="creation-form" label-position="top" @submit.prevent="submitCreation">
         <template v-if="creationDialog === 'course'">
-          <el-form-item class="creation-field" label="课程 ID" required>
-            <el-input
-              v-model.trim="creationForm.courseId"
-              name="courseId"
-              pattern="[A-Za-z0-9_-]+"
-              maxlength="64"
-              placeholder="例如：os-2026"
-              show-word-limit
-              required
-            />
-          </el-form-item>
           <el-form-item class="creation-field" label="课程名称" required>
             <el-input
               v-model.trim="creationForm.courseName"
@@ -984,6 +1022,28 @@ onBeforeUnmount(() => cancelLongTask())
               show-word-limit
               required
             />
+          </el-form-item>
+          <el-form-item class="creation-field" label="授课教师" required>
+            <el-select
+              v-model="creationForm.teacherUserId"
+              name="teacherUserId"
+              filterable
+              remote
+              clearable
+              remote-show-suffix
+              :remote-method="loadCreationTeachers"
+              :loading="creationTeacherLoading"
+              :placeholder="creationTeacherLoading ? '正在加载教师' : '搜索并选择教师'"
+              :disabled="creationTeacherLoading && !creationTeacherOptions.length"
+              required
+            >
+              <el-option
+                v-for="option in creationTeacherOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
           </el-form-item>
           <el-form-item class="creation-field" label="访问策略">
             <el-select v-model="creationForm.accessPolicy" name="accessPolicy">
@@ -1055,6 +1115,18 @@ onBeforeUnmount(() => cancelLongTask())
           </el-form-item>
         </template>
 
+        <p
+          v-if="creationDialog === 'course' && creationTeacherState === 'empty'"
+          class="inline-error creation-form__wide"
+        >
+          暂无可用教师，请先创建或启用教师账号。
+        </p>
+        <p
+          v-if="creationDialog === 'course' && creationTeacherError"
+          class="inline-error creation-form__wide"
+        >
+          {{ creationTeacherError.message }}
+        </p>
         <p
           v-if="creationDialog === 'knowledge-base' && creationCourseState === 'empty'"
           class="inline-error creation-form__wide"

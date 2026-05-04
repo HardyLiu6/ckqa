@@ -46,12 +46,7 @@ public class UsersController {
 
     @GetMapping
     public ApiResponse<ApiPageData<UserResponse>> listUsers(@Valid UserQueryRequest request) {
-        IPage<Users> page = usersService.pageUsers(
-                request.getPage(),
-                request.getSize(),
-                request.getUsername(),
-                request.getStatus()
-        );
+        IPage<Users> page = usersService.pageUsers(request);
         List<UserResponse> items = page.getRecords().stream()
                 .map(UserResponse::fromEntity)
                 .toList();

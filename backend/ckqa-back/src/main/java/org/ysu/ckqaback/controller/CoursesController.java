@@ -6,6 +6,7 @@ import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
@@ -37,6 +38,7 @@ import java.util.List;
 public class CoursesController {
 
     private final CourseLookupService courseLookupService;
+    private final CourseCommandService courseCommandService;
 
     @GetMapping
     public ApiResponse<ApiPageData<CourseSummaryResponse>> listCourses(@Valid @ModelAttribute CourseQueryRequest request) {
@@ -45,7 +47,7 @@ public class CoursesController {
 
     @PostMapping
     public ApiResponse<CourseDetailResponse> createCourse(@Valid @RequestBody CourseCreateRequest request) {
-        return ApiResponseUtils.success(courseLookupService.createCourse(request));
+        return ApiResponseUtils.success(courseCommandService.createCourse(request));
     }
 
     @GetMapping("/{courseId}")

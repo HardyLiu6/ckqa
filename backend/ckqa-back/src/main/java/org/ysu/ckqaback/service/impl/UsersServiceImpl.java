@@ -10,6 +10,7 @@ import org.ysu.ckqaback.mapper.UsersMapper;
 import org.ysu.ckqaback.service.UsersService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.ysu.ckqaback.user.dto.UserCreateRequest;
+import org.ysu.ckqaback.user.dto.UserQueryRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -35,18 +36,26 @@ public class UsersServiceImpl extends ServiceImpl<UsersMapper, Users> implements
     }
 
     @Override
-    public IPage<Users> pageUsers(Long page, Long size, String username, String status) {
-        LambdaQueryWrapper<Users> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.orderByDesc(Users::getCreatedAt);
+    public IPage<Users> pageUsers(UserQueryRequest request) {
+        long current = request.getPage() == null ? 1L : request.getPage();
+        long size = request.getSize() == null ? 10L : request.getSize();
+        String keyword = trimToNull(request.getKeyword());
+        String username = keyword == null ? trimToNull(request.getUsername()) : null;
+        return baseMapper.selectUserPage(
+                new Page<>(current, size),
+                username,
+                trimToNull(request.getStatus()),
+                trimToNull(request.getRoleCode()),
+                keyword
+        );
+    }
 
-        if (StringUtils.hasText(username)) {
-            queryWrapper.like(Users::getUsername, username);
+    @Override
+    public boolean hasRole(Long userId, String roleCode) {
+        if (userId == null || !StringUtils.hasText(roleCode)) {
+            return false;
         }
-        if (StringUtils.hasText(status)) {
-            queryWrapper.eq(Users::getStatus, status);
-        }
-
-        return page(new Page<>(page, size), queryWrapper);
+        return baseMapper.countUserRole(userId, roleCode.trim()) > 0;
     }
 
     @Override
@@ -66,5 +75,9 @@ public class UsersServiceImpl extends ServiceImpl<UsersMapper, Users> implements
         user.setStatus(StringUtils.hasText(request.getStatus()) ? request.getStatus() : "active");
         save(user);
         return user;
+    }
+
+    private String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

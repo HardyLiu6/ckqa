@@ -44,7 +44,7 @@ test('课程列表操作列固定在右侧且横向滚动不遮挡内容列', as
   const tableScroller = page.locator('.ckqa-el-table .el-table__body-wrapper .el-scrollbar__wrap').first()
   const firstRow = page.locator('.ckqa-el-table .el-table__body-wrapper tbody tr').first()
   const courseCell = firstRow.locator('td').first()
-  const updatedAtCell = firstRow.locator('td').nth(5)
+  const updatedAtCell = firstRow.locator('td').nth(6)
   const actionCell = firstRow.locator('.ckqa-el-table__action-column').first()
   await expect(actionCell.getByRole('link', { name: /知识库/ })).toBeVisible()
   await expect(updatedAtCell).toContainText('2026-05-03T09:40:00')

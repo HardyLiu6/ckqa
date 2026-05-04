@@ -1,7 +1,9 @@
 package org.ysu.ckqaback.course.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,14 +14,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class CourseCreateRequest {
-
-    /**
-     * 课程 ID，用作跨模块稳定业务标识。
-     */
-    @NotBlank(message = "courseId不能为空")
-    @Size(max = 64, message = "courseId长度不能超过64")
-    @Pattern(regexp = "[A-Za-z0-9_-]+", message = "courseId只能包含字母、数字、下划线或短横线")
-    private String courseId;
 
     /**
      * 课程名称。
@@ -45,4 +39,11 @@ public class CourseCreateRequest {
      */
     @Pattern(regexp = "restricted|public", message = "accessPolicy取值不合法")
     private String accessPolicy;
+
+    /**
+     * 初始授课教师用户 ID。
+     */
+    @NotNull(message = "请选择授课教师")
+    @Positive(message = "teacherUserId必须大于0")
+    private Long teacherUserId;
 }

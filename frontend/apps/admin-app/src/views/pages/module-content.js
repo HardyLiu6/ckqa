@@ -48,7 +48,7 @@ const configs = {
       {
         key: 'status',
         label: '课程状态',
-        columnIndex: 1,
+        columnIndex: 2,
         options: [
           { label: '全部状态', value: '' },
           { label: '开课中', value: 'active' },
@@ -59,7 +59,7 @@ const configs = {
       {
         key: 'materialState',
         label: '资料进度',
-        columnIndex: 2,
+        columnIndex: 3,
         options: [
           { label: '全部资料', value: '' },
           { label: '全部解析完成', value: 'complete' },
@@ -71,7 +71,7 @@ const configs = {
       {
         key: 'indexState',
         label: '索引状态',
-        columnIndex: 4,
+        columnIndex: 5,
         options: [
           { label: '全部索引', value: '' },
           { label: '最近成功', value: 'success' },
@@ -81,7 +81,7 @@ const configs = {
         ],
       },
     ],
-    columns: ['课程', '状态', '资料进度', '知识库', '最近索引', '更新时间'],
+    columns: ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间'],
     rows: [],
   },
   'course-detail': {

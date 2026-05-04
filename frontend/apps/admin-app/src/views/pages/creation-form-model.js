@@ -27,8 +27,8 @@ export function createCreationForm(type, options = {}) {
   }
 
   return {
-    courseId: '',
     courseName: '',
+    teacherUserId: '',
     description: '',
     status: 'active',
     accessPolicy: 'restricted',
@@ -47,6 +47,24 @@ export function resolveCourseSelectOptions(courses = []) {
       return {
         value: String(value),
         label: `${name}（${value}）`,
+      }
+    })
+    .filter(Boolean)
+}
+
+export function resolveTeacherSelectOptions(users = []) {
+  return users
+    .map((user) => {
+      const value = user.id ?? user.userId
+      if (!value) {
+        return null
+      }
+
+      const code = user.userCode ?? user.username ?? value
+      const name = user.displayName ?? user.username ?? code
+      return {
+        value: Number(value),
+        label: `${name}（${code}）`,
       }
     })
     .filter(Boolean)

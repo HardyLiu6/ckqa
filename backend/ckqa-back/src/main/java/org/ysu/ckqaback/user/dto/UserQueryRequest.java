@@ -34,8 +34,20 @@ public class UserQueryRequest {
     private String username;
 
     /**
+     * 用户编码、用户名、展示名统一模糊查询条件。
+     */
+    @Size(max = 128, message = "keyword长度不能超过128")
+    private String keyword;
+
+    /**
      * 用户状态过滤条件。
      */
     @Pattern(regexp = "active|disabled|locked|pending", message = "status取值不合法")
     private String status;
+
+    /**
+     * 平台角色过滤条件。
+     */
+    @Pattern(regexp = "student|teacher|admin", message = "roleCode取值不合法")
+    private String roleCode;
 }

@@ -19,7 +19,52 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, user_code, username, display_name, password_hash, status, last_login_at, extra_metadata, created_at, updated_at, is_deleted
+        u.id, u.user_code, u.username, u.display_name, u.password_hash, u.status, u.last_login_at, u.extra_metadata,
+        u.created_at, u.updated_at, u.is_deleted
     </sql>
+
+    <select id="selectUserPage" resultMap="BaseResultMap">
+        select distinct
+        <include refid="Base_Column_List" />
+        from users u
+        <if test="roleCode != null and roleCode != ''">
+            inner join user_roles ur on ur.user_id = u.id
+            inner join roles r on r.id = ur.role_id
+        </if>
+        where u.is_deleted = 0
+        <if test="status != null and status != ''">
+            and u.status = #{status}
+        </if>
+        <!-- username 保留旧接口语义；keyword 非空时由服务层置空 username，避免两套模糊条件叠加。 -->
+        <if test="username != null and username != ''">
+            and u.username like concat('%', #{username}, '%')
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and (
+                u.user_code like concat('%', #{keyword}, '%')
+                or u.username like concat('%', #{keyword}, '%')
+                or u.display_name like concat('%', #{keyword}, '%')
+            )
+        </if>
+        <if test="roleCode != null and roleCode != ''">
+            and r.role_code = #{roleCode}
+        </if>
+        <choose>
+            <when test="roleCode != null and roleCode != ''">
+                order by u.user_code asc, u.id asc
+            </when>
+            <otherwise>
+                order by u.created_at desc, u.id desc
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="countUserRole" resultType="long">
+        select count(1)
+        from user_roles ur
+        inner join roles r on r.id = ur.role_id
+        where ur.user_id = #{userId}
+          and r.role_code = #{roleCode}
+    </select>
 
 </mapper>

@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 课程列表摘要响应。
@@ -25,5 +26,9 @@ public class CourseSummaryResponse {
     private final Long activeKnowledgeBaseCount;
     private final Long latestIndexRunId;
     private final String latestIndexRunStatus;
+    @Builder.Default
+    private final List<CourseTeacherResponse> teachers = List.of();
+    @Builder.Default
+    private final Long teacherCount = 0L;
     private final LocalDateTime updatedAt;
 }

@@ -186,6 +186,32 @@ test('提示词调优步骤刷新后从 promptConfirmed=1 恢复完成态', asyn
   await expect(stage).toContainText('进入创建索引')
 })
 
+test('课程创建教师候选失败时显示本地错误并禁用提交', async ({ page }) => {
+  await installApiMocks(page, {
+    'GET /courses': () => ({ items: [], current: 1, size: 20, total: 0, pages: 0 }),
+    'GET /users': () => failure(502, 5003, '教师候选接口不可用'),
+  })
+
+  await openAuthenticated(page, '/app/courses')
+  await page.getByRole('button', { name: '新建课程' }).click()
+
+  await expect(page.getByText('教师候选接口不可用')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: '新建课程' }).getByRole('button', { name: '创建', exact: true })).toBeDisabled()
+})
+
+test('课程创建没有可用教师时显示空态并禁用提交', async ({ page }) => {
+  await installApiMocks(page, {
+    'GET /courses': () => ({ items: [], current: 1, size: 20, total: 0, pages: 0 }),
+    'GET /users': () => ({ items: [], current: 1, size: 20, total: 0, pages: 0 }),
+  })
+
+  await openAuthenticated(page, '/app/courses')
+  await page.getByRole('button', { name: '新建课程' }).click()
+
+  await expect(page.getByText('暂无可用教师，请先创建或启用教师账号。')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: '新建课程' }).getByRole('button', { name: '创建', exact: true })).toBeDisabled()
+})
+
 async function openAuthenticated(page, path) {
   await page.goto(path)
   await page.getByRole('button', { name: '进入平台' }).click()

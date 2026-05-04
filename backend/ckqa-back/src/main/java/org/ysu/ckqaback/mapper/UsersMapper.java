@@ -1,7 +1,9 @@
 package org.ysu.ckqaback.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.ysu.ckqaback.entity.Users;
 
 /**
@@ -15,4 +17,13 @@ import org.ysu.ckqaback.entity.Users;
 @Mapper
 public interface UsersMapper extends BaseMapper<Users> {
 
+    Page<Users> selectUserPage(
+            Page<Users> page,
+            @Param("username") String username,
+            @Param("status") String status,
+            @Param("roleCode") String roleCode,
+            @Param("keyword") String keyword
+    );
+
+    long countUserRole(@Param("userId") Long userId, @Param("roleCode") String roleCode);
 }

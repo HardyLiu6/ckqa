@@ -10,11 +10,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
+import org.ysu.ckqaback.course.dto.CourseTeacherResponse;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 
@@ -32,12 +34,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CoursesControllerWebMvcTest {
 
     private CourseLookupService courseLookupService;
+    private CourseCommandService courseCommandService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         courseLookupService = Mockito.mock(CourseLookupService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new CoursesController(courseLookupService))
+        courseCommandService = Mockito.mock(CourseCommandService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new CoursesController(courseLookupService, courseCommandService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -94,12 +98,19 @@ class CoursesControllerWebMvcTest {
 
     @Test
     void shouldCreateCourse() throws Exception {
-        given(courseLookupService.createCourse(any())).willReturn(CourseDetailResponse.builder()
+        given(courseCommandService.createCourse(any())).willReturn(CourseDetailResponse.builder()
                 .id(3L)
-                .courseId("db")
+                .courseId("crs-20260504-7f3k2a")
                 .courseName("数据库系统")
                 .status("active")
                 .accessPolicy("restricted")
+                .teachers(List.of(CourseTeacherResponse.builder()
+                        .userId(8L)
+                        .userCode("t008")
+                        .username("zhang")
+                        .displayName("张老师")
+                        .build()))
+                .teacherCount(1L)
                 .materialCount(0L)
                 .knowledgeBaseCount(0L)
                 .build());
@@ -108,16 +119,33 @@ class CoursesControllerWebMvcTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "courseId": "db",
+                                  "courseName": "数据库系统",
+                                  "description": "数据库课程资料",
+                                  "accessPolicy": "restricted",
+                                  "teacherUserId": 8
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courseId").value("crs-20260504-7f3k2a"))
+                .andExpect(jsonPath("$.data.courseName").value("数据库系统"))
+                .andExpect(jsonPath("$.data.status").value("active"))
+                .andExpect(jsonPath("$.data.teachers[0].userId").value(8));
+    }
+
+    @Test
+    void shouldRejectCreateCourseWhenTeacherUserIdMissing() throws Exception {
+        mockMvc.perform(post(ApiPaths.COURSES)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
                                   "courseName": "数据库系统",
                                   "description": "数据库课程资料",
                                   "accessPolicy": "restricted"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.courseId").value("db"))
-                .andExpect(jsonPath("$.data.courseName").value("数据库系统"))
-                .andExpect(jsonPath("$.data.status").value("active"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001))
+                .andExpect(jsonPath("$.message").value("参数校验失败"));
     }
 
     @Test
