@@ -24,6 +24,7 @@ ACTIVE_AUDIT_PATHS = (
     Path(".codex"),
     Path("pdf_ingest/README.md"),
     Path("pdf_ingest/CLAUDE.md"),
+    Path("pdf_ingest/scripts/cleanup_legacy_course_data.py"),
     Path("graphrag_pipeline/README.md"),
     Path("graphrag_pipeline/CLAUDE.md"),
     Path("graphrag_pipeline/pyproject.toml"),

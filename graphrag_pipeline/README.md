@@ -16,6 +16,8 @@
 - 真实依赖基线是 `graphrag==3.0.9`
 - `utils/main.py` 已收口为纯 CLI 查询包装层
 - API 运行时配置会优先读取仓库内 `.env` / 当前环境变量，并把查询统一委托给 GraphRAG CLI
+- 当前本地旧索引、旧输入和旧调优产物已清空；重新抽取后需要先同步输入、重建索引，再启动正式问答验证
+- Prompt 默认回到 `prompts/*.txt` 基础模板；`prompts/final/active_prompt.json` 只会在重新固化候选 Prompt 后生成
 
 ## 真实入口与关键文件
 
@@ -58,24 +60,26 @@ pip install -e ".[all]"
 ### 1. 同步输入
 
 ```bash
-python utils/fetch_from_minio.py os --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file page_docs.json --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file normalized_docs.json --input-dir ./tmp_validate/os/normalized --clean
+python utils/fetch_from_minio.py <course_id> --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file page_docs.json --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file normalized_docs.json --input-dir ./tmp_validate/<course_id>/normalized --clean
 ```
 
 脚本当前行为：
 
 - 默认拉取 `section_docs.json`
-- 多 PDF 课程下建议显式传 `--pdf-file-id`
+- 多资料课程下建议显式传 `--material-id`
 - 兼容历史 `*.jsonl` 文件并自动转为 JSON 数组
 - 会尽量把 `course_id`、`source_file`、`document_type`、`heading_path_text`、`page_start`、`page_end`、`section_level` 等 metadata 提升到顶层
 
-### 2. 激活当前索引使用的 Prompt
+### 2. 选择当前索引使用的 Prompt
 
 ```bash
-python scripts/finalize_candidate_prompt.py --candidate auto_tuned
+python scripts/finalize_candidate_prompt.py --candidate <candidate>
 ```
+
+刚完成旧产物清理后，`.env` 默认指向 `prompts/` 下的基础模板，可以直接建索引。只有在重新生成并选定候选 Prompt 后，才需要执行上面的固化命令。
 
 脚本当前行为：
 
@@ -121,7 +125,7 @@ python scripts/build_prompt_tuning_samples.py
 python scripts/build_audit_extraction_set.py
 python scripts/generate_candidate_prompts.py --overwrite
 python scripts/run_graphrag_prompt_tune.py --dry_run
-python scripts/finalize_candidate_prompt.py --candidate auto_tuned
+python scripts/finalize_candidate_prompt.py --candidate <candidate>
 ```
 
 当前约定是：模块专属脚本放在 `graphrag_pipeline/scripts/`，仓库根目录 `scripts/` 只保留仓库级工具，例如漂移审计。
@@ -164,6 +168,7 @@ python scripts/run_candidate_extraction.py \
 - 如需回退旧行为，可显式传 `--stream-mode off --no-retry-on-truncation`
 - `--max-entities` / `--max-relationships` 可限制高扇出样本的输出规模
 - 输出文件默认写入 `results/extraction_eval/`、`results/extraction_raw/`、`results/errors/`
+- `data/prompt_tuning_samples/`、`data/eval/audit_extraction_set.json`、`prompts/candidates/`、`prompts/final/` 和 `results/` 下的评测/报告文件都是可再生调优产物；重新抽取一版课程前可以清空，避免旧课程材料污染新评测
 
 ## API 说明
 
@@ -232,7 +237,7 @@ curl -X POST http://localhost:8012/v1/chat/completions \
 
 - `graphrag index` / `graphrag query` 主要走 `settings.yaml` + `.env`
 - `python utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认指向仓库内 `output/`
-- 当前活动 Prompt 由 `.env` 中的 `GRAPHRAG_ACTIVE_PROMPT_CANDIDATE` 与各个 `GRAPHRAG_*_PROMPT_FILE` 共同决定
+- 当前活动 Prompt 由 `.env` 中的 `GRAPHRAG_ACTIVE_PROMPT_CANDIDATE` 与各个 `GRAPHRAG_*_PROMPT_FILE` 共同决定；清理后默认候选名为 `base`，并直接指向 `prompts/*.txt`
 - API 侧常用覆盖项包括 `GRAPHRAG_OUTPUT_DIR`、`GRAPHRAG_LANCEDB_URI`、`GRAPHRAG_API_HOST`、`GRAPHRAG_API_PORT`
 
 如果索引结果和 API 服务行为不一致，先检查 `.env` / 环境变量里的输出目录是否和当前索引产物一致。
@@ -276,7 +281,7 @@ python ../scripts/audit_repo_drift.py --strict
 ### 验证输入同步
 
 ```bash
-python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file normalized_docs.json --input-dir ./tmp_validate/os/normalized --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file normalized_docs.json --input-dir ./tmp_validate/<course_id>/normalized --clean
 ```
 
 ## 辅助工具

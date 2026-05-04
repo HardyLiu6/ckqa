@@ -27,13 +27,13 @@ python scripts/pdf_processor/mineru_parser.py <command> [options]
 
 # Key commands: upload, parse, status, download, export-graphrag, list
 # Example: upload and parse a PDF
-python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
-python scripts/pdf_processor/mineru_parser.py upload os -f data/os/slides.pdf
-python scripts/pdf_processor/mineru_parser.py parse os --file-name slides.pdf
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/book.pdf --parse
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/slides.pdf
+python scripts/pdf_processor/mineru_parser.py parse <course_id> --material-id <material_id>
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section
 
 # Export to GraphRAG format
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section
 
 # Audit exported documents (example)
 python scripts/pdf_processor/export_audit.py ../graphrag_pipeline/tmp_validate/os/normalized/normalized_docs.json
@@ -43,6 +43,10 @@ python -m pytest tests/
 
 # Run a single test file
 python -m pytest tests/test_block_renderer.py
+
+# Clean legacy local course data before a full re-extraction
+python scripts/cleanup_legacy_course_data.py --env-file .env
+python scripts/cleanup_legacy_course_data.py --env-file .env --execute
 
 # Initialize database
 mysql -u root -p < sql/ocqa.sql
@@ -90,6 +94,7 @@ courses (1) ──→ (N) course_materials (N) ──→ (1) material_objects
 - `parse_results.course_material_id` and `parse_logs.course_material_id` isolate outputs and logs by course material
 - One course can contain multiple materials; operational commands should use `--material-id` first, while `--file-id` / `--file-name` remain compatibility inputs
 - `v_course_parse_overview` view aggregates stats
+- `scripts/cleanup_legacy_course_data.py` defaults to dry-run and treats course IDs not matching `crs-YYYYMMDD-HHMMSS` as legacy local data; use `--execute` only after checking its MySQL / MinIO plan
 
 ## Dependencies
 

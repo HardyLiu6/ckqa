@@ -5,9 +5,35 @@
 ## There are a number of settings to tune the threading and token limits for LLM calls - check the docs.
 
 completion_models:
+  # Legacy fallback for disabled or future workflow blocks that still reference
+  # the default model id. Active stages below bind to explicit model ids.
   default_completion_model:
     model_provider: openai
-    model: ${GRAPHRAG_CHAT_MODEL}
+    model: ${GRAPHRAG_QUERY_MODEL}
+    auth_method: api_key # or azure_managed_identity
+    api_key: ${GRAPHRAG_CHAT_API_KEY}
+    api_base: ${GRAPHRAG_API_BASE}
+    retry:
+      type: exponential_backoff
+  extraction_completion_model:
+    model_provider: openai
+    model: ${GRAPHRAG_EXTRACTION_MODEL}
+    auth_method: api_key # or azure_managed_identity
+    api_key: ${GRAPHRAG_CHAT_API_KEY}
+    api_base: ${GRAPHRAG_API_BASE}
+    retry:
+      type: exponential_backoff
+  summary_completion_model:
+    model_provider: openai
+    model: ${GRAPHRAG_SUMMARY_MODEL}
+    auth_method: api_key # or azure_managed_identity
+    api_key: ${GRAPHRAG_CHAT_API_KEY}
+    api_base: ${GRAPHRAG_API_BASE}
+    retry:
+      type: exponential_backoff
+  query_completion_model:
+    model_provider: openai
+    model: ${GRAPHRAG_QUERY_MODEL}
     auth_method: api_key # or azure_managed_identity
     api_key: ${GRAPHRAG_CHAT_API_KEY}
     api_base: ${GRAPHRAG_API_BASE}
@@ -99,13 +125,13 @@ embed_text:
   batch_size: 10
 
 extract_graph:
-  completion_model_id: default_completion_model
+  completion_model_id: extraction_completion_model
   prompt: ${GRAPHRAG_ENTITY_EXTRACTION_PROMPT_FILE}
   entity_types: [organization,person,geo,event]
   max_gleanings: 1
 
 summarize_descriptions:
-  completion_model_id: default_completion_model
+  completion_model_id: summary_completion_model
   prompt: ${GRAPHRAG_SUMMARIZE_DESCRIPTIONS_PROMPT_FILE}
   max_length: 500
 
@@ -124,7 +150,7 @@ extract_claims:
   max_gleanings: 1
 
 community_reports:
-  completion_model_id: default_completion_model
+  completion_model_id: summary_completion_model
   graph_prompt: ${GRAPHRAG_COMMUNITY_REPORT_GRAPH_PROMPT_FILE}
   text_prompt: ${GRAPHRAG_COMMUNITY_REPORT_TEXT_PROMPT_FILE}
   max_length: 2000
@@ -139,23 +165,23 @@ snapshots:
 ## See the config docs: https://microsoft.github.io/graphrag/config/yaml/#query
 
 local_search:
-  completion_model_id: default_completion_model
+  completion_model_id: query_completion_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/local_search_system_prompt.txt"
 
 global_search:
-  completion_model_id: default_completion_model
+  completion_model_id: query_completion_model
   map_prompt: "prompts/global_search_map_system_prompt.txt"
   reduce_prompt: "prompts/global_search_reduce_system_prompt.txt"
   knowledge_prompt: "prompts/global_search_knowledge_system_prompt.txt"
 
 drift_search:
-  completion_model_id: default_completion_model
+  completion_model_id: query_completion_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/drift_search_system_prompt.txt"
   reduce_prompt: "prompts/drift_search_reduce_prompt.txt"
 
 basic_search:
-  completion_model_id: default_completion_model
+  completion_model_id: query_completion_model
   embedding_model_id: default_embedding_model
   prompt: "prompts/basic_search_system_prompt.txt"

@@ -23,10 +23,10 @@ pip install -e ".[all]"
 pip install pytest
 
 # Pull GraphRAG input exported by pdf_ingest
-python utils/fetch_from_minio.py os --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file page_docs.json --clean
-python utils/fetch_from_minio.py os --pdf-file-id 3 --json-file normalized_docs.json --input-dir ./tmp_validate/os/normalized --clean
+python utils/fetch_from_minio.py <course_id> --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file page_docs.json --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file normalized_docs.json --input-dir ./tmp_validate/<course_id>/normalized --clean
 
 # Build/rebuild the knowledge graph index
 graphrag index --root .
@@ -45,7 +45,7 @@ python scripts/build_prompt_tuning_samples.py
 python scripts/build_audit_extraction_set.py
 python scripts/generate_candidate_prompts.py --overwrite
 python scripts/run_graphrag_prompt_tune.py --dry_run
-python scripts/finalize_candidate_prompt.py --candidate auto_tuned
+python scripts/finalize_candidate_prompt.py --candidate <candidate>
 python scripts/score_extraction_results.py --overwrite
 
 # Run tests
@@ -106,7 +106,7 @@ pdf_ingest 导出的 json
 - **`scripts/build_audit_extraction_set.py`**：从样本构建 audit 校准集。
 - **`scripts/generate_candidate_prompts.py`**：生成候选 Prompt 与 manifest。
 - **`scripts/run_graphrag_prompt_tune.py`**：统一封装 GraphRAG 官方 prompt-tune。
-- **`scripts/finalize_candidate_prompt.py`**：把候选 Prompt 固化到 `prompts/final/`，并更新 `.env` 中当前活动 Prompt 路径。
+- **`scripts/finalize_candidate_prompt.py`**：把候选 Prompt 固化到 `prompts/final/`，并更新 `.env` 中当前活动 Prompt 路径；清理旧调优产物后，候选目录可能为空。
 - **`utils/main.py`**：主 FastAPI 服务。默认读取仓库内 `output/`，统一通过 GraphRAG CLI 执行查询。
 - **`settings.yaml`**：GraphRAG CLI 索引配置，使用 `.env` 变量。
 - **`.env`**：GraphRAG CLI 所需的模型、目录和凭据变量。
@@ -123,7 +123,7 @@ pdf_ingest 导出的 json
 1. **`settings.yaml` + `.env`**
    - 供 `graphrag index` / `graphrag query` 等 CLI 使用。
    - `settings.yaml` 通过 `${GRAPHRAG_*}` 读取环境变量。
-   - 索引阶段的抽取 / 摘要 / community report Prompt 也通过 `.env` 驱动，可先运行 `python scripts/finalize_candidate_prompt.py --candidate <name>` 切换当前活动 Prompt。
+   - 索引阶段的抽取 / 摘要 / community report Prompt 也通过 `.env` 驱动。旧产物清理后默认使用 `prompts/*.txt` 基础模板；重新生成候选后，可运行 `python scripts/finalize_candidate_prompt.py --candidate <name>` 切换当前活动 Prompt。
 2. **`utils/main.py` 运行时配置**
    - 供 API 服务设置输出目录与监听地址。
    - 会优先读取仓库内 `.env` / 当前环境变量。
@@ -141,7 +141,7 @@ pdf_ingest 导出的 json
   - `normalized_docs.json`
 - `section_docs.json` / `page_docs.json` 是 GraphRAG 投影结果。
 - `normalized_docs.json` 更适合验收、抽样检查和字段保真分析。
-- 多 PDF 课程下，优先传 `--pdf-file-id` 避免歧义。
+- 多资料课程下，优先传 `--material-id` 避免歧义；`--pdf-file-id` 仅保留历史兼容。
 
 ### Infrastructure
 
@@ -176,5 +176,6 @@ pip install -e ".[all]"    # 全部依赖
 - `graphrag_pipeline/scripts/` 内部实现按 `prompt_tuning/` 与 `extraction_eval/` 分组；根目录同名脚本保留为兼容入口。
 - 仓库活跃入口文件与关键脚本可以用 `python ../scripts/audit_repo_drift.py --strict` 做快速审计。
 - `settings.yaml` 已经配置 `input.type: json` 与一组 metadata 字段。
+- 旧输入、旧索引和旧调优产物可能被清空以准备重新抽取；不要假设 `input/`、`output/`、`prompts/candidates/` 或 `prompts/final/active_prompt.json` 一定存在。
 - 若已经完成提示词调优并选定候选 Prompt，先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再执行 `graphrag index --root .`。
 - `output/` 中的 parquet 与 `lancedb/` 需要同时保留，API 服务依赖二者并存。

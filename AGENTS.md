@@ -67,6 +67,7 @@ Important files:
 - `scripts/pdf_processor/text_cleaner.py`
 - `scripts/pdf_processor/db_service.py`
 - `scripts/pdf_processor/storage_service.py`
+- `scripts/cleanup_legacy_course_data.py`
 
 Environment and commands:
 
@@ -80,9 +81,10 @@ Notes:
 - Runtime config comes from `.env`, loaded by `Config.from_env()`.
 - The shared `courseKg` environment already has `pytest` installed, so repository-local verification can run the test command directly. For a fresh environment, `pip install -e ".[dev]"` is still the reproducible setup.
 - MySQL state flow matters: `pending -> processing -> done/failed`.
-- A course may contain multiple PDFs. When there is more than one file, prefer `--file-id` or `--file-name` for parse/status/download/export commands.
+- A course may contain multiple PDFs. When there is more than one file, prefer `--material-id` for parse/status/download/export commands; `--file-id` / `--file-name` are compatibility inputs.
 - MinIO object paths are part of the real interface. Be careful when changing filenames or storage layout.
 - `export-graphrag` output is the main contract consumed by `graphrag_pipeline`.
+- For local full reset before re-extraction, use `python scripts/cleanup_legacy_course_data.py --env-file .env` for dry-run and add `--execute` only after checking the plan. By default it treats course IDs not matching `crs-YYYYMMDD-HHMMSS` as legacy data and deletes matching DB/MinIO references.
 
 ### `graphrag_pipeline/`
 
@@ -106,8 +108,8 @@ Environment and commands:
 - Install: `pip install -e ".[all]"`
 - Tests: `python -m pytest tests/`
 - Input sync: `python utils/fetch_from_minio.py <course_id> --clean`
-- Multi-PDF sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
-- Validation sync: `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --json-file normalized_docs.json --clean`
+- Multi-PDF sync: `python utils/fetch_from_minio.py <course_id> --material-id <id> --clean`
+- Validation sync: `python utils/fetch_from_minio.py <course_id> --material-id <id> --json-file normalized_docs.json --clean`
 - Index: `graphrag index --root .`
 - Query local: `graphrag query --root . --method local "问题"`
 - Query global: `graphrag query --root . --method global "问题"`
@@ -124,6 +126,8 @@ Notes:
 - `utils/main.py` reads repo-local `.env` / environment variables, defaults to the repo-local `output/` directory, and always delegates search to `graphrag query` in CLI mode.
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.
+- After a local reset, `input/`, `output/`, `prompts/candidates/`, prompt tuning reports, and `prompts/final/active_prompt.json` may be absent or empty. Regenerate them from the current course extraction instead of assuming old `os` / `ds` artifacts exist.
+- The reset default prompt state is `base`, pointing directly to `prompts/*.txt`; only use `finalize_candidate_prompt.py` after new candidates have been generated.
 - When updating active guidance files or runtime defaults, run `python scripts/audit_repo_drift.py --strict`.
 
 ### `frontend/apps/student-app/`

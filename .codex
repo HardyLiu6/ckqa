@@ -34,6 +34,7 @@
 - `graphrag_pipeline/pyproject.toml` 当前固定的是 `graphrag==3.0.9`，仓库内涉及版本判断时统一以它为准。
 - `graphrag_pipeline/utils/main.py` 当前已经收口为纯 GraphRAG CLI 查询包装层，不再尝试 2.x 风格的内部 API。
 - `pdf_ingest` 导出时会同时生成标准化中间结果 `normalized_docs.json`，以及面向 GraphRAG 的 `section_docs.json` / `page_docs.json`。
+- 本地完整重抽取前，旧版课程 ID 的 MySQL / MinIO 数据可用 `pdf_ingest/scripts/cleanup_legacy_course_data.py` 先 dry-run 后执行清理；不要默认假设 `os`、`ds` 仍是当前可用课程。
 - `frontend/apps/admin-app/` 仍不是主业务链路；`backend/ckqa-back/` 已经承担 Java 编排，但真实解析、索引和问答能力仍由两个 Python 模块提供。
 
 ## 仓库级工作规则
@@ -60,6 +61,7 @@
 - `graphrag_exporter.py`：输出 `normalized_docs.json`、`section_docs.json`、`page_docs.json`
 - `db_service.py`：MySQL 服务层
 - `storage_service.py`：MinIO 服务层
+- `cleanup_legacy_course_data.py`：清理旧版课程 ID 关联的本地 MySQL / MinIO 数据
 
 常用命令：
 
@@ -77,6 +79,7 @@
 - 当前共享开发环境里的 `courseKg` 已安装 `pytest`，因此仓库内日常验证可直接运行测试；如果重建环境，仍建议使用 `pip install -e ".[dev]"` 保持可复现。
 - 解析状态依赖 MySQL：`pending -> processing -> done/failed`。
 - 同一课程可绑定多份 PDF；多文件课程下优先传 `--material-id`，`--file-id` / `--file-name` 仅保留兼容入口。
+- 清理旧本地课程数据时，先运行 `python scripts/cleanup_legacy_course_data.py --env-file .env` 查看计划，再加 `--execute`；默认只清不符合 `crs-YYYYMMDD-HHMMSS` 的旧课程 ID。
 - `export-graphrag` 是对下游最重要的接口，改字段、命名或 MinIO 路径时必须检查 `graphrag_pipeline` 兼容性。
 
 ### 2. `graphrag_pipeline/`
@@ -104,8 +107,8 @@
 - `pip install -e ".[all]"`
 - `python -m pytest tests/`
 - `python utils/fetch_from_minio.py <course_id> --clean`
-- `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --clean`
-- `python utils/fetch_from_minio.py <course_id> --pdf-file-id <id> --json-file normalized_docs.json --clean`
+- `python utils/fetch_from_minio.py <course_id> --material-id <id> --clean`
+- `python utils/fetch_from_minio.py <course_id> --material-id <id> --json-file normalized_docs.json --clean`
 - `graphrag index --root .`
 - `graphrag query --root . --method local "问题"`
 - `graphrag query --root . --method global "问题"`
@@ -121,6 +124,8 @@
 - 当前共享开发环境里的 `graphrag-oneapi` 已安装 `pytest`，因此仓库内可直接跑测试；如果重建环境，请在安装项目依赖后额外补装 `pytest`。
 - `utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认读取仓库内 `output/`，并统一委托 `graphrag query` 执行查询。
 - `output/` 下的 parquet 与 `output/lancedb/` 都是 API 服务必需品。
+- 重新抽取准备阶段可能会清空 `input/`、`output/`、`prompts/candidates/`、调优报告和 `prompts/final/active_prompt.json`；后续必须从当前课程导出重新生成，不要复用旧课程材料的调优产物。
+- 旧调优产物清空后，默认活动 Prompt 是 `.env` 中的 `base`，指向 `prompts/*.txt` 基础模板；新候选生成后再运行 `finalize_candidate_prompt.py`。
 - 当前公开 API 模型名是 `graphrag-local-search:latest`、`graphrag-global-search:latest`、`graphrag-drift-search:latest`、`graphrag-basic-search:latest`；`full-model:latest` 已归档为后续扩展模式，不再对外宣称可用。
 - 修改入口文档、关键脚本或版本基线后，可运行 `python scripts/audit_repo_drift.py --strict` 做仓库级审计。
 

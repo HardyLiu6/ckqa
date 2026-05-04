@@ -36,6 +36,7 @@
 | `scripts/pdf_processor/db_service.py` | MySQL 服务层 |
 | `scripts/pdf_processor/storage_service.py` | MinIO 服务层 |
 | `scripts/pdf_processor/export_audit.py` | 导出结果审计辅助脚本 |
+| `scripts/cleanup_legacy_course_data.py` | 清理旧版课程 ID 关联的 MySQL / MinIO 本地数据 |
 | `sql/ocqa.sql` | 数据库初始化脚本 |
 
 ## 环境准备
@@ -90,7 +91,7 @@ cd pdf_ingest
 mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/migrations/20260504_role_user_test_data.sql
 ```
 
-如果本机 MinIO 中已经保留了操作系统教材 PDF、MinerU 解析产物和 GraphRAG 导出，但 MySQL 被重置，可以执行幂等修复脚本恢复课程资料元数据：
+如果本机 MinIO 中已经保留了旧种子教材 PDF、MinerU 解析产物和 GraphRAG 导出，但 MySQL 被重置，可以执行幂等修复脚本恢复课程资料元数据：
 
 ```bash
 cd pdf_ingest
@@ -98,34 +99,44 @@ python scripts/repair_course_material_seed.py --dry-run
 python scripts/repair_course_material_seed.py
 ```
 
-默认参数对应当前本机 `os` 课程的 `计算机操作系统.pdf` 种子数据；其它课程可通过 `--course-id`、`--material-id`、`--display-name`、`--file-md5`、`--pdf-object-key` 等参数覆盖。脚本会优先使用 `material_<id>` 新命名空间，也能在旧 `pdf_<id>` 对象仍存在时补齐新路径；只有显式传入 `--cleanup-legacy` 才会删除旧对象。
+默认参数是历史本机种子示例，不代表当前库中一定还保留 `os` 课程；其它课程可通过 `--course-id`、`--material-id`、`--display-name`、`--file-md5`、`--pdf-object-key` 等参数覆盖。脚本会优先使用 `material_<id>` 新命名空间，也能在旧 `pdf_<id>` 对象仍存在时补齐新路径；只有显式传入 `--cleanup-legacy` 才会删除旧对象。
+
+如果要在重新抽取前清空旧版课程 ID 的运行态数据，可先 dry-run 再执行：
+
+```bash
+cd pdf_ingest
+python scripts/cleanup_legacy_course_data.py --env-file .env
+python scripts/cleanup_legacy_course_data.py --env-file .env --execute
+```
+
+不传 `--course-id` 时，脚本会把不符合 `crs-YYYYMMDD-HHMMSS` 的课程 ID 视为旧版课程；如需清理特定课程，可以重复传入 `--course-id <course_id>`。脚本会同时清理数据库引用、课程 MinIO 前缀，以及不再被其它课程复用的 raw PDF 对象。
 
 ## 常用命令
 
 ### 上传 PDF
 
 ```bash
-python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf
-python scripts/pdf_processor/mineru_parser.py upload os -f data/os/slides.pdf
-python scripts/pdf_processor/mineru_parser.py upload os -f data/os/book.pdf --parse
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/book.pdf
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/slides.pdf
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/book.pdf --parse
 ```
 
 ### 解析、查看状态、下载结果
 
 ```bash
-python scripts/pdf_processor/mineru_parser.py parse os --material-id 3
-python scripts/pdf_processor/mineru_parser.py status os --material-id 3
-python scripts/pdf_processor/mineru_parser.py download os --material-id 3 -o ./output
+python scripts/pdf_processor/mineru_parser.py parse <course_id> --material-id <material_id>
+python scripts/pdf_processor/mineru_parser.py status <course_id> --material-id <material_id>
+python scripts/pdf_processor/mineru_parser.py download <course_id> --material-id <material_id> -o ./output
 python scripts/pdf_processor/mineru_parser.py list
 ```
 
 ### 导出给 GraphRAG
 
 ```bash
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode section --with-page-docs
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --mode page --force
-python scripts/pdf_processor/mineru_parser.py export-graphrag os --material-id 3 --no-semantic-table
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section --with-page-docs
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode page --force
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --no-semantic-table
 ```
 
 ## 导出产物说明
@@ -169,7 +180,7 @@ python -m pytest tests/
 ### 审计导出结果
 
 ```bash
-python scripts/pdf_processor/export_audit.py ../graphrag_pipeline/tmp_validate/os/normalized/normalized_docs.json
+python scripts/pdf_processor/export_audit.py ../graphrag_pipeline/tmp_validate/<course_id>/normalized/normalized_docs.json
 ```
 
 ### 运行仓库级漂移审计
