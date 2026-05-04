@@ -27,8 +27,19 @@ import {
 } from './module-content.js'
 import { resolveBuildSelectionFromQuery } from './module-page-model.js'
 
-const COURSE_COLUMNS = ['课程', '状态', '资料', '知识库', '最近索引', '更新时间']
+const COURSE_COLUMNS = ['课程', '状态', '资料进度', '知识库', '最近索引', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
+const COURSE_STATUS_LABELS = {
+  active: '开课中',
+  draft: '草稿',
+  archived: '已归档',
+}
+const INDEX_STATUS_LABELS = {
+  success: '最近索引成功',
+  running: '索引构建中',
+  failed: '最近索引失败',
+  pending: '索引等待中',
+}
 const defaultServices = {
   getCourse,
   listCourseKnowledgeBases,
@@ -138,26 +149,133 @@ export function resolveCoursesRequestState(items = []) {
 
 function mapCourseRow(course) {
   const courseId = course.courseId ?? course.id
+  const encodedCourseId = courseId ? encodeURIComponent(courseId) : ''
 
   return {
     id: courseId ?? course.courseName,
-    to: courseId ? `/app/courses/${encodeURIComponent(courseId)}` : '',
+    to: encodedCourseId ? `/app/courses/${encodedCourseId}` : '',
     subtitle: courseId ? `#${courseId}` : '',
-    actions: courseId ? [
-      { label: '详情', to: `/app/courses/${encodeURIComponent(courseId)}` },
+    actions: encodedCourseId ? [
+      { label: '详情', to: `/app/courses/${encodedCourseId}` },
+      { label: '成员', to: `/app/course-memberships?keyword=${encodedCourseId}` },
+      { label: '知识库', to: `/app/knowledge-bases?keyword=${encodedCourseId}`, variant: 'primary' },
     ] : [],
     cells: [
       course.courseName || course.courseId || '-',
-      course.status || '-',
-      `${Number(course.parsedMaterialCount ?? 0)}/${Number(course.materialCount ?? 0)} done`
-        + failedSuffix(course.failedMaterialCount),
-      `${Number(course.activeKnowledgeBaseCount ?? 0)}/${Number(course.knowledgeBaseCount ?? 0)} active`,
-      course.latestIndexRunId
-        ? `#${course.latestIndexRunId} ${course.latestIndexRunStatus || ''}`.trim()
-        : '-',
+      createCourseStatusCell(course.status),
+      createMaterialProgressCell(course),
+      createKnowledgeBaseProgressCell(course),
+      createLatestIndexCell(course),
       course.updatedAt || '-',
     ],
   }
+}
+
+function createCourseStatusCell(status) {
+  const normalizedStatus = String(status ?? '').trim() || 'unknown'
+
+  return {
+    kind: 'status',
+    status: normalizedStatus,
+    label: COURSE_STATUS_LABELS[normalizedStatus] ?? normalizedStatus,
+    filterValue: normalizedStatus,
+  }
+}
+
+function createMaterialProgressCell(course = {}) {
+  const total = Number(course.materialCount ?? 0)
+  const parsed = Number(course.parsedMaterialCount ?? 0)
+  const failed = Number(course.failedMaterialCount ?? 0)
+
+  if (total <= 0) {
+    return createProgressCell({
+      summary: '暂无资料',
+      detail: '等待课程资料登记',
+      percent: 0,
+      status: 'blocked',
+      filterValue: 'empty',
+    })
+  }
+
+  if (failed > 0) {
+    return createProgressCell({
+      summary: `已解析 ${parsed}/${total}`,
+      detail: `${failed} 份解析失败`,
+      percent: resolvePercent(parsed, total),
+      status: 'failed',
+      filterValue: 'hasFailed',
+    })
+  }
+
+  const complete = parsed >= total
+  return createProgressCell({
+    summary: `已解析 ${parsed}/${total}`,
+    detail: complete ? '资料可用于构建' : `${Math.max(total - parsed, 0)} 份待解析`,
+    percent: resolvePercent(parsed, total),
+    status: complete ? 'success' : 'pending',
+    filterValue: complete ? 'complete' : 'incomplete',
+  })
+}
+
+function createKnowledgeBaseProgressCell(course = {}) {
+  const total = Number(course.knowledgeBaseCount ?? 0)
+  const active = Number(course.activeKnowledgeBaseCount ?? 0)
+
+  if (total <= 0) {
+    return createProgressCell({
+      summary: '暂无知识库',
+      detail: '可创建课程知识库',
+      percent: 0,
+      status: 'blocked',
+      filterValue: 'empty',
+    })
+  }
+
+  const complete = active >= total
+  return createProgressCell({
+    summary: `已激活 ${active}/${total}`,
+    detail: complete ? '知识库均已激活' : `${Math.max(total - active, 0)} 个待激活`,
+    percent: resolvePercent(active, total),
+    status: complete ? 'success' : 'pending',
+    filterValue: complete ? 'complete' : 'partial',
+  })
+}
+
+function createProgressCell({ summary, detail, percent, status, filterValue }) {
+  return {
+    kind: 'progress',
+    summary,
+    detail,
+    percent,
+    status,
+    filterValue,
+  }
+}
+
+function createLatestIndexCell(course = {}) {
+  const latestIndexRunId = course.latestIndexRunId
+  const status = String(course.latestIndexRunStatus ?? '').trim()
+
+  if (!latestIndexRunId) {
+    return {
+      kind: 'empty',
+      label: '暂无索引',
+      filterValue: 'none',
+    }
+  }
+
+  return {
+    kind: 'status',
+    status: status || 'neutral',
+    label: INDEX_STATUS_LABELS[status] ?? `索引${status || '状态未知'}`,
+    detail: `运行 ${latestIndexRunId}`,
+    filterValue: status || 'none',
+  }
+}
+
+function resolvePercent(done, total) {
+  if (total <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((Number(done) / Number(total)) * 100)))
 }
 
 async function loadKnowledgeBases(query, services) {
@@ -647,11 +765,6 @@ function resolveStepDisplayStatus(status) {
     failed: '失败',
     blocked: '未满足条件',
   }[status] ?? status
-}
-
-function failedSuffix(value) {
-  const failed = Number(value ?? 0)
-  return failed > 0 ? ` / ${failed} failed` : ''
 }
 
 async function loadCourseDetail(route, services) {

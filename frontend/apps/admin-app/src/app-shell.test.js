@@ -46,7 +46,9 @@ import {
   PRODUCTION_STEPS,
 } from './views/dashboard/production-track-model.js'
 import {
+  filterRowsBySearchAndFilters,
   filterRowsByFilters,
+  getCellText,
   getRowCells,
   getModulePageConfig,
   isWorkflowPrimaryActionDisabled,
@@ -388,7 +390,48 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', asyn
   )
 
   assert.equal(liveResult.rows[0].to, '/app/courses/os')
-  assert.deepEqual(getRowCells(liveResult.rows[0]).slice(0, 2), ['操作系统', 'active'])
+  assert.equal(getRowCells(liveResult.rows[0])[0], '操作系统')
+  assert.equal(getCellText(getRowCells(liveResult.rows[0])[1]), '开课中')
+})
+
+test('课程列表行使用教师可读状态、进度和索引摘要', async () => {
+  const liveResult = await loadModulePage(
+    { name: 'courses', query: {}, params: {} },
+    {},
+    {
+      listCourses: async () => ({
+        items: [{
+          courseId: 'os',
+          courseName: '操作系统',
+          status: 'active',
+          materialCount: 2,
+          parsedMaterialCount: 1,
+          failedMaterialCount: 1,
+          knowledgeBaseCount: 2,
+          activeKnowledgeBaseCount: 1,
+          latestIndexRunId: 9,
+          latestIndexRunStatus: 'success',
+          updatedAt: '2026-05-03T10:44:00',
+        }],
+      }),
+    },
+  )
+
+  const cells = getRowCells(liveResult.rows[0])
+  assert.deepEqual(cells[1], {
+    kind: 'status',
+    status: 'active',
+    label: '开课中',
+    filterValue: 'active',
+  })
+  assert.equal(cells[2].kind, 'progress')
+  assert.equal(cells[2].summary, '已解析 1/2')
+  assert.equal(cells[2].detail, '1 份解析失败')
+  assert.equal(cells[2].percent, 50)
+  assert.equal(cells[2].filterValue, 'hasFailed')
+  assert.equal(cells[3].summary, '已激活 1/2')
+  assert.equal(cells[4].label, '最近索引成功')
+  assert.equal(cells[4].detail, '运行 9')
 })
 
 test('课程详情 loader 只在主资源失败时进入页面级错误', async () => {
@@ -1540,11 +1583,13 @@ test('业务页模型显式声明数据来源和主操作', () => {
   const build = getModulePageConfig('knowledge-base-build')
 
   assert.equal(courses.dataSource, 'live')
+  assert.equal(courses.tableTitle, '课程清单')
   assert.equal(courses.primaryAction.label, '新建课程')
   assert.equal(courses.primaryAction.disabled, false)
   assert.equal(courses.primaryAction.title, '创建课程')
   assert.equal(courses.secondaryAction, null)
   assert.equal(knowledgeBases.dataSource, 'live')
+  assert.equal(knowledgeBases.tableTitle, '知识库实例')
   assert.deepEqual(knowledgeBases.rows, [])
   assert.equal(knowledgeBases.primaryAction.disabled, false)
   assert.equal(knowledgeBases.primaryAction.title, '创建知识库')
@@ -1570,14 +1615,48 @@ test('业务页列表筛选只按显式列匹配', () => {
   const courses = getModulePageConfig('courses')
   const qaSessions = getModulePageConfig('qa-sessions')
   const liveCourseRows = [
-    ['操作系统', 'active', '1/2 done', '1/1 active', '#9 success', '2026-04-28T09:30:00'],
-    ['数据结构', 'draft', '0/1 done', '0/0 active', '-', '2026-04-27T09:30:00'],
+    {
+      id: 'os',
+      subtitle: '#os',
+      cells: [
+        '操作系统',
+        { kind: 'status', label: '开课中', status: 'active', filterValue: 'active' },
+        { kind: 'progress', summary: '已解析 1/2', filterValue: 'hasFailed' },
+        { kind: 'progress', summary: '已激活 1/1', filterValue: 'complete' },
+        { kind: 'status', label: '最近索引成功', filterValue: 'success' },
+        '2026-04-28T09:30:00',
+      ],
+    },
+    {
+      id: 'ds',
+      subtitle: '#ds',
+      cells: [
+        '数据结构',
+        { kind: 'status', label: '草稿', status: 'draft', filterValue: 'draft' },
+        { kind: 'progress', summary: '已解析 0/1', filterValue: 'incomplete' },
+        { kind: 'progress', summary: '暂无知识库', filterValue: 'empty' },
+        { kind: 'empty', label: '暂无索引', filterValue: 'none' },
+        '2026-04-27T09:30:00',
+      ],
+    },
   ]
 
   assert.deepEqual(
-    filterRowsByFilters(liveCourseRows, courses.filters, { status: 'active', scope: '我的课程' }).map((row) => row[0]),
+    filterRowsByFilters(liveCourseRows, courses.filters, { status: 'active', scope: '我的课程' })
+      .map((row) => getRowCells(row)[0]),
     ['操作系统'],
   )
+  assert.deepEqual(
+    filterRowsByFilters(liveCourseRows, courses.filters, { materialState: 'incomplete' })
+      .map((row) => getRowCells(row)[0]),
+    ['数据结构'],
+  )
+  assert.deepEqual(
+    filterRowsBySearchAndFilters(liveCourseRows, courses.filters, { indexState: 'success' }, 'os')
+      .map((row) => getCellText(getRowCells(row)[0])),
+    ['操作系统'],
+  )
+  assert.equal(getCellText(getRowCells(liveCourseRows[0])[2]), '已解析 1/2')
   assert.deepEqual(
     filterRowsByFilters(qaSessions.rows, qaSessions.filters, { sessionType: '冒烟验证' }).map((row) => row[0]),
     ['构建后冒烟验证', '索引切换验证'],
@@ -1668,9 +1747,19 @@ test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
   assert.match(tableShell, /<el-table\s/)
+  assert.match(tableShell, /:fit="false"/)
   assert.match(tableShell, /<el-table-column[\s\S]*v-for="\([^"]*column[^"]*\) in columns"/)
   assert.match(tableShell, /<el-table-column[\s\S]*label="操作"/)
-  assert.match(tableShell, /<el-select\s+v-model="filterValues\[filter\.key\]"/)
+  assert.match(tableShell, /class="table-search-input"/)
+  assert.match(tableShell, /:model-value="getFilterValue\(filter\)"/)
+  assert.match(tableShell, /@update:model-value="handleFilterChange\(filter\.key, \$event\)"/)
+  assert.match(tableShell, /@update:model-value="handleSearchInput"/)
+  assert.match(tableShell, /<el-tag class="table-toolbar-tag" type="primary" effect="light">检索<\/el-tag>/)
+  assert.match(tableShell, /<el-tag class="table-toolbar-tag" :type="getFilterTagType\(index\)" effect="light">/)
+  assert.match(tableShell, /class="table-progress-cell"/)
+  assert.match(tableShell, /type="circle"/)
+  assert.match(tableShell, /class="table-progress-cell__ring"/)
+  assert.match(tableShell, /fixed="right"/)
   assert.match(tableShell, /<el-pagination[\s\S]*@current-change="handlePageChange"/)
   assert.doesNotMatch(tableShell, /<table\s/)
   assert.doesNotMatch(tableShell, /<select\s/)
@@ -1681,15 +1770,27 @@ test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
   assert.match(componentsCss, /\.pagination-bar\s*\{[\s\S]*justify-content:\s*center;[\s\S]*\}/)
 })
 
-test('表格操作列按钮使用紧凑横排避免图标按钮换行堆叠', () => {
+test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   const tableShell = readFileSync(new URL('./components/common/DataTableShell.vue', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
 
-  assert.match(tableShell, /label="操作"[\s\S]*min-width="220"/)
+  assert.match(tableShell, /label="操作"[\s\S]*width="306"/)
+  assert.match(tableShell, /header-class-name="ckqa-el-table__action-column"/)
+  assert.match(tableShell, /fixed="right"/)
   assert.match(componentsCss, /\.data-table__actions\s*\{[\s\S]*flex-wrap:\s*nowrap;[\s\S]*\}/)
+  assert.match(componentsCss, /\.data-table__actions\s*\{[\s\S]*justify-content:\s*center;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-scroll\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-progress-cell\s*\{[\s\S]*display:\s*flex;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-toolbar\s*\{[\s\S]*align-items:\s*center;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-toolbar-field--search\s*\{[\s\S]*flex:\s*1 1 320px;[\s\S]*\}/)
   assert.match(componentsCss, /\.data-table__actions\s+\.el-button\s*\+\s*\.el-button\s*\{[\s\S]*margin-left:\s*0;[\s\S]*\}/)
-  assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*min-width:\s*82px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*width:\s*78px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.ckqa-el-button--primary\.el-button\s*\{[\s\S]*width:\s*104px;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*8px;[\s\S]*\}/)
+  assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:\s*1px solid var\(--ckqa-border-subtle\);[\s\S]*\}/)
+  assert.doesNotMatch(elementPlusCss, /scrollbar-gutter:\s*stable/)
+  assert.doesNotMatch(elementPlusCss, /el-table-fixed-column--right[\s\S]*box-shadow/)
 })
 
 test('构建向导使用顶部进度轨和单一主舞台结构', () => {
@@ -1712,7 +1813,7 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.match(modulePage, /ChevronLeft/)
   assert.match(modulePage, /BuildStepMaterial/)
   assert.match(modulePage, /BuildStepQaCheck/)
-  assert.match(modulePage, /v-if="route\.name !== 'knowledge-base-build'"[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
+  assert.match(modulePage, /v-if="route\.name !== 'knowledge-base-build'"[\s\S]*:class="primaryHeroButtonClass"/)
   assert.doesNotMatch(modulePage, /v-if="route\.name === 'knowledge-base-build'"\s+class="content-grid two-columns"/)
   assert.doesNotMatch(modulePage, /buildSelectionBlock\?\.selectedMaterialId/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
@@ -1730,11 +1831,21 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
 
   assert.match(modulePage, /<el-form\s+class="creation-form"/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseId"/)
+  assert.match(modulePage, /placeholder="例如：os-2026"/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.courseName"/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.accessPolicy"/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.status"/)
   assert.match(modulePage, /<el-select\s+v-model\.trim="creationForm\.courseId"/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.description"[\s\S]*type="textarea"/)
+  assert.match(modulePage, /:rows="5"/)
+  assert.match(modulePage, /aria-label="取消创建"/)
+  assert.doesNotMatch(modulePage, />\s*关闭\s*</)
+  assert.match(modulePage, /@search-change="handleTableSearch"/)
+  assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
+  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
+  assert.match(modulePage, /:title="tableTitle"/)
+  assert.match(modulePage, /data-course-section="materials"/)
+  assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId: String\(route\.params\.courseId \?\? ''\) \}\)/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
 
   assert.match(qaCheckStep, /<el-input[\s\S]*id="smoke-question"[\s\S]*@input="\$emit\('update-smoke-question'/)
@@ -1750,7 +1861,13 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(topbar, /<select/)
   assert.doesNotMatch(consoleLayout, /@role-change/)
   assert.doesNotMatch(consoleLayout, /function switchRole/)
+  assert.match(consoleLayout, /const breadcrumbItems = computed/)
+  assert.match(consoleLayout, /LIST_ROUTE_BY_GROUP/)
+  assert.match(consoleLayout, /class="breadcrumb-list"/)
+  assert.match(consoleLayout, /:data-kind="item\.kind"/)
   assert.match(componentsCss, /\.creation-field\s+\.el-input,\s*[\s\S]*\.creation-field\s+\.el-select/)
+  assert.match(componentsCss, /\.breadcrumb-item\[data-kind="link"\]/)
+  assert.match(componentsCss, /\.breadcrumb-item\[data-kind="current"\]/)
 })
 
 test('按钮和菜单图标与文字保留舒展间距', () => {

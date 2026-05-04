@@ -17,6 +17,8 @@ class TestOCQADocsContract(unittest.TestCase):
         text = README_PATH.read_text(encoding="utf-8")
         self.assertIn("mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/ocqa.sql", text)
         self.assertIn("SELECT role_code, role_name FROM roles ORDER BY id;", text)
+        self.assertIn("COUNT(ur.user_id) AS user_count", text)
+        self.assertIn("mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/migrations/20260504_role_user_test_data.sql", text)
         self.assertIn("SHOW TABLES LIKE 'course_memberships';", text)
 
     def test_readme_documents_reusable_course_material_contract(self):

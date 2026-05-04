@@ -147,6 +147,8 @@ const creationSubmitDisabled = computed(() => (
   || (creationDialog.value === 'knowledge-base' && (!creationForm.value.courseId || creationCourseLoading.value))
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
+const tableTitle = computed(() => config.value.tableTitle || pageTitle.value)
+const showModuleHeroTitle = computed(() => config.value.variant !== 'table')
 const activeBuildStep = computed(() => {
   const steps = config.value.workflowSteps ?? []
   return steps.find((step) => step.key === activeStepKey.value)
@@ -202,6 +204,17 @@ const primaryActionLabel = computed(() => (
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
 const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
 const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
+const canManualRefresh = computed(() => config.value.dataSource === 'live' && route.name !== 'knowledge-base-build')
+const tableSearchText = computed(() => firstQueryValue(route.query.keyword))
+const tableFilterValues = computed(() => {
+  const values = {}
+
+  for (const filter of config.value.filters ?? []) {
+    values[filter.key] = firstQueryValue(route.query[filter.key])
+  }
+
+  return values
+})
 const primaryActionIcon = computed(() => {
   if (canOpenCreationDialog.value) return Plus
   if (route.name === 'material-detail') return Play
@@ -213,6 +226,11 @@ const secondaryActionIcon = computed(() => {
   return DatabaseZap
 })
 const creationDialogTitle = computed(() => creationDialog.value === 'knowledge-base' ? '新建知识库' : '新建课程')
+const primaryHeroButtonClass = computed(() => [
+  'ckqa-el-button',
+  route.name === 'course-detail' ? 'ckqa-el-button--secondary' : 'ckqa-el-button--primary',
+])
+const primaryHeroButtonType = computed(() => route.name === 'course-detail' ? 'default' : 'primary')
 const operationFeedback = computed(() => resolveOperationFeedback(
   activeOperationKey.value,
   actionState.value,
@@ -341,6 +359,32 @@ function handlePageChange(page) {
   router.replace({ query: buildPageQuery(route.query, page) })
 }
 
+function handleTableSearch(keyword) {
+  router.replace({
+    query: normalizeTableQuery({
+      ...route.query,
+      keyword: String(keyword ?? '').trim(),
+      page: 1,
+    }),
+  })
+}
+
+function handleTableFilterChange({ key, value }) {
+  router.replace({
+    query: normalizeTableQuery({
+      ...route.query,
+      [key]: value,
+      page: 1,
+    }),
+  })
+}
+
+function normalizeTableQuery(query = {}) {
+  return Object.fromEntries(
+    Object.entries(query).filter(([, value]) => String(value ?? '').trim() !== ''),
+  )
+}
+
 async function updateBuildActiveStep(stepKey) {
   activeStepKey.value = stepKey
   if (route.name === 'knowledge-base-build') {
@@ -381,6 +425,11 @@ async function retryCourseBlock(key) {
 async function handlePrimaryAction() {
   if (route.name === 'courses' || route.name === 'knowledge-bases') {
     openCreationDialog()
+    return
+  }
+
+  if (route.name === 'course-detail') {
+    scrollToCourseSection('materials')
     return
   }
 
@@ -445,6 +494,14 @@ async function handleBuildPrimaryAction() {
 }
 
 async function handleSecondaryAction() {
+  if (route.name === 'course-detail') {
+    await router.push({
+      path: '/app/course-memberships',
+      query: { keyword: String(route.params.courseId ?? '') },
+    })
+    return
+  }
+
   if (route.name !== 'material-detail') {
     return
   }
@@ -452,10 +509,13 @@ async function handleSecondaryAction() {
   await runMaterialExport()
 }
 
-function openCreationDialog() {
-  const type = route.name === 'knowledge-bases' ? 'knowledge-base' : 'course'
+function openCreationDialog(typeOverride = '', defaults = {}) {
+  const type = typeOverride || (route.name === 'knowledge-bases' ? 'knowledge-base' : 'course')
   creationDialog.value = type
-  creationForm.value = createCreationForm(type, { courseOptions: creationCourseOptions.value })
+  creationForm.value = {
+    ...createCreationForm(type, { courseOptions: creationCourseOptions.value }),
+    ...defaults,
+  }
   creationState.value = 'idle'
   creationError.value = null
   creationCourseError.value = null
@@ -802,6 +862,29 @@ function countRowsByStatus(rows = [], status) {
   return rows.filter((row) => row.status === status).length
 }
 
+function firstQueryValue(value) {
+  return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
+}
+
+function scrollToCourseSection(key) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.querySelector(`[data-course-section="${key}"]`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
+
+function resolveCourseStatusLabel(status) {
+  return {
+    active: '开课中',
+    draft: '草稿',
+    archived: '已归档',
+  }[status] ?? status
+}
+
 watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
 onBeforeUnmount(() => cancelLongTask())
 </script>
@@ -811,8 +894,18 @@ onBeforeUnmount(() => cancelLongTask())
     <div>
       <p class="eyebrow">{{ config.eyebrow }}</p>
       <div class="module-title-row">
-        <h2>{{ pageTitle }}</h2>
+        <h2 v-if="showModuleHeroTitle">{{ pageTitle }}</h2>
         <DataSourceChip :source="config.dataSource" :refreshed-at="config.refreshedAt" />
+        <el-button
+          v-if="canManualRefresh"
+          class="ckqa-el-button ckqa-el-button--ghost manual-refresh-button"
+          native-type="button"
+          :disabled="loading"
+          @click="loadPage()"
+        >
+          <RefreshCw class="button-icon" :size="15" aria-hidden="true" />
+          刷新
+        </el-button>
       </div>
       <p>{{ config.summary }}</p>
     </div>
@@ -820,8 +913,8 @@ onBeforeUnmount(() => cancelLongTask())
     <div class="button-row">
       <el-button
         v-if="route.name !== 'knowledge-base-build'"
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
+        :class="primaryHeroButtonClass"
+        :type="primaryHeroButtonType"
         native-type="button"
         :disabled="Boolean(config.primaryAction?.disabled)
           || (route.name === 'material-detail' && (!config.actions?.canParse || actionRunning))
@@ -861,10 +954,11 @@ onBeforeUnmount(() => cancelLongTask())
           class="ckqa-el-button ckqa-el-button--ghost"
           native-type="button"
           :disabled="creationSubmitting"
+          aria-label="取消创建"
           @click="closeCreationDialog"
         >
           <X class="button-icon" :size="16" aria-hidden="true" />
-          关闭
+          取消
         </el-button>
       </div>
 
@@ -876,6 +970,7 @@ onBeforeUnmount(() => cancelLongTask())
               name="courseId"
               pattern="[A-Za-z0-9_-]+"
               maxlength="64"
+              placeholder="例如：os-2026"
               show-word-limit
               required
             />
@@ -885,6 +980,7 @@ onBeforeUnmount(() => cancelLongTask())
               v-model.trim="creationForm.courseName"
               name="courseName"
               maxlength="255"
+              placeholder="例如：操作系统 2026 春"
               show-word-limit
               required
             />
@@ -977,7 +1073,8 @@ onBeforeUnmount(() => cancelLongTask())
             v-model.trim="creationForm.description"
             type="textarea"
             name="description"
-            :rows="3"
+            :rows="5"
+            placeholder="补充课程范围、面向班级或资料来源"
             maxlength="2000"
             show-word-limit
           />
@@ -1097,31 +1194,39 @@ onBeforeUnmount(() => cancelLongTask())
 
   <DataTableShell
     v-else-if="config.variant === 'table'"
-    :title="pageTitle"
+    :title="tableTitle"
     :columns="config.columns"
     :rows="config.rows"
     :filters="config.filters"
     :pagination="config.pagination"
+    :search="config.search"
+    :search-text="tableSearchText"
+    :filter-values="tableFilterValues"
     :loading="loading"
     :error="loadError"
     @page-change="handlePageChange"
+    @search-change="handleTableSearch"
+    @filter-change="handleTableFilterChange"
   />
 
   <section v-else-if="courseBlock" class="content-grid two-columns">
-    <article class="panel">
+    <article class="panel course-info-panel wide-panel">
       <div class="panel-heading">
         <h2>课程概览</h2>
-        <span class="record-count">{{ courseBlock.facts?.length ?? 0 }} 项</span>
+        <StatusBadge
+          :status="courseBlock.item?.status || 'neutral'"
+          :label="resolveCourseStatusLabel(courseBlock.item?.status)"
+        />
       </div>
-      <div class="field-grid">
-        <div v-for="field in courseBlock.facts" :key="field.label" class="field-tile">
-          <span>{{ renderFactLabel(field) }}</span>
-          <strong>{{ renderFactValue(field) }}</strong>
+      <dl class="course-info-block">
+        <div v-for="field in courseBlock.facts" :key="field.label" class="course-info-row">
+          <dt>{{ renderFactLabel(field) }}</dt>
+          <dd>{{ renderFactValue(field) }}</dd>
         </div>
-      </div>
+      </dl>
     </article>
 
-    <article class="panel">
+    <article class="panel" data-course-section="materials">
       <div class="panel-heading">
         <h2>资料区块</h2>
         <el-button
@@ -1143,10 +1248,21 @@ onBeforeUnmount(() => cancelLongTask())
           <small>{{ item.meta }} {{ item.detail }}</small>
         </li>
       </ol>
-      <p v-if="materialsBlock?.state === 'empty'">暂无课程资料。</p>
+      <div v-if="materialsBlock?.state === 'empty'" class="empty-action-state">
+        <p>暂无课程资料。</p>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="blockLoadingKey === 'materials'"
+          @click="retryCourseBlock('materials')"
+        >
+          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
+          刷新资料
+        </el-button>
+      </div>
     </article>
 
-    <article class="panel wide-panel">
+    <article class="panel wide-panel" data-course-section="knowledgeBases">
       <div class="panel-heading">
         <h2>知识库区块</h2>
         <el-button
@@ -1169,7 +1285,18 @@ onBeforeUnmount(() => cancelLongTask())
           <small>{{ item.detail }}</small>
         </li>
       </ol>
-      <p v-if="knowledgeBasesBlock?.state === 'empty'">暂无知识库。</p>
+      <div v-if="knowledgeBasesBlock?.state === 'empty'" class="empty-action-state">
+        <p>暂无知识库。</p>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="button"
+          @click="openCreationDialog('knowledge-base', { courseId: String(route.params.courseId ?? '') })"
+        >
+          <Plus class="button-icon" :size="16" aria-hidden="true" />
+          新建知识库
+        </el-button>
+      </div>
     </article>
   </section>
 

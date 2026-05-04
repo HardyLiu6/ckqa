@@ -31,7 +31,12 @@ const configs = {
     variant: 'table',
     dataSource: 'live',
     eyebrow: 'Course Operations',
+    tableTitle: '课程清单',
     summary: '从课程进入资料、知识库与问答闭环，管理员可管理全局课程，教师只看授权课程。',
+    search: {
+      placeholder: '搜索课程名称或课程 ID',
+      ariaLabel: '搜索课程',
+    },
     primaryAction: {
       label: '新建课程',
       permission: 'course:write',
@@ -40,9 +45,43 @@ const configs = {
     },
     secondaryAction: null,
     filters: [
-      { key: 'status', label: '课程状态', columnIndex: 1, options: ['全部', 'active', 'archived'] },
+      {
+        key: 'status',
+        label: '课程状态',
+        columnIndex: 1,
+        options: [
+          { label: '全部状态', value: '' },
+          { label: '开课中', value: 'active' },
+          { label: '草稿', value: 'draft' },
+          { label: '已归档', value: 'archived' },
+        ],
+      },
+      {
+        key: 'materialState',
+        label: '资料进度',
+        columnIndex: 2,
+        options: [
+          { label: '全部资料', value: '' },
+          { label: '全部解析完成', value: 'complete' },
+          { label: '存在待处理', value: 'incomplete' },
+          { label: '存在失败', value: 'hasFailed' },
+          { label: '暂无资料', value: 'empty' },
+        ],
+      },
+      {
+        key: 'indexState',
+        label: '索引状态',
+        columnIndex: 4,
+        options: [
+          { label: '全部索引', value: '' },
+          { label: '最近成功', value: 'success' },
+          { label: '构建中', value: 'running' },
+          { label: '最近失败', value: 'failed' },
+          { label: '暂无索引', value: 'none' },
+        ],
+      },
     ],
-    columns: ['课程', '状态', '资料', '知识库', '最近索引', '更新时间'],
+    columns: ['课程', '状态', '资料进度', '知识库', '最近索引', '更新时间'],
     rows: [],
   },
   'course-detail': {
@@ -83,6 +122,7 @@ const configs = {
     variant: 'table',
     dataSource: 'live',
     eyebrow: 'Knowledge Base',
+    tableTitle: '知识库实例',
     summary: '管理课程知识库实例，重点看激活索引、最近构建状态和进入构建向导。',
     primaryAction: {
       label: '新建知识库',
@@ -291,9 +331,9 @@ export function getRowCells(row = []) {
 export function filterRowsByFilters(rows = [], filters = [], values = {}) {
   return rows.filter((row) =>
     filters.every((filter) => {
-      const selected = values[filter.key] ?? '全部'
+      const selected = normalizeFilterValue(values[filter.key])
 
-      if (selected === '全部') {
+      if (!selected || selected === '全部') {
         return true
       }
 
@@ -301,9 +341,57 @@ export function filterRowsByFilters(rows = [], filters = [], values = {}) {
         return true
       }
 
-      return String(getRowCells(row)[filter.columnIndex] ?? '') === String(selected)
+      return String(getCellFilterValue(getRowCells(row)[filter.columnIndex]) ?? '') === String(selected)
     }),
   )
+}
+
+export function filterRowsBySearchAndFilters(rows = [], filters = [], values = {}, keyword = '') {
+  const query = String(keyword ?? '').trim().toLowerCase()
+  const filteredRows = filterRowsByFilters(rows, filters, values)
+
+  if (!query) {
+    return filteredRows
+  }
+
+  return filteredRows.filter((row) => {
+    const searchableText = [
+      ...getRowCells(row).map(getCellText),
+      row?.subtitle,
+      row?.id,
+    ].join(' ').toLowerCase()
+
+    return searchableText.includes(query)
+  })
+}
+
+export function getCellText(cell) {
+  if (cell == null) return ''
+  if (typeof cell !== 'object') return String(cell)
+
+  return String(
+    cell.text
+    ?? cell.label
+    ?? cell.summary
+    ?? cell.value
+    ?? cell.title
+    ?? '',
+  )
+}
+
+export function getCellFilterValue(cell) {
+  if (cell == null) return ''
+  if (typeof cell !== 'object') return cell
+
+  return cell.filterValue ?? cell.value ?? cell.status ?? getCellText(cell)
+}
+
+function normalizeFilterValue(value) {
+  if (Array.isArray(value)) {
+    return normalizeFilterValue(value[0])
+  }
+
+  return String(value ?? '').trim()
 }
 
 export function resolveActiveWorkflowStep(steps = [], activeKey = '') {

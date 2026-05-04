@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive } from 'vue'
-import { ArrowRight, Eye } from 'lucide-vue-next'
+import { ArrowRight, Eye, Search } from 'lucide-vue-next'
 
 import StatusBadge from './StatusBadge.vue'
 import {
@@ -8,7 +8,11 @@ import {
   resolveTableError,
   resolveTableRecordCount,
 } from './data-table-shell-model.js'
-import { filterRowsByFilters, getRowCells } from '../../views/pages/module-content.js'
+import {
+  filterRowsBySearchAndFilters,
+  getCellText,
+  getRowCells,
+} from '../../views/pages/module-content.js'
 
 const STATUS_VALUES = new Set([
   'active',
@@ -29,30 +33,58 @@ const props = defineProps({
   columns: { type: Array, required: true },
   rows: { type: Array, required: true },
   filters: { type: Array, default: () => [] },
+  filterValues: { type: Object, default: () => ({}) },
+  search: { type: [Object, String, Boolean], default: false },
+  searchText: { type: String, default: '' },
   emptyText: { type: String, default: '暂无记录' },
   pagination: { type: Object, default: null },
   loading: { type: Boolean, default: false },
   error: { type: [Object, String], default: null },
 })
 
-const emit = defineEmits(['pageChange'])
+const emit = defineEmits(['pageChange', 'filterChange', 'searchChange'])
 
 const filterValues = reactive({})
+const localSearchText = reactive({ value: '' })
 
 const paginationState = computed(() => resolvePaginationState(props.pagination))
 const tableError = computed(() => resolveTableError(props.error))
-const filteredRows = computed(() => {
-  return filterRowsByFilters(props.rows, props.filters, filterValues)
-})
+const effectiveFilterValues = computed(() => ({ ...filterValues, ...props.filterValues }))
+const effectiveSearchText = computed(() => props.searchText || localSearchText.value)
+const searchConfig = computed(() => resolveSearchConfig(props.search))
+const filteredRows = computed(() => filterRowsBySearchAndFilters(
+  props.rows,
+  props.filters,
+  effectiveFilterValues.value,
+  effectiveSearchText.value,
+))
 const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
 const hasRowActions = computed(() => filteredRows.value.some((row) => getRowActions(row).length > 0))
 
 function isStatusCell(column, cell) {
-  return column.includes('状态') || STATUS_VALUES.has(String(cell))
+  return cell?.kind === 'status' || column.includes('状态') || STATUS_VALUES.has(String(cell))
+}
+
+function isProgressCell(cell) {
+  return cell?.kind === 'progress'
+}
+
+function isEmptyCell(cell) {
+  return cell?.kind === 'empty'
 }
 
 function handlePageChange(page) {
   emit('pageChange', page)
+}
+
+function handleSearchInput(value) {
+  localSearchText.value = value
+  emit('searchChange', value)
+}
+
+function handleFilterChange(key, value) {
+  filterValues[key] = value
+  emit('filterChange', { key, value })
 }
 
 function resolveRowKey(row, index) {
@@ -63,13 +95,51 @@ function getCell(row, index) {
   return getRowCells(row)[index] ?? ''
 }
 
+function getCellLabel(row, index) {
+  return getCellText(getCell(row, index))
+}
+
 function getColumnMinWidth(index) {
-  if (index === 0) return 180
-  return 138
+  const column = props.columns[index] ?? ''
+  if (index === 0) return 210
+  if (column.includes('状态')) return 112
+  if (column.includes('进度') || column.includes('知识库')) return 190
+  if (column.includes('更新时间')) return 168
+  return 148
 }
 
 function getRowActions(row) {
   return Array.isArray(row?.actions) ? row.actions.filter((action) => action?.label && action?.to) : []
+}
+
+function getFilterValue(filter) {
+  return effectiveFilterValues.value[filter.key] ?? ''
+}
+
+function getOptionLabel(option) {
+  return typeof option === 'object' ? option.label : option
+}
+
+function getOptionValue(option) {
+  return typeof option === 'object' ? option.value : option
+}
+
+function getFilterTagType(index) {
+  return ['success', 'warning', 'info', 'danger'][index % 4]
+}
+
+function resolveSearchConfig(search) {
+  if (!search) return null
+  if (typeof search === 'string') {
+    return { placeholder: search, ariaLabel: search }
+  }
+  if (typeof search === 'object') {
+    return {
+      placeholder: search.placeholder ?? '搜索',
+      ariaLabel: search.ariaLabel ?? search.placeholder ?? '搜索列表',
+    }
+  }
+  return { placeholder: '搜索', ariaLabel: '搜索列表' }
 }
 
 function resolveActionClass(action) {
@@ -87,6 +157,13 @@ function resolveActionType(action) {
 function resolveActionIcon(action) {
   return action.variant === 'primary' ? ArrowRight : Eye
 }
+
+function resolveProgressStatus(status) {
+  if (status === 'failed') return 'exception'
+  if (status === 'success') return 'success'
+  if (status === 'pending' || status === 'running') return 'warning'
+  return undefined
+}
 </script>
 
 <template>
@@ -98,19 +175,42 @@ function resolveActionIcon(action) {
 
     <p v-if="tableError" class="inline-error">{{ tableError }}</p>
 
-    <div v-if="filters.length" class="filter-bar" aria-label="列表筛选">
-      <label v-for="filter in filters" :key="filter.key">
-        <span>{{ filter.label }}</span>
+    <div v-if="searchConfig || filters.length" class="table-toolbar" aria-label="列表检索与筛选">
+      <label v-if="searchConfig" class="table-toolbar-field table-toolbar-field--search">
+        <el-tag class="table-toolbar-tag" type="primary" effect="light">检索</el-tag>
+        <el-input
+          class="table-search-input"
+          :model-value="effectiveSearchText"
+          :placeholder="searchConfig.placeholder"
+          :aria-label="searchConfig.ariaLabel"
+          clearable
+          @update:model-value="handleSearchInput"
+        >
+          <template #prefix>
+            <Search :size="16" aria-hidden="true" />
+          </template>
+        </el-input>
+      </label>
+
+      <label
+        v-for="(filter, index) in filters"
+        :key="filter.key"
+        class="table-toolbar-field table-toolbar-field--filter"
+      >
+        <el-tag class="table-toolbar-tag" :type="getFilterTagType(index)" effect="light">
+          {{ filter.label }}
+        </el-tag>
         <el-select
-          v-model="filterValues[filter.key]"
+          :model-value="getFilterValue(filter)"
           class="table-filter-select"
           :aria-label="filter.label"
+          @update:model-value="handleFilterChange(filter.key, $event)"
         >
           <el-option
             v-for="option in filter.options"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="getOptionValue(option)"
+            :label="getOptionLabel(option)"
+            :value="getOptionValue(option)"
           />
         </el-select>
       </label>
@@ -123,6 +223,7 @@ function resolveActionIcon(action) {
         class="ckqa-el-table"
         :data="filteredRows"
         :empty-text="emptyText"
+        :fit="false"
         :row-key="resolveRowKey"
         :aria-label="title"
       >
@@ -136,24 +237,44 @@ function resolveActionIcon(action) {
           <template #default="{ row, $index }">
             <template v-if="index === 0">
               <RouterLink v-if="row.to" :to="row.to">
-                <strong class="ckqa-table-primary">{{ getCell(row, index) }}</strong>
+                <strong class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
               </RouterLink>
-              <strong v-else class="ckqa-table-primary">{{ getCell(row, index) }}</strong>
+              <strong v-else class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
               <small v-if="row.subtitle" class="ckqa-table-secondary">{{ row.subtitle }}</small>
             </template>
+            <div v-else-if="isProgressCell(getCell(row, index))" class="table-progress-cell">
+              <el-progress
+                class="table-progress-cell__ring"
+                type="circle"
+                :width="42"
+                :stroke-width="5"
+                :percentage="Number(getCell(row, index).percent ?? 0)"
+                :status="resolveProgressStatus(getCell(row, index).status)"
+                :aria-label="`${column}：${getCell(row, index).summary}`"
+              />
+              <div class="table-progress-cell__copy">
+                <strong>{{ getCell(row, index).summary }}</strong>
+                <small>{{ getCell(row, index).detail }}</small>
+              </div>
+            </div>
             <StatusBadge
               v-else-if="isStatusCell(column, getCell(row, index))"
-              :status="String(getCell(row, index))"
+              :status="String(getCell(row, index).status ?? getCell(row, index))"
+              :label="getCell(row, index).label"
             />
-            <span v-else>{{ getCell(row, index) }}</span>
+            <span v-else-if="isEmptyCell(getCell(row, index))" class="table-empty-cell">
+              {{ getCell(row, index).label }}
+            </span>
+            <span v-else>{{ getCellLabel(row, index) }}</span>
           </template>
         </el-table-column>
         <el-table-column
           v-if="hasRowActions"
           label="操作"
           fixed="right"
-          min-width="220"
+          width="306"
           class-name="ckqa-el-table__action-column"
+          header-class-name="ckqa-el-table__action-column"
         >
           <template #default="{ row, $index }">
             <div class="data-table__actions">

@@ -285,7 +285,6 @@
   --el-table-border-color: var(--ckqa-border);
   --el-table-border: 1px solid var(--ckqa-border);
   width: 100%;
-  min-width: 720px;
   border-radius: var(--ckqa-radius-md);
   color: var(--ckqa-text);
   font-family: var(--ckqa-font-sans);
@@ -305,7 +304,12 @@
 
 .ckqa-el-table .el-table__body-wrapper td.el-table__cell {
   height: 48px;
+  border-bottom: 1px solid var(--ckqa-border-subtle);
   background: var(--ckqa-surface);
+}
+
+.ckqa-el-table .el-table__body-wrapper tr:nth-child(even) > td.el-table__cell {
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 54%, var(--ckqa-surface));
 }
 
 .ckqa-el-table .el-table__cell {
@@ -324,7 +328,29 @@
 }
 
 .ckqa-el-table .ckqa-el-table__action-column .cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: visible;
+}
+
+.ckqa-el-table .ckqa-el-table__action-column {
+  border-left: 1px solid var(--ckqa-border-subtle);
+}
+
+.ckqa-el-table .el-progress-bar__outer {
+  background: var(--ckqa-surface-muted);
+}
+
+.ckqa-el-table .el-progress-circle__track {
+  stroke: var(--ckqa-surface-muted);
+}
+
+.ckqa-el-table .table-progress-cell__ring .el-progress__text {
+  min-width: 0;
+  color: var(--ckqa-text);
+  font-size: 11px !important;
+  font-weight: 900;
 }
 
 .el-pagination {
