@@ -20,6 +20,7 @@
 2. `courses.course_id` 是当前跨模块业务标识，被资料、知识库、问答、授权审计等表引用。
 3. `course_memberships` 已存在 `membership_role enum('student','teacher','assistant')`，可以表达课程内教师关系。
 4. 种子数据已包含全局 `teacher` 角色和一组教师用户。
+5. `courses.course_id` 当前已有数据库级唯一索引 `uk_course_id`，后端查重只是提前给出可读错误，最终唯一性仍必须由数据库约束兜底。
 
 ## 2. 外部系统参考
 
@@ -65,6 +66,12 @@
 
 首版继续沿用现有 `courses.course_id` 字段承载系统课程标识，避免立即重构所有下游表。
 
+数据库约束要求：
+
+1. `courses.course_id` 必须保留唯一索引 `uk_course_id`。
+2. 后端生成 ID 后的应用层查重用于减少冲突重试和提升错误提示可读性，不替代数据库唯一约束。
+3. 并发创建时如果数据库抛出唯一键冲突，后端应捕获后重新生成并重试，仍受最多 5 次重试限制约束。
+
 ### 5.2 新 `courseId` 生成规范
 
 推荐格式：
@@ -83,7 +90,7 @@ crs-20260504-7f3k2a
 
 1. `crs`：固定前缀，表示 course。
 2. `YYYYMMDD`：创建日期，使用后端业务时间；CKQA 后端当前按 Asia/Shanghai 口径处理跨服务业务时间。
-3. `XXXXXX`：6 位小写 base32/base36 随机串，只包含 `a-z0-9`。
+3. `XXXXXX`：6 位小写 base36 随机串，字符集固定为 `a-z0-9`。
 4. 总长度 19，满足当前 `varchar(64)` 与前端 URL 编码需求。
 5. 后端生成后必须查询 `courses.course_id` 唯一性，冲突时重试，最多 5 次。
 6. 若 5 次仍冲突，返回明确业务错误，提示稍后重试。
@@ -120,19 +127,23 @@ course_memberships.status = 'active'
 | `access_source` | `manual` |
 | `joined_at` | 当前时间 |
 | `effective_from` | 当前时间 |
-| `granted_by_user_id` | 当前认证用户可用时写入；开发态未接真实用户上下文时可为空 |
-| `change_reason` | `课程创建时绑定初始教师` |
+| `granted_by_user_id` | 数据库字段可空；生产认证上下文可用时必须写入当前操作者用户 ID，只有开发态未接真实认证上下文时允许为空 |
+| `change_reason` | `COURSE_CREATION_INITIAL_TEACHER` |
 
 后续增加第二名教师或助教时，仍使用 `course_memberships`，不改变课程主表。
+
+`change_reason` 存储稳定枚举值，展示层再翻译为“课程创建时绑定初始教师”。这样后续审计查询、国际化和自动化迁移都不依赖中文文案。
+
+当前 `course_memberships.granted_by_user_id` 在 `pdf_ingest/sql/ocqa.sql` 中定义为 `bigint NULL DEFAULT NULL`，并通过 `ON DELETE SET NULL` 外键引用 `users.id`。该可空性用于兼容本地开发态和历史数据；正式部署的写操作路径仍应把认证用户上下文作为必备输入，避免生产审计长期缺少授权人。
 
 ## 7. 后端 API 设计
 
 ### 7.1 教师候选查询
 
-推荐扩展现有用户列表接口：
+推荐扩展现有用户列表接口，并按远程搜索方式服务教师选择器：
 
 ```http
-GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
+GET /api/v1/users?roleCode=teacher&status=active&keyword=zhang&page=1&size=20
 ```
 
 原因：
@@ -140,12 +151,16 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 1. 教师本质是拥有全局 `teacher` 角色的用户。
 2. 复用现有 `/api/v1/users` 分页契约，减少新端点数量。
 3. 管理端未来在用户管理、角色管理、课程成员管理里也可复用 `roleCode` 过滤。
+4. 不一次性拉取固定 `size=200`，避免教师数量超过 200 后出现不可见候选。
 
 实现要求：
 
 1. `UserQueryRequest` 增加 `roleCode`，允许 `student|teacher|admin`。
-2. `UsersService.pageUsers()` 在 `roleCode` 非空时通过 `user_roles` + `roles` 过滤。
-3. 默认行为不变；不传 `roleCode` 时仍返回原有用户分页。
+2. `UserQueryRequest` 增加 `keyword`，用于模糊匹配 `user_code`、`username`、`display_name`。
+3. `UsersService.pageUsers()` 在 `roleCode` 非空时通过 `user_roles` + `roles` 过滤。
+4. `keyword` 为空或未传时，后端返回符合 `roleCode=teacher` 与 `status=active` 的第一页候选，排序固定为 `user_code ASC, id ASC`，确保初次打开 autocomplete 时前后端理解一致。
+5. 默认行为不变；不传 `roleCode` 时仍返回原有用户分页。
+6. 管理端教师选择器使用远程 autocomplete，输入关键词后 debounce 请求；初次打开只加载第一页候选，若结果不足以定位教师，应提示继续输入关键词。
 
 ### 7.2 创建课程请求
 
@@ -185,6 +200,8 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 
 `courseId` 从请求 DTO 中移除，或保留为只读兼容字段但忽略输入。首选直接移除，避免前端和外部调用继续依赖手填能力。
 
+课程状态默认值首版沿用 `active`，原因是当前数据库默认值、后端 DTO、管理端列表筛选和既有种子数据都以 `active` 为正常开课态。若产品侧希望“创建后配置，确认后再上线”，应在后续单独把默认值切到 `inactive`，并同步调整 schema 默认值、前端默认选项、文档和测试。
+
 ### 7.3 创建课程响应
 
 响应继续返回生成后的 `courseId`，并增加教师摘要：
@@ -213,11 +230,15 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 }
 ```
 
+响应时间字段继续遵循当前 Java `/api/v1` 契约：DTO 使用 `LocalDateTime`，序列化为不带 `Z` 或 `+08:00` 的时间字符串，并按 CKQA 现有 Asia/Shanghai 业务时间口径解释。管理端展示时应把它当作后端已归一的本地业务时间，不再二次做 UTC 偏移转换。若未来统一切换为带 offset 的 `OffsetDateTime`，需要作为跨端时间契约变更单独处理。
+
 列表页可只展示第一名教师与教师数量；详情页展示完整教师列表。
 
 ### 7.4 后端事务流程
 
-`CourseLookupService.createCourse()` 调整为事务方法：
+创建逻辑从 `CourseLookupService` 拆到写操作服务，建议命名为 `CourseCommandService.createCourse()`；`CourseLookupService` 保留课程列表、详情、课程资料、课程知识库等只读查询职责。
+
+`CourseCommandService.createCourse()` 使用主事务执行：
 
 1. 校验 `courseName`。
 2. 校验 `teacherUserId`：
@@ -227,10 +248,16 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 3. 生成 `courseId`。
 4. 插入 `courses`。
 5. 插入 `course_memberships` 初始教师关系。
-6. 可选插入 `course_membership_events`，记录创建时授权事件。
-7. 返回课程详情响应。
+6. 返回课程详情响应。
 
 如果第 5 步失败，课程插入必须回滚，避免出现“没有教师的课程”。
+
+`course_membership_events` 不参与主事务。课程与 membership 主事务提交成功后，再尽力写入一条授权事件：
+
+1. 事件写入失败时，不回滚课程创建和 membership。
+2. 失败信息写入后端日志或后续审计补偿队列。
+3. 事件的 `event_type` 建议使用稳定枚举值，例如 `grant` 或 `initial_teacher_bound`；`change_reason` 使用 `COURSE_CREATION_INITIAL_TEACHER`。
+4. 如果未来引入 outbox/异步审计机制，该事件写入应迁移到 outbox，避免请求线程承担审计系统可用性风险。
 
 ### 7.5 错误处理
 
@@ -282,7 +309,7 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 打开新建课程弹窗时加载教师候选：
 
 ```http
-GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
+GET /api/v1/users?roleCode=teacher&status=active&keyword=zhang&page=1&size=20
 ```
 
 前端状态：
@@ -293,6 +320,13 @@ GET /api/v1/users?roleCode=teacher&status=active&page=1&size=200
 | success | 可选择教师 |
 | empty | 禁用提交，提示“暂无可用教师，请先创建或启用教师账号” |
 | failed | 禁用提交，展示接口错误，可重试 |
+
+交互规则：
+
+1. 使用远程 autocomplete 或可搜索 `el-select`，不固定一次拉取全部教师。
+2. 初次打开可加载第一页 active teacher 作为最近候选。
+3. 用户输入教师姓名、用户名或用户编码后触发远程搜索。
+4. 当接口返回 `total > items.length` 时，提示“继续输入关键词以缩小范围”，避免管理员误以为候选已全部展示。
 
 提交按钮禁用条件：
 
@@ -352,8 +386,10 @@ ds,TCH2026002
 3. 已有教师的课程跳过。
 4. 缺少教师的课程按 mapping 找教师。
 5. mapping 缺失时 dry-run 明确报出，不自动猜测真实业务教师。
-6. 对开发种子数据可提供 `--fallback-teacher-user-code TCH2026001`，但正式数据迁移不默认启用 fallback。
-7. 写入 membership 后输出迁移报告。
+6. mapping 中的 `teacher_user_code` 不存在时，dry-run 和 apply 都必须报错并中止该课程迁移。
+7. mapping 中的教师用户存在但不是 active teacher 角色时，必须报错并中止该课程迁移。
+8. 对开发种子数据可提供 `--fallback-teacher-user-code TCH2026001`，但正式数据迁移不默认启用 fallback。
+9. 写入 membership 后输出迁移报告。
 
 该阶段不改变 `course_id`，风险最低，应先实施并验证。
 
@@ -391,19 +427,31 @@ os,crs-20260504-7f3k2a,planned,
 
 迁移步骤：
 
-1. 停止课程资料解析、GraphRAG 导出、索引构建、问答任务等写入型流程。
-2. 备份 MySQL、MinIO 相关对象列表和 GraphRAG 输入/输出目录。
-3. dry-run 扫描所有旧课程 ID，生成 old -> new 映射并检查冲突。
-4. 复制 MinIO 对象到新前缀，先不删除旧对象。
-5. 对 MySQL 执行受控迁移：
+1. 进入迁移维护窗口，先把课程上传、资料解析、GraphRAG 导出、索引构建、问答任务等写入型入口切到只读或维护态。
+2. 确认无在途写入：
+   - 后端不再接受新的上传/解析/导出/索引/问答任务。
+   - 数据库中无 `processing` / `running` / `pending` 的相关长任务需要继续写旧 `course_id`。
+   - 如 MinIO 开启版本化，应记录迁移开始时间点；如未开启版本化，则必须依赖应用层停写和对象清单校验。
+3. 备份 MySQL、MinIO 相关对象列表和 GraphRAG 输入/输出目录。
+4. dry-run 扫描所有旧课程 ID，生成 old -> new 映射并检查冲突。
+5. 确认 `courses.course_id` 上存在唯一索引 `uk_course_id`；如缺失，先修复索引再迁移。
+6. 复制 MinIO 对象到新前缀，先不删除旧对象。
+7. 对 MySQL 执行受控迁移：
    - 记录所有涉及 `course_id` 的表和行数。
    - 在迁移窗口内显式删除并重建指向 `courses.course_id` 的外键，不依赖静默的全局 `FOREIGN_KEY_CHECKS=0`。
    - 当前已知外键包括 `fk_course_memberships_course`、`fk_knowledge_bases_course`、`fk_sessions_course`、`fk_retrieval_logs_course`、`fk_auth_audit_course`。
+   - 当前 `course_materials.course_id` 与 `parse_results.course_id` 在 `ocqa.sql` 中只有索引、没有指向 `courses.course_id` 的外键；实施前仍需通过 `SHOW CREATE TABLE course_materials`、`SHOW CREATE TABLE parse_results` 核实，迁移时必须手动 `UPDATE` 并做孤儿记录扫描。
    - 外键删除后按审计清单更新所有引用字段，再以原有 `ON UPDATE RESTRICT` 语义重建外键。
    - 每张表更新后校验旧 ID 行数是否归零、新 ID 行数是否匹配。
-6. 重新拉取 GraphRAG 输入并重建索引。
-7. 启动 Java 后端和 admin-app，验证课程列表、课程详情、资料列表、知识库列表、构建向导、QA 冒烟验证。
-8. 验证通过后，再删除旧 MinIO 前缀和旧本地目录。
+8. 重新拉取 GraphRAG 输入并重建索引。
+9. 启动 Java 后端和 admin-app，验证课程列表、课程详情、资料列表、知识库列表、构建向导、QA 冒烟验证。
+10. 验证通过后，再删除旧 MinIO 前缀和旧本地目录。
+
+迁移窗口评估：
+
+1. Phase 3 实施计划必须先统计课程数量、资料数量、GraphRAG 输入文件大小、现有索引构建耗时和 MinIO 对象数量。
+2. 先选一门低风险课程做试迁移，记录 copy、DB 更新、fetch、index、QA smoke 的实际耗时。
+3. 根据试迁移耗时估算总窗口；如果全量重建超过可接受窗口，应分批迁移课程或安排更长维护窗口。
 
 该阶段建议单独做实施计划，不和课程创建功能同一个提交混在一起。
 
@@ -428,17 +476,20 @@ os,crs-20260504-7f3k2a,planned,
 
 新增或调整测试：
 
-1. `CourseLookupServiceTest`
+1. `CourseCommandServiceTest`
    - 创建课程时不需要 request.courseId。
    - 自动生成的 `courseId` 匹配 `crs-YYYYMMDD-XXXXXX`。
    - 创建课程同时写入 active teacher membership。
    - 选择非教师用户时报错。
    - 选择停用教师时报错。
+   - 模拟 membership 写入失败时，验证课程插入回滚。
+   - 模拟 `course_membership_events` 写入失败时，验证课程和 membership 仍保留，并记录日志或补偿信号。
 2. `CoursesControllerWebMvcTest`
    - POST `/api/v1/courses` 请求体不含 `courseId`。
    - 响应含生成后的 `courseId` 和教师摘要。
 3. `UsersControllerWebMvcTest`
    - `roleCode=teacher` 能过滤教师候选。
+   - `keyword` 能匹配教师的 `userCode`、`username`、`displayName`。
    - 不传 `roleCode` 的原有用户列表行为保持不变。
 
 建议后端验证命令：
@@ -453,11 +504,12 @@ cd backend/ckqa-back
 新增或调整测试：
 
 1. 新建课程弹窗不渲染可编辑课程 ID 输入。
-2. 新建课程弹窗打开时加载教师候选。
+2. 新建课程弹窗打开时加载第一页教师候选。
 3. 教师候选为空时禁用提交并显示空态。
-4. 成功提交时 payload 不包含 `courseId`，包含 `teacherUserId`。
-5. 成功后跳转到后端返回的生成 `courseId` 详情页。
-6. 课程列表能展示教师列。
+4. 输入关键词时发起远程教师搜索，不依赖固定 `size=200` 全量结果。
+5. 成功提交时 payload 不包含 `courseId`，包含 `teacherUserId`。
+6. 成功后跳转到后端返回的生成 `courseId` 详情页。
+7. 课程列表能展示教师列。
 
 建议前端验证命令：
 
@@ -497,11 +549,12 @@ WHERE cm.id IS NULL;
 ### Phase 1：新建课程链路
 
 1. 后端 DTO/API 调整。
-2. 后端 `courseId` 生成器与事务创建。
-3. 后端教师候选过滤。
+2. 新增 `CourseCommandService`，承接 `courseId` 生成器、主事务创建和 membership 写入。
+3. 后端教师候选按 `roleCode + keyword` 远程搜索过滤。
 4. admin-app 新建课程弹窗调整。
 5. admin-app 课程列表教师展示。
-6. 单元测试、构建测试和必要 E2E。
+6. 主事务回滚、事件日志尽力写入、教师远程搜索的测试覆盖。
+7. 单元测试、构建测试和必要 E2E。
 
 ### Phase 2：旧课程补齐教师
 
@@ -527,6 +580,8 @@ WHERE cm.id IS NULL;
 | 旧 `course_id` 改名破坏资料/知识库/问答链路 | 标识规范化单独分期，先 dry-run 和备份，再迁移 |
 | MinIO 对象前缀迁移后 GraphRAG 拉取失败 | 复制后先验证新前缀，不立即删除旧前缀 |
 | 已构建索引仍带旧 metadata | 阶段二必须重新拉取输入并重建索引 |
+| 迁移窗口内仍有用户上传资料 | 迁移前切只读/维护态，确认无在途任务，再复制 MinIO 对象 |
+| GraphRAG 全量重建耗时过长 | Phase 3 先做试迁移和耗时估算，必要时分批迁移 |
 | 前端误改学生端 | 本设计明确只改 admin-app |
 
 ## 13. 验收标准
