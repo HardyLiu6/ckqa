@@ -53,6 +53,7 @@ user_id + knowledge_base_id + build_run_id
 3. 不让浏览器直接传本地文件路径或访问 Python GraphRAG API。
 4. 不把 GraphRAG parquet、LanceDB 或长日志塞进 MySQL；MySQL 只保存控制面和产物元数据。
 5. 不把课程资料解析结果从现有 `course_materials` / `parse_results` / MinIO 命名空间迁走；这些仍是上游事实源。
+6. 首轮不把 GraphRAG 构建改成 `graphrag.api.build_index()` 内部 API 调用，不引入 Spring Statemachine。它们可以作为后续演进方向，但当前实现先保持 CLI 可验证闭环。
 
 ## 3. 核心对象模型
 
@@ -125,8 +126,11 @@ user_id + knowledge_base_id + build_run_id
 
 ```properties
 ckqa.integration.graphrag.build-runs-root=${GRAPHRAG_BUILD_RUNS_ROOT:}
+ckqa.integration.graphrag.concurrent-builds-enabled=${GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS:true}
+ckqa.integration.graphrag.auto-activation-policy=${GRAPHRAG_AUTO_ACTIVATION_POLICY:latest-build-only}
 ckqa.integration.graphrag.retention.keep-success-build-runs=${GRAPHRAG_KEEP_SUCCESS_BUILD_RUNS:3}
 ckqa.integration.graphrag.retention.keep-failed-build-runs=${GRAPHRAG_KEEP_FAILED_BUILD_RUNS:3}
+ckqa.integration.graphrag.retention.auto-cleanup-enabled=${GRAPHRAG_AUTO_CLEANUP_BUILD_RUNS:false}
 ```
 
 默认 `build-runs-root`：
@@ -138,7 +142,7 @@ ckqa.integration.graphrag.retention.keep-failed-build-runs=${GRAPHRAG_KEEP_FAILE
 单次构建流水线 workspace：
 
 ```text
-runtime/kb-build-runs/
+{GRAPHRAG_BUILD_RUNS_ROOT}/
   user_{user_id}/
     kb_{knowledge_base_id}/
       build_{build_run_id}/
@@ -188,6 +192,22 @@ runtime/kb-build-runs/
 
 `runtime/kb-build-runs/` 必须加入忽略规则，不提交 Git。
 
+路径持久化规则：
+
+1. `GRAPHRAG_BUILD_RUNS_ROOT` 是唯一绝对路径锚点，只存在于配置、运行时环境和服务层。
+2. `knowledge_base_build_runs.workspace_uri`、`index_artifacts.storage_uri`、`run_metadata.workspaceUri` 等数据库字段只存相对于 `GRAPHRAG_BUILD_RUNS_ROOT` 的路径，例如 `user_2/kb_5/build_27/index/output/lancedb`。
+3. 服务层读写文件时把相对路径解析到 `GRAPHRAG_BUILD_RUNS_ROOT` 下，并必须校验 `normalize()` 后仍位于该根目录内。
+4. Java `/api/v1` 对前端默认只暴露 `artifactId`、产物类型、大小、状态和可读的相对标识；不返回服务器绝对路径。
+5. 旧的 `graphrag_pipeline/input/`、`output/`、`cache/`、`reports/` 仍相对于 `GRAPHRAG_ROOT`，只作为本地 CLI 调试路径，不写入新业务 run 的 `workspace_uri`。
+
+清理与保留策略：
+
+1. 首轮默认不自动删除 workspace，`auto-cleanup-enabled=false`，避免误删正在排查的索引产物。
+2. 手动清理通过 build run 删除/归档接口或 `POST /api/v1/knowledge-bases/{id}/build-runs/gc` 触发。
+3. 若开启自动清理，仅在 build run 成功或失败进入终态后异步触发同知识库范围 GC；新建 build run 时可以做一次轻量扫描，但不阻塞创建接口。
+4. GC 永远跳过 running build run、running index run、当前 active index run 所属 build run，以及 `artifact_status=ready` 且仍被 active run 引用的产物。
+5. 超出保留数量的 success/failed build run 先标记 `archived`，再删除 workspace，并把关联 `index_artifacts.artifact_status` 更新为 `deleted`。
+
 ## 6. GraphRAG 配置策略
 
 保留 `graphrag_pipeline/settings.yaml` 当前变量化方式：
@@ -235,6 +255,13 @@ python -m graphrag index --root .
 
 这样保留 GraphRAG CLI 路径，但让每个 CLI 进程读取自己的输入并写自己的输出。
 
+GraphRAG Python API 评估结论：
+
+1. GraphRAG 官方文档提供了 `graphrag.api.build_index(config=...)` 的库调用方式，理论上可以减少 Java 侧子进程环境变量注入。
+2. 本仓库当前已把 GraphRAG 3.0.9 查询与构建路径收口到 CLI，`utils/main.py` 也明确委托 `graphrag query`；首轮继续沿用这个稳定面，降低版本漂移风险。
+3. GitHub issue #1680 记录过 `build_index()` 下 `storage.base_dir` 相对路径解析与 `root_dir` 不一致的问题。即使该问题在后续版本中被修复，CKQA 也要先做本地 3.0.9 回归，再考虑切换。
+4. 后续若迁移到 Python API，应让每个 build workspace 拥有生成后的绝对路径配置副本，或者继续使用环境变量展开后的绝对目录，不能重新回到共享 `output/`。
+
 ## 7. 构建流水线阶段设计
 
 首轮 build run 阶段：
@@ -255,6 +282,29 @@ python -m graphrag index --root .
 2. 共享上游事实源可以复用，例如同一 `course_material_id` 的解析结果和 MinIO 导出产物，但本 build run 必须保存自己的选择快照和输入副本。
 3. 前端切换页面、刷新或另一个用户同时构建时，必须通过 `buildRunId` 恢复状态，而不是依赖浏览器 sessionStorage 作为唯一状态源。
 4. active index 的切换只发生在索引产物登记成功之后。
+
+### 7.1 状态转移与重试规则
+
+首轮不引入 Spring Statemachine，使用 `current_stage` enum、`build_metadata.stageSummary` 和服务层显式 Guard 实现状态机。状态转移必须集中在 `KnowledgeBaseBuildRunService`，不能散落在 Controller 中。
+
+| 动作 | 允许前置阶段 | 成功后阶段 | 失败后处理 | 可否重试 |
+| --- | --- | --- | --- | --- |
+| 创建 build run | 无 | `material_selection` | 创建失败不落库或标记 `failed` | 重新创建 |
+| 更新资料选择 | `material_selection`、`parse` 失败、`graph_input_export` 失败 | `material_selection` | 保留旧选择和错误摘要 | 是，未创建 index run 前可重选 |
+| 解析检查/触发 | `material_selection`、`parse` | `parse` 或 `graph_input_export` 待执行 | `stageSummary.parse=failed` | 是，可只刷新缺失 material |
+| 同步图谱输入 | `material_selection`、`parse`、`graph_input_export` | `graph_input_export` | 保留已成功拉取文件，记录失败 material | 是，可按 material 局部重试 |
+| 确认 Prompt | `graph_input_export`、`prompt` | `prompt` | `stageSummary.prompt=failed` | 是，可重新确认策略 |
+| 创建索引运行 | `prompt`、`index` 失败 | `index` 或 `done` | `index_run=failed`，build run 保留在 `index` | 是，同一 build run 内无 running index run 时可再建一个 index run |
+| QA 冒烟验证 | `index` success、`done`、`qa_smoke` 失败 | `done` | `qa_status=failed`，build `status` 不回退 | 是 |
+| 归档/清理 | `success`、`failed`、`interrupted` | `archived` | 返回 409 或错误摘要 | 条件满足后可重试 |
+
+阶段语义：
+
+1. `prompt` 阶段首轮不能跳过；即使使用默认 `active` Prompt，也要写入 `active_prompt_snapshot.json` 和确认记录，避免后续无法复现本次构建。
+2. `parse` 阶段可以只是“读取已完成解析状态并写快照”，不一定触发新解析任务。
+3. `qa_smoke` 是索引后的质量验证阶段，不是索引产物是否可用的硬门槛；它的通过与否写入 `qa_status`。
+4. `build_run.status=success` 表示索引阶段已成功、核心产物已登记。`qa_status=failed` 表示验证警告，不把 build run 改成 `failed`。
+5. `build_run.status=interrupted` 只用于后端重启或进程丢失后的恢复结果；前端应提示可重新发起失败阶段。
 
 ## 8. 输入同步设计
 
@@ -288,6 +338,14 @@ POST /api/v1/knowledge-bases/{id}/build-runs
 
 创建后立即生成 workspace 和 `selection/selected_materials.json`，并返回 `buildRunId`。
 
+`buildRunId` 与 `buildVersion` 规则：
+
+1. `buildRunId` 使用 MySQL 自增 `bigint` 主键，是所有内部关联和 API 动作的稳定 ID。
+2. `buildVersion` 是面向展示、审计和幂等排查的版本号，不承担主键职责。
+3. 首轮格式使用 `kb{knowledgeBaseId}-{yyyyMMddHHmmssSSS}-{random4}`，例如 `kb5-20260505203000123-a7f3`。
+4. `UNIQUE KEY (knowledge_base_id, build_version)` 仍保留；若极端并发下随机后缀冲突，服务层重试生成最多 3 次。
+5. 不把 UUID v7 作为首轮强制方案，因为当前 Java 标准库没有内置 UUID v7 生成器，为一个展示字段引入额外依赖收益不高；后续如项目已有统一 ID 组件再切换。
+
 ### 8.2 多资料同名输入避免覆盖
 
 `fetch_from_minio.py` 当前会把每份资料下载为同一个 `section_docs.json`。需要新增最小 CLI 参数：
@@ -303,8 +361,10 @@ python utils/fetch_from_minio.py <course_id> \
 
 1. `--output-file` 只控制写入本地目录的文件名，不改变 MinIO 源文件名。
 2. 每个 `material_id` 生成独立 JSON 文件。
-3. GraphRAG 索引前，后端把 `graph-input/` 中本次确认的文件复制或链接到 `index/input/`。
-4. `index/input/` 只包含本 build run 确认过的输入，不读取共享 `graphrag_pipeline/input/`。
+3. GraphRAG 官方输入说明支持同一输入目录下多个 JSON 文件并合并为最终 documents 表，但 CKQA 实施时必须用 GraphRAG 3.0.9 做本地回归验证。
+4. 首轮默认把 `graph-input/` 中本次确认的文件以唯一文件名复制到 `index/input/`，例如 `material_3.section_docs.json`、`material_4.section_docs.json`。
+5. 如果本地验证发现多 JSON 文件行为与预期不一致，后端改为用 Jackson 把多个 JSON array 合并为单个 `build_{buildRunId}.section_docs.json`，并在 `export_snapshot.json` 记录来源 material 映射。
+6. `index/input/` 只包含本 build run 确认过的输入，不读取共享 `graphrag_pipeline/input/`。
 
 ## 9. 索引构建流程
 
@@ -327,7 +387,7 @@ python utils/fetch_from_minio.py <course_id> \
 前端 POST /api/v1/knowledge-base-build-runs/{buildRunId}/index-runs
   -> Java 创建 index_runs(pending, build_run_id)
   -> 准备 index/input, index/output, index/cache, index/reports, index/logs
-  -> 把 graph-input 中确认的 JSON 放入 index/input
+  -> 把 graph-input 中确认的 JSON 以唯一文件名放入 index/input
   -> 标记 index_runs running, build_run.stage=index
   -> 注入本次运行环境变量
   -> 执行 python -m graphrag index --root .
@@ -345,13 +405,22 @@ python utils/fetch_from_minio.py <course_id> \
 3. `active_index_run_id` 必须属于同一个 `knowledge_base_id`。
 4. active 切换必须在 artifact 写入成功之后。
 5. 如果切换失败，`index_run` 保持 `success`，但 `knowledge_bases.active_index_run_id` 不变，并在 metadata 中记录“索引成功但激活失败”。
+6. active 切换在数据库事务内执行，并对目标 `knowledge_bases` 行加锁或使用等价乐观锁条件更新；首轮不引入 Redis 分布式锁。
+7. 默认允许同一知识库并发 build run，但 `auto-activation-policy=latest-build-only`：只有该知识库下创建时间或 ID 最新的 build run 才能自动激活。较早 build run 后完成时仍标记 `success`，但自动激活结果为 `skipped_newer_build_exists`。
+8. 管理员通过 `POST /api/v1/knowledge-bases/{id}/active-index-run` 手动激活历史 success run 时，可以覆盖上述自动激活策略。
 
 失败处理：
 
 1. 输入拉取失败：`build_run.status=failed` 或阶段状态为 `failed`，保留 `graph-input/` 中已拉取文件和错误 metadata。
 2. 索引命令失败：`index_run.status=failed`，保留 `index/output`、`index/reports` 残留文件，artifact 可记录为 `partial`。
-3. QA 验证失败：不影响已成功的 index run，但 `build_run.qaStatus=failed`，前端可选择重新验证或完成构建。
+3. QA 验证失败：不影响已成功的 index run，也不回滚 active 切换；`build_run.status` 保持 `success`，`qa_status=failed`，前端可选择重新验证或提示质量风险。
 4. 后端重启：沿用 stale recovery，把超时的 running index run 标记为 failed；build run 根据最新阶段恢复为 `failed` 或 `interrupted`。
+
+日志写入规则：
+
+1. `GraphRagIndexOrchestrator` 不依赖 GraphRAG CLI 自己是否写日志文件，而是由 Java `ProcessRunner` 把子进程 stdout/stderr 同步写入 `index/logs/process.log`。
+2. `ProcessRunner` 同时保留尾部日志，写入 `run_metadata.latestLogs` 或通过详情接口返回。
+3. GraphRAG `reporting.base_dir` 仍指向 `index/reports`，用于保存 GraphRAG 自身报告；前端“最近日志”优先读 `index/logs/process.log`，报告列表来自 `index_artifacts`。
 
 ## 10. 查询路由设计
 
@@ -401,11 +470,13 @@ CREATE TABLE knowledge_base_build_runs (
   course_id varchar(64) NOT NULL COMMENT '课程ID快照',
   requested_by_user_id bigint NULL COMMENT '发起用户ID',
   build_version varchar(64) NOT NULL COMMENT '构建版本',
-  status enum('pending','running','success','failed','archived') NOT NULL DEFAULT 'pending' COMMENT '流水线状态',
+  status enum('pending','running','success','failed','interrupted','archived') NOT NULL DEFAULT 'pending' COMMENT '流水线状态',
   current_stage enum('material_selection','parse','graph_input_export','prompt','index','qa_smoke','done') NOT NULL DEFAULT 'material_selection' COMMENT '当前阶段',
+  qa_status enum('pending','running','success','failed','skipped') NOT NULL DEFAULT 'skipped' COMMENT '问答验证状态',
+  activation_policy enum('manual','index_success') NOT NULL DEFAULT 'index_success' COMMENT '自动激活策略',
   selected_material_ids json DEFAULT NULL COMMENT '本次构建资料选择快照',
   active_index_run_id bigint NULL COMMENT '本次构建最终激活的索引运行',
-  workspace_uri varchar(512) NULL COMMENT '本地工作区相对路径',
+  workspace_uri varchar(512) NULL COMMENT '相对 GRAPHRAG_BUILD_RUNS_ROOT 的工作区路径',
   build_metadata json DEFAULT NULL COMMENT '构建元数据',
   started_at timestamp NULL DEFAULT NULL COMMENT '开始时间',
   finished_at timestamp NULL DEFAULT NULL COMMENT '结束时间',
@@ -415,11 +486,18 @@ CREATE TABLE knowledge_base_build_runs (
   UNIQUE KEY uk_kb_build_version (knowledge_base_id, build_version),
   KEY idx_kb_build_status (knowledge_base_id, status),
   KEY idx_kb_build_user_status (requested_by_user_id, status),
+  KEY idx_kb_build_created (knowledge_base_id, created_at, id),
   CONSTRAINT fk_kb_build_runs_kb FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases(id)
 );
 ```
 
-`requested_by_user_id` 首轮可为空，用于兼容当前 dev 身份和未完全接入登录的场景；前端或后端身份接入稳定后再改成必填。
+字段说明：
+
+1. `requested_by_user_id` 首轮可为空，用于兼容当前 dev 身份和未完全接入登录的场景；前端或后端身份接入稳定后再改成必填。
+2. `build_version` 由服务层生成，格式为 `kb{knowledgeBaseId}-{yyyyMMddHHmmssSSS}-{random4}`；唯一索引冲突时最多重试 3 次。
+3. `workspace_uri` 只存相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的路径，例如 `user_2/kb_5/build_27`。
+4. `activation_policy=index_success` 对应请求中的 `activateOnSuccess=true`；`manual` 对应 `false`。
+5. `build_metadata.stageSummary` 保存各阶段子状态、错误摘要、activation 结果和 QA 摘要，避免首轮新增过多阶段明细表。
 
 ### 11.2 扩展 `index_runs`
 
@@ -449,15 +527,17 @@ ALTER TABLE index_runs
   "elapsedSeconds": 542,
   "exitCode": 0,
   "buildRunId": 27,
-  "workspace": "runtime/kb-build-runs/user_2/kb_5/build_27",
-  "inputDir": "runtime/kb-build-runs/user_2/kb_5/build_27/index/input",
-  "outputDir": "runtime/kb-build-runs/user_2/kb_5/build_27/index/output",
-  "reportsDir": "runtime/kb-build-runs/user_2/kb_5/build_27/index/reports",
-  "cacheDir": "runtime/kb-build-runs/user_2/kb_5/build_27/index/cache",
-  "lancedbUri": "runtime/kb-build-runs/user_2/kb_5/build_27/index/output/lancedb",
+  "workspaceUri": "user_2/kb_5/build_27",
+  "inputDir": "user_2/kb_5/build_27/index/input",
+  "outputDir": "user_2/kb_5/build_27/index/output",
+  "reportsDir": "user_2/kb_5/build_27/index/reports",
+  "cacheDir": "user_2/kb_5/build_27/index/cache",
+  "lancedbUri": "user_2/kb_5/build_27/index/output/lancedb",
   "materialIds": [3, 4],
   "jsonFile": "section_docs.json",
   "activateOnSuccess": true,
+  "activationPolicy": "index_success",
+  "activationResult": "activated",
   "artifactCount": 12,
   "staleTimeoutRecovered": false,
   "errorSummary": null
@@ -495,7 +575,7 @@ ALTER TABLE index_artifacts
 首轮仍可把 `storage_uri` 写为本地相对路径，例如：
 
 ```text
-runtime/kb-build-runs/user_2/kb_5/build_27/index/output/lancedb
+user_2/kb_5/build_27/index/output/lancedb
 ```
 
 ## 12. Java 后端 API 设计
@@ -650,9 +730,11 @@ POST /api/v1/knowledge-bases/{id}/build-runs
   "knowledgeBaseId": 5,
   "courseId": "os",
   "requestedByUserId": 2,
-  "buildVersion": "build-20260505203000",
+  "buildVersion": "kb5-20260505203000123-a7f3",
   "status": "pending",
   "currentStage": "material_selection",
+  "qaStatus": "skipped",
+  "activationPolicy": "index_success",
   "selectedMaterialIds": [3, 4],
   "canContinue": true,
   "createdAt": "2026-05-05T20:30:00"
@@ -732,6 +814,38 @@ DELETE /api/v1/knowledge-base-build-runs/{id}?deleteWorkspace=false
 1. 不硬删数据库行，默认标记 `status=archived`。
 2. `deleteWorkspace=true` 时清理本地 workspace，并把关联 artifact 标记为 `deleted`。
 3. active run、running run 不允许删除。
+
+#### 清理历史构建工作区
+
+```http
+POST /api/v1/knowledge-bases/{id}/build-runs/gc
+```
+
+请求：
+
+```json
+{
+  "deleteWorkspace": true,
+  "dryRun": true
+}
+```
+
+返回：
+
+```json
+{
+  "candidateBuildRunIds": [12, 13],
+  "archivedBuildRunIds": [],
+  "deletedWorkspaceCount": 0,
+  "skippedActiveBuildRunIds": [27]
+}
+```
+
+约束：
+
+1. `dryRun=true` 只返回候选项，不改数据库和文件系统。
+2. `deleteWorkspace=true` 只作用于非 active、非 running、超出保留策略或已归档的 build run。
+3. 前端首轮可把该能力放到知识库详情的“维护动作”，不放在构建向导主流程。
 
 ### 12.3 构建阶段动作 API
 
@@ -908,23 +1022,41 @@ deleteIndexArtifact(id)
 
 1. 创建 build run 时，`materialIds` 必须属于该知识库所在课程。
 2. 同一知识库可以同时存在多个 build run，但同一个 build run 内最多一个 running index run。
-3. 是否限制“同一知识库同时只有一个 running build run”由后端配置控制；默认允许并发构建但只允许显式 active 切换。
-4. 归档知识库前必须确认没有 running build run 或 running index run。
-5. 归档 active run 所属 build run 必须先切换到其他 success run；首轮不支持清空 active run。
-6. 创建索引运行时，所选资料必须已有 GraphRAG 输入导出产物；缺失时返回明确错误，由前端引导回“导出图谱输入”步骤。
-7. 查询问答时，如果 active run 的产物缺失，返回 `KNOWLEDGE_BASE_NOT_READY`，并在详情中给出缺失 artifact 类型。
+3. 是否限制“同一知识库同时只有一个 running build run”由 `concurrent-builds-enabled` 控制；默认允许并发构建。
+4. 并发构建默认只允许“最新创建的 build run”自动激活，较早 build run 后完成时需要管理员手动激活。
+5. active 切换必须在数据库事务内校验知识库归属、index run 成功状态、artifact ready 状态和最新 build run 策略；首轮使用 MySQL 行锁或乐观条件更新，不引入 Redis 锁。
+6. 归档知识库前必须确认没有 running build run 或 running index run。
+7. 归档 active run 所属 build run 必须先切换到其他 success run；首轮不支持清空 active run。
+8. 创建索引运行时，所选资料必须已有 GraphRAG 输入导出产物；缺失时返回明确错误，由前端引导回“导出图谱输入”步骤。
+9. 查询问答时，如果 active run 的产物缺失，返回 `KNOWLEDGE_BASE_NOT_READY`，并在详情中给出缺失 artifact 类型。
 
 ## 15. 健康检查调整
 
-`GET /api/v1/system/health` 不能再只检查 `GRAPHRAG_ROOT/output` 和 `output/lancedb`。调整为：
+`GET /api/v1/system/health` 不能再只检查 `GRAPHRAG_ROOT/output` 和 `output/lancedb`，也不应该在每次健康检查里遍历所有知识库 active run。首轮拆成轻量健康检查和可用性检查：
+
+### 15.1 轻量健康检查
 
 1. `graphrag-root`：GraphRAG 项目根目录存在。
 2. `graphrag-build-runs-root`：构建运行目录存在或可创建。
 3. `graphrag-api`：Python API 可访问。
-4. `graphrag-active-indexes`：数据库中 active run 的 artifact 是否可读。
-5. `graphrag-ready`：至少存在一个可查询的 active run，或返回 `ready=false` 并提示“尚无可用索引”。
+4. `graphrag-ready`：表示 GraphRAG 服务链路可运行，不等同于某个知识库已有可用索引。
 
 这样本地刚清空索引时，系统可以是“服务可运行但知识库未就绪”，不会误报为路径损坏。
+
+### 15.2 知识库可用性检查
+
+新增可选接口：
+
+```http
+GET /api/v1/system/readiness
+GET /api/v1/knowledge-bases/{id}/readiness
+```
+
+规则：
+
+1. 全局 readiness 默认只检查是否存在至少一个 `active_index_run_id` 且其 `lancedb` artifact 状态为 `ready`，不逐个遍历大目录。
+2. 单知识库 readiness 检查该知识库 active run 的必要 artifact 是否 ready，并可按需做文件存在性检查。
+3. 文件系统深度扫描只在知识库详情、维护动作或后台巡检中触发，不放进高频 health endpoint。
 
 ## 16. 兼容与迁移
 
@@ -967,6 +1099,8 @@ deleteIndexArtifact(id)
 2. 多 material 同步到同一 `graph-input` 时不覆盖文件。
 3. Python `/v1/query-tasks` 支持每任务 `dataDir`，并拒绝 build-runs-root 外路径。
 4. `graphrag query` 命令构造包含 `--data <run_output_dir>`。
+5. 用两份最小 JSON 输入验证 GraphRAG 3.0.9 会合并 `index/input/` 下多个 JSON 文件；若失败，启用单文件合并 fallback 并补测试。
+6. `dataDir` 校验覆盖路径穿越、软链接逃逸和绝对路径不在 `GRAPHRAG_BUILD_RUNS_ROOT` 下的拒绝场景。
 
 建议命令：
 
@@ -983,6 +1117,11 @@ conda run -n graphrag-oneapi python -m pytest tests/
 4. active run 查询上下文正确传给 `GraphRagTaskClient`。
 5. build run CRUD、知识库 CRUD、索引运行 CRUD、artifact 查询/清理接口覆盖 WebMvc 测试。
 6. active run 所属 build run 不能归档或删除。
+7. `buildVersion` 在同毫秒并发创建时不会冲突，唯一索引冲突能重试。
+8. 状态机 Guard 阻止未确认 Prompt 时创建索引、running build run 被归档、active build run 被删除。
+9. 两个并发 build run 都 `activateOnSuccess=true` 时，只有最新 build run 自动激活，较早 run 记录 `skipped_newer_build_exists`。
+10. `ProcessRunner` 将 stdout/stderr 写入 `index/logs/process.log`，详情接口能返回尾部日志。
+11. GC dry-run、归档、删除 workspace、跳过 active/running run 的行为都有服务层测试。
 
 建议命令：
 
@@ -1016,8 +1155,10 @@ pnpm build
 3. 确认生成两个不同 workspace。
 4. 分别推进到索引阶段，确认 `index/input`、`index/output`、`index/output/lancedb` 不互相覆盖。
 5. 确认各自 `index_artifacts` 指向不同目录。
-6. 分别激活两个 success run，确认 `knowledge_bases.active_index_run_id` 显式切换。
-7. 分别发起 QA smoke，确认 Java 传入不同 active run output。
+6. 让较早 build run 后完成，确认它不会覆盖较新的 active run。
+7. 通过手动 active 接口切换到另一个 success run，确认 `knowledge_bases.active_index_run_id` 显式切换。
+8. 分别发起 QA smoke，确认 Java 传入不同 active run output。
+9. 触发一次 GC dry-run，确认 active/running build run 被跳过。
 
 ## 18. 实施切分建议
 
@@ -1025,9 +1166,10 @@ pnpm build
 
 1. **构建流水线控制面**：新增 `knowledge_base_build_runs` schema、实体、service、controller、workspace 路径计算和状态机。
 2. **GraphRAG 输入与索引隔离**：新增 `fetch_from_minio.py --output-file`，把 `graph-input` 和 `index/input/output/cache/reports` 全部绑定到 build workspace。
-3. **产物登记与 active 查询**：补 `index_artifacts` 服务、artifact 扫描、Python query-task 每任务 dataDir、Java QA 传 active run context。
+3. **产物登记与 active 查询**：补 `index_artifacts` 服务、artifact 扫描、Python query-task 每任务 dataDir、Java QA 传 active run context，并实现 latest-build-only 自动激活。
 4. **前端 build run 接入**：admin-app 构建向导从 URL/sessionStorage 主导改为 `buildRunId` 主导，补 CRUD/API 模块和状态展示。
-5. **文档与回归**：更新 README、AGENTS、模块 README，跑 Python/Java/admin-app 验证和 repo drift audit。
+5. **日志、GC 与健康检查**：补 `index/logs/process.log`、GC dry-run/清理接口、轻量 health 与 readiness 拆分。
+6. **文档与回归**：更新 README、AGENTS、模块 README，跑 Python/Java/admin-app 验证和 repo drift audit。
 
 ## 19. 验收标准
 
@@ -1039,3 +1181,23 @@ pnpm build
 4. 前端能完成知识库创建、查看、修改、归档；构建流水线创建、查看、推进、归档/清理；索引运行查看、归档/清理、激活；产物查看和受控清理。
 5. 系统健康检查能区分“GraphRAG 服务可运行”和“某知识库已有可用索引”。
 6. MinIO 首轮仍保存 pdf_ingest 导出的源产物和 GraphRAG 输入源；GraphRAG 索引产物首轮保留在本地 build workspace，不做远端上传。
+7. 并发构建时自动激活不会让较早完成的旧 build run 覆盖更新 build run 的 active 指针。
+8. QA smoke 失败不会把已成功索引回滚为 failed，但前端能看到 `qaStatus=failed` 和错误摘要。
+9. GC 不会删除 active/running run 的 workspace，且 dry-run 输出与实际清理结果一致。
+
+## 20. 审阅建议处理记录
+
+| 建议 | 处理结论 | 说明 |
+| --- | --- | --- |
+| 明确 `build_run_id` 和 `build_version` 生成策略 | 采纳 | `id` 用 MySQL 自增 bigint；`build_version` 改为 `kb{id}-{yyyyMMddHHmmssSSS}-{random4}`，冲突重试。 |
+| 数据库只存相对路径，服务层用根目录解析 | 采纳 | 新增路径持久化规则，所有 workspace/artifact URI 相对 `GRAPHRAG_BUILD_RUNS_ROOT`。 |
+| 增加状态转移图和重试规则 | 采纳 | 新增 7.1 状态转移表，明确 Prompt 不跳过、QA 不阻断索引成功、失败阶段可重试。 |
+| 明确并发构建和 active 锁策略 | 采纳 | 默认允许并发 build run；自动激活采用 `latest-build-only`；active 更新使用 MySQL 事务行锁或乐观条件更新，不引入 Redis。 |
+| 明确 QA smoke 对终态和激活的影响 | 采纳 | 首轮 `activateOnSuccess` 在 index success 后生效；QA 失败只写 `qa_status=failed`，不回滚 active。 |
+| 健康检查避免遍历所有 active artifact | 采纳 | `/system/health` 保持轻量，新增 readiness 语义用于全局或单知识库可用性检查。 |
+| 补充 workspace GC 触发时机 | 采纳 | 默认手动/dry-run，自动清理默认关闭，只在终态后异步触发且跳过 active/running。 |
+| 明确 `index/logs/` 写入方 | 采纳 | 由 Java `ProcessRunner` tee stdout/stderr 到 `index/logs/process.log`，不依赖 GraphRAG 自身日志。 |
+| 明确多 material 输入组装 | 采纳 | 默认唯一文件名复制到 `index/input`，并要求 GraphRAG 3.0.9 多 JSON 回归；失败时合并成单 JSON array。 |
+| 近期改用 `graphrag.api.build_index()` | 暂不采纳 | 官方 API 存在，但本仓库已把 3.0.9 路径收口到 CLI；同时存在过 `build_index()` storage 相对路径 bug。首轮继续 subprocess + env 注入，后续单独评估。 |
+| 引入 Spring Statemachine | 暂不采纳 | Spring Statemachine 支持 machineId、Guard、持久化，但对当前 7 个顺序阶段偏重；首轮用 enum + 服务层 Guard，更符合最小可运行原则。 |
+| UUID v7 作为 build version 必选方案 | 暂不采纳 | UUID v7 有排序优势，但 Java 标准库无内置实现；当前展示版本号用时间戳毫秒 + 随机后缀足够，避免新增依赖。 |
