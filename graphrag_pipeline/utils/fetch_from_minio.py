@@ -254,6 +254,9 @@ def fetch_and_prepare(
     json_filename: str = "section_docs.json",
     pdf_file_id: int | None = None,
     material_id: int | None = None,
+    output_filename: str | None = None,
+    client: Minio | None = None,
+    bucket: str | None = None,
 ) -> dict:
     """
     从 MinIO 下载 GraphRAG 输入文件，并在必要时兼容转换历史 JSONL。
@@ -266,25 +269,32 @@ def fetch_and_prepare(
         json_filename: GraphRAG 输入文件名
         pdf_file_id: 历史 PDF 文件 ID，用于读取 pdf_{id} namespace
         material_id: 课程资料 ID，优先读取 material_{id} namespace
+        output_filename: 写入 input_dir 的本地文件名，不改变 MinIO 源文件名
+        client: 测试或调用方注入的 MinIO 客户端，默认从环境变量创建
+        bucket: 测试或调用方注入的 MinIO bucket，默认从环境变量读取
 
     Returns:
         {status, course_id, documents_count, output_file, input_dir}
     """
-    client = get_minio_client()
-    bucket = get_bucket()
+    client = client or get_minio_client()
+    bucket = bucket or get_bucket()
 
     if json_filename.endswith(".jsonl"):
-        output_filename = json_filename[:-1]
-        preferred_filename = output_filename
+        default_output_filename = json_filename[:-1]
+        preferred_filename = default_output_filename
         legacy_filename = json_filename
     elif json_filename.endswith(".json"):
-        output_filename = json_filename
+        default_output_filename = json_filename
         preferred_filename = json_filename
         legacy_filename = json_filename[:-1] + "l"
     else:
-        output_filename = f"{json_filename}.json"
-        preferred_filename = output_filename
+        default_output_filename = f"{json_filename}.json"
+        preferred_filename = default_output_filename
         legacy_filename = f"{json_filename}.jsonl"
+
+    local_filename = output_filename or Path(default_output_filename).name
+    if Path(local_filename).name != local_filename:
+        raise ValueError("--output-file 只允许文件名，不允许包含目录")
 
     preferred_keys = build_candidate_object_keys(
         course_id=course_id,
@@ -435,7 +445,7 @@ def fetch_and_prepare(
                 documents.append(flatten_record(record))
 
     # 4) 写入 JSON 数组文件
-    output_path = input_dir / output_filename
+    output_path = input_dir / local_filename
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(documents, f, ensure_ascii=False, indent=2)
@@ -516,6 +526,11 @@ def main() -> int:
         help="输入文件名，默认 section_docs.json；也兼容历史 *.jsonl 文件",
     )
     parser.add_argument(
+        "--output-file",
+        default=None,
+        help="写入 input-dir 的本地文件名，不改变 MinIO 源文件名",
+    )
+    parser.add_argument(
         "--env-file",
         default=None,
         help=".env 文件路径 (默认: 自动查找)",
@@ -546,6 +561,7 @@ def main() -> int:
         json_filename=args.json_filename,
         pdf_file_id=args.pdf_file_id,
         material_id=args.material_id,
+        output_filename=args.output_file,
     )
 
     if result["status"] in {"not_found", "ambiguous"}:

@@ -103,6 +103,16 @@ class TestRuntimeDefaults(unittest.TestCase):
         self.assertNotIn("{record_delimiter}", text)
         self.assertNotIn("{completion_delimiter}", text)
 
+    def test_extract_graph_prompt_uses_graphrag_3_0_9_literal_delimiters(self):
+        text = (_PROJECT_ROOT / "prompts" / "extract_graph.txt").read_text(encoding="utf-8")
+
+        self.assertIn("<|>", text)
+        self.assertIn("##", text)
+        self.assertIn("<|COMPLETE|>", text)
+        self.assertNotIn("{tuple_delimiter}", text)
+        self.assertNotIn("{record_delimiter}", text)
+        self.assertNotIn("{completion_delimiter}", text)
+
 
 if __name__ == "__main__":
     unittest.main()

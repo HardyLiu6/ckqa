@@ -10,6 +10,14 @@
 - 读取 `output/*.parquet` 与 `output/lancedb/`
 - 对外暴露 `/v1/chat/completions`、`/v1/models`、`/v1/query-tasks`、`/health`
 
+Java 管理端的知识库构建会使用 `runtime/kb-build-runs/` 下的独立 workspace。共享 `input/` 和 `output/` 仍保留为手工 CLI 调试入口，不再是管理端并发构建的唯一运行态。
+
+相关环境变量：
+
+- `GRAPHRAG_BUILD_RUNS_ROOT`：Java 与 Python 共同识别的 build-run 根目录，未配置时按 `${GRAPHRAG_ROOT}/runtime/kb-build-runs` 理解。
+- `GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS`：Java 后端是否允许同一知识库同时存在多个 `pending/running` build run。
+- `GRAPHRAG_AUTO_ACTIVATION_POLICY`：成功索引的自动激活策略，默认 `latest-build-only`，避免较旧并发构建覆盖较新的激活索引。
+
 ## 当前状态
 
 - 属于主链路模块
@@ -64,12 +72,14 @@ python utils/fetch_from_minio.py <course_id> --clean
 python utils/fetch_from_minio.py <course_id> --material-id <material_id> --clean
 python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file page_docs.json --clean
 python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file normalized_docs.json --input-dir ./tmp_validate/<course_id>/normalized --clean
+python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-file section_docs.json --output-file material_<material_id>.section_docs.json
 ```
 
 脚本当前行为：
 
 - 默认拉取 `section_docs.json`
 - 多资料课程下建议显式传 `--material-id`
+- `--json-file` 指定 MinIO 源文件名，`--output-file` 只改变本地写入文件名，Java build-run 会用它把多个资料写入独立 `index/input/`
 - 兼容历史 `*.jsonl` 文件并自动转为 JSON 数组
 - 会尽量把 `course_id`、`source_file`、`document_type`、`heading_path_text`、`page_start`、`page_end`、`section_level` 等 metadata 提升到顶层
 
@@ -189,9 +199,13 @@ curl -X POST http://127.0.0.1:8012/v1/query-tasks \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "global",
-    "prompt": "请概括这套图谱的主题"
+    "prompt": "请概括这套图谱的主题",
+    "indexRunId": 18,
+    "dataDirUri": "user_2/kb_5/build_27/index/output"
   }'
 ```
+
+`indexRunId` 和 `dataDirUri` 是 Java 后端传入的内部字段。`dataDirUri` 必须位于 `GRAPHRAG_BUILD_RUNS_ROOT` 下，Python API 会拒绝绝对路径和目录逃逸；未传时仍查询共享 `output/`，用于 CLI 调试和兼容旧调用。
 
 查询异步任务状态：
 

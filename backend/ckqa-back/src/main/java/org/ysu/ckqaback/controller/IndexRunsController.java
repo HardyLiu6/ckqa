@@ -6,7 +6,9 @@ import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.index.IndexWorkflowService;
+import org.ysu.ckqaback.index.dto.IndexArtifactResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
+import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,9 +30,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class IndexRunsController {
 
     private final IndexWorkflowService indexWorkflowService;
+    private final IndexArtifactsService indexArtifactsService;
 
     @GetMapping("/{id}")
     public ApiResponse<IndexRunResponse> getIndexRun(@PathVariable @Positive(message = "id必须大于0") Long id) {
         return ApiResponseUtils.success(indexWorkflowService.getIndexRun(id));
+    }
+
+    @GetMapping("/{id}/artifacts")
+    public ApiResponse<java.util.List<IndexArtifactResponse>> listIndexRunArtifacts(
+            @PathVariable @Positive(message = "id必须大于0") Long id
+    ) {
+        return ApiResponseUtils.success(indexArtifactsService.listByIndexRunId(id).stream()
+                .map(IndexArtifactResponse::fromEntity)
+                .toList());
     }
 }

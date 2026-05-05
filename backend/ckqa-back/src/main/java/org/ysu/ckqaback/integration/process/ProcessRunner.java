@@ -5,7 +5,9 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +67,7 @@ public class ProcessRunner implements DisposableBean {
 
             String stdout = stdoutFuture.get();
             String stderr = stderrFuture.get();
+            writeLogFile(context, stdout, stderr);
 
             return ProcessExecutionResult.builder()
                     .command(command)
@@ -79,6 +82,44 @@ public class ProcessRunner implements DisposableBean {
             throw new IOException("读取进程输出失败", ex);
         } finally {
             activeProcesses.remove(key);
+        }
+    }
+
+    private void writeLogFile(ProcessContext context, String stdout, String stderr) throws IOException {
+        if (context == null || context.getLogFile() == null) {
+            return;
+        }
+        Path logFile = context.getLogFile();
+        Path parent = logFile.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        StringBuilder builder = new StringBuilder();
+        appendLogLines(builder, "stdout", stdout);
+        appendLogLines(builder, "stderr", stderr);
+        Files.writeString(
+                logFile,
+                builder.toString(),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
+    }
+
+    private void appendLogLines(StringBuilder builder, String streamName, String output) {
+        if (output == null || output.isEmpty()) {
+            return;
+        }
+        for (String line : output.split("\\R", -1)) {
+            if (line.isEmpty()) {
+                continue;
+            }
+            builder.append('[')
+                    .append(streamName)
+                    .append("] ")
+                    .append(line)
+                    .append(System.lineSeparator());
         }
     }
 

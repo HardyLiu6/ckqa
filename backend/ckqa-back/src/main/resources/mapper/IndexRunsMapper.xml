@@ -6,6 +6,7 @@
     <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.IndexRuns">
         <id column="id" property="id" />
         <result column="knowledge_base_id" property="knowledgeBaseId" />
+        <result column="build_run_id" property="buildRunId" />
         <result column="engine" property="engine" />
         <result column="index_version" property="indexVersion" />
         <result column="status" property="status" />
@@ -17,7 +18,8 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, knowledge_base_id, engine, index_version, status, started_at, finished_at, run_metadata, created_at
+        id, knowledge_base_id, build_run_id, engine, index_version, status, started_at, finished_at, run_metadata,
+        created_at
     </sql>
 
 </mapper>

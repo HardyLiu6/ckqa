@@ -17,6 +17,7 @@ public final class ApiPaths {
     public static final String INDEX_ARTIFACTS = API_V1 + "/index-artifacts";
     public static final String INDEX_RUNS = API_V1 + "/index-runs";
     public static final String KB_DOCUMENTS = API_V1 + "/kb-documents";
+    public static final String KNOWLEDGE_BASE_BUILD_RUNS = API_V1 + "/knowledge-base-build-runs";
     public static final String KNOWLEDGE_BASES = API_V1 + "/knowledge-bases";
     public static final String PARSE_LOGS = API_V1 + "/parse-logs";
     public static final String PARSE_RESULTS = API_V1 + "/parse-results";
@@ -29,6 +30,7 @@ public final class ApiPaths {
     public static final String ROLE_PERMISSIONS = API_V1 + "/role-permissions";
     public static final String ROLES = API_V1 + "/roles";
     public static final String SYSTEM_HEALTH = API_V1 + "/system/health";
+    public static final String SYSTEM_READINESS = API_V1 + "/system/readiness";
     public static final String USER_ROLES = API_V1 + "/user-roles";
     public static final String USERS = API_V1 + "/users";
 

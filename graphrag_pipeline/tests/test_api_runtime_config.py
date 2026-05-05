@@ -29,6 +29,7 @@ class TestApiRuntimeConfig(unittest.TestCase):
             {
                 "GRAPHRAG_STORAGE_DIR": "custom-output",
                 "GRAPHRAG_LANCEDB_URI": "custom-output/custom-lancedb",
+                "GRAPHRAG_BUILD_RUNS_ROOT": "runtime/custom-build-runs",
                 "GRAPHRAG_API_HOST": "127.0.0.1",
                 "GRAPHRAG_API_PORT": "18012",
             },
@@ -40,6 +41,7 @@ class TestApiRuntimeConfig(unittest.TestCase):
             config.lancedb_uri,
             str((_PROJECT_ROOT / "custom-output" / "custom-lancedb").resolve()),
         )
+        self.assertEqual(config.build_runs_root, (_PROJECT_ROOT / "runtime" / "custom-build-runs").resolve())
         self.assertEqual(config.api_host, "127.0.0.1")
         self.assertEqual(config.api_port, 18012)
         self.assertFalse(hasattr(config, "global_search_community_level"))
@@ -51,6 +53,7 @@ class TestApiRuntimeConfig(unittest.TestCase):
 
         self.assertEqual(config.api_host, "0.0.0.0")
         self.assertEqual(config.api_port, 8012)
+        self.assertEqual(config.build_runs_root, (_PROJECT_ROOT / "runtime" / "kb-build-runs").resolve())
         self.assertFalse(hasattr(config, "global_search_community_level"))
         self.assertFalse(hasattr(config, "global_search_dynamic_selection"))
         self.assertFalse(hasattr(config, "global_search_response_type"))

@@ -3,7 +3,13 @@ const SERVICE_LABELS = {
   mysql: 'MySQL',
   pdfIngestRoot: 'pdf_ingest root',
   graphRagRoot: 'graphrag_pipeline root',
+  'graphrag-root': 'graphrag_pipeline root',
+  graphRagBuildRunsRoot: 'GraphRAG build-runs root',
+  'graphrag-build-runs-root': 'GraphRAG build-runs root',
   graphRagApi: 'GraphRAG API',
+  'graphrag-api': 'GraphRAG API',
+  graphRagReady: 'GraphRAG ready',
+  'graphrag-ready': 'GraphRAG ready',
   lanceDb: 'output/lancedb',
 }
 

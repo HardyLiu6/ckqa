@@ -25,6 +25,8 @@ public interface IndexRunsService extends IService<IndexRuns> {
 
     IndexRuns createPendingRun(Long knowledgeBaseId, String indexVersion);
 
+    IndexRuns createPendingRun(Long knowledgeBaseId, Long buildRunId, String indexVersion);
+
     void markRunning(Long id);
 
     void markSuccess(Long id, String metadataJson);

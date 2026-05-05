@@ -11,6 +11,7 @@ import org.ysu.ckqaback.system.dto.SystemHealthResponse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,10 +30,17 @@ public class SystemHealthService {
                 checkMySql(),
                 checkPath("pdf-ingest-root", properties.getPdfIngest().getRoot()),
                 checkPath("graphrag-root", properties.getGraphrag().getRoot()),
-                checkGraphRagOutput(),
+                checkPath("graphrag-build-runs-root", resolveBuildRunsRoot()),
                 checkApiReachable(),
                 checkApiReady()
         );
+        boolean up = items.stream().allMatch(SystemHealthItemResponse::isReachable);
+        return new SystemHealthResponse(up, items);
+    }
+
+    public SystemHealthResponse readiness() {
+        List<SystemHealthItemResponse> items = new ArrayList<>(check().getItems());
+        items.add(checkGraphRagOutput());
         boolean up = items.stream().allMatch(SystemHealthItemResponse::isReachable);
         return new SystemHealthResponse(up, items);
     }
@@ -119,6 +127,16 @@ public class SystemHealthService {
         } catch (Exception exception) {
             return SystemHealthItemResponse.of("graphrag-output", false, false, exception.getMessage());
         }
+    }
+
+    private String resolveBuildRunsRoot() {
+        if (StringUtils.hasText(properties.getGraphrag().getBuildRunsRoot())) {
+            return properties.getGraphrag().getBuildRunsRoot();
+        }
+        if (StringUtils.hasText(properties.getGraphrag().getRoot())) {
+            return Path.of(properties.getGraphrag().getRoot(), "runtime", "kb-build-runs").toString();
+        }
+        return null;
     }
 
     private String buildGraphRagOutputMessage(boolean outputExists, boolean lanceDbExists) {

@@ -30,5 +30,10 @@ class CkqaIntegrationPropertiesTest {
         assertThat(properties.getGraphrag().getManagedApi().getCondaEnv()).isEqualTo("graphrag-oneapi");
         assertThat(properties.getGraphrag().getManagedApi().getHost()).isEqualTo("127.0.0.1");
         assertThat(properties.getGraphrag().getManagedApi().getPort()).isEqualTo(8012);
+        assertThat(properties.getGraphrag().isConcurrentBuildsEnabled()).isTrue();
+        assertThat(properties.getGraphrag().getAutoActivationPolicy()).isEqualTo("latest-build-only");
+        assertThat(properties.getGraphrag().getRetention().getKeepSuccessBuildRuns()).isEqualTo(3);
+        assertThat(properties.getGraphrag().getRetention().getKeepFailedBuildRuns()).isEqualTo(3);
+        assertThat(properties.getGraphrag().getRetention().isAutoCleanupEnabled()).isFalse();
     }
 }

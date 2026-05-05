@@ -1,6 +1,6 @@
 # Student App 到后端与 GraphRAG API 契约
 
-> 审查日期：2026-05-03
+> 审查日期：2026-05-05
 > 适用范围：`frontend/apps/student-app/`、`backend/ckqa-back/`、`graphrag_pipeline/`
 
 本文档定义学员端前端、Java 编排后端和 GraphRAG Python 服务之间的最小稳定契约。当前约定是：`student-app` 只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
@@ -76,8 +76,10 @@ VITE_API_TIMEOUT=10000
 | `4046` | 知识库不存在 |
 | `4047` | 索引任务不存在 |
 | `4048` | 问答会话不存在 |
+| `4049` | 知识库构建流水线不存在 |
 | `4096` | 问答会话已关闭 |
 | `4097` | 知识库当前没有可用索引 |
+| `4099` | 当前知识库已有构建流水线未完成 |
 | `5000` | 服务器内部错误 |
 
 ## 前端应消费的 Java API
@@ -86,6 +88,7 @@ VITE_API_TIMEOUT=10000
 
 ```http
 GET /api/v1/system/health
+GET /api/v1/system/readiness
 ```
 
 `data` 形态：
@@ -107,8 +110,9 @@ GET /api/v1/system/health
 前端建议：
 
 - `reachable=false` 表示依赖不可达。
-- `ready=false` 表示依赖可达但不满足业务前置条件，例如缺少 `output/lancedb/`。
-- 学员端问答入口应优先关注 `graphrag-ready` 或后端后续聚合出的业务就绪状态。
+- `GET /system/health` 是轻量健康检查，重点覆盖 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api` 和 `graphrag-ready`。
+- `GET /system/readiness` 会额外检查共享 `GRAPHRAG_ROOT/output` 和 `output/lancedb`，它们主要用于手工 CLI 调试和兼容旧调用，不再是管理端 build-run 构建的唯一就绪条件。
+- 学员端问答入口应优先关注知识库摘要里的 `activeIndexRunId` 以及后端后续聚合出的业务就绪状态。
 
 ### 课程资源入口
 
@@ -165,9 +169,27 @@ PDF 摘要：
 | `GET` | `/api/v1/pdf-files/{id}/results` | 查看 MinerU/标准化/GraphRAG 导出产物 |
 | `POST` | `/api/v1/pdf-files/{id}/parse` | 触发 PDF 解析，当前是同步长任务 |
 | `POST` | `/api/v1/pdf-files/{id}/export-graphrag` | 触发 GraphRAG JSON 导出 |
-| `POST` | `/api/v1/knowledge-bases/{id}/index-runs` | 创建索引任务，当前是同步长任务 |
+| `POST` | `/api/v1/knowledge-bases/{id}/index-runs` | 兼容入口：内部会桥接为 build run 后再创建索引任务 |
 | `GET` | `/api/v1/knowledge-bases/{id}/index-runs` | 查看知识库索引任务列表 |
 | `GET` | `/api/v1/index-runs/{id}` | 查看单个索引任务 |
+
+管理端知识库构建向导使用 build-run API，而不是让浏览器直接接触本机目录：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/v1/knowledge-bases/{id}/build-runs` | 创建一次知识库构建流水线 |
+| `GET` | `/api/v1/knowledge-bases/{id}/build-runs` | 分页查看构建流水线 |
+| `POST` | `/api/v1/knowledge-bases/{id}/build-runs/gc` | 清理旧构建流水线，默认 dry-run |
+| `GET` | `/api/v1/knowledge-base-build-runs/{id}` | 查看构建详情 |
+| `DELETE` | `/api/v1/knowledge-base-build-runs/{id}` | 归档单个构建流水线，默认保留本地 artifacts |
+| `PUT` | `/api/v1/knowledge-base-build-runs/{id}/material-selection` | 更新本次构建资料选择 |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/parse-check` | 确认资料解析状态 |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/graph-input` | 同步 GraphRAG 输入到独立 workspace |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/prompt-confirmation` | 确认 Prompt 策略 |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/index-runs` | 在 build-run workspace 内建索引 |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/qa-smoke` | 使用该 build run 的索引发起 QA 冒烟验证 |
+
+学生端当前不直接触发这些构建接口；它只消费已经激活的知识库索引。后端不会把 `${GRAPHRAG_BUILD_RUNS_ROOT}` 下的绝对路径暴露给浏览器。
 
 这些 `/api/v1/pdf-files/*` 路径同样是兼容保留名；`{id}` 当前实际对应 `course_materials.id`，响应体会额外补出 `materialId` 与 `materialObjectId`。
 
@@ -405,7 +427,9 @@ Content-Type: application/json
 ```json
 {
   "mode": "basic",
-  "prompt": "请概括这套图谱的主题"
+  "prompt": "请概括这套图谱的主题",
+  "indexRunId": 18,
+  "dataDirUri": "user_2/kb_5/build_27/index/output"
 }
 ```
 
@@ -419,6 +443,12 @@ Content-Type: application/json
   "createdAt": "2026-04-23T15:31:00"
 }
 ```
+
+字段约定：
+
+- `indexRunId` 用于 Java 和 Python 日志侧关联当前激活索引。
+- `dataDirUri` 是相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的后端内部路径，Python 会拒绝绝对路径、`..` 逃逸和反斜杠路径。
+- 旧调用不传 `dataDirUri` 时，Python 仍会回退到共享 `output/`，该路径只作为 CLI 调试和兼容保留。
 
 ### 查询 Python 任务快照
 

@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import uuid
 from typing import Dict, List, Literal, Optional, Union
@@ -27,7 +28,7 @@ from pydantic import BaseModel, Field
 
 from api_runtime_config import load_api_runtime_config
 from runtime_defaults import PROJECT_ROOT, PROJECT_VERSION, TARGET_GRAPHRAG_VERSION
-from query_task_manager import QueryTaskManager
+from query_task_manager import QueryTaskManager, QueryTaskRequest
 
 
 logging.basicConfig(
@@ -42,6 +43,7 @@ GRAPHRAG_ROOT = PROJECT_ROOT
 OUTPUT_DIR = APP_CONFIG.output_dir
 INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
+BUILD_RUNS_ROOT = APP_CONFIG.build_runs_root
 API_TIME_ZONE = ZoneInfo("Asia/Shanghai")
 SUPPORTED_QUERY_MODELS: dict[str, str] = {
     "graphrag-local-search:latest": "local",
@@ -76,12 +78,14 @@ def _merge_no_proxy_hosts(current_value: str | None, extra_hosts: list[str]) -> 
     return ",".join(merged)
 
 
-def _build_query_env() -> dict[str, str]:
+def _build_query_env(request: QueryTaskRequest | None = None) -> dict[str, str]:
     """为 graphrag CLI 查询构建稳定的运行环境。"""
     env = os.environ.copy()
-    env["GRAPHRAG_OUTPUT_DIR"] = str(OUTPUT_DIR)
-    env["GRAPHRAG_STORAGE_DIR"] = str(OUTPUT_DIR)
-    env["GRAPHRAG_LANCEDB_URI"] = LANCEDB_URI
+    has_task_data_dir = request is not None and request.data_dir is not None
+    output_dir = request.data_dir if has_task_data_dir else OUTPUT_DIR
+    env["GRAPHRAG_OUTPUT_DIR"] = str(output_dir)
+    env["GRAPHRAG_STORAGE_DIR"] = str(output_dir)
+    env["GRAPHRAG_LANCEDB_URI"] = str(output_dir / "lancedb") if has_task_data_dir else LANCEDB_URI
     if _should_bypass_env_proxy(env.get("GRAPHRAG_API_BASE")):
         no_proxy = _merge_no_proxy_hosts(
             env.get("NO_PROXY") or env.get("no_proxy"),
@@ -92,34 +96,43 @@ def _build_query_env() -> dict[str, str]:
     return env
 
 
-def _build_query_cmd(method: str, prompt: str) -> list[str]:
+def _build_query_cmd(request: QueryTaskRequest) -> list[str]:
     """按查询模式构造 graphrag CLI 参数。"""
-    return [
+    cmd = [
+        sys.executable,
+        "-m",
         "graphrag",
         "query",
         "--root",
         ".",
-        "--method",
-        method,
-        prompt,
     ]
+    if request.data_dir is not None:
+        cmd.extend(["--data", str(request.data_dir)])
+    cmd.extend([
+        "--method",
+        request.mode,
+        request.prompt,
+    ])
+    return cmd
 
 
 QUERY_TASK_MANAGER = QueryTaskManager(
     command_factory=_build_query_cmd,
     env_factory=_build_query_env,
     cwd=GRAPHRAG_ROOT,
+    build_runs_root=BUILD_RUNS_ROOT,
 )
 
 
 async def run_graphrag_query_cli(method: str, prompt: str) -> str:
     """通过 graphrag CLI 执行查询。"""
-    cmd = _build_query_cmd(method, prompt)
+    request = QueryTaskRequest(method, prompt, None, None, None)
+    cmd = _build_query_cmd(request)
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=str(GRAPHRAG_ROOT),
-        env=_build_query_env(),
+        env=_build_query_env(request),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -160,6 +173,8 @@ class ChatCompletionRequest(BaseModel):
 class QueryTaskCreateRequest(BaseModel):
     mode: Literal["local", "global", "drift", "basic"] = Field(default="local")
     prompt: str
+    indexRunId: int | None = None
+    dataDirUri: str | None = None
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -225,6 +240,8 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "resultText": snapshot.result_text,
         "errorMessage": snapshot.error_message,
         "returnCode": snapshot.return_code,
+        "indexRunId": snapshot.index_run_id,
+        "dataDirUri": snapshot.data_dir_uri,
     }
 
 
@@ -254,7 +271,12 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
     @app.post("/v1/query-tasks")
     async def submit_query_task(request: QueryTaskCreateRequest):
         """提交一个异步查询任务。"""
-        snapshot = await active_task_manager.create_task(request.mode, request.prompt)
+        snapshot = await active_task_manager.create_task(
+            request.mode,
+            request.prompt,
+            index_run_id=request.indexRunId,
+            data_dir_uri=request.dataDirUri,
+        )
         return JSONResponse(
             content={
                 "pythonTaskId": snapshot.python_task_id,
@@ -395,6 +417,7 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             "basic_search_ready": True,
             "output_dir": INPUT_DIR,
             "lancedb_uri": LANCEDB_URI,
+            "build_runs_root": str(BUILD_RUNS_ROOT),
         }
 
     @app.get("/")

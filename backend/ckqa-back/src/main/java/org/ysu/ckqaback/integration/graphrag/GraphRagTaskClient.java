@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -41,10 +42,23 @@ public class GraphRagTaskClient {
     }
 
     public GraphRagTaskCreateResult createTask(String mode, String prompt) {
+        return createTask(mode, prompt, null, null);
+    }
+
+    public GraphRagTaskCreateResult createTask(String mode, String prompt, Long indexRunId, String dataDirUri) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mode", mode);
+        body.put("prompt", prompt);
+        if (indexRunId != null) {
+            body.put("indexRunId", indexRunId);
+        }
+        if (dataDirUri != null && !dataDirUri.isBlank()) {
+            body.put("dataDirUri", dataDirUri);
+        }
         return restClient.post()
                 .uri("/v1/query-tasks")
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("mode", mode, "prompt", prompt))
+                .body(body)
                 .retrieve()
                 .body(GraphRagTaskCreateResult.class);
     }

@@ -76,7 +76,19 @@ public class CkqaIntegrationProperties {
     @Setter
     public static class GraphRagProperties extends PythonProcessProperties {
         private String apiBaseUrl;
+        private String buildRunsRoot;
+        private boolean concurrentBuildsEnabled = true;
+        private String autoActivationPolicy = "latest-build-only";
         private final ManagedApiProperties managedApi = new ManagedApiProperties();
+        private final RetentionProperties retention = new RetentionProperties();
+    }
+
+    @Getter
+    @Setter
+    public static class RetentionProperties {
+        private int keepSuccessBuildRuns = 3;
+        private int keepFailedBuildRuns = 3;
+        private boolean autoCleanupEnabled = false;
     }
 
     @Getter

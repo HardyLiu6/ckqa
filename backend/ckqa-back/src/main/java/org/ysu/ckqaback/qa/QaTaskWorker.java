@@ -3,17 +3,24 @@ package org.ysu.ckqaback.qa;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.entity.IndexArtifacts;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionsService;
 
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -35,6 +42,7 @@ public class QaTaskWorker {
     private final QaRetrievalLogsService qaRetrievalLogsService;
     private final QaMessagesService qaMessagesService;
     private final QaSessionsService qaSessionsService;
+    private final IndexArtifactsService indexArtifactsService;
     private final Function<String, Duration> pollIntervalResolver;
     private final Function<String, Duration> staleThresholdResolver;
     private final Function<String, String> timeoutMessageResolver;
@@ -47,6 +55,7 @@ public class QaTaskWorker {
             QaRetrievalLogsService qaRetrievalLogsService,
             QaMessagesService qaMessagesService,
             QaSessionsService qaSessionsService,
+            IndexArtifactsService indexArtifactsService,
             CkqaIntegrationProperties properties
     ) {
         this(
@@ -55,6 +64,7 @@ public class QaTaskWorker {
                 qaRetrievalLogsService,
                 qaMessagesService,
                 qaSessionsService,
+                indexArtifactsService,
                 mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).recommendedPollingIntervalSeconds()),
                 mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).staleTimeoutSeconds()),
                 mode -> properties.resolveQueryTaskModePolicy(mode).timeoutMessage(),
@@ -78,6 +88,7 @@ public class QaTaskWorker {
                 qaRetrievalLogsService,
                 qaMessagesService,
                 qaSessionsService,
+                null,
                 mode -> pollInterval,
                 mode -> staleThreshold,
                 mode -> "任务心跳超时",
@@ -96,11 +107,38 @@ public class QaTaskWorker {
             Function<String, String> timeoutMessageResolver,
             Clock clock
     ) {
+        this(
+                qaTaskExecutor,
+                graphRagTaskClient,
+                qaRetrievalLogsService,
+                qaMessagesService,
+                qaSessionsService,
+                null,
+                pollIntervalResolver,
+                staleThresholdResolver,
+                timeoutMessageResolver,
+                clock
+        );
+    }
+
+    QaTaskWorker(
+            TaskExecutor qaTaskExecutor,
+            GraphRagTaskClient graphRagTaskClient,
+            QaRetrievalLogsService qaRetrievalLogsService,
+            QaMessagesService qaMessagesService,
+            QaSessionsService qaSessionsService,
+            IndexArtifactsService indexArtifactsService,
+            Function<String, Duration> pollIntervalResolver,
+            Function<String, Duration> staleThresholdResolver,
+            Function<String, String> timeoutMessageResolver,
+            Clock clock
+    ) {
         this.qaTaskExecutor = qaTaskExecutor;
         this.graphRagTaskClient = graphRagTaskClient;
         this.qaRetrievalLogsService = qaRetrievalLogsService;
         this.qaMessagesService = qaMessagesService;
         this.qaSessionsService = qaSessionsService;
+        this.indexArtifactsService = indexArtifactsService;
         this.pollIntervalResolver = pollIntervalResolver;
         this.staleThresholdResolver = staleThresholdResolver;
         this.timeoutMessageResolver = timeoutMessageResolver;
@@ -112,13 +150,13 @@ public class QaTaskWorker {
     }
 
     public void processTask(Long sessionId, Long taskId) {
-        QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
-        Duration taskPollInterval = pollIntervalResolver.apply(task.getQueryMode());
-        Duration taskStaleThreshold = staleThresholdResolver.apply(task.getQueryMode());
-        String timeoutMessage = timeoutMessageResolver.apply(task.getQueryMode());
         GraphRagTaskSnapshot latestSnapshot = null;
         try {
-            GraphRagTaskCreateResult created = graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText());
+            QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
+            Duration taskPollInterval = pollIntervalResolver.apply(task.getQueryMode());
+            Duration taskStaleThreshold = staleThresholdResolver.apply(task.getQueryMode());
+            String timeoutMessage = timeoutMessageResolver.apply(task.getQueryMode());
+            GraphRagTaskCreateResult created = createGraphRagTask(task);
             qaRetrievalLogsService.bindPythonTask(taskId, created.pythonTaskId(), created.taskStatus(), created.progressStage());
 
             while (true) {
@@ -185,5 +223,38 @@ public class QaTaskWorker {
             return "";
         }
         return String.join("\n", latestLogs);
+    }
+
+    private GraphRagTaskCreateResult createGraphRagTask(QaRetrievalLogs task) {
+        String dataDirUri = resolveReadyOutputDirUri(task);
+        if (!StringUtils.hasText(dataDirUri)) {
+            return graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText());
+        }
+        return graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText(), task.getIndexRunId(), dataDirUri);
+    }
+
+    private String resolveReadyOutputDirUri(QaRetrievalLogs task) {
+        if (task.getIndexRunId() == null || indexArtifactsService == null) {
+            return null;
+        }
+        return indexArtifactsService.listByIndexRunId(task.getIndexRunId()).stream()
+                .filter(artifact -> "output_dir".equals(artifact.getArtifactType()))
+                .filter(artifact -> "ready".equals(artifact.getArtifactStatus()))
+                .map(IndexArtifacts::getStorageUri)
+                .filter(this::isSafeRelativeUri)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT));
+    }
+
+    private boolean isSafeRelativeUri(String storageUri) {
+        if (!StringUtils.hasText(storageUri) || storageUri.contains("\\") || storageUri.contains("/home/")) {
+            return false;
+        }
+        Path path = Path.of(storageUri);
+        if (path.isAbsolute()) {
+            return false;
+        }
+        Path normalized = path.normalize();
+        return !normalized.startsWith("..");
     }
 }

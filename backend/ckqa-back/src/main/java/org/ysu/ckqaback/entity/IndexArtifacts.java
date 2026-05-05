@@ -46,10 +46,28 @@ public class IndexArtifacts implements Serializable {
     private String artifactType;
 
     /**
+     * 前端展示名
+     */
+    @TableField("display_name")
+    private String displayName;
+
+    /**
      * 产物路径
      */
     @TableField("storage_uri")
     private String storageUri;
+
+    /**
+     * 存储位置类型
+     */
+    @TableField("storage_scope")
+    private String storageScope;
+
+    /**
+     * 产物状态
+     */
+    @TableField("artifact_status")
+    private String artifactStatus;
 
     /**
      * 文件大小

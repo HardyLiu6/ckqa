@@ -25,23 +25,31 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from main import QueryTaskCreateRequest, _resolve_query_response, create_app, format_response
-from query_task_manager import QueryTaskSnapshot
+from main import QueryTaskCreateRequest, _build_query_cmd, _resolve_query_response, create_app, format_response
+from query_task_manager import QueryTaskRequest, QueryTaskSnapshot
 
 
 class _FakeQueryTaskManager:
     def __init__(self) -> None:
-        self.created_requests: list[tuple[str, str]] = []
+        self.created_requests: list[tuple[str, str, int | None, str | None]] = []
         self.created_at = datetime(2026, 4, 22, 12, 20, 34, tzinfo=UTC)
         self.started_at = datetime(2026, 4, 22, 12, 20, 35, tzinfo=UTC)
         self.last_heartbeat_at = datetime(2026, 4, 22, 12, 20, 36, tzinfo=UTC)
 
-    async def create_task(self, mode: str, prompt: str) -> QueryTaskSnapshot:
-        self.created_requests.append((mode, prompt))
+    async def create_task(
+        self,
+        mode: str,
+        prompt: str,
+        index_run_id: int | None = None,
+        data_dir_uri: str | None = None,
+    ) -> QueryTaskSnapshot:
+        self.created_requests.append((mode, prompt, index_run_id, data_dir_uri))
         return QueryTaskSnapshot(
             python_task_id="qt_20260422_000001_001",
             mode=mode,
             prompt=prompt,
+            index_run_id=index_run_id,
+            data_dir_uri=data_dir_uri,
             task_status="pending",
             progress_stage="queued",
             process_alive=False,
@@ -56,6 +64,8 @@ class _FakeQueryTaskManager:
             python_task_id=python_task_id,
             mode="drift",
             prompt="请概括这套图谱的主题",
+            index_run_id=18,
+            data_dir_uri="user_2/kb_5/build_27/index/output",
             task_status="running",
             progress_stage="running",
             process_alive=True,
@@ -88,7 +98,7 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(submit_payload["pythonTaskId"], "qt_20260422_000001_001")
         self.assertEqual(submit_payload["progressStage"], "queued")
         self.assertEqual(submit_payload["createdAt"], "2026-04-22T20:20:34")
-        self.assertEqual(task_manager.created_requests, [("drift", "请概括这套图谱的主题")])
+        self.assertEqual(task_manager.created_requests, [("drift", "请概括这套图谱的主题", None, None)])
 
         fetch_response = asyncio.run(detail_endpoint("qt_20260422_000001_001"))
         self.assertEqual(fetch_response.status_code, 200)
@@ -98,6 +108,45 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(fetch_payload["createdAt"], "2026-04-22T20:20:34")
         self.assertEqual(fetch_payload["startedAt"], "2026-04-22T20:20:35")
         self.assertEqual(fetch_payload["lastHeartbeatAt"], "2026-04-22T20:20:36")
+        self.assertEqual(fetch_payload["indexRunId"], 18)
+        self.assertEqual(fetch_payload["dataDirUri"], "user_2/kb_5/build_27/index/output")
+
+    def test_submit_query_task_accepts_backend_index_context(self):
+        task_manager = _FakeQueryTaskManager()
+        app = create_app(task_manager=task_manager)
+        submit_endpoint = _get_route_endpoint(app, "/v1/query-tasks", "POST")
+
+        response = asyncio.run(
+            submit_endpoint(
+                QueryTaskCreateRequest(
+                    mode="basic",
+                    prompt="问题",
+                    indexRunId=18,
+                    dataDirUri="user_2/kb_5/build_27/index/output",
+                )
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            task_manager.created_requests,
+            [("basic", "问题", 18, "user_2/kb_5/build_27/index/output")],
+        )
+
+    def test_query_command_uses_current_python_module_invocation(self):
+        cmd = _build_query_cmd(
+            QueryTaskRequest(
+                mode="basic",
+                prompt="问题",
+                index_run_id=18,
+                data_dir_uri="user_2/kb_5/build_27/index/output",
+                data_dir=_PROJECT_ROOT / "runtime" / "kb-build-runs" / "user_2/kb_5/build_27/index/output",
+            )
+        )
+
+        self.assertEqual(cmd[:4], [sys.executable, "-m", "graphrag", "query"])
+        self.assertIn("--data", cmd)
+        self.assertNotEqual(cmd[0], "graphrag")
 
     def test_get_query_task_returns_404_when_snapshot_missing(self):
         app = create_app(task_manager=_FakeQueryTaskManager())

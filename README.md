@@ -127,7 +127,7 @@ export GRAPHRAG_API_MANAGED_ENABLED=true
 
 #### 3.1 确认基础依赖
 
-MySQL、MinIO、One API、Neo4j 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，GraphRAG 输出目录中存在 `output/*.parquet` 和 `output/lancedb/`。
+MySQL、MinIO、One API、Neo4j 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，`GRAPHRAG_ROOT` 指向可用的 `graphrag_pipeline/`，并为构建流水线准备本地运行目录 `graphrag_pipeline/runtime/kb-build-runs/`。共享 `graphrag_pipeline/output/` 现在主要作为 CLI 手工排障路径；管理端构建向导会优先使用每个 build run 自己的 `index/output/`。
 
 ```bash
 docker ps
@@ -178,6 +178,9 @@ export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_BUILD_RUNS_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs
+export GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS=true
+export GRAPHRAG_AUTO_ACTIVATION_POLICY=latest-build-only
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
 
 ./mvnw spring-boot:run
@@ -191,7 +194,7 @@ curl http://127.0.0.1:8080/api/v1/courses
 curl http://127.0.0.1:8080/api/v1/knowledge-bases
 ```
 
-`/api/v1/system/health` 中 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-output`、`graphrag-api`、`graphrag-ready` 都为 `ready=true` 时，管理端核心流程才具备真实联调条件。
+`/api/v1/system/health` 现在保持轻量，重点确认 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api`、`graphrag-ready`。如果需要检查共享 CLI 调试产物，再调用 `/api/v1/system/readiness`；其中 `graphrag-output` 只代表 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 的手工排障状态，不再是管理端 build-run 流程的唯一就绪条件。
 
 #### 3.4 手工启动 admin-app 前端
 
@@ -337,7 +340,7 @@ ckqa/
 - 主入口：`utils/fetch_from_minio.py`、`utils/main.py`
 - 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`、`scripts/finalize_candidate_prompt.py`
 - 脚本分层：实现代码见 `graphrag_pipeline/scripts/README.md`，根目录同名脚本保留兼容入口
-- 关键产物：`input/*.json`、`output/*.parquet`、`output/lancedb/`
+- 关键产物：手工 CLI 调试使用 `input/*.json`、`output/*.parquet`、`output/lancedb/`；Java 管理端构建使用 `runtime/kb-build-runs/user_*/kb_*/build_*/index/input|output|logs`
 - 当前重建前状态：旧输入、旧索引和旧调优产物已清空，默认 Prompt 回到 `prompts/*.txt` 基础模板
 - 运行环境：`graphrag-oneapi`
 - 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
@@ -427,7 +430,7 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
 - `graphrag_pipeline` 当前活动 Prompt 由 `.env` 中的 `GRAPHRAG_*_PROMPT_FILE` 决定；旧调优产物清理后默认候选为 `base`，指向 `prompts/*.txt`，只有重新固化候选 Prompt 后才会生成 `prompts/final/active_prompt.json`。
 - 本地重新抽取前如果要清空旧课程运行态数据，使用 `cd pdf_ingest && python scripts/cleanup_legacy_course_data.py --env-file .env` 先 dry-run，再加 `--execute` 执行；默认会把不符合 `crs-YYYYMMDD-HHMMSS` 的课程 ID 当作旧课程。
-- `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 缺一不可。
+- `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 对手工 CLI 查询缺一不可；Java 管理端构建会把输入、输出、日志和 QA smoke 快照隔离到 `runtime/kb-build-runs/` 下。
 - `backend/ckqa-back/` 的问答链路通过 `graphrag_pipeline` 的 `/v1/query-tasks` 异步任务接口工作；跨服务时间字段对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。

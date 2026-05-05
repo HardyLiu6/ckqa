@@ -286,6 +286,37 @@ CREATE TABLE `knowledge_bases` (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程知识库表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
+-- Table structure for knowledge_base_build_runs
+-- ----------------------------
+DROP TABLE IF EXISTS `knowledge_base_build_runs`;
+CREATE TABLE `knowledge_base_build_runs` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库ID',
+  `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID快照',
+  `requested_by_user_id` bigint NULL DEFAULT NULL COMMENT '发起用户ID',
+  `build_version` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '构建版本',
+  `status` enum('pending','running','success','failed','interrupted','archived') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '流水线状态',
+  `current_stage` enum('material_selection','parse','graph_input_export','prompt','index','qa_smoke','done') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'material_selection' COMMENT '当前阶段',
+  `qa_status` enum('pending','running','success','failed','skipped') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'skipped' COMMENT '问答验证状态',
+  `activation_policy` enum('manual','index_success') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'index_success' COMMENT '自动激活策略',
+  `selected_material_ids` json DEFAULT NULL COMMENT '本次构建资料选择快照',
+  `active_index_run_id` bigint NULL DEFAULT NULL COMMENT '当前由该构建承载的激活索引运行',
+  `workspace_uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '相对 GRAPHRAG_BUILD_RUNS_ROOT 的工作区路径',
+  `build_metadata` json DEFAULT NULL COMMENT '构建元数据',
+  `started_at` timestamp NULL DEFAULT NULL COMMENT '开始时间',
+  `finished_at` timestamp NULL DEFAULT NULL COMMENT '结束时间',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_kb_build_version`(`knowledge_base_id` ASC, `build_version` ASC) USING BTREE,
+  INDEX `idx_kb_build_status`(`knowledge_base_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_kb_build_user_status`(`requested_by_user_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_kb_build_created`(`knowledge_base_id` ASC, `created_at` ASC, `id` ASC) USING BTREE,
+  INDEX `idx_kb_build_active_index`(`knowledge_base_id` ASC, `active_index_run_id` ASC) USING BTREE,
+  CONSTRAINT `fk_kb_build_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '知识库构建流水线表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
 -- Table structure for kb_documents
 -- ----------------------------
 DROP TABLE IF EXISTS `kb_documents`;
@@ -310,6 +341,7 @@ DROP TABLE IF EXISTS `index_runs`;
 CREATE TABLE `index_runs` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库ID',
+  `build_run_id` bigint NULL DEFAULT NULL COMMENT '所属知识库构建流水线ID',
   `engine` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '索引引擎',
   `index_version` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '索引版本',
   `status` enum('pending','running','success','failed','archived') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pending' COMMENT '运行状态',
@@ -320,8 +352,10 @@ CREATE TABLE `index_runs` (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_kb_index_version`(`knowledge_base_id` ASC, `index_version` ASC) USING BTREE,
   INDEX `idx_index_runs_kb_status`(`knowledge_base_id` ASC, `status` ASC) USING BTREE,
+  INDEX `idx_index_runs_build_run`(`build_run_id` ASC) USING BTREE,
   INDEX `idx_index_runs_status_started`(`status` ASC, `started_at` ASC) USING BTREE,
-  CONSTRAINT `fk_index_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
+  CONSTRAINT `fk_index_runs_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
+  CONSTRAINT `fk_index_runs_build_run` FOREIGN KEY (`build_run_id`) REFERENCES `knowledge_base_build_runs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '索引运行表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -331,8 +365,11 @@ DROP TABLE IF EXISTS `index_artifacts`;
 CREATE TABLE `index_artifacts` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `index_run_id` bigint NOT NULL COMMENT '索引运行ID',
-  `artifact_type` enum('graphrag_output','parquet','lancedb','report','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '产物类型',
+  `artifact_type` enum('input_json','output_dir','parquet','lancedb','report','cache','manifest','log','qa_smoke','graphrag_output','other') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '产物类型',
+  `display_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '前端展示名',
   `storage_uri` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '产物路径',
+  `storage_scope` enum('local','minio') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'local' COMMENT '存储位置类型',
+  `artifact_status` enum('ready','partial','missing','deleted') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'ready' COMMENT '产物状态',
   `file_size` bigint NULL DEFAULT 0 COMMENT '文件大小',
   `checksum` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '校验值',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

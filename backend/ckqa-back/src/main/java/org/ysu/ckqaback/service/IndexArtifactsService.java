@@ -13,4 +13,11 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IndexArtifactsService extends IService<IndexArtifacts> {
 
+    IndexArtifacts getRequiredById(Long id);
+
+    java.util.List<IndexArtifacts> listByIndexRunId(Long indexRunId);
+
+    void removeByIndexRunId(Long indexRunId);
+
+    IndexArtifacts markDeleted(Long id);
 }

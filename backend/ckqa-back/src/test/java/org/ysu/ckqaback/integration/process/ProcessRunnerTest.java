@@ -1,8 +1,10 @@
 package org.ysu.ckqaback.integration.process;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
@@ -14,6 +16,9 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ProcessRunnerTest {
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void shouldTerminateTrackedProcessWhenRunnerDestroyed() throws Exception {
@@ -71,5 +76,24 @@ class ProcessRunnerTest {
         assertThat(result.getExitCode()).isEqualTo(0);
         assertThat(result.getStdout()).contains("out-5000");
         assertThat(result.getStderr()).contains("err-5000");
+    }
+
+    @Test
+    void shouldWriteStdoutAndStderrToLogFile() throws Exception {
+        ProcessRunner runner = new ProcessRunner();
+        Path logFile = tempDir.resolve("process.log");
+
+        ProcessExecutionResult result = runner.run(
+                java.util.List.of("bash", "-lc", "echo out; echo err >&2"),
+                tempDir,
+                Map.of(),
+                Duration.ofSeconds(5),
+                ProcessContext.builder().operation("index").logFile(logFile).build()
+        );
+
+        assertThat(result.getExitCode()).isZero();
+        assertThat(result.getStdout()).contains("out");
+        assertThat(result.getStderr()).contains("err");
+        assertThat(Files.readString(logFile)).contains("[stdout] out").contains("[stderr] err");
     }
 }

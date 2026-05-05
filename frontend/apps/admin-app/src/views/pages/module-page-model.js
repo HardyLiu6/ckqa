@@ -19,6 +19,12 @@ export function resolveCleanMaterialQuery(query = {}) {
   return rest
 }
 
+export function resolveBuildRunIdQuery(query = {}) {
+  const raw = firstQueryValue(query.buildRunId)
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
 export function selectLatestRunningOrSuccess(indexRuns = [], resolveState) {
   return indexRuns.filter((item) => {
     const state = resolveState(item)

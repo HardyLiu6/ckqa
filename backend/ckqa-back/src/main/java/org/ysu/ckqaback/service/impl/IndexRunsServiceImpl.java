@@ -78,8 +78,14 @@ public class IndexRunsServiceImpl extends ServiceImpl<IndexRunsMapper, IndexRuns
 
     @Override
     public IndexRuns createPendingRun(Long knowledgeBaseId, String indexVersion) {
+        return createPendingRun(knowledgeBaseId, null, indexVersion);
+    }
+
+    @Override
+    public IndexRuns createPendingRun(Long knowledgeBaseId, Long buildRunId, String indexVersion) {
         IndexRuns indexRun = new IndexRuns();
         indexRun.setKnowledgeBaseId(knowledgeBaseId);
+        indexRun.setBuildRunId(buildRunId);
         indexRun.setEngine("graphrag");
         indexRun.setIndexVersion(indexVersion);
         indexRun.setStatus("pending");

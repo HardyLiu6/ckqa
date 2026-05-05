@@ -63,4 +63,66 @@ public class GraphRagIndexOrchestrator {
                         .build()
         );
     }
+
+    public ProcessExecutionResult fetchMaterialInput(
+            IndexRuns run,
+            KnowledgeBases knowledgeBase,
+            Long materialId,
+            Path graphInputDir,
+            String jsonFile,
+            String outputFile
+    ) throws IOException, InterruptedException {
+        return processRunner.run(
+                List.of(
+                        properties.getGraphrag().getPython(),
+                        "utils/fetch_from_minio.py",
+                        knowledgeBase.getCourseId(),
+                        "--material-id",
+                        String.valueOf(materialId),
+                        "--json-file",
+                        jsonFile,
+                        "--input-dir",
+                        graphInputDir.toString(),
+                        "--output-file",
+                        outputFile
+                ),
+                Path.of(properties.getGraphrag().getRoot()),
+                Map.of(),
+                Duration.ofSeconds(properties.getTimeout().getFetchSeconds()),
+                ProcessContext.builder()
+                        .operation("fetch-material-input")
+                        .indexRunId(run.getId())
+                        .build()
+        );
+    }
+
+    public ProcessExecutionResult runIndex(IndexRuns run, Path workspaceRoot) throws IOException, InterruptedException {
+        Path indexRoot = workspaceRoot.resolve("index");
+        Path logsDir = indexRoot.resolve("logs");
+        java.nio.file.Files.createDirectories(logsDir);
+        return processRunner.run(
+                List.of(
+                        properties.getGraphrag().getPython(),
+                        "-m",
+                        "graphrag",
+                        "index",
+                        "--root",
+                        "."
+                ),
+                Path.of(properties.getGraphrag().getRoot()),
+                Map.of(
+                        "GRAPHRAG_INPUT_DIR", indexRoot.resolve("input").toString(),
+                        "GRAPHRAG_OUTPUT_DIR", indexRoot.resolve("output").toString(),
+                        "GRAPHRAG_STORAGE_DIR", indexRoot.resolve("output").toString(),
+                        "GRAPHRAG_REPORTING_DIR", indexRoot.resolve("reports").toString(),
+                        "GRAPHRAG_CACHE_DIR", indexRoot.resolve("cache").toString()
+                ),
+                Duration.ofSeconds(properties.getTimeout().getIndexSeconds()),
+                ProcessContext.builder()
+                        .operation("index")
+                        .indexRunId(run.getId())
+                        .logFile(logsDir.resolve("process.log"))
+                        .build()
+        );
+    }
 }
