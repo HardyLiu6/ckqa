@@ -21,4 +21,9 @@ public class SystemHealthController {
     public ApiResponse<SystemHealthResponse> health() {
         return ApiResponseUtils.success(systemHealthService.check());
     }
+
+    @GetMapping(ApiPaths.SYSTEM_READINESS)
+    public ApiResponse<SystemHealthResponse> readiness() {
+        return ApiResponseUtils.success(systemHealthService.readiness());
+    }
 }

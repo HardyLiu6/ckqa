@@ -17,13 +17,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { createApiError, normalizePageData } from '../../api/client.js'
 import { createCourse, listCourses } from '../../api/courses.js'
 import { http } from '../../axios/index.js'
-import { createQaSession, getQaTask, sendQaMessage } from '../../api/qa.js'
 import { listUsers } from '../../api/users.js'
 import {
+  checkBuildRunParse,
+  confirmBuildRunPrompt,
+  createBuildRun,
+  createBuildRunIndexRun,
   createKnowledgeBase,
-  createIndexRun,
-  getKnowledgeBase,
-  listIndexRuns,
+  runBuildRunQaSmoke,
+  syncBuildRunGraphInput,
+  updateBuildRunMaterialSelection as submitBuildRunMaterialSelection,
+  getBuildRun,
 } from '../../api/knowledge-bases.js'
 import { authStore } from '../../stores/auth.js'
 import {
@@ -71,19 +75,13 @@ import {
   createRouteSnapshot,
   createStaleRequestGuard,
   resolveApiErrorAction,
+  resolveBuildRunIdQuery,
   resolveBuildConfirmQuery,
   resolveBuildSelectionQuery,
   resolveBuildStepQuery,
   resolveCleanBuildStepQuery,
   resolveOperationFeedback,
-  selectLatestRunningOrSuccess,
 } from './module-page-model.js'
-import {
-  isQaFailedState,
-  isQaSuccessState,
-  resolveQaPollingInterval,
-  resolveQaStaleTimeout,
-} from './qa-polling.js'
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
@@ -470,26 +468,23 @@ async function handleBuildPrimaryAction() {
     return
   }
 
+  if (action.operationKey === 'material-confirm') {
+    await confirmBuildMaterialSelection(action)
+    return
+  }
+
   if (action.operationKey === 'parse-batch') {
-    await runBuildBatchParse()
+    await runBuildParseCheck(action)
     return
   }
 
-  if (action.operationKey === 'export-missing') {
-    await runBuildExportMissing()
+  if (action.operationKey === 'export-missing' || action.operationKey === 'export-confirm') {
+    await runBuildGraphInput(action)
     return
   }
 
-  if (
-    action.operationKey === 'material-confirm'
-    || action.operationKey === 'export-confirm'
-    || action.operationKey === 'prompt-confirm'
-  ) {
-    if (!action.nextQuery) {
-      throw new Error(`构建向导确认动作缺少 nextQuery: ${action.operationKey}`)
-    }
-
-    await router.replace({ query: action.nextQuery })
+  if (action.operationKey === 'prompt-confirm') {
+    await runBuildPromptConfirmation(action)
     return
   }
 
@@ -765,11 +760,124 @@ async function updateBuildMaterialSelection(materialIds) {
   })
 }
 
+async function confirmBuildMaterialSelection(action) {
+  const materialIds = config.value.blocks?.selection?.materialIds ?? []
+
+  if (materialIds.length === 0 || actionRunning.value) {
+    return
+  }
+
+  await runBuildRunRequest({
+    operationKey: 'material-confirm',
+    request: async (buildRunId) => submitBuildRunMaterialSelection(buildRunId, {
+      materialIds: materialIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)),
+    }),
+    nextQuery: action.nextQuery,
+  })
+}
+
+async function runBuildParseCheck(action) {
+  await runBuildRunRequest({
+    operationKey: 'material-parse',
+    request: (buildRunId) => checkBuildRunParse(buildRunId, { parseMissing: false }),
+    nextQuery: action.nextQuery,
+  })
+}
+
+async function runBuildGraphInput(action) {
+  await runBuildRunRequest({
+    operationKey: 'material-export',
+    request: (buildRunId) => syncBuildRunGraphInput(buildRunId, {
+      jsonFile: 'section_docs.json',
+      exportMissing: false,
+    }),
+    nextQuery: action.nextQuery,
+  })
+}
+
+async function runBuildPromptConfirmation(action) {
+  await runBuildRunRequest({
+    operationKey: 'prompt-confirm',
+    request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
+      confirmed: true,
+      promptStrategy: 'active',
+    }),
+    nextQuery: action.nextQuery,
+  })
+}
+
+async function runBuildRunRequest({ operationKey, request, nextQuery }) {
+  if (actionRunning.value) {
+    return
+  }
+
+  cancelLongTask()
+  activeOperationKey.value = operationKey
+  actionState.value = 'running'
+  actionSnapshot.value = null
+
+  try {
+    const { id: buildRunId } = await ensureBuildRun()
+    const result = await request(buildRunId)
+    actionState.value = 'success'
+    actionSnapshot.value = result ?? null
+    await navigateAfterBuildRunAction(buildRunId, nextQuery)
+  } catch (error) {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+  }
+}
+
+async function ensureBuildRun() {
+  const existingId = config.value.blocks?.buildRun?.item?.id
+    ?? resolveBuildRunIdQuery(route.query)
+
+  if (existingId) {
+    return { id: existingId, created: false }
+  }
+
+  const materialIds = config.value.blocks?.selection?.materialIds ?? []
+  const created = await createBuildRun(route.params.kbId, {
+    materialIds: materialIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)),
+  })
+  const buildRunId = created?.id
+
+  if (!buildRunId) {
+    throw { message: '构建运行创建响应缺少 buildRunId' }
+  }
+
+  return { id: buildRunId, created: true }
+}
+
+async function navigateAfterBuildRunAction(buildRunId, nextQuery = null) {
+  const query = {
+    ...(nextQuery ?? route.query),
+    buildRunId: String(buildRunId),
+  }
+
+  if (!isSameQuery(route.query, query)) {
+    await router.replace({ query })
+    return
+  }
+
+  await loadPage(query)
+}
+
 async function runKnowledgeBaseIndex() {
-  const kbId = route.params.kbId
   const indexStep = config.value.workflowSteps?.find((step) => step.key === 'index')
 
   if (indexStep?.status !== 'ready' || actionRunning.value) {
+    return
+  }
+
+  let buildRunId
+
+  try {
+    buildRunId = (await ensureBuildRun()).id
+  } catch (error) {
+    activeOperationKey.value = 'index-build'
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
     return
   }
 
@@ -777,20 +885,16 @@ async function runKnowledgeBaseIndex() {
   activeOperationKey.value = 'index-build'
   actionSnapshot.value = null
   activeLongTaskController = createLongTaskController({
-    trigger: ({ signal }) => createIndexRun(kbId, { post: (url) => http.post(url, null, { signal }) }),
-    poll: async ({ signal }) => selectLatestRunningOrSuccess(
-      await listIndexRuns(kbId, { get: (url) => http.get(url, { signal }) }),
-      resolveLongTaskState,
-    ),
-    isSuccess: (snapshot) => resolveLongTaskState(snapshot) === 'success',
-    isFailed: (snapshot) => resolveLongTaskState(snapshot) === 'failed',
+    trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
+    isSuccess: isBuildRunIndexSuccess,
+    isFailed: (snapshot) => normalizeRunState(snapshot?.status) === 'failed',
     onState: (state, snapshot) => {
       actionState.value = state
       actionSnapshot.value = snapshot ?? null
     },
     onSuccess: async () => {
-      await getKnowledgeBase(kbId)
-      await loadPage()
+      await navigateAfterBuildRunAction(buildRunId, resolveBuildStepQuery(route.query, 'qa_check'))
     },
     limits: LONG_TASK_LIMITS.index,
   })
@@ -804,7 +908,11 @@ function updateSmokeQuestion(value) {
 
 async function runQaSmoke() {
   const knowledgeBase = knowledgeBaseBlock.value?.item
-  const activeIndexRunId = knowledgeBase?.activeIndexRunId ?? knowledgeBase?.activeIndexId
+  const buildRun = config.value.blocks?.buildRun?.item
+  const activeIndexRunId = knowledgeBase?.activeIndexRunId
+    ?? knowledgeBase?.activeIndexId
+    ?? buildRun?.activeIndexRunId
+    ?? buildRun?.indexRunId
   const question = smokeQuestionEdited.value ? smokeQuestion.value.trim() : DEFAULT_SMOKE_QUESTION
 
   if (!activeIndexRunId || !question || actionRunning.value) {
@@ -816,67 +924,60 @@ async function runQaSmoke() {
   actionSnapshot.value = null
   smokeResult.value = null
 
-  let sessionId = null
-  let taskId = null
-  const limits = {
-    ...resolveQaPollingInterval({ mode: DEFAULT_SMOKE_MODE }, DEFAULT_SMOKE_MODE),
-    ...resolveQaStaleTimeout({ mode: DEFAULT_SMOKE_MODE }, DEFAULT_SMOKE_MODE),
+  let buildRunId
+
+  try {
+    buildRunId = (await ensureBuildRun()).id
+  } catch (error) {
+    const apiError = createApiError(error)
+    actionState.value = 'failed'
+    actionSnapshot.value = apiError
+    smokeResult.value = {
+      state: 'failed',
+      message: apiError.message,
+    }
+    return
   }
 
   activeLongTaskController = createLongTaskController({
-    trigger: async ({ signal }) => {
-      const session = await createQaSession({
-        userId: authStore.state.currentUser?.id ?? 1,
-        courseId: knowledgeBase.courseId,
-        knowledgeBaseId: knowledgeBase.id ?? route.params.kbId,
-        sessionType: 'smoke',
-        title: '知识库构建冒烟验证',
-      }, { post: (url, payload) => http.post(url, payload, { signal }) })
-      sessionId = session.id
-
-      const submission = await sendQaMessage(sessionId, {
-        mode: DEFAULT_SMOKE_MODE,
-        content: question,
-      }, { post: (url, payload) => http.post(url, payload, { signal }) })
-      taskId = submission.taskId
-      Object.assign(limits, {
-        ...resolveQaPollingInterval(submission, DEFAULT_SMOKE_MODE),
-        ...resolveQaStaleTimeout(submission, DEFAULT_SMOKE_MODE),
-      })
-
-      return {
-        ...submission,
-        sessionId,
-      }
-    },
-    poll: async ({ signal }) => ({
-      ...(await getQaTask(sessionId, taskId, { get: (url) => http.get(url, { signal }) })),
-      sessionId,
-    }),
-    isSuccess: (snapshot) => isQaSuccessState(snapshot?.taskStatus ?? snapshot?.status),
-    isFailed: (snapshot) => isQaFailedState(snapshot?.taskStatus ?? snapshot?.status),
+    trigger: ({ signal }) => runBuildRunQaSmoke(buildRunId, {
+      question,
+      mode: DEFAULT_SMOKE_MODE,
+    }, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
+    isSuccess: isBuildRunQaSmokeSuccess,
+    isFailed: isBuildRunQaSmokeFailed,
     onState: (state, snapshot) => {
       actionState.value = state
       actionSnapshot.value = snapshot ?? null
+
+      if (['running', 'confirming'].includes(state)) {
+        smokeResult.value = {
+          state: 'running',
+          message: '问答验证已提交，正在等待后端确认结果。',
+        }
+      }
     },
-    onSuccess: (snapshot) => {
+    onSuccess: async (snapshot) => {
       smokeResult.value = {
         state: 'success',
-        sessionId: snapshot.sessionId ?? sessionId,
-        taskId: snapshot.taskId ?? taskId,
-        content: snapshot.assistantMessage?.content ?? snapshot.answer ?? '问答任务已完成，后端未返回助手摘要。',
+        sessionId: snapshot?.sessionId,
+        taskId: snapshot?.taskId,
+        content: snapshot?.assistantMessage?.content
+          ?? snapshot?.answer
+          ?? snapshot?.qaMessage
+          ?? '问答验证已通过。',
       }
+      await navigateAfterBuildRunAction(buildRunId, resolveBuildStepQuery(route.query, 'qa_check'))
     },
     onFailure: (snapshot) => {
-      const error = createApiError(snapshot)
+      const apiError = createApiError(snapshot)
       smokeResult.value = {
         state: 'failed',
-        sessionId,
-        taskId,
-        message: snapshot?.errorMessage ?? snapshot?.timeoutMessage ?? error.message,
+        message: apiError.message,
       }
     },
-    limits,
+    limits: { intervalMs: 5000, timeoutMs: 300000 },
   })
   startActiveLongTask(activeLongTaskController)
 }
@@ -909,6 +1010,44 @@ function renderFactLabel(field) {
 
 function countRowsByStatus(rows = [], status) {
   return rows.filter((row) => row.status === status).length
+}
+
+function isBuildRunIndexSuccess(snapshot = {}) {
+  const stage = String(snapshot.currentStage ?? '').toLowerCase()
+  const indexStatus = normalizeRunState(snapshot.indexRunStatus ?? snapshot.latestIndexRunStatus)
+
+  return normalizeRunState(snapshot.status) === 'success'
+    || indexStatus === 'success'
+    || stage === 'qa_smoke'
+    || stage === 'done'
+}
+
+function isBuildRunQaSmokeSuccess(snapshot = {}) {
+  const stage = String(snapshot.currentStage ?? '').toLowerCase()
+  const qaStatus = normalizeRunState(snapshot.qaStatus)
+  const runStatus = normalizeRunState(snapshot.status)
+
+  return qaStatus === 'success'
+    || (stage === 'done' && runStatus === 'success')
+}
+
+function isBuildRunQaSmokeFailed(snapshot = {}) {
+  return normalizeRunState(snapshot.qaStatus) === 'failed'
+    || normalizeRunState(snapshot.status) === 'failed'
+}
+
+function normalizeRunState(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'success'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  return normalized
 }
 
 function firstQueryValue(value) {

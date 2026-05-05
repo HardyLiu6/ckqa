@@ -11,7 +11,7 @@ import {
   normalizePageData,
   unwrapApiResponse,
 } from './api/client.js'
-import { getSystemHealth } from './api/system.js'
+import { getSystemHealth, getSystemReadiness } from './api/system.js'
 import {
   createQaSession,
   getQaTask,
@@ -85,12 +85,27 @@ import {
   startParse,
 } from './api/materials.js'
 import {
+  activateIndexRun,
+  checkBuildRunParse,
   createKnowledgeBase,
+  createBuildRun,
   createIndexRun,
+  confirmBuildRunPrompt,
+  createBuildRunIndexRun,
+  deleteBuildRun,
+  deleteIndexArtifact,
+  getBuildRun,
+  getIndexArtifact,
   getIndexRun,
   getKnowledgeBase,
+  listIndexRunArtifacts,
   listIndexRuns,
   listKnowledgeBases,
+  listKnowledgeBaseBuildRuns,
+  runBuildRunQaSmoke,
+  syncBuildRunGraphInput,
+  updateBuildRun,
+  updateBuildRunMaterialSelection,
 } from './api/knowledge-bases.js'
 import {
   LONG_TASK_LIMITS,
@@ -119,6 +134,7 @@ import {
   createRouteSnapshot,
   createStaleRequestGuard,
   resolveBuildConfirmQuery,
+  resolveBuildRunIdQuery,
   resolveBuildMaterialIdsQuery,
   resolveBuildSelectionFromQuery,
   resolveBuildSelectionQuery,
@@ -775,6 +791,78 @@ test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运�
   ])
 })
 
+test('知识库 API 暴露 build-run、激活索引和产物端点', async () => {
+  const calls = []
+  const client = {
+    get: async (url, config) => {
+      calls.push(['get', url, config?.params ?? null])
+      return {
+        data: {
+          code: 200,
+          message: 'ok',
+          data: url.includes('/build-runs')
+            ? { items: [{ id: 27 }], current: 1, size: 20, total: 1, pages: 1 }
+            : { id: 27, url },
+        },
+      }
+    },
+    post: async (url, payload) => {
+      calls.push(['post', url, payload ?? null])
+      return { data: { code: 200, message: 'ok', data: { id: 27, url, payload } } }
+    },
+    patch: async (url, payload) => {
+      calls.push(['patch', url, payload])
+      return { data: { code: 200, message: 'ok', data: { id: 27, ...payload } } }
+    },
+    put: async (url, payload) => {
+      calls.push(['put', url, payload])
+      return { data: { code: 200, message: 'ok', data: { id: 27, ...payload } } }
+    },
+    delete: async (url, config) => {
+      calls.push(['delete', url, config?.params ?? null])
+      return { data: { code: 200, message: 'ok', data: { id: 27 } } }
+    },
+  }
+
+  assert.deepEqual(await createBuildRun(5, { materialIds: [3] }, client), {
+    id: 27,
+    url: '/knowledge-bases/5/build-runs',
+    payload: { materialIds: [3] },
+  })
+  assert.equal((await listKnowledgeBaseBuildRuns(5, { page: 1 }, client)).items[0].id, 27)
+  await getBuildRun(27, client)
+  await updateBuildRun(27, { currentStage: 'parse' }, client)
+  await deleteBuildRun(27, { keepArtifacts: true }, client)
+  await updateBuildRunMaterialSelection(27, { materialIds: [3] }, client)
+  await checkBuildRunParse(27, { force: false }, client)
+  await syncBuildRunGraphInput(27, { force: false }, client)
+  await confirmBuildRunPrompt(27, { promptConfirmed: true }, client)
+  await createBuildRunIndexRun(27, { engine: 'graphrag' }, client)
+  await runBuildRunQaSmoke(27, { question: '测试问题' }, client)
+  await activateIndexRun(5, 88, client)
+  await listIndexRunArtifacts(88, client)
+  await getIndexArtifact(99, client)
+  await deleteIndexArtifact(99, client)
+
+  assert.deepEqual(calls, [
+    ['post', '/knowledge-bases/5/build-runs', { materialIds: [3] }],
+    ['get', '/knowledge-bases/5/build-runs', { page: 1 }],
+    ['get', '/knowledge-base-build-runs/27', null],
+    ['patch', '/knowledge-base-build-runs/27', { currentStage: 'parse' }],
+    ['delete', '/knowledge-base-build-runs/27', { keepArtifacts: true }],
+    ['put', '/knowledge-base-build-runs/27/material-selection', { materialIds: [3] }],
+    ['post', '/knowledge-base-build-runs/27/parse-check', { force: false }],
+    ['post', '/knowledge-base-build-runs/27/graph-input', { force: false }],
+    ['post', '/knowledge-base-build-runs/27/prompt-confirmation', { promptConfirmed: true }],
+    ['post', '/knowledge-base-build-runs/27/index-runs', { engine: 'graphrag' }],
+    ['post', '/knowledge-base-build-runs/27/qa-smoke', { question: '测试问题' }],
+    ['post', '/knowledge-bases/5/active-index-run', { indexRunId: 88 }],
+    ['get', '/index-runs/88/artifacts', null],
+    ['get', '/index-artifacts/99', null],
+    ['delete', '/index-artifacts/99', null],
+  ])
+})
+
 test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   const calls = []
   const client = {
@@ -1012,6 +1100,96 @@ test('知识库构建 loader 以 materialIds query 恢复多资料选择', async
   assert.equal(result.workflowSteps.find((step) => step.key === 'parse').status, 'ready')
 })
 
+test('知识库构建 loader 仅在 buildRunId 存在时加载 build-run 且不自动创建', async () => {
+  const calls = []
+  const baseServices = {
+    getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+    ],
+    listIndexRuns: async () => [],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+    getBuildRun: async (id) => {
+      calls.push(['getBuildRun', id])
+      return {
+        id,
+        currentStage: 'prompt',
+        status: 'running',
+        qaStatus: 'not_started',
+        materialIds: [9],
+        indexRunId: null,
+      }
+    },
+    createBuildRun: async () => {
+      calls.push(['createBuildRun'])
+      return { id: 30 }
+    },
+  }
+
+  const draftResult = await loadModulePage(
+    { name: 'knowledge-base-build', query: { materialIds: '9' }, params: { kbId: '7' } },
+    { materialIds: '9' },
+    baseServices,
+  )
+
+  assert.deepEqual(calls, [])
+  assert.equal(draftResult.blocks.buildRun.state, 'empty')
+  assert.equal(draftResult.blocks.selection.selectionSource, 'materialIds')
+
+  const runResult = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
+    { buildRunId: '27', materialIds: '9' },
+    baseServices,
+  )
+
+  assert.deepEqual(calls, [['getBuildRun', 27]])
+  assert.equal(runResult.blocks.buildRun.item.id, 27)
+  assert.equal(runResult.raw.buildRun.id, 27)
+  assert.equal(runResult.workflowSteps.find((step) => step.key === 'prompt').status, 'running')
+})
+
+test('知识库构建 loader 优先从 build-run 详情恢复资料选择', async () => {
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
+    { buildRunId: '27', materialIds: '9' },
+    {
+      getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+      listCourseMaterials: async () => [
+        { id: 9, fileName: 'legacy.pdf', parseStatus: 'done' },
+        { id: 10, fileName: 'selected.pdf', parseStatus: 'done' },
+      ],
+      listIndexRuns: async () => [],
+      getMaterial: async (id) => ({
+        id: Number(id),
+        courseId: 'os',
+        fileName: id === '10' ? 'selected.pdf' : 'legacy.pdf',
+        parseStatus: 'done',
+      }),
+      listParseResults: async () => [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ],
+      getBuildRun: async () => ({
+        id: 27,
+        currentStage: 'parse_check',
+        status: 'running',
+        selectedMaterialIds: '[10]',
+        materialIds: [9],
+      }),
+    },
+  )
+
+  assert.deepEqual(result.blocks.selection.materialIds, ['10'])
+  assert.equal(result.blocks.selection.selectionSource, 'buildRun')
+  assert.equal(result.raw.selectedMaterials[0].fileName, 'selected.pdf')
+})
+
 test('知识库构建 loader 在 selectionKey 本地缺失时降级读取 materialIds', async () => {
   const route = {
     name: 'knowledge-base-build',
@@ -1039,6 +1217,11 @@ test('知识库构建 loader 在 selectionKey 本地缺失时降级读取 materi
 })
 
 test('构建向导资料集合 query 支持小集合、旧 materialId 兼容和确认态清理', () => {
+  assert.equal(resolveBuildRunIdQuery({ buildRunId: '27' }), 27)
+  assert.equal(resolveBuildRunIdQuery({ buildRunId: ['28'] }), 28)
+  assert.equal(resolveBuildRunIdQuery({ buildRunId: 'bad' }), null)
+  assert.equal(resolveBuildRunIdQuery({ buildRunId: '0' }), null)
+
   assert.deepEqual(resolveBuildSelectionFromQuery({ materialIds: '10, 9, bad,9' }), {
     source: 'materialIds',
     materialIds: ['9', '10'],
@@ -1474,6 +1657,28 @@ test('知识库构建六步状态使用确认态、长任务状态和激活索�
 
   assert.equal(blockedIndexStep.status, 'blocked')
   assert.equal(blockedIndexStep.primaryAction.disabled, true)
+
+  const failedQaSteps = buildKnowledgeBaseWorkflowSteps({
+    query: {
+      materialIds: '9',
+      materialConfirmed: '1',
+      exportConfirmed: '1',
+      promptConfirmed: '1',
+    },
+    knowledgeBase: { id: 7, courseId: 'os', activeIndexRunId: 15 },
+    selection: { materialIds: ['9'], materials: [{ id: 9, parseStatus: 'done' }] },
+    parseTaskRows: [{ id: '9', status: 'done' }],
+    exportArtifacts: { rows: [{ id: '9', status: 'done' }], missingCount: 0, completeCount: 1 },
+    buildRun: {
+      currentStage: 'done',
+      status: 'success',
+      qaStatus: 'failed',
+      activeIndexRunId: 15,
+    },
+  })
+
+  assert.equal(failedQaSteps.find((step) => step.key === 'index').status, 'done')
+  assert.equal(failedQaSteps.find((step) => step.key === 'qa_check').status, 'failed')
 })
 
 function createMemoryStorage(initialState = {}) {
@@ -1591,6 +1796,19 @@ test('系统健康接口通过统一 ApiResponse 解包', async () => {
   assert.deepEqual(result, payload)
 })
 
+test('系统 readiness 接口通过统一 ApiResponse 解包', async () => {
+  const payload = { status: 'ready', checks: [] }
+  const result = await getSystemReadiness({
+    get: async (url) => ({
+      status: 200,
+      config: { url },
+      data: { code: 200, message: '操作成功', data: payload },
+    }),
+  })
+
+  assert.deepEqual(result, payload)
+})
+
 test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义', () => {
   const config = getModulePageConfig('knowledge-base-build')
 
@@ -1615,6 +1833,21 @@ test('构建页主操作统一走模型 operationKey 分发', () => {
   assert.match(modulePage, /operationKey === 'index-build'/)
   assert.match(modulePage, /operationKey === 'qa-smoke'/)
   assert.doesNotMatch(modulePage, /if \(route\.name === 'knowledge-base-build'\) \{\n\s+await runKnowledgeBaseIndex\(\)/)
+})
+
+test('构建页 QA smoke 提交后必须轮询 build-run 终态', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const qaSmokeBlock = modulePage.slice(
+    modulePage.indexOf('async function runQaSmoke'),
+    modulePage.indexOf('function cancelLongTask'),
+  )
+
+  assert.match(qaSmokeBlock, /createLongTaskController\(/)
+  assert.match(qaSmokeBlock, /runBuildRunQaSmoke\(buildRunId/)
+  assert.match(qaSmokeBlock, /getBuildRun\(buildRunId/)
+  assert.match(qaSmokeBlock, /isBuildRunQaSmokeSuccess/)
+  assert.match(qaSmokeBlock, /isBuildRunQaSmokeFailed/)
+  assert.doesNotMatch(qaSmokeBlock, /const result = await runBuildRunQaSmoke[\s\S]*?actionState\.value = 'success'/)
 })
 
 test('构建页 loadPage 统一规范化选择集和非法步骤 query', () => {
@@ -2180,18 +2413,28 @@ test('健康响应同时保留 reachable 和 ready', () => {
     status: 'degraded',
     services: {
       javaApi: { reachable: true, ready: true, message: 'ok' },
-      graphRagApi: { reachable: true, ready: false, message: 'index missing' },
+      graphRagBuildRunsRoot: { reachable: true, ready: true, path: '/tmp/build-runs' },
+      graphRagReady: { reachable: true, ready: false, message: 'active build run missing' },
     },
   })
 
   assert.equal(result.overallStatus, 'degraded')
-  assert.equal(result.services.length, 2)
+  assert.equal(result.services.length, 3)
   assert.deepEqual(result.services[1], {
-    key: 'graphRagApi',
-    label: 'GraphRAG API',
+    key: 'graphRagBuildRunsRoot',
+    label: 'GraphRAG build-runs root',
+    reachable: true,
+    ready: true,
+    message: '',
+    path: '/tmp/build-runs',
+    tone: 'success',
+  })
+  assert.deepEqual(result.services[2], {
+    key: 'graphRagReady',
+    label: 'GraphRAG ready',
     reachable: true,
     ready: false,
-    message: 'index missing',
+    message: 'active build run missing',
     tone: 'warning',
   })
 })

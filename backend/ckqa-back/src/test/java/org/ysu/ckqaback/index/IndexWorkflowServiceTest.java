@@ -1,15 +1,20 @@
 package org.ysu.ckqaback.index;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
+import org.ysu.ckqaback.index.dto.BuildRunIndexRequest;
 import org.ysu.ckqaback.integration.graphrag.GraphRagIndexOrchestrator;
 import org.ysu.ckqaback.integration.process.ProcessExecutionResult;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +30,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 class IndexWorkflowServiceTest {
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void shouldRecoverStaleRunningRunBeforeCreatingNewOne() throws Exception {
@@ -126,6 +134,40 @@ class IndexWorkflowServiceTest {
         then(indexRunsService).should().markFailed(eq(18L), contains("minio fetch failed"));
     }
 
+    @Test
+    void shouldSkipAutoActivationWhenBuildRunIsNotLatest() throws Exception {
+        Fixture fixture = buildRunFixture(27L);
+        given(fixture.buildRunService.isLatestBuildRun(27L)).willReturn(false);
+
+        fixture.workflowService.createBuildRunIndexRun(27L, new BuildRunIndexRequest());
+
+        then(fixture.activeIndexRunService).should(never()).activate(any(), any(), eq(false));
+        then(fixture.indexRunsService).should().markSuccess(eq(18L), contains("skipped_newer_build_exists"));
+    }
+
+    @Test
+    void shouldMarkBuildRunDoneAndQaSkippedAfterSuccessfulIndex() throws Exception {
+        Fixture fixture = buildRunFixture(28L);
+        given(fixture.buildRunService.isLatestBuildRun(28L)).willReturn(true);
+
+        fixture.workflowService.createBuildRunIndexRun(28L, new BuildRunIndexRequest());
+
+        then(fixture.activeIndexRunService).should().activate(5L, 18L, false);
+        then(fixture.buildRunService).should().markIndexSuccessDone(28L, "skipped");
+    }
+
+    @Test
+    void shouldCleanIndexInputBeforeCopyingGraphInput() throws Exception {
+        Fixture fixture = buildRunFixture(29L);
+        Files.createDirectories(fixture.workspace.resolve("index/input"));
+        Files.writeString(fixture.workspace.resolve("index/input/stale.json"), "[{\"text\":\"old\"}]");
+
+        fixture.workflowService.createBuildRunIndexRun(29L, new BuildRunIndexRequest());
+
+        org.assertj.core.api.Assertions.assertThat(fixture.workspace.resolve("index/input/stale.json")).doesNotExist();
+        org.assertj.core.api.Assertions.assertThat(fixture.workspace.resolve("index/input/material_3.section_docs.json")).exists();
+    }
+
     private ProcessExecutionResult successResult(List<String> command) {
         return ProcessExecutionResult.builder()
                 .command(command)
@@ -136,5 +178,76 @@ class IndexWorkflowServiceTest {
                 .timedOut(false)
                 .terminatedByShutdown(false)
                 .build();
+    }
+
+    private Fixture buildRunFixture(Long buildRunId) throws Exception {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+
+        String workspaceUri = "user_0/kb_5/build_" + buildRunId;
+        Path workspace = tempDir.resolve(workspaceUri);
+        Files.createDirectories(workspace.resolve("graph-input"));
+        Files.writeString(workspace.resolve("graph-input/material_3.section_docs.json"), "[{\"text\":\"ok\"}]");
+
+        KnowledgeBases kb = new KnowledgeBases();
+        kb.setId(5L);
+        kb.setCourseId("os");
+
+        IndexRuns pendingRun = new IndexRuns();
+        pendingRun.setId(18L);
+        pendingRun.setKnowledgeBaseId(5L);
+        pendingRun.setBuildRunId(buildRunId);
+        pendingRun.setEngine("graphrag");
+        pendingRun.setIndexVersion("graphrag-20260505150000");
+        pendingRun.setStatus("pending");
+
+        IndexRuns successRun = new IndexRuns();
+        successRun.setId(18L);
+        successRun.setKnowledgeBaseId(5L);
+        successRun.setBuildRunId(buildRunId);
+        successRun.setEngine("graphrag");
+        successRun.setIndexVersion("graphrag-20260505150000");
+        successRun.setStatus("success");
+
+        given(buildRunService.getBuildRun(buildRunId)).willReturn(BuildRunDetailResponse.builder()
+                .id(buildRunId)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .selectedMaterialIds("[3]")
+                .workspaceUri(workspaceUri)
+                .build());
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(kb);
+        given(indexRunsService.recoverStaleRunningRuns(5L, Duration.ofSeconds(2400))).willReturn(List.of());
+        given(indexRunsService.findActiveRunningByKnowledgeBaseId(5L)).willReturn(Optional.empty());
+        given(indexRunsService.createPendingRun(eq(5L), eq(buildRunId), anyString())).willReturn(pendingRun);
+        given(indexRunsService.getRequiredById(18L)).willReturn(successRun);
+        given(orchestrator.runIndex(eq(pendingRun), any(Path.class))).willReturn(successResult(List.of("python", "-m", "graphrag", "index", "--root", ".")));
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+        return new Fixture(workflowService, indexRunsService, buildRunService, activeIndexRunService, workspace);
+    }
+
+    private record Fixture(
+            IndexWorkflowService workflowService,
+            IndexRunsService indexRunsService,
+            KnowledgeBaseBuildRunService buildRunService,
+            ActiveIndexRunService activeIndexRunService,
+            Path workspace
+    ) {
     }
 }

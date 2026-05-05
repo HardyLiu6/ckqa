@@ -13,6 +13,15 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+@dataclass(frozen=True, slots=True)
+class QueryTaskRequest:
+    mode: str
+    prompt: str
+    index_run_id: int | None
+    data_dir_uri: str | None
+    data_dir: Path | None
+
+
 @dataclass(slots=True)
 class QueryTaskSnapshot:
     python_task_id: str
@@ -29,6 +38,8 @@ class QueryTaskSnapshot:
     result_text: str | None = None
     error_message: str | None = None
     return_code: int | None = None
+    index_run_id: int | None = None
+    data_dir_uri: str | None = None
 
 
 def trim_log_tail(lines: list[str], *, max_lines: int, max_chars: int) -> list[str]:
@@ -47,9 +58,10 @@ class QueryTaskManager:
         heartbeat_interval_seconds: float = 5.0,
         max_log_lines: int = 20,
         max_log_chars: int = 4000,
-        command_factory: Callable[[str, str], list[str]],
-        env_factory: Callable[[], dict[str, str]],
+        command_factory: Callable[[QueryTaskRequest], list[str]],
+        env_factory: Callable[[QueryTaskRequest], dict[str, str]],
         cwd: str | Path,
+        build_runs_root: str | Path | None = None,
     ) -> None:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._max_log_lines = max_log_lines
@@ -57,11 +69,21 @@ class QueryTaskManager:
         self._command_factory = command_factory
         self._env_factory = env_factory
         self._cwd = str(cwd)
+        self._build_runs_root = Path(build_runs_root).resolve() if build_runs_root is not None else None
         self._counter = count(1)
         self._tasks: dict[str, QueryTaskSnapshot] = {}
+        self._task_requests: dict[str, QueryTaskRequest] = {}
         self._lock = asyncio.Lock()
 
-    async def create_task(self, mode: str, prompt: str) -> QueryTaskSnapshot:
+    async def create_task(
+        self,
+        mode: str,
+        prompt: str,
+        *,
+        index_run_id: int | None = None,
+        data_dir_uri: str | None = None,
+    ) -> QueryTaskSnapshot:
+        data_dir = self._resolve_data_dir(data_dir_uri)
         python_task_id = f"qt_{utc_now():%Y%m%d_%H%M%S}_{next(self._counter):03d}"
         snapshot = QueryTaskSnapshot(
             python_task_id=python_task_id,
@@ -72,9 +94,19 @@ class QueryTaskManager:
             process_alive=False,
             created_at=utc_now(),
             latest_logs=[],
+            index_run_id=index_run_id,
+            data_dir_uri=data_dir_uri,
+        )
+        request = QueryTaskRequest(
+            mode=mode,
+            prompt=prompt,
+            index_run_id=index_run_id,
+            data_dir_uri=data_dir_uri,
+            data_dir=data_dir,
         )
         async with self._lock:
             self._tasks[python_task_id] = snapshot
+            self._task_requests[python_task_id] = request
             asyncio.create_task(self._run_task(python_task_id))
         return replace(snapshot)
 
@@ -94,12 +126,12 @@ class QueryTaskManager:
         stdout_lines: list[str] = []
         heartbeat: asyncio.Task[None] | None = None
         try:
-            snapshot = self._tasks[python_task_id]
-            cmd = self._command_factory(snapshot.mode, snapshot.prompt)
+            request = self._task_requests[python_task_id]
+            cmd = self._command_factory(request)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=self._cwd,
-                env=self._env_factory(),
+                env=self._env_factory(request),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -147,6 +179,22 @@ class QueryTaskManager:
         finally:
             if heartbeat is not None:
                 heartbeat.cancel()
+
+    def _resolve_data_dir(self, data_dir_uri: str | None) -> Path | None:
+        if not data_dir_uri:
+            return None
+        if self._build_runs_root is None:
+            raise ValueError("GRAPHRAG_BUILD_RUNS_ROOT 未配置")
+
+        data_dir_path = Path(data_dir_uri)
+        if data_dir_path.is_absolute():
+            raise ValueError("dataDirUri 超出允许的构建根目录")
+
+        root = self._build_runs_root.resolve()
+        resolved = (root / data_dir_path).resolve()
+        if root not in (resolved, *resolved.parents):
+            raise ValueError("dataDirUri 超出允许的构建根目录")
+        return resolved
 
     async def _heartbeat_loop(self, python_task_id: str, process) -> None:
         while process.returncode is None:

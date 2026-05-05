@@ -8,7 +8,16 @@ import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.index.IndexWorkflowService;
+import org.ysu.ckqaback.index.ActiveIndexRunService;
+import org.ysu.ckqaback.index.KnowledgeBaseBuildRunService;
 import org.ysu.ckqaback.index.KnowledgeBaseLookupService;
+import org.ysu.ckqaback.index.dto.ActiveIndexRunRequest;
+import org.ysu.ckqaback.index.dto.ActiveIndexRunResponse;
+import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
+import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
+import org.ysu.ckqaback.index.dto.BuildRunGcRequest;
+import org.ysu.ckqaback.index.dto.BuildRunGcResponse;
+import org.ysu.ckqaback.index.dto.BuildRunSummaryResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
@@ -21,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
@@ -42,6 +52,8 @@ public class KnowledgeBasesController {
 
     private final IndexWorkflowService indexWorkflowService;
     private final KnowledgeBaseLookupService knowledgeBaseLookupService;
+    private final KnowledgeBaseBuildRunService buildRunService;
+    private final ActiveIndexRunService activeIndexRunService;
 
     @GetMapping
     public ApiResponse<ApiPageData<KnowledgeBaseSummaryResponse>> listKnowledgeBases(
@@ -73,5 +85,39 @@ public class KnowledgeBasesController {
     @GetMapping("/{id}/index-runs")
     public ApiResponse<List<IndexRunResponse>> listIndexRuns(@PathVariable @Positive(message = "id必须大于0") Long id) {
         return ApiResponseUtils.success(indexWorkflowService.listIndexRuns(id));
+    }
+
+    @PostMapping("/{id}/build-runs")
+    public ApiResponse<BuildRunDetailResponse> createBuildRun(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody BuildRunCreateRequest request
+    ) {
+        return ApiResponseUtils.success(buildRunService.createBuildRun(id, request));
+    }
+
+    @GetMapping("/{id}/build-runs")
+    public ApiResponse<ApiPageData<BuildRunSummaryResponse>> listBuildRuns(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "1") Long page,
+            @RequestParam(defaultValue = "20") Long size
+    ) {
+        return ApiResponseUtils.success(buildRunService.listBuildRuns(id, status, page, size));
+    }
+
+    @PostMapping("/{id}/build-runs/gc")
+    public ApiResponse<BuildRunGcResponse> gcBuildRuns(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody(required = false) BuildRunGcRequest request
+    ) {
+        return ApiResponseUtils.success(buildRunService.gcBuildRuns(id, request));
+    }
+
+    @PostMapping("/{id}/active-index-run")
+    public ApiResponse<ActiveIndexRunResponse> activateIndexRun(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody ActiveIndexRunRequest request
+    ) {
+        return ApiResponseUtils.success(activeIndexRunService.activate(id, request.getIndexRunId(), true));
     }
 }

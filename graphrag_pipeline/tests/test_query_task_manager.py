@@ -25,10 +25,10 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
     async def test_refreshes_heartbeat_until_process_finishes(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,
-            command_factory=lambda mode, prompt: _python_cmd(
+            command_factory=lambda request: _python_cmd(
                 "import time; print('started', flush=True); time.sleep(0.2); print('done', flush=True)"
             ),
-            env_factory=lambda: os.environ.copy(),
+            env_factory=lambda request: os.environ.copy(),
             cwd=_PROJECT_ROOT,
         )
 
@@ -52,10 +52,10 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             heartbeat_interval_seconds=0.05,
             max_log_lines=3,
             max_log_chars=40,
-            command_factory=lambda mode, prompt: _python_cmd(
+            command_factory=lambda request: _python_cmd(
                 "import sys; [print(f'line-{i}', flush=True) for i in range(6)]; sys.exit(3)"
             ),
-            env_factory=lambda: os.environ.copy(),
+            env_factory=lambda request: os.environ.copy(),
             cwd=_PROJECT_ROOT,
         )
 
@@ -71,8 +71,8 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
     async def test_marks_task_failed_when_process_startup_raises(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,
-            command_factory=lambda mode, prompt: (_ for _ in ()).throw(RuntimeError("boom on startup")),
-            env_factory=lambda: os.environ.copy(),
+            command_factory=lambda request: (_ for _ in ()).throw(RuntimeError("boom on startup")),
+            env_factory=lambda request: os.environ.copy(),
             cwd=_PROJECT_ROOT,
         )
 
@@ -89,10 +89,10 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
     async def test_includes_stderr_output_in_latest_logs(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,
-            command_factory=lambda mode, prompt: _python_cmd(
+            command_factory=lambda request: _python_cmd(
                 "import sys; sys.stderr.write('warn\\n'); sys.stderr.flush(); print('done', flush=True)"
             ),
-            env_factory=lambda: os.environ.copy(),
+            env_factory=lambda request: os.environ.copy(),
             cwd=_PROJECT_ROOT,
         )
 
@@ -107,10 +107,10 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
     async def test_preserves_indented_stdout_in_result_text(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,
-            command_factory=lambda mode, prompt: _python_cmd(
+            command_factory=lambda request: _python_cmd(
                 "print('  section', flush=True); print('    detail', flush=True)"
             ),
-            env_factory=lambda: os.environ.copy(),
+            env_factory=lambda request: os.environ.copy(),
             cwd=_PROJECT_ROOT,
         )
 
@@ -120,6 +120,40 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         snapshot = manager.get_snapshot(created.python_task_id)
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(snapshot.result_text, "  section\n    detail")
+
+    async def test_uses_task_specific_data_dir_uri(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("print('ok', flush=True)"),
+            env_factory=lambda request: {"GRAPHRAG_STORAGE_DIR": str(request.data_dir)},
+            cwd=_PROJECT_ROOT,
+            build_runs_root=_PROJECT_ROOT / "runtime" / "kb-build-runs",
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "问题",
+            index_run_id=18,
+            data_dir_uri="user_2/kb_5/build_27/index/output",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.index_run_id, 18)
+        self.assertEqual(snapshot.data_dir_uri, "user_2/kb_5/build_27/index/output")
+
+    async def test_rejects_task_data_dir_path_escape(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("print('ok', flush=True)"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            build_runs_root=_PROJECT_ROOT / "runtime" / "kb-build-runs",
+        )
+
+        with self.assertRaises(ValueError):
+            await manager.create_task("basic", "问题", index_run_id=18, data_dir_uri="../outside")
 
 
 if __name__ == "__main__":

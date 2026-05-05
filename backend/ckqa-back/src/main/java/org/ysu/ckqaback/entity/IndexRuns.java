@@ -40,6 +40,12 @@ public class IndexRuns implements Serializable {
     private Long knowledgeBaseId;
 
     /**
+     * 所属知识库构建流水线ID
+     */
+    @TableField("build_run_id")
+    private Long buildRunId;
+
+    /**
      * 索引引擎
      */
     @TableField("engine")

@@ -41,4 +41,17 @@ class SystemHealthControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.items[0].name").value("mysql"))
                 .andExpect(jsonPath("$.data.items[1].ready").value(false));
     }
+
+    @Test
+    void shouldReturnReadinessStatus() throws Exception {
+        SystemHealthResponse response = SystemHealthResponse.up(
+                SystemHealthItemResponse.of("graphrag-output", true, false, "lancedb directory missing")
+        );
+        given(systemHealthService.readiness()).willReturn(response);
+
+        mockMvc.perform(get(ApiPaths.API_V1 + "/system/readiness"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].name").value("graphrag-output"))
+                .andExpect(jsonPath("$.data.items[0].ready").value(false));
+    }
 }

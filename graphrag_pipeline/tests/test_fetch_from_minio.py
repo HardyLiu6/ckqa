@@ -6,9 +6,11 @@ fetch_from_minio 字段保留测试
 验证 GraphRAG 下游同步脚本不会丢失 pdf_ingest 导出的标准字段。
 """
 
+import json
 import sys
 import types
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 
@@ -48,11 +50,35 @@ def _install_optional_dependency_stubs() -> None:
 
 _install_optional_dependency_stubs()
 
-from fetch_from_minio import flatten_record, _extract_primary_text
+from fetch_from_minio import fetch_and_prepare, flatten_record, _extract_primary_text
 
 
 class TestFetchFromMinioFlatten(unittest.TestCase):
     """标准字段应在同步到 GraphRAG input 时保留。"""
+
+    def test_output_file_overrides_local_filename(self):
+        source = [{"id": "doc-1", "text": "hello", "title": "t"}]
+
+        class FakeClient:
+            def fget_object(self, bucket_name, object_name, file_path):
+                Path(file_path).write_text(json.dumps(source), encoding="utf-8")
+
+        with TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            result = fetch_and_prepare(
+                course_id="os",
+                input_dir=tmp_path,
+                clean=False,
+                json_filename="section_docs.json",
+                material_id=3,
+                output_filename="material_3.section_docs.json",
+                client=FakeClient(),
+                bucket="course-artifacts",
+            )
+
+            self.assertTrue(result["output_file"].endswith("material_3.section_docs.json"))
+            self.assertTrue((tmp_path / "material_3.section_docs.json").exists())
+            self.assertFalse((tmp_path / "section_docs.json").exists())
 
     def test_flatten_record_preserves_top_level_standard_fields(self):
         record = {

@@ -3,6 +3,8 @@ package org.ysu.ckqaback.qa;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.KnowledgeBases;
@@ -52,6 +54,10 @@ public class QaWorkflowService {
     }
 
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request) {
+        return sendMessage(sessionId, request, null);
+    }
+
+    public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request, Long indexRunIdOverride) {
         QaSessions session = qaSessionsService.getRequiredById(sessionId);
         if (!"active".equals(session.getStatus())) {
             throw new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT);
@@ -61,7 +67,8 @@ public class QaWorkflowService {
         }
 
         KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(session.getKnowledgeBaseId());
-        if (knowledgeBase.getActiveIndexRunId() == null) {
+        Long indexRunId = indexRunIdOverride == null ? knowledgeBase.getActiveIndexRunId() : indexRunIdOverride;
+        if (indexRunId == null) {
             throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
         }
 
@@ -70,12 +77,12 @@ public class QaWorkflowService {
         QaRetrievalLogs task = qaRetrievalLogsService.createPendingTask(
                 sessionId,
                 session.getCourseId(),
-                knowledgeBase.getActiveIndexRunId(),
+                indexRunId,
                 userMessage.getId(),
                 request.getMode(),
                 request.getContent()
         );
-        qaTaskWorker.dispatch(sessionId, task.getId());
+        dispatchAfterCommit(sessionId, task.getId());
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(request.getMode());
 
         return QaTaskSubmissionResponse.of(
@@ -90,6 +97,19 @@ public class QaWorkflowService {
                 taskPolicy.staleTimeoutSeconds(),
                 taskPolicy.timeoutMessage()
         );
+    }
+
+    private void dispatchAfterCommit(Long sessionId, Long taskId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            qaTaskWorker.dispatch(sessionId, taskId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                qaTaskWorker.dispatch(sessionId, taskId);
+            }
+        });
     }
 
     public QaSessionResponse getSession(Long id) {

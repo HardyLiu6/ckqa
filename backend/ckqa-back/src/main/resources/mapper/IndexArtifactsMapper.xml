@@ -7,7 +7,10 @@
         <id column="id" property="id" />
         <result column="index_run_id" property="indexRunId" />
         <result column="artifact_type" property="artifactType" />
+        <result column="display_name" property="displayName" />
         <result column="storage_uri" property="storageUri" />
+        <result column="storage_scope" property="storageScope" />
+        <result column="artifact_status" property="artifactStatus" />
         <result column="file_size" property="fileSize" />
         <result column="checksum" property="checksum" />
         <result column="created_at" property="createdAt" />
@@ -15,7 +18,8 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, index_run_id, artifact_type, storage_uri, file_size, checksum, created_at
+        id, index_run_id, artifact_type, display_name, storage_uri, storage_scope, artifact_status, file_size,
+        checksum, created_at
     </sql>
 
 </mapper>

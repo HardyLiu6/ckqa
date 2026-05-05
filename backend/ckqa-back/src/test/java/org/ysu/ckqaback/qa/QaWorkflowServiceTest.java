@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.qa;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
@@ -83,6 +84,63 @@ class QaWorkflowServiceTest {
         assertThat(response.getTimeoutMessage()).contains("basic");
         then(qaTaskWorker).should().dispatch(5L, 9001L);
         then(qaMessagesService).should(never()).appendAssistantMessage(anyLong(), eq("请概括这套图谱的主题"));
+    }
+
+    @Test
+    void shouldDispatchWorkerAfterTransactionCommitWhenSynchronizationActive() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+
+        QaMessages userMessage = new QaMessages();
+        userMessage.setId(11L);
+        userMessage.setSessionId(5L);
+        userMessage.setRole("user");
+        userMessage.setSequenceNo(1);
+        userMessage.setContent("请概括这套图谱的主题");
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.appendUserMessage(5L, "请概括这套图谱的主题")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(5L, "os", 17L, 11L, "basic", "请概括这套图谱的主题")).willReturn(task);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "请概括这套图谱的主题"));
+
+            then(qaTaskWorker).should(never()).dispatch(5L, 9001L);
+
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(synchronization -> synchronization.afterCommit());
+
+            then(qaTaskWorker).should().dispatch(5L, 9001L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

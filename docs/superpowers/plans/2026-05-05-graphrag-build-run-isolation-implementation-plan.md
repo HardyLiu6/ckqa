@@ -145,7 +145,7 @@
 - Modify: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/entity/IndexArtifacts.java`
 - Modify: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/api/ApiResultCode.java`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 Create `sql/migrations/20260505_kb_build_runs.sql` with idempotent DDL:
 
@@ -266,11 +266,11 @@ DEALLOCATE PREPARE stmt;
 
 Do not add another `qa_sessions.session_type` migration in this task: `sql/ocqa.sql` and `sql/migrations/20260429_qa_session_type.sql` already define `enum('formal','smoke')`.
 
-- [ ] **Step 2: Update `sql/ocqa.sql`**
+- [x] **Step 2: Update `sql/ocqa.sql`**
 
 Add `knowledge_base_build_runs` between `knowledge_bases` and `index_runs`, add `build_run_id` to `index_runs`, expand `index_artifacts`, and add the `fk_index_runs_build_run` constraint before adding `knowledge_bases.active_index_run_id` foreign key to avoid circular FK creation issues.
 
-- [ ] **Step 3: Add Java entity and mapper**
+- [x] **Step 3: Add Java entity and mapper**
 
 Create `KnowledgeBaseBuildRuns.java`:
 
@@ -334,7 +334,7 @@ public class KnowledgeBaseBuildRuns implements Serializable {
 
 Create `KnowledgeBaseBuildRunsMapper.java` extending `BaseMapper<KnowledgeBaseBuildRuns>`. Create `KnowledgeBaseBuildRunsMapper.xml` with a standard `BaseResultMap` matching the entity fields.
 
-- [ ] **Step 4: Extend existing entities**
+- [x] **Step 4: Extend existing entities**
 
 Modify `IndexRuns.java`:
 
@@ -356,7 +356,7 @@ private String storageScope;
 private String artifactStatus;
 ```
 
-- [ ] **Step 5: Add service wrapper and error code**
+- [x] **Step 5: Add service wrapper and error code**
 
 Create `KnowledgeBaseBuildRunsService` extending `IService<KnowledgeBaseBuildRuns>` with:
 
@@ -369,7 +369,7 @@ void clearActiveIndexRunMarkers(Long knowledgeBaseId);
 
 Add `KNOWLEDGE_BASE_BUILD_RUN_NOT_FOUND(4049, "知识库构建流水线不存在")` and `KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING(4099, "当前知识库已有构建流水线未完成")` to `ApiResultCode`.
 
-- [ ] **Step 6: Run backend compile**
+- [x] **Step 6: Run backend compile**
 
 Run:
 
@@ -380,7 +380,7 @@ cd backend/ckqa-back
 
 Expected: `BUILD SUCCESS`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add sql/ocqa.sql sql/migrations/20260505_kb_build_runs.sql backend/ckqa-back/src/main/java/org/ysu/ckqaback/entity backend/ckqa-back/src/main/java/org/ysu/ckqaback/mapper backend/ckqa-back/src/main/resources/mapper backend/ckqa-back/src/main/java/org/ysu/ckqaback/service backend/ckqa-back/src/main/java/org/ysu/ckqaback/api/ApiResultCode.java
@@ -402,7 +402,7 @@ git commit -m "feat(backend): add knowledge base build run schema"
 - Test: `backend/ckqa-back/src/test/java/org/ysu/ckqaback/controller/KnowledgeBaseBuildRunsControllerWebMvcTest.java`
 - Test: `backend/ckqa-back/src/test/java/org/ysu/ckqaback/controller/KnowledgeBasesControllerWebMvcTest.java`
 
-- [ ] **Step 1: Add config properties**
+- [x] **Step 1: Add config properties**
 
 Extend `CkqaIntegrationProperties.GraphRagProperties`:
 
@@ -421,7 +421,7 @@ public static class RetentionProperties {
 }
 ```
 
-- [ ] **Step 2: Write failing workspace tests**
+- [x] **Step 2: Write failing workspace tests**
 
 Create `KnowledgeBaseBuildRunServiceTest` with tests:
 
@@ -456,7 +456,7 @@ cd backend/ckqa-back
 
 Expected: FAIL because the service does not exist.
 
-- [ ] **Step 3: Implement workspace service**
+- [x] **Step 3: Implement workspace service**
 
 Implement `BuildRunWorkspaceService` with methods:
 
@@ -482,7 +482,7 @@ public void createLayout(String workspaceUri) throws IOException {
 }
 ```
 
-- [ ] **Step 4: Add DTOs**
+- [x] **Step 4: Add DTOs**
 
 Implement request DTOs with Jakarta validation:
 
@@ -509,7 +509,7 @@ public class BuildRunGcRequest { private Boolean deleteWorkspace = false; privat
 public class ActiveIndexRunRequest { @NotNull @Positive private Long indexRunId; }
 ```
 
-- [ ] **Step 5: Implement build run service create/list/detail/archive/gc**
+- [x] **Step 5: Implement build run service create/list/detail/archive/gc**
 
 Implement `KnowledgeBaseBuildRunService` with these public methods:
 
@@ -539,7 +539,7 @@ Rules:
 7. `isLatestBuildRun` returns true only when the target build run has no newer same-knowledge-base build run by `(created_at, id)`.
 8. `markIndexSuccessDone` sets `status=success`, `current_stage=done`, `qa_status` to the supplied value, `finished_at=now`, and records the index terminal summary in `build_metadata` in the same transaction.
 
-- [ ] **Step 6: Add controllers**
+- [x] **Step 6: Add controllers**
 
 Add `KnowledgeBaseBuildRunsController`:
 
@@ -597,7 +597,7 @@ public ApiResponse<BuildRunGcResponse> gcBuildRuns(@PathVariable @Positive Long 
 }
 ```
 
-- [ ] **Step 7: WebMvc tests**
+- [x] **Step 7: WebMvc tests**
 
 Add tests for:
 
@@ -624,7 +624,7 @@ mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASES + "/5/build-runs")
     .andExpect(jsonPath("$.code").value(ApiResultCode.KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING.getCode()));
 ```
 
-- [ ] **Step 8: Run tests and commit**
+- [x] **Step 8: Run tests and commit**
 
 Run:
 
@@ -651,7 +651,7 @@ git commit -m "feat(backend): add knowledge base build run control plane"
 - Modify: `graphrag_pipeline/utils/api_runtime_config.py`
 - Modify tests listed in the Python file map.
 
-- [ ] **Step 1: Add failing `--output-file` tests**
+- [x] **Step 1: Add failing `--output-file` tests**
 
 In `test_fetch_from_minio.py`, add:
 
@@ -687,7 +687,7 @@ conda run -n graphrag-oneapi python -m pytest tests/test_fetch_from_minio.py -q
 
 Expected: FAIL because `output_filename` does not exist.
 
-- [ ] **Step 2: Implement `--output-file`**
+- [x] **Step 2: Implement `--output-file`**
 
 Modify `fetch_and_prepare` to accept `output_filename: str | None = None`. Use:
 
@@ -706,7 +706,7 @@ parser.add_argument("--output-file", default=None, help="写入 input-dir 的本
 
 Preserve the existing `--json-file` / `--jsonl-file` option and continue passing it to `fetch_and_prepare` as `json_filename`. The Java workflow depends on using `--json-file page_docs.json` or `--json-file normalized_docs.json` for validation inputs while `--output-file` controls only the local filename.
 
-- [ ] **Step 3: Add query context tests**
+- [x] **Step 3: Add query context tests**
 
 In `test_query_task_manager.py`, add a context-aware test:
 
@@ -739,7 +739,7 @@ conda run -n graphrag-oneapi python -m pytest tests/test_query_task_manager.py -
 
 Expected: FAIL because the manager does not accept task context.
 
-- [ ] **Step 4: Implement task context**
+- [x] **Step 4: Implement task context**
 
 Add dataclass in `query_task_manager.py`:
 
@@ -800,7 +800,7 @@ build_runs_root = _resolve_repo_path(
 
 Pass `CONFIG.build_runs_root` into `QueryTaskManager(build_runs_root=CONFIG.build_runs_root)` in `main.py`.
 
-- [ ] **Step 5: Update FastAPI request model**
+- [x] **Step 5: Update FastAPI request model**
 
 In `main.py`:
 
@@ -845,7 +845,7 @@ def _build_query_env(request: QueryTaskRequest) -> dict[str, str]:
     return env
 ```
 
-- [ ] **Step 6: Add path rejection tests**
+- [x] **Step 6: Add path rejection tests**
 
 In `test_query_task_api.py`, add:
 
@@ -857,7 +857,7 @@ def test_query_task_rejects_path_escape():
 
 Also test request JSON with `dataDirUri` reaches the fake manager.
 
-- [ ] **Step 7: Run Python tests and commit**
+- [x] **Step 7: Run Python tests and commit**
 
 Run:
 
@@ -890,7 +890,7 @@ git commit -m "feat(graphrag): isolate build input and query data dirs"
 - Modify: controllers and DTOs.
 - Tests: `IndexWorkflowServiceTest`, `ProcessRunnerTest`, `IndexArtifactsControllerWebMvcTest`, `IndexRunsControllerWebMvcTest`.
 
-- [ ] **Step 1: Write failing log tee test**
+- [x] **Step 1: Write failing log tee test**
 
 In `ProcessRunnerTest`, add:
 
@@ -911,7 +911,7 @@ void shouldWriteStdoutAndStderrToLogFile() throws Exception {
 }
 ```
 
-- [ ] **Step 2: Implement ProcessContext log file support**
+- [x] **Step 2: Implement ProcessContext log file support**
 
 Add `Path logFile` to `ProcessContext`. In `ProcessRunner`, stream stdout/stderr to both in-memory strings and the file. Prefix lines with stream names:
 
@@ -922,7 +922,7 @@ Add `Path logFile` to `ProcessContext`. In `ProcessRunner`, stream stdout/stderr
 
 Do not remove existing `stdout` / `stderr` capture because current error handling depends on it.
 
-- [ ] **Step 3: Implement artifact scanner**
+- [x] **Step 3: Implement artifact scanner**
 
 `IndexArtifactRegistryService.scanAndRegister(IndexRuns run, Path workspaceRoot, String workspaceUri)` must:
 
@@ -954,7 +954,7 @@ void shouldRegisterLancedbAndProcessLogArtifacts() throws Exception {
 }
 ```
 
-- [ ] **Step 4: Implement ActiveIndexRunService**
+- [x] **Step 4: Implement ActiveIndexRunService**
 
 Provide:
 
@@ -972,7 +972,7 @@ Rules:
 6. Clear only build run rows where `knowledge_base_id=? AND active_index_run_id IS NOT NULL`.
 7. Set the target build run marker only when `build_run_id` is not null.
 
-- [ ] **Step 5: Extend GraphRagIndexOrchestrator**
+- [x] **Step 5: Extend GraphRagIndexOrchestrator**
 
 Replace shared fetch/index methods with build-run-aware methods:
 
@@ -1003,7 +1003,7 @@ Map.of(
 )
 ```
 
-- [ ] **Step 6: Move legacy create-index endpoint through compatibility build run**
+- [x] **Step 6: Move legacy create-index endpoint through compatibility build run**
 
 In `IndexWorkflowService.createIndexRun(Long knowledgeBaseId)`, internally call:
 
@@ -1018,7 +1018,7 @@ Add new:
 IndexRunResponse createBuildRunIndexRun(Long buildRunId, BuildRunIndexRequest request);
 ```
 
-- [ ] **Step 7: Build index input safely**
+- [x] **Step 7: Build index input safely**
 
 In the workflow:
 
@@ -1026,7 +1026,7 @@ In the workflow:
 2. If the multi-JSON GraphRAG check in Task 7 Step 4 real integration smoke fails, merge arrays into `index/input/build_{buildRunId}.section_docs.json`.
 3. Never read or clean `graphrag_pipeline/input`.
 
-- [ ] **Step 8: Add automatic activation policy tests**
+- [x] **Step 8: Add automatic activation policy tests**
 
 Add tests:
 
@@ -1049,7 +1049,7 @@ void shouldMarkBuildRunDoneAndQaSkippedAfterSuccessfulIndex() {
 }
 ```
 
-- [ ] **Step 9: Add controller endpoints**
+- [x] **Step 9: Add controller endpoints**
 
 Add:
 
@@ -1078,7 +1078,7 @@ public ApiResponse<IndexArtifactResponse> getIndexArtifact(@PathVariable @Positi
 public ApiResponse<IndexArtifactResponse> deleteIndexArtifact(@PathVariable @Positive Long id)
 ```
 
-- [ ] **Step 10: Run backend tests and commit**
+- [x] **Step 10: Run backend tests and commit**
 
 Run:
 
@@ -1106,7 +1106,7 @@ git commit -m "feat(backend): isolate graphrag index workflow"
 - Modify: `SystemHealthController.java`
 - Tests: `GraphRagTaskClientTest`, `QaWorkflowServiceTest`, `SystemHealthServiceTest`, `SystemHealthControllerWebMvcTest`.
 
-- [ ] **Step 1: Extend GraphRagTaskClient request**
+- [x] **Step 1: Extend GraphRagTaskClient request**
 
 Add backend-only fields to the Python request payload:
 
@@ -1127,7 +1127,7 @@ assertThat(capturedRequest.getBody()).contains("\"dataDirUri\":\"user_2/kb_5/bui
 assertThat(capturedRequest.getBody()).doesNotContain("/home/");
 ```
 
-- [ ] **Step 2: Resolve active index context for QA**
+- [x] **Step 2: Resolve active index context for QA**
 
 In `QaWorkflowService`, before submitting a GraphRAG task:
 
@@ -1137,7 +1137,7 @@ In `QaWorkflowService`, before submitting a GraphRAG task:
 4. Pass `indexRunId` and `dataDirUri` to `GraphRagTaskClient`.
 5. If missing, throw `KNOWLEDGE_BASE_NOT_READY`.
 
-- [ ] **Step 3: Implement build-run QA smoke action**
+- [x] **Step 3: Implement build-run QA smoke action**
 
 In `KnowledgeBaseBuildRunService.runQaSmoke(Long buildRunId, BuildRunQaSmokeRequest request)`:
 
@@ -1151,7 +1151,7 @@ Keep `build_run.status=success` when QA fails.
 
 Schema note: `session_type='smoke'` is already supported by `sql/ocqa.sql` and `sql/migrations/20260429_qa_session_type.sql`; this task should reuse that existing enum value instead of adding another QA migration.
 
-- [ ] **Step 4: Split health and readiness**
+- [x] **Step 4: Split health and readiness**
 
 Keep `GET /api/v1/system/health` lightweight:
 
@@ -1173,7 +1173,7 @@ and optional:
 @GetMapping(ApiPaths.KNOWLEDGE_BASES + "/{id}/readiness")
 ```
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run:
 
@@ -1203,7 +1203,7 @@ git commit -m "feat(backend): route qa through active build artifacts"
 - Modify: `health-model.js`
 - Modify: `app-shell.test.js`
 
-- [ ] **Step 1: Add API client tests**
+- [x] **Step 1: Add API client tests**
 
 In `app-shell.test.js`, add assertions with a fake client:
 
@@ -1226,7 +1226,7 @@ test('knowledge-base api exposes build-run endpoints', async () => {
 })
 ```
 
-- [ ] **Step 2: Implement API functions**
+- [x] **Step 2: Implement API functions**
 
 Change the top imports in `knowledge-bases.js` to:
 
@@ -1303,7 +1303,7 @@ export async function deleteIndexArtifact(id, client = http) {
 }
 ```
 
-- [ ] **Step 3: Move build wizard source of truth to buildRunId**
+- [x] **Step 3: Move build wizard source of truth to buildRunId**
 
 In `module-page-model.js`, add:
 
@@ -1322,7 +1322,7 @@ In `module-loaders.js`:
 3. Call `createBuildRun` only from the explicit user action that starts or confirms the build, then write the returned `buildRunId` into the route query.
 4. Keep sessionStorage only as selection fallback, not state truth.
 
-- [ ] **Step 4: Update workflow actions**
+- [x] **Step 4: Update workflow actions**
 
 Route primary actions:
 
@@ -1343,7 +1343,7 @@ Make labels business-facing:
 - `qa_smoke`: `问答验证`
 - `done`: `完成`
 
-- [ ] **Step 5: Health/readiness UI**
+- [x] **Step 5: Health/readiness UI**
 
 Update `health-model.js` to treat:
 
@@ -1354,7 +1354,7 @@ Update `health-model.js` to treat:
 
 Do not require shared `output/lancedb` for healthy status.
 
-- [ ] **Step 6: Run admin tests and commit**
+- [x] **Step 6: Run admin tests and commit**
 
 Run:
 
@@ -1383,7 +1383,7 @@ git commit -m "feat(admin-app): drive knowledge-base builds by build runs"
 - Modify: `frontend/apps/admin-app/README.md`
 - Modify: `docs/student-backend-graphrag-api-contract.md`
 
-- [ ] **Step 1: Update docs**
+- [x] **Step 1: Update docs**
 
 Document:
 
@@ -1395,7 +1395,7 @@ Document:
 6. `system/health` vs `system/readiness`
 7. Shared legacy `graphrag_pipeline/output` as CLI-only debug path
 
-- [ ] **Step 2: Add `.gitignore` runtime path**
+- [x] **Step 2: Add `.gitignore` runtime path**
 
 Modify `.gitignore`:
 
@@ -1403,7 +1403,7 @@ Modify `.gitignore`:
 graphrag_pipeline/runtime/kb-build-runs/
 ```
 
-- [ ] **Step 3: Run module tests**
+- [x] **Step 3: Run module tests**
 
 Run:
 
@@ -1435,7 +1435,7 @@ python scripts/audit_repo_drift.py --strict
 git diff --check
 ```
 
-- [ ] **Step 4: Real integration smoke**
+- [x] **Step 4: Real integration smoke**
 
 With MySQL, MinIO, One API, Neo4j and GraphRAG API available:
 
@@ -1455,7 +1455,7 @@ runtime/kb-build-runs/user_0/kb_{id}/build_{runB}
 8. Submit QA smoke and verify Java passes `dataDirUri` to Python.
 9. Run GC dry-run and verify active/running build runs are skipped.
 
-- [ ] **Step 5: Final commit**
+- [x] **Step 5: Final commit**
 
 ```bash
 git add README.md AGENTS.md backend/ckqa-back/README.md graphrag_pipeline/README.md frontend/apps/admin-app/README.md docs/student-backend-graphrag-api-contract.md .gitignore
@@ -1466,17 +1466,45 @@ git commit -m "docs: document isolated graphrag build runs"
 
 ## Self-Review Checklist
 
-- [ ] SQL creates `knowledge_base_build_runs` and keeps FK ordering safe.
-- [ ] Legacy `POST /knowledge-bases/{id}/index-runs` still works through a compatibility build run.
-- [ ] No browser API accepts or returns server absolute paths.
-- [ ] GraphRAG CLI uses `GRAPHRAG_STORAGE_DIR/lancedb`, not `GRAPHRAG_LANCEDB_URI`, for indexing/querying.
-- [ ] `build_metadata` writes are transactional with status/stage changes.
-- [ ] Automatic activation skips older concurrent build runs.
-- [ ] Manual activation uses `indexRunId` and clears only `active_index_run_id IS NOT NULL` build run rows.
-- [ ] QA smoke failure does not mark the build run failed.
-- [ ] Health no longer requires shared `output/lancedb`.
-- [ ] Admin app uses `buildRunId` as the source of truth.
-- [ ] Runtime workspaces are ignored by Git.
+- [x] SQL creates `knowledge_base_build_runs` and keeps FK ordering safe.
+- [x] Legacy `POST /knowledge-bases/{id}/index-runs` still works through a compatibility build run.
+- [x] No browser API accepts or returns server absolute paths.
+- [x] GraphRAG CLI uses `GRAPHRAG_STORAGE_DIR/lancedb`, not `GRAPHRAG_LANCEDB_URI`, for indexing/querying.
+- [x] `build_metadata` writes are transactional with status/stage changes.
+- [x] Automatic activation skips older concurrent build runs.
+- [x] Manual activation uses `indexRunId` and clears only `active_index_run_id IS NOT NULL` build run rows.
+- [x] QA smoke failure does not mark the build run failed.
+- [x] Health no longer requires shared `output/lancedb`.
+- [x] Admin app uses `buildRunId` as the source of truth.
+- [x] Runtime workspaces are ignored by Git.
+
+---
+
+## Closeout Evidence
+
+Completed on 2026-05-05 in branch `feature/graphrag-build-run-isolation`.
+
+- Real infrastructure check: `docker compose --env-file infra/.env -f infra/docker-compose.yml ps` showed `mysql`, `minio`, `neo4j`, and `one-api` running.
+- Real build-run smoke:
+  - KB 4 active index was manually switched to `indexRunId=7`.
+  - Build run 3 QA smoke completed with `taskId=7`, `taskStatus=success`, `currentStage=done`, and `qaStatus=success`.
+  - `graphrag_pipeline/runtime/kb-build-runs/user_9/kb_4/build_3/qa-smoke/response.json` was written with the successful assistant response.
+- Real artifact checks:
+  - `GET /api/v1/index-runs/7/artifacts` returned ready `output_dir`, parquet, `lancedb`, and log artifacts for `build_3`.
+  - `GET /api/v1/index-runs/8/artifacts` returned ready `output_dir`, parquet, `lancedb`, and log artifacts for `build_4`.
+- Real GC check: `POST /api/v1/knowledge-bases/4/build-runs/gc` with `{"dryRun":true,"deleteWorkspace":false}` returned `deletedBuildRunCount=0`, `deletedWorkspaceCount=0`, `dryRun=true`.
+- Regressions fixed during smoke:
+  - `QaWorkflowService` now dispatches QA workers after transaction commit, preventing worker reads before `qa_retrieval_logs` commits.
+  - `QaTaskWorker` now records an early task lookup failure through the existing failed-task path when possible.
+  - GraphRAG query tasks invoke `sys.executable -m graphrag query` so the managed API uses the same Python environment that started it.
+  - `prompts/extract_graph.txt` now uses GraphRAG 3.0.9 literal delimiters instead of removed placeholder variables.
+- Verification:
+  - `backend/ckqa-back`: `./mvnw test` -> 139 tests passed.
+  - `graphrag_pipeline`: `/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python -m pytest tests/` -> 181 tests passed.
+  - `graphrag_pipeline`: `/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python scripts/audit_repo_drift.py --strict` -> passed.
+  - `frontend/apps/admin-app`: `pnpm test` -> 1 test passed.
+  - `frontend/apps/admin-app`: `pnpm build` -> passed, with the existing Vite chunk-size warning.
+  - Repository: `git diff --check` -> passed.
 
 ## Execution Handoff
 

@@ -67,6 +67,7 @@ class ApiRuntimeConfig:
 
     output_dir: Path
     lancedb_uri: str
+    build_runs_root: Path
     api_host: str
     api_port: int
 
@@ -99,10 +100,15 @@ def load_api_runtime_config(
         DEFAULT_OUTPUT_DIR,
     )
     lancedb_uri = _resolve_lancedb_uri(env.get("GRAPHRAG_LANCEDB_URI"), output_dir)
+    build_runs_root = _resolve_repo_path(
+        env.get("GRAPHRAG_BUILD_RUNS_ROOT"),
+        PROJECT_ROOT / "runtime" / "kb-build-runs",
+    )
 
     return ApiRuntimeConfig(
         output_dir=output_dir,
         lancedb_uri=lancedb_uri,
+        build_runs_root=build_runs_root,
         api_host=(env.get("GRAPHRAG_API_HOST") or "0.0.0.0").strip(),
         api_port=_parse_int(env.get("GRAPHRAG_API_PORT") or env.get("PORT"), 8012),
     )

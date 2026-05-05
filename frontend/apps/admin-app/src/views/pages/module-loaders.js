@@ -11,6 +11,7 @@ import {
   listParseResults,
 } from '../../api/materials.js'
 import {
+  getBuildRun,
   getIndexRun,
   getKnowledgeBase,
   listIndexRuns,
@@ -25,7 +26,7 @@ import {
   resolveParseTaskRows,
   resolvePromptConfirmState,
 } from './module-content.js'
-import { resolveBuildSelectionFromQuery } from './module-page-model.js'
+import { resolveBuildRunIdQuery, resolveBuildSelectionFromQuery } from './module-page-model.js'
 
 const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
@@ -49,6 +50,7 @@ const defaultServices = {
   listParseResults,
   getIndexRun,
   getKnowledgeBase,
+  getBuildRun,
   listIndexRuns,
   listKnowledgeBases,
 }
@@ -441,17 +443,21 @@ async function loadIndexRunDetail(route, services) {
 
 async function loadKnowledgeBaseBuild(route, query, services) {
   const kbId = route.params?.kbId
+  const buildRunId = resolveBuildRunIdQuery(query)
   const knowledgeBase = await services.getKnowledgeBase(kbId)
-  const [materialsResult, indexRunsResult] = await Promise.allSettled([
+  const [materialsResult, indexRunsResult, buildRunResult] = await Promise.allSettled([
     services.listCourseMaterials(knowledgeBase.courseId),
     services.listIndexRuns(kbId),
+    buildRunId ? services.getBuildRun(buildRunId) : Promise.resolve(null),
   ])
   const materialsBlock = createSettledListBlock(materialsResult, mapMaterialItem)
   const indexRuns = indexRunsResult.status === 'fulfilled' && Array.isArray(indexRunsResult.value)
     ? indexRunsResult.value
     : []
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
-  const selectionQuery = resolveBuildSelectionFromQuery(query)
+  const buildRunBlock = createBuildRunBlock(buildRunResult, buildRunId)
+  const buildRun = buildRunBlock.item ?? null
+  const selectionQuery = resolveBuildSelectionFromBuildRun(buildRun) ?? resolveBuildSelectionFromQuery(query)
   const selection = await resolveBuildSelection({
     selectionQuery,
     knowledgeBase,
@@ -472,6 +478,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
     exportArtifacts,
     promptState,
     indexState,
+    buildRun,
   })
   const activeStepKey = query.step && workflowSteps.some((step) => step.key === query.step)
     ? String(query.step)
@@ -495,6 +502,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
       },
       materials: materialsBlock,
       indexRuns: indexRunsBlock,
+      buildRun: buildRunBlock,
       selection,
       parseTasks: {
         state: parseTaskRows.length > 0 ? 'success' : 'empty',
@@ -510,12 +518,57 @@ async function loadKnowledgeBaseBuild(route, query, services) {
     },
     raw: {
       knowledgeBase,
+      buildRun,
       materials: materialsBlock.raw,
       indexRuns: indexRunsBlock.raw,
       selectedMaterials: selection.materials,
       parseResultsByMaterialId: selection.parseResultsByMaterialId,
     },
   })
+}
+
+function resolveBuildSelectionFromBuildRun(buildRun) {
+  const selectedMaterialIds = parseBuildRunSelectedMaterialIds(buildRun?.selectedMaterialIds)
+
+  if (selectedMaterialIds.length === 0) {
+    return null
+  }
+
+  const materialIds = [...new Set(selectedMaterialIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+    .sort((left, right) => left - right)
+    .map((id) => String(id)))]
+
+  if (materialIds.length === 0) {
+    return null
+  }
+
+  return {
+    source: 'buildRun',
+    materialIds,
+    selectionKey: '',
+    selectionCount: materialIds.length,
+    shouldCleanQuery: false,
+    invalid: false,
+  }
+}
+
+function parseBuildRunSelectedMaterialIds(value) {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return value.split(',')
+  }
 }
 
 async function resolveBuildSelection({ selectionQuery, knowledgeBase, materials, services }) {
@@ -593,8 +646,12 @@ export function buildKnowledgeBaseWorkflowSteps({
   exportArtifacts = { rows: [], missingCount: 0, completeCount: 0 },
   promptState = null,
   indexState = null,
+  buildRun = null,
 } = {}) {
-  const activeIndexRunId = knowledgeBase.activeIndexRunId ?? knowledgeBase.activeIndexId
+  const activeIndexRunId = knowledgeBase.activeIndexRunId
+    ?? knowledgeBase.activeIndexId
+    ?? buildRun?.activeIndexRunId
+    ?? buildRun?.indexRunId
   const materialIds = selection.materialIds ?? []
   const hasMaterialSelection = materialIds.length > 0
   const parseSummary = summarizeParseRows(parseTaskRows)
@@ -617,11 +674,19 @@ export function buildKnowledgeBaseWorkflowSteps({
     ? 'blocked'
     : indexAvailability.status
   const qaStatus = activeIndexRunId ? 'ready' : 'blocked'
+  const statusByStep = applyBuildRunStageStatuses({
+    material: materialStatus,
+    parse: parseStatus,
+    export: exportStatus,
+    prompt: promptStatus,
+    index: indexStatus,
+    qa_check: qaStatus,
+  }, buildRun)
 
   return [
     createWorkflowStep({
       key: 'material',
-      status: materialStatus,
+      status: statusByStep.material,
       detail: hasMaterialSelection ? `已选择 ${materialIds.length} 个课程资料` : '选择本次构建的课程资料',
       conditions: ['知识库已绑定课程', '选择一个课程资料'],
       actionLabel: '确认勾选',
@@ -635,7 +700,7 @@ export function buildKnowledgeBaseWorkflowSteps({
     }),
     createWorkflowStep({
       key: 'parse',
-      status: parseStatus,
+      status: statusByStep.parse,
       detail: hasMaterialSelection ? `解析完成 ${parseSummary.done}/${parseTaskRows.length}` : '请先选择课程资料',
       conditions: ['资料对象已上传', 'MinerU 解析状态为 done'],
       actionLabel: parseSummary.pending > 0 || parseSummary.failed > 0 ? '并行解析未完成资料' : '检查图谱输入',
@@ -648,7 +713,7 @@ export function buildKnowledgeBaseWorkflowSteps({
     }),
     createWorkflowStep({
       key: 'export',
-      status: exportStatus,
+      status: statusByStep.export,
       detail: exportComplete ? 'GraphRAG 必需输入产物已完整' : '需要 normalized、section 与 page 导出产物',
       conditions: ['解析结果存在', 'section_docs/page_docs 已导出'],
       actionLabel: exportComplete ? '确认图谱输入' : '导出缺失输入',
@@ -665,7 +730,7 @@ export function buildKnowledgeBaseWorkflowSteps({
     }),
     createWorkflowStep({
       key: 'prompt',
-      status: promptStatus,
+      status: statusByStep.prompt,
       detail: promptConfirmed ? '已确认沿用当前活动提示词' : '确认本次索引沿用 GraphRAG 当前活动提示词',
       conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
       actionLabel: promptConfirmed ? '进入创建索引' : '确认提示词策略',
@@ -677,7 +742,7 @@ export function buildKnowledgeBaseWorkflowSteps({
     }),
     createWorkflowStep({
       key: 'index',
-      status: indexStatus,
+      status: statusByStep.index,
       detail: indexAvailability.warning ?? (activeIndexRunId ? `激活索引 #${activeIndexRunId}` : '等待创建索引运行'),
       conditions: ['GraphRAG 导出产物存在', 'Java 后端可创建索引运行'],
       actionLabel: '开始构建索引',
@@ -685,13 +750,13 @@ export function buildKnowledgeBaseWorkflowSteps({
       primaryAction: resolveBuildPrimaryAction('index', {
         query,
         indexState: indexAvailability,
-        canBuildIndex: indexStatus !== 'blocked',
+        canBuildIndex: statusByStep.index !== 'blocked',
         disabledReason: '请先确认图谱输入和提示词策略',
       }),
     }),
     createWorkflowStep({
       key: 'qa_check',
-      status: qaStatus,
+      status: statusByStep.qa_check,
       detail: activeIndexRunId ? `激活索引 #${activeIndexRunId} 可进入问答验证` : '缺少激活索引，暂不可验证',
       conditions: ['索引运行成功并激活', 'Java /api/v1 问答入口可用'],
       actionLabel: '发起问答验证',
@@ -774,6 +839,85 @@ function normalizeBuildParseStatus(status) {
   }
 
   return 'pending'
+}
+
+const BUILD_RUN_STAGE_TO_STEP = {
+  material_selection: 'material',
+  material: 'material',
+  parse: 'parse',
+  parse_check: 'parse',
+  graph_input: 'export',
+  graph_input_export: 'export',
+  export: 'export',
+  prompt: 'prompt',
+  prompt_confirmation: 'prompt',
+  index: 'index',
+  index_build: 'index',
+  qa_smoke: 'qa_check',
+  qa_check: 'qa_check',
+  done: 'done',
+}
+
+const BUILD_RUN_STEP_ORDER = ['material', 'parse', 'export', 'prompt', 'index', 'qa_check']
+
+function applyBuildRunStageStatuses(baseStatuses, buildRun) {
+  const stageKey = BUILD_RUN_STAGE_TO_STEP[String(buildRun?.currentStage ?? '').toLowerCase()]
+
+  if (!stageKey) {
+    return {
+      ...baseStatuses,
+      qa_check: mergeQaStatus(baseStatuses.qa_check, buildRun?.qaStatus),
+    }
+  }
+
+  if (stageKey === 'done') {
+    const doneStatuses = Object.fromEntries(BUILD_RUN_STEP_ORDER.map((key) => [key, 'done']))
+    doneStatuses.qa_check = mergeQaStatus(doneStatuses.qa_check, buildRun?.qaStatus)
+    return doneStatuses
+  }
+
+  const runStatus = normalizeBuildRunStatus(buildRun?.status)
+  const activeIndex = BUILD_RUN_STEP_ORDER.indexOf(stageKey)
+  const nextStatuses = { ...baseStatuses }
+
+  BUILD_RUN_STEP_ORDER.forEach((key, index) => {
+    if (index < activeIndex) {
+      nextStatuses[key] = 'done'
+    }
+  })
+
+  nextStatuses[stageKey] = runStatus
+  nextStatuses.qa_check = mergeQaStatus(nextStatuses.qa_check, buildRun?.qaStatus)
+
+  return nextStatuses
+}
+
+function normalizeBuildRunStatus(status) {
+  const normalized = String(status ?? '').toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'done'
+  }
+
+  if (['running', 'processing', 'building', 'syncing'].includes(normalized)) {
+    return 'running'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  return 'ready'
+}
+
+function mergeQaStatus(baseStatus, qaStatus) {
+  const normalized = String(qaStatus ?? '').toLowerCase()
+
+  if (!normalized || normalized === 'not_started') {
+    return baseStatus
+  }
+
+  return normalizeBuildRunStatus(normalized)
 }
 
 function isBuildQueryConfirmed(value) {
@@ -901,6 +1045,31 @@ function createSettledListBlock(result, mapper) {
     state: rawItems.length > 0 ? 'success' : 'empty',
     items: rawItems.map(mapper),
     raw: result.value,
+  }
+}
+
+function createBuildRunBlock(result, buildRunId) {
+  if (!buildRunId) {
+    return {
+      state: 'empty',
+      item: null,
+      raw: null,
+    }
+  }
+
+  if (result.status === 'rejected') {
+    return {
+      state: 'error',
+      item: null,
+      error: createApiError(result.reason),
+      raw: result.reason?.raw ?? result.reason,
+    }
+  }
+
+  return {
+    state: result.value ? 'success' : 'empty',
+    item: result.value ?? null,
+    raw: result.value ?? null,
   }
 }
 

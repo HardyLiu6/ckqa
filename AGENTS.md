@@ -167,7 +167,10 @@ Notes:
 - The shared `graphrag-oneapi` environment already has `pytest` installed, so tests can run directly. For a fresh environment, install project deps first and then add `pytest` separately because `pyproject.toml` does not currently declare a dev extra.
 - `utils/main.py` reads repo-local `.env` / environment variables, defaults to the repo-local `output/` directory, and always delegates search to `graphrag query` in CLI mode.
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
-- `output/` contains both parquet data and `lancedb/`; both are required for serving.
+- Shared `output/` contains both parquet data and `lancedb/`; both are required for manual CLI/debug serving. Java-managed admin build runs use isolated workspaces under `runtime/kb-build-runs/` instead.
+- `GRAPHRAG_BUILD_RUNS_ROOT` defaults to `${GRAPHRAG_ROOT}/runtime/kb-build-runs`; keep this runtime path ignored by Git and do not expose absolute workspace paths to browser clients.
+- Java passes build-run query context to Python as `indexRunId` plus backend-only `dataDirUri`; Python must reject absolute paths and path traversal outside `GRAPHRAG_BUILD_RUNS_ROOT`.
+- Build-run concurrency and activation are controlled by `GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS` and `GRAPHRAG_AUTO_ACTIVATION_POLICY`; the default activation policy is `latest-build-only`.
 - Neo4j and One API containers are managed by the repository-root `infra/docker-compose.yml`; do not reintroduce module-local compose files under `graphrag_pipeline/`.
 - After a local reset, `input/`, `output/`, `prompts/candidates/`, prompt tuning reports, and `prompts/final/active_prompt.json` may be absent or empty. Regenerate them from the current course extraction instead of assuming old `os` / `ds` artifacts exist.
 - The reset default prompt state is `base`, pointing directly to `prompts/*.txt`; only use `finalize_candidate_prompt.py` after new candidates have been generated.
@@ -191,6 +194,7 @@ Notes:
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
 - Current state: shell, theme system, dashboard, health page, login/status pages, courses, course detail, material lifecycle, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Knowledge-base build wizard state should be driven by Java build-run APIs and the URL `buildRunId`, not by browser-only query/sessionStorage state once a build run exists.
 - Playwright E2E uses mocked `/api/v1` fault injection to verify local operation error panels. Do not commit `test-results/`, `playwright-report/`, `dist/`, or `node_modules/`.
 
 ### `backend/ckqa-back/`
@@ -198,7 +202,9 @@ Notes:
 - Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 phase-1 orchestration backend.
 - Unified response envelope is `code / message / data / timestamp`; business success code is `200`.
 - Async QA uses Python GraphRAG `/v1/query-tasks`; cross-service task timestamps are exposed as Asia/Shanghai offset-free `LocalDateTime` strings.
-- Local admin-app integration expects MySQL, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, GraphRAG output/lancedb, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
+- Local admin-app integration expects MySQL, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, `GRAPHRAG_BUILD_RUNS_ROOT`, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
+- `/api/v1/system/health` is a lightweight dependency check and no longer requires shared `GRAPHRAG_ROOT/output/lancedb`; `/api/v1/system/readiness` includes that shared CLI/debug output check.
+- Knowledge-base build runs isolate input, output, logs, artifacts, active-index metadata, and QA smoke snapshots under `GRAPHRAG_BUILD_RUNS_ROOT`.
 - Treat it as secondary to the Python parsing/indexing chain unless the user explicitly wants Java backend, `/api/v1`, orchestration, or frontend integration work.
 
 ## Cross-Module Contract

@@ -29,6 +29,7 @@
 当前已经落地的核心接口如下：
 
 - `GET /api/v1/system/health`
+- `GET /api/v1/system/readiness`
 - `GET /api/v1/courses`
 - `GET /api/v1/courses/{courseId}`
 - `GET /api/v1/courses/{courseId}/pdf-files`
@@ -41,7 +42,21 @@
 - `POST /api/v1/pdf-files/{id}/export-graphrag`
 - `POST /api/v1/knowledge-bases/{id}/index-runs`
 - `GET /api/v1/knowledge-bases/{id}/index-runs`
+- `POST /api/v1/knowledge-bases/{id}/build-runs`
+- `GET /api/v1/knowledge-bases/{id}/build-runs`
+- `POST /api/v1/knowledge-bases/{id}/build-runs/gc`
+- `GET /api/v1/knowledge-base-build-runs/{id}`
+- `DELETE /api/v1/knowledge-base-build-runs/{id}`
+- `PUT /api/v1/knowledge-base-build-runs/{id}/material-selection`
+- `POST /api/v1/knowledge-base-build-runs/{id}/parse-check`
+- `POST /api/v1/knowledge-base-build-runs/{id}/graph-input`
+- `POST /api/v1/knowledge-base-build-runs/{id}/prompt-confirmation`
+- `POST /api/v1/knowledge-base-build-runs/{id}/index-runs`
+- `POST /api/v1/knowledge-base-build-runs/{id}/qa-smoke`
 - `GET /api/v1/index-runs/{id}`
+- `GET /api/v1/index-runs/{id}/artifacts`
+- `GET /api/v1/index-artifacts/{id}`
+- `DELETE /api/v1/index-artifacts/{id}`
 - `POST /api/v1/qa-sessions`
 - `GET /api/v1/qa-sessions/{id}`
 - `GET /api/v1/qa-sessions/{id}/messages`
@@ -95,6 +110,9 @@ export GRAPHRAG_PYTHON=/path/to/graphrag-oneapi/bin/python
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_BUILD_RUNS_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs
+export GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS=true
+export GRAPHRAG_AUTO_ACTIVATION_POLICY=latest-build-only
 export GRAPHRAG_API_HOST=127.0.0.1
 export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
@@ -170,6 +188,9 @@ export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
+export GRAPHRAG_BUILD_RUNS_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs
+export GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS=true
+export GRAPHRAG_AUTO_ACTIVATION_POLICY=latest-build-only
 export GRAPHRAG_API_HOST=127.0.0.1
 export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
@@ -201,7 +222,7 @@ curl http://127.0.0.1:8080/api/v1/knowledge-bases
 - `mysql`
 - `pdf-ingest-root`
 - `graphrag-root`
-- `graphrag-output`
+- `graphrag-build-runs-root`
 - `graphrag-api`
 - `graphrag-ready`
 
@@ -210,7 +231,23 @@ curl http://127.0.0.1:8080/api/v1/knowledge-bases
 - `reachable` 表示依赖可连通或路径存在
 - `ready` 表示依赖具备处理真实业务的前提条件
 
-例如 `graphrag-output` 会检查 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 是否存在。
+`GET /api/v1/system/health` 是轻量健康检查，不再要求共享 `GRAPHRAG_ROOT/output/lancedb` 已存在。`GET /api/v1/system/readiness` 会额外包含 `graphrag-output`，用于手工 CLI 调试路径的就绪判断。
+
+## GraphRAG build-run 隔离
+
+管理端知识库构建不再把所有输入、输出和日志写入共享 `graphrag_pipeline/input` / `output`。Java 后端会为每次构建创建独立 workspace：
+
+```text
+${GRAPHRAG_BUILD_RUNS_ROOT}/user_{userId}/kb_{knowledgeBaseId}/build_{buildRunId}/
+  graph-input/
+  index/input/
+  index/output/
+  index/logs/process.log
+  qa-smoke/request.json
+  qa-smoke/response.json
+```
+
+`GRAPHRAG_BUILD_RUNS_ROOT` 未配置时，默认解析为 `${GRAPHRAG_ROOT}/runtime/kb-build-runs`。`GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS=false` 时，同一知识库只允许一个 `pending/running` build run。`GRAPHRAG_AUTO_ACTIVATION_POLICY=latest-build-only` 时，只有最新 build run 的成功索引会自动激活；旧成功索引仍可通过手动激活接口切换。
 
 ## 常用命令
 

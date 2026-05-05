@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -47,6 +49,44 @@ class GraphRagTaskClientTest {
         assertThat(result.taskStatus()).isEqualTo("pending");
         assertThat(result.progressStage()).isEqualTo("queued");
         assertThat(result.createdAt()).isEqualTo(LocalDateTime.of(2026, 4, 22, 20, 20, 34));
+        server.verify();
+    }
+
+    @Test
+    void shouldCreateQueryTaskWithBackendOnlyIndexContext() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"indexRunId\":18")))
+                .andExpect(content().string(containsString("\"dataDirUri\":\"user_2/kb_5/build_27/index/output\"")))
+                .andExpect(content().string(not(containsString("/home/"))))
+                .andExpect(content().json("""
+                        {
+                          "mode": "basic",
+                          "prompt": "问题",
+                          "indexRunId": 18,
+                          "dataDirUri": "user_2/kb_5/build_27/index/output"
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "pythonTaskId": "qt_20260505_000001_001",
+                          "taskStatus": "pending",
+                          "progressStage": "queued",
+                          "createdAt": "2026-05-05T20:20:34"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        GraphRagTaskCreateResult result = client.createTask(
+                "basic",
+                "问题",
+                18L,
+                "user_2/kb_5/build_27/index/output"
+        );
+
+        assertThat(result.pythonTaskId()).isEqualTo("qt_20260505_000001_001");
         server.verify();
     }
 

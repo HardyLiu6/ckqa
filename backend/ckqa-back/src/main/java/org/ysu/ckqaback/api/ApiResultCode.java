@@ -66,6 +66,11 @@ public enum ApiResultCode {
     QA_SESSION_NOT_FOUND(4048, "问答会话不存在"),
 
     /**
+     * 知识库构建流水线不存在。
+     */
+    KNOWLEDGE_BASE_BUILD_RUN_NOT_FOUND(4049, "知识库构建流水线不存在"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
@@ -109,6 +114,11 @@ public enum ApiResultCode {
      * 同一课程下知识库编码已存在。
      */
     KNOWLEDGE_BASE_CODE_EXISTS(4098, "知识库编码已存在"),
+
+    /**
+     * 当前知识库已有构建流水线未完成。
+     */
+    KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING(4099, "当前知识库已有构建流水线未完成"),
 
     /**
      * PDF 解析执行失败。

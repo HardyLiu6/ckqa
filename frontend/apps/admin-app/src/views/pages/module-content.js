@@ -4,12 +4,12 @@ import {
 } from './module-page-model.js'
 
 export const BUILD_STEP_LABELS = {
-  material: '选择课程资料',
-  parse: '解析状态检查',
-  export: '导出图谱输入',
-  prompt: '提示词调优',
-  index: '创建索引',
-  qa_check: '问答效果验证',
+  material: '资料选择',
+  parse: '解析检查',
+  export: '图谱输入',
+  prompt: 'Prompt确认',
+  index: '索引构建',
+  qa_check: '问答验证',
 }
 
 export const BUILD_STEP_KEYS = Object.keys(BUILD_STEP_LABELS)

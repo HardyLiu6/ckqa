@@ -99,14 +99,16 @@ VITE_API_TIMEOUT=15000
 4. 未登录访问业务页跳转 `/login`，无权限跳转 `/403`。
 5. 登录页支持管理员/教师开发态身份切换，并明确标记“当前为开发态身份切换，正式登录接口待接入”。
 6. 未开放页面统一显示模块、规划状态和恢复入口，避免空白路由。
-7. 系统健康页只调用 Java `/api/v1/system/health`，并区分 `reachable` 与 `ready`。
+7. 系统健康页调用 Java `/api/v1/system/health`，并识别 `graphrag-build-runs-root` / `graphrag-ready`；更重的共享输出检查由后端 `/api/v1/system/readiness` 承担。
 8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`。
-9. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
-10. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
-11. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
-12. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
-13. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
-14. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
+9. 知识库构建向导以 `buildRunId` 为运行态来源：URL 有 `buildRunId` 时加载对应 build run；没有时保持草稿选择，首次用户确认动作才创建 build run 并写回 query。
+10. 构建向导动作走 build-run API：资料选择、解析检查、图谱输入同步、Prompt 确认、索引构建和 QA 冒烟验证都由 Java `/api/v1/knowledge-base-build-runs/*` 编排。
+11. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
+12. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
+13. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
+14. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
+15. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
+16. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 
