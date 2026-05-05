@@ -354,6 +354,7 @@ POST /api/v1/knowledge-bases/{id}/build-runs
 ```bash
 python utils/fetch_from_minio.py <course_id> \
   --material-id <material_id> \
+  --json-file <jsonFile> \
   --input-dir <build_workspace>/graph-input \
   --output-file material_<material_id>.section_docs.json
 ```
@@ -1061,13 +1062,14 @@ deleteIndexArtifact(id)
 
 前端展示原则：
 
-1. 构建向导进入时先创建或恢复 `buildRunId`，所有步骤都围绕后端 build run 状态推进。
-2. sessionStorage 只做临时体验优化，不能作为唯一状态源。
-3. 知识库列表展示 `latestBuildRunStatus`、`activeIndexRunId`、`latestIndexRunStatus`、`canAsk`、`artifactReady`。
-4. 构建向导创建索引时不再直接传 `materialIds` 给 index endpoint，而是先把资料选择写入 build run。
-5. 索引运行详情展示“所属 build run、运行状态、输入资料、产物摘要、是否为当前可用版本、最近日志/错误摘要”。
-6. 删除按钮默认展示为“归档”或“清理工作区”，不要让用户误解为立即删除课程资料或 MinIO 源文件。
-7. 前端不展示服务器绝对路径，只展示产物类型、大小、创建时间、状态。
+1. 构建向导进入时，如果 URL 或后端状态中已有 `buildRunId`，先恢复该 build run；如果没有 `buildRunId`，展示“待发起构建”的草稿态，由用户显式点击开始/确认后再创建 build run，避免刷新或历史链接静默产生新流水线。
+2. 所有已发起后的步骤都围绕后端 build run 状态推进。
+3. sessionStorage 只做临时体验优化，不能作为唯一状态源。
+4. 知识库列表展示 `latestBuildRunStatus`、`activeIndexRunId`、`latestIndexRunStatus`、`canAsk`、`artifactReady`。
+5. 构建向导创建索引时不再直接传 `materialIds` 给 index endpoint，而是先把资料选择写入 build run。
+6. 索引运行详情展示“所属 build run、运行状态、输入资料、产物摘要、是否为当前可用版本、最近日志/错误摘要”。
+7. 删除按钮默认展示为“归档”或“清理工作区”，不要让用户误解为立即删除课程资料或 MinIO 源文件。
+8. 前端不展示服务器绝对路径，只展示产物类型、大小、创建时间、状态。
 
 ## 14. 权限与状态约束
 

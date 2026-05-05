@@ -202,7 +202,18 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-CREATE INDEX `idx_index_runs_build_run` ON `index_runs` (`build_run_id`);
+SET @has_idx_index_runs_build_run := (
+  SELECT COUNT(1) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'index_runs'
+    AND INDEX_NAME = 'idx_index_runs_build_run'
+);
+SET @sql := IF(@has_idx_index_runs_build_run = 0,
+  'CREATE INDEX `idx_index_runs_build_run` ON `index_runs` (`build_run_id`)',
+  'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 SET @has_fk_index_runs_build_run := (
   SELECT COUNT(1) FROM information_schema.REFERENTIAL_CONSTRAINTS
@@ -252,6 +263,8 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 ```
+
+Do not add another `qa_sessions.session_type` migration in this task: `sql/ocqa.sql` and `sql/migrations/20260429_qa_session_type.sql` already define `enum('formal','smoke')`.
 
 - [ ] **Step 2: Update `sql/ocqa.sql`**
 
@@ -506,6 +519,9 @@ ApiPageData<BuildRunSummaryResponse> listBuildRuns(Long knowledgeBaseId, String 
 BuildRunDetailResponse getBuildRun(Long id);
 BuildRunDetailResponse updateBuildRun(Long id, BuildRunUpdateRequest request);
 BuildRunGcResponse gcBuildRuns(Long knowledgeBaseId, BuildRunGcRequest request);
+BuildRunDetailResponse createCompatibilityBuildRun(Long knowledgeBaseId);
+boolean isLatestBuildRun(Long buildRunId);
+void markIndexSuccessDone(Long buildRunId, String qaStatus);
 BuildRunDetailResponse updateMaterialSelection(Long id, BuildRunMaterialSelectionRequest request);
 BuildRunDetailResponse checkParse(Long id, BuildRunParseCheckRequest request);
 BuildRunDetailResponse syncGraphInput(Long id, BuildRunGraphInputRequest request);
@@ -519,6 +535,9 @@ Rules:
 3. Save `selected_material_ids` as JSON array string.
 4. Create workspace layout and `selection/selected_materials.json` immediately after the DB row has an ID.
 5. Update `build_metadata` and `current_stage` in the same `@Transactional` method.
+6. `createCompatibilityBuildRun` creates a build run for the legacy index endpoint with empty material selection, `jsonFile=section_docs.json`, `activationPolicy=index_success`, and `requestedByUserId=null`.
+7. `isLatestBuildRun` returns true only when the target build run has no newer same-knowledge-base build run by `(created_at, id)`.
+8. `markIndexSuccessDone` sets `status=success`, `current_stage=done`, `qa_status` to the supplied value, `finished_at=now`, and records the index terminal summary in `build_metadata` in the same transaction.
 
 - [ ] **Step 6: Add controllers**
 
@@ -594,6 +613,15 @@ mockMvc.perform(post(ApiPaths.API_V1 + "/knowledge-base-build-runs/27/parse-chec
         .content("{\"parseMissing\":true}"))
     .andExpect(status().isOk())
     .andExpect(jsonPath("$.data.currentStage").value("parse"));
+
+given(buildRunService.createBuildRun(eq(5L), any(BuildRunCreateRequest.class)))
+        .willThrow(new BusinessException(ApiResultCode.KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING, HttpStatus.CONFLICT));
+
+mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASES + "/5/build-runs")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"materialIds\":[3]}"))
+    .andExpect(status().isConflict())
+    .andExpect(jsonPath("$.code").value(ApiResultCode.KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING.getCode()));
 ```
 
 - [ ] **Step 8: Run tests and commit**
@@ -676,6 +704,8 @@ Add CLI argument:
 parser.add_argument("--output-file", default=None, help="写入 input-dir 的本地文件名，不改变 MinIO 源文件名")
 ```
 
+Preserve the existing `--json-file` / `--jsonl-file` option and continue passing it to `fetch_and_prepare` as `json_filename`. The Java workflow depends on using `--json-file page_docs.json` or `--json-file normalized_docs.json` for validation inputs while `--output-file` controls only the local filename.
+
 - [ ] **Step 3: Add query context tests**
 
 In `test_query_task_manager.py`, add a context-aware test:
@@ -746,6 +776,29 @@ def _resolve_data_dir(self, data_dir_uri: str | None) -> Path | None:
         raise ValueError("dataDirUri 超出允许的构建根目录")
     return resolved
 ```
+
+Update `api_runtime_config.py` so the API runtime owns the build-runs-root default:
+
+```python
+@dataclass(frozen=True)
+class ApiRuntimeConfig:
+    output_dir: Path
+    lancedb_uri: str
+    build_runs_root: Path
+    api_host: str
+    api_port: int
+```
+
+In `load_api_runtime_config`, resolve:
+
+```python
+build_runs_root = _resolve_repo_path(
+    env.get("GRAPHRAG_BUILD_RUNS_ROOT"),
+    PROJECT_ROOT / "runtime" / "kb-build-runs",
+)
+```
+
+Pass `CONFIG.build_runs_root` into `QueryTaskManager(build_runs_root=CONFIG.build_runs_root)` in `main.py`.
 
 - [ ] **Step 5: Update FastAPI request model**
 
@@ -970,7 +1023,7 @@ IndexRunResponse createBuildRunIndexRun(Long buildRunId, BuildRunIndexRequest re
 In the workflow:
 
 1. Copy `graph-input/material_{id}.section_docs.json` to `index/input/material_{id}.section_docs.json`.
-2. If the multi-JSON GraphRAG smoke fails in Task 7, merge arrays into `index/input/build_{buildRunId}.section_docs.json`.
+2. If the multi-JSON GraphRAG check in Task 7 Step 4 real integration smoke fails, merge arrays into `index/input/build_{buildRunId}.section_docs.json`.
 3. Never read or clean `graphrag_pipeline/input`.
 
 - [ ] **Step 8: Add automatic activation policy tests**
@@ -1096,6 +1149,8 @@ In `KnowledgeBaseBuildRunService.runQaSmoke(Long buildRunId, BuildRunQaSmokeRequ
 
 Keep `build_run.status=success` when QA fails.
 
+Schema note: `session_type='smoke'` is already supported by `sql/ocqa.sql` and `sql/migrations/20260429_qa_session_type.sql`; this task should reuse that existing enum value instead of adding another QA migration.
+
 - [ ] **Step 4: Split health and readiness**
 
 Keep `GET /api/v1/system/health` lightweight:
@@ -1173,7 +1228,14 @@ test('knowledge-base api exposes build-run endpoints', async () => {
 
 - [ ] **Step 2: Implement API functions**
 
-Add to `knowledge-bases.js`:
+Change the top imports in `knowledge-bases.js` to:
+
+```js
+import { http } from '../axios/index.js'
+import { normalizePageData, unwrapApiResponse } from './client.js'
+```
+
+Add:
 
 ```js
 export async function createBuildRun(knowledgeBaseId, payload, client = http) {
@@ -1197,7 +1259,49 @@ export async function runBuildRunQaSmoke(id, payload, client = http) {
 }
 ```
 
-Also add list/update/delete/material-selection/parse-check/prompt-confirmation/active/artifact functions from the design.
+Add the remaining functions in the same module:
+
+```js
+export async function listKnowledgeBaseBuildRuns(knowledgeBaseId, params = {}, client = http) {
+  return normalizePageData(unwrapApiResponse(await client.get(`/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/build-runs`, { params })))
+}
+
+export async function updateBuildRun(id, payload, client = http) {
+  return unwrapApiResponse(await client.patch(`/knowledge-base-build-runs/${encodeURIComponent(id)}`, payload))
+}
+
+export async function deleteBuildRun(id, options = {}, client = http) {
+  return unwrapApiResponse(await client.delete(`/knowledge-base-build-runs/${encodeURIComponent(id)}`, { params: options }))
+}
+
+export async function updateBuildRunMaterialSelection(id, payload, client = http) {
+  return unwrapApiResponse(await client.put(`/knowledge-base-build-runs/${encodeURIComponent(id)}/material-selection`, payload))
+}
+
+export async function checkBuildRunParse(id, payload, client = http) {
+  return unwrapApiResponse(await client.post(`/knowledge-base-build-runs/${encodeURIComponent(id)}/parse-check`, payload))
+}
+
+export async function confirmBuildRunPrompt(id, payload, client = http) {
+  return unwrapApiResponse(await client.post(`/knowledge-base-build-runs/${encodeURIComponent(id)}/prompt-confirmation`, payload))
+}
+
+export async function activateIndexRun(knowledgeBaseId, indexRunId, client = http) {
+  return unwrapApiResponse(await client.post(`/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/active-index-run`, { indexRunId }))
+}
+
+export async function listIndexRunArtifacts(indexRunId, client = http) {
+  return unwrapApiResponse(await client.get(`/index-runs/${encodeURIComponent(indexRunId)}/artifacts`))
+}
+
+export async function getIndexArtifact(id, client = http) {
+  return unwrapApiResponse(await client.get(`/index-artifacts/${encodeURIComponent(id)}`))
+}
+
+export async function deleteIndexArtifact(id, client = http) {
+  return unwrapApiResponse(await client.delete(`/index-artifacts/${encodeURIComponent(id)}`))
+}
+```
 
 - [ ] **Step 3: Move build wizard source of truth to buildRunId**
 
@@ -1214,8 +1318,9 @@ export function resolveBuildRunIdQuery(query = {}) {
 In `module-loaders.js`:
 
 1. If `buildRunId` exists, call `getBuildRun(buildRunId)`.
-2. If route has material selection but no `buildRunId`, call `createBuildRun`.
-3. Keep sessionStorage only as selection fallback, not state truth.
+2. If there is no `buildRunId`, do not call `createBuildRun` during page load; show the wizard in `not_started` state with the current material selection as a draft.
+3. Call `createBuildRun` only from the explicit user action that starts or confirms the build, then write the returned `buildRunId` into the route query.
+4. Keep sessionStorage only as selection fallback, not state truth.
 
 - [ ] **Step 4: Update workflow actions**
 
