@@ -57,8 +57,8 @@ python utils/apiTest.py
 # Audit active docs/config drift from repo root
 python ../scripts/audit_repo_drift.py --strict
 
-# Neo4j: start database, then import graph data
-cd infra/neo4j && docker-compose up -d && cd ../..
+# Neo4j: start database from the repository-root unified compose, then import graph data
+docker compose --env-file ../infra/.env -f ../infra/docker-compose.yml up -d neo4j
 python utils/neo4jTest.py --folder output
 
 # 3D knowledge graph visualization
@@ -145,7 +145,7 @@ pdf_ingest 导出的 json
 
 ### Infrastructure
 
-- **Neo4j**：Docker Compose 位于 `infra/neo4j/`。
+- **Neo4j / OneAPI**：Docker Compose 统一位于仓库根目录 `infra/docker-compose.yml`。
 - **LanceDB**：文件型向量库，路径通常在 `output/lancedb/`。
 - **OpenAI-compatible endpoint / OneAPI**：通常由 GraphRAG CLI 读取 `.env` 中的模型配置。
 

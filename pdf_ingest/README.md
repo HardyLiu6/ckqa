@@ -37,7 +37,7 @@
 | `scripts/pdf_processor/storage_service.py` | MinIO 服务层 |
 | `scripts/pdf_processor/export_audit.py` | 导出结果审计辅助脚本 |
 | `scripts/cleanup_legacy_course_data.py` | 清理旧版课程 ID 关联的 MySQL / MinIO 本地数据 |
-| `sql/ocqa.sql` | 数据库初始化脚本 |
+| `../sql/ocqa.sql` | 仓库级数据库初始化脚本 |
 
 ## 环境准备
 
@@ -64,7 +64,7 @@ pip install -e ".[dev]"
 
 ```bash
 cd pdf_ingest
-mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/ocqa.sql
+mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < ../sql/ocqa.sql
 ```
 
 初始化完成后，建议先检查核心种子数据和关键表是否存在：
@@ -88,7 +88,7 @@ SHOW TABLES LIKE 'qa_sessions';
 
 ```bash
 cd pdf_ingest
-mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < sql/migrations/20260504_role_user_test_data.sql
+mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < ../sql/migrations/20260504_role_user_test_data.sql
 ```
 
 如果本机 MinIO 中已经保留了旧种子教材 PDF、MinerU 解析产物和 GraphRAG 导出，但 MySQL 被重置，可以执行幂等修复脚本恢复课程资料元数据：

@@ -48,8 +48,8 @@ python -m pytest tests/test_block_renderer.py
 python scripts/cleanup_legacy_course_data.py --env-file .env
 python scripts/cleanup_legacy_course_data.py --env-file .env --execute
 
-# Initialize database
-mysql -u root -p < sql/ocqa.sql
+# Initialize database from the repository root SQL directory
+mysql -u root -p ocqa < ../sql/ocqa.sql
 ```
 
 ## Architecture
@@ -81,7 +81,7 @@ PDF → MinerU Cloud API → JSON (content_list.json)
 - **Config dataclass**: `Config.from_env()` loads settings from `.env` with multi-location search
 - **State Machine**: PDF processing status tracked as `pending → processing → done/failed` in MySQL
 
-### Database Schema (`sql/ocqa.sql`)
+### Database Schema (`../sql/ocqa.sql`)
 
 ```
 courses (1) ──→ (N) course_materials (N) ──→ (1) material_objects

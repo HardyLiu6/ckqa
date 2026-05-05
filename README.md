@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-05-03
+> 审计日期：2026-05-05
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -10,8 +10,10 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 2. `graphrag_pipeline/`
    负责拉取导出的 JSON、执行 Microsoft GraphRAG 建索引，并通过 FastAPI 提供 OpenAI 兼容问答接口。
 
-其余目录目前属于编排入口或配套前端/后端工作区：
+其余目录目前属于编排入口、基础设施或配套前端/后端工作区：
 
+- `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
+- `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
 - `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
@@ -24,19 +26,52 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | --- | --- | --- | --- |
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
+| `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
+| `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
 | `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本机启动前后端服务
 
-开发阶段推荐把入口分成两层：
+开发阶段推荐把入口分成三层：
 
 默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`，student-app `5174`。
 
+- 基础设施容器统一由根目录 `infra/docker-compose.yml` 管理。
 - 前端用 `pnpm` 原生命令启动，不额外包一层 shell 脚本。
 - 后端用 Java 编排层启动；开发态可让 Java 在启动时托管拉起 GraphRAG Python API。
 - `pdf_ingest/` 当前没有常驻 HTTP 服务，Java 后端会在解析/导出动作发生时按需调用它的 CLI。
+
+### 0. 一键启动基础设施容器
+
+首次使用先准备本机密钥文件：
+
+```bash
+cd infra
+cp .env.example .env
+# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码
+```
+
+统一启动：
+
+```bash
+cd infra
+docker compose up -d
+docker compose ps
+```
+
+如果当前机器已经存在旧容器，第一次切换到统一 compose 时只删除容器对象，不删除数据目录：
+
+```bash
+docker stop neo4j one-api mysql minio
+docker rm neo4j one-api mysql minio
+
+cd infra
+docker compose up -d
+```
+
+当前数据保留策略见 [infra/README.md](infra/README.md)：MySQL 继续挂载 `/home/sunlight/mysql/data`，MinIO 继续挂载 `/home/sunlight/minio/data`，One API 和 Neo4j 数据已经随 `infra/` 迁到仓库根目录下。
 
 ### 1. 一键启动前端
 
@@ -92,7 +127,7 @@ export GRAPHRAG_API_MANAGED_ENABLED=true
 
 #### 3.1 确认基础依赖
 
-MySQL、MinIO、One API、Neo4j 等容器通常由本机开发环境提供。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，GraphRAG 输出目录中存在 `output/*.parquet` 和 `output/lancedb/`。
+MySQL、MinIO、One API、Neo4j 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，GraphRAG 输出目录中存在 `output/*.parquet` 和 `output/lancedb/`。
 
 ```bash
 docker ps

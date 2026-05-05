@@ -2,7 +2,7 @@ from pathlib import Path
 import unittest
 
 
-SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "ocqa.sql"
+SQL_PATH = Path(__file__).resolve().parents[2] / "sql" / "ocqa.sql"
 
 
 class TestOCQAAccessSchemaContract(unittest.TestCase):

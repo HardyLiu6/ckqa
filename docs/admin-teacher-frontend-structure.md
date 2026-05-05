@@ -56,7 +56,7 @@
 
 1. `frontend/apps/admin-app/` 已经完成管理端壳层、开发态身份切换、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、索引详情、QA 冒烟验证和 Playwright 故障注入验收，本结构文档继续作为页面/路由/RBAC 设计依据，而不是“起步页待搭骨架”的提案。
 2. `backend/ckqa-back/` 已提供 `/api/v1` 下的课程、课程资料、知识库、PDF 解析、GraphRAG 导出、索引任务、问答任务、QA 冒烟会话和系统健康接口。
-3. `pdf_ingest/sql/ocqa.sql` 已包含 `users`、`roles`、`permissions`、`user_roles`、`role_permissions`、`course_memberships`、`course_materials`、`material_objects`、`knowledge_bases`、`index_runs`、`qa_sessions`、`qa_messages`、`authorization_audit_logs` 等表结构。
+3. 根目录 `sql/ocqa.sql` 已包含 `users`、`roles`、`permissions`、`user_roles`、`role_permissions`、`course_memberships`、`course_materials`、`material_objects`、`knowledge_bases`、`index_runs`、`qa_sessions`、`qa_messages`、`authorization_audit_logs` 等表结构。
 4. 正式前端应通过 Java `/api/v1` 调用业务能力，不应直接请求 GraphRAG Python 服务。GraphRAG Python 服务属于后端内部编排和开发调试依赖。
 5. 2026-04-28 真实数据接入设计稿与实施计划已完成并归档；当前启动方式、验证命令和已落地模块以仓库根 `README.md`、`frontend/apps/admin-app/README.md`、`backend/ckqa-back/README.md` 为准。
 

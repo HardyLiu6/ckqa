@@ -33,6 +33,12 @@ This repository currently has five notable areas, with the two Python modules as
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
    - Provides `/api/v1` course, PDF, knowledge-base, index, async QA, QA smoke session, and system health endpoints.
    - Still depends on `pdf_ingest/` and `graphrag_pipeline/` for real parsing, indexing, and QA work.
+6. `infra/`
+   - Repository-root Docker Compose entrypoint for local MySQL, MinIO, One API, and Neo4j.
+   - Runtime data directories are ignored by Git; preserve bind mounts when changing deployment.
+7. `sql/`
+   - Repository-root MySQL schema and migration scripts.
+   - `sql/ocqa.sql` is the database initialization source of truth.
 
 ## Read First
 
@@ -51,10 +57,46 @@ Read these when needed for more detail:
 - `docs/admin-teacher-frontend-structure.md` when touching admin-app information architecture, routes, or RBAC
 - `backend/ckqa-back/README.md`
 - `docs/student-backend-graphrag-api-contract.md` when touching student/backend/GraphRAG API integration
+- `infra/README.md` when touching Docker Compose, local container deployment, or data mount layout
 
 If docs and code differ, trust the code and call out the mismatch.
 
 ## Module Guidance
+
+### `infra/`
+
+Important files:
+
+- `docker-compose.yml`
+- `.env.example`
+- `README.md`
+
+Environment and commands:
+
+- Prepare local secrets with `cp infra/.env.example infra/.env`, then edit `infra/.env`.
+- Start all local infrastructure: `cd infra && docker compose up -d`.
+- Verify: `cd infra && docker compose ps`.
+
+Notes:
+
+- The unified compose manages `mysql`, `minio`, `one-api`, and `neo4j` with the existing local ports.
+- MySQL and MinIO defaults preserve the current external bind mounts `/home/sunlight/mysql/data` and `/home/sunlight/minio/data`.
+- Neo4j and One API data live under `infra/neo4j/neo4j/` and `infra/one-api/one-api/data/`; these paths are runtime data and must not be committed.
+- Do not run `docker compose down -v` unless explicitly asked to destroy local data.
+
+### `sql/`
+
+Important files:
+
+- `ocqa.sql`
+- `migrations/20260423_course_materials.sql`
+- `migrations/20260429_qa_session_type.sql`
+- `migrations/20260504_role_user_test_data.sql`
+
+Notes:
+
+- `sql/ocqa.sql` is now at the repository root, not under `pdf_ingest/`.
+- From `pdf_ingest/`, use `../sql/ocqa.sql` and `../sql/migrations/...`.
 
 ### `pdf_ingest/`
 
@@ -126,6 +168,7 @@ Notes:
 - `utils/main.py` reads repo-local `.env` / environment variables, defaults to the repo-local `output/` directory, and always delegates search to `graphrag query` in CLI mode.
 - GraphRAG input is now direct `json`; `fetch_from_minio.py` only keeps `jsonl` conversion for backward compatibility.
 - `output/` contains both parquet data and `lancedb/`; both are required for serving.
+- Neo4j and One API containers are managed by the repository-root `infra/docker-compose.yml`; do not reintroduce module-local compose files under `graphrag_pipeline/`.
 - After a local reset, `input/`, `output/`, `prompts/candidates/`, prompt tuning reports, and `prompts/final/active_prompt.json` may be absent or empty. Regenerate them from the current course extraction instead of assuming old `os` / `ds` artifacts exist.
 - The reset default prompt state is `base`, pointing directly to `prompts/*.txt`; only use `finalize_candidate_prompt.py` after new candidates have been generated.
 - When updating active guidance files or runtime defaults, run `python scripts/audit_repo_drift.py --strict`.

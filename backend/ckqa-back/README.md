@@ -139,9 +139,19 @@ export INDEX_STALE_SECONDS=2400
 
 一期联调推荐按下面顺序启动：
 
-1. 启动 MySQL
+1. 通过仓库根目录 `infra/docker-compose.yml` 启动 MySQL、MinIO、One API、Neo4j
 2. 根据需要确认 `pdf_ingest/` 和 `graphrag_pipeline/` 根目录、Python 解释器路径已配置
 3. 启动 `backend/ckqa-back`
+
+基础设施启动：
+
+```bash
+cd ../../infra
+cp .env.example .env
+# 编辑 .env，填入当前 MySQL root 密码和 MinIO 账号密码
+docker compose up -d
+docker compose ps
+```
 
 开发态可以让 Java 后端托管启动 GraphRAG API：设置 `GRAPHRAG_API_MANAGED_ENABLED=true` 后，Spring Boot 启动阶段会先探测 `GRAPHRAG_API_BASE_URL/health`，服务已存在则复用，服务不可达则在 `GRAPHRAG_ROOT` 下启动 `utils/main.py`。`pdf_ingest/` 当前没有常驻 HTTP 服务，仍由 Java 后端在解析/导出动作发生时按需调用 CLI。
 

@@ -91,16 +91,16 @@ MINIO_SECRET_KEY=minioadmin
 
 # MySQL
 MYSQL_HOST=localhost
-MYSQL_PORT=3306
+MYSQL_PORT=23306
 MYSQL_USER=root
 MYSQL_PASSWORD=your_password
-MYSQL_DATABASE=mineru_parser
+MYSQL_DATABASE=ocqa
 ```
 
 ### 3. 初始化数据库
 
 ```bash
-mysql -u root -p < sql/init.sql
+mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < ../sql/ocqa.sql
 ```
 
 ### 4. 使用
@@ -306,44 +306,23 @@ course-artifacts/               # 解析结果存储桶
 2. 在 [https://mineru.net/apiManage](https://mineru.net/apiManage) 申请API权限
 3. 审核通过后获取Token
 
-## Docker部署MinIO和MySQL
+## Docker 部署 MinIO 和 MySQL
 
-```yaml
-# docker-compose.yml
-version: '3.8'
+CKQA 当前不再维护模块内独立 compose。MySQL、MinIO、One API、Neo4j 统一由仓库根目录 `infra/docker-compose.yml` 管理，数据保留策略见 `../../infra/README.md`。
 
-services:
-  minio:
-    image: minio/minio:latest
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
+首次配置：
 
-  mysql:
-    image: mysql:8.0
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: your_password
-      MYSQL_DATABASE: mineru_parser
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-
-volumes:
-  minio_data:
-  mysql_data:
+```bash
+cd ../../infra
+cp .env.example .env
+# 编辑 .env，填入当前 MySQL root 密码和 MinIO 账号密码
 ```
 
 启动服务：
+
 ```bash
-docker-compose up -d
+cd ../../infra
+docker compose up -d mysql minio
 ```
 
 ## 常见问题

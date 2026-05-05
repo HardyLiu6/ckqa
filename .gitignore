@@ -150,10 +150,15 @@ graphrag_pipeline/inputs/artifacts/
 # LanceDB
 graphrag_pipeline/**/lancedb/
 
-# infra - 忽略数据文件但保留 docker-compose
-graphrag_pipeline/infra/*/*
-!graphrag_pipeline/infra/*/docker-compose.yml
-!graphrag_pipeline/infra/*/docker-compose.yaml
+# infra - 忽略容器运行态数据与本机部署密钥，但保留统一 docker-compose 与示例配置
+infra/.env
+infra/mysql/
+infra/minio/
+infra/neo4j/neo4j/
+infra/one-api/one-api/
+!infra/docker-compose.yml
+!infra/.env.example
+!infra/README.md
 
 # =========================
 # pdf_ingest 项目特定

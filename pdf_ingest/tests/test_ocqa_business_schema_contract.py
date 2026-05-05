@@ -3,15 +3,15 @@ import re
 import unittest
 
 
-SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "ocqa.sql"
+SQL_PATH = Path(__file__).resolve().parents[2] / "sql" / "ocqa.sql"
 MIGRATION_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "sql"
     / "migrations"
     / "20260423_course_materials.sql"
 )
 SESSION_TYPE_MIGRATION_PATH = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "sql"
     / "migrations"
     / "20260429_qa_session_type.sql"

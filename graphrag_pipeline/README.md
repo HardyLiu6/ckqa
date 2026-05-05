@@ -289,9 +289,7 @@ python utils/fetch_from_minio.py <course_id> --material-id <material_id> --json-
 ### Neo4j 导入
 
 ```bash
-cd infra/neo4j
-docker-compose up -d
-cd ../..
+docker compose --env-file ../infra/.env -f ../infra/docker-compose.yml up -d neo4j
 
 python utils/neo4jTest.py --folder output
 ```
