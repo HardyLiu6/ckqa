@@ -402,8 +402,15 @@ python utils/fetch_from_minio.py <course_id> \
   -> 写 index_artifacts
   -> markSuccess / markFailed
   -> activateOnSuccess=true 时按 activation_policy 和 auto-activation-policy 尝试更新 active 指针
-  -> 更新 build_run 终态或等待 qa_smoke
+  -> 按 QA 验证策略推进 build_run.current_stage
 ```
+
+索引成功后的阶段推进：
+
+1. 首轮默认不让 build run 无限停留在“等待验证”。index run 成功、artifact 登记和 active 切换处理完成后，如果没有显式要求立即 QA 验证，则写 `current_stage=done`、`status=success`、`qa_status=skipped`、`finished_at=now`。
+2. 如果后续增加 `qaSmokeRequired=true` 或前端在索引成功后立即触发 `POST /qa-smoke`，则先写 `current_stage=qa_smoke`、`qa_status=running`，QA 完成后再回到 `current_stage=done`。
+3. QA 成功时 `status=success`、`qa_status=success`；QA 失败时 `status` 仍保持 `success`，`qa_status=failed`，错误摘要写入 `build_metadata.qaSmoke`。
+4. 前端判断“索引是否可用”优先看 `latestIndexRunStatus=success`、`artifactReady=true`、`canAsk=true`；判断“验证是否完成”再看 `qaStatus`。
 
 成功切换规则：
 
@@ -422,7 +429,7 @@ python utils/fetch_from_minio.py <course_id> \
 2. `activation_policy=index_success` 时，索引成功后进入系统级策略判断。
 3. `auto-activation-policy=latest-build-only` 时，只有该知识库下最新创建的 build run 可以自动激活；被较新 build run 压过的运行写 `activationResult=skipped_newer_build_exists`。
 4. 自动激活被跳过或失败时，`knowledge_base_build_runs.active_index_run_id` 保持 `NULL`，`knowledge_bases.active_index_run_id` 不变，原因写入 `index_runs.run_metadata.activationResult` 和 `build_metadata.activation`。
-5. 自动或手动激活真正成功时，事务内同时更新 `knowledge_bases.active_index_run_id={indexRunId}`，清空同知识库其他 build run 的 `active_index_run_id`，再写当前 build run 的 `active_index_run_id={indexRunId}`。
+5. 自动或手动激活真正成功时，事务内同时更新 `knowledge_bases.active_index_run_id={indexRunId}`，清空同知识库中 `active_index_run_id IS NOT NULL` 的 build run 行，再写当前 build run 的 `active_index_run_id={indexRunId}`。
 6. `knowledge_bases.active_index_run_id` 是唯一权威的当前 active 指针；`knowledge_base_build_runs.active_index_run_id` 是面向列表和详情的冗余标记，必须跟随 active 切换同步维护。
 
 失败处理：
@@ -505,6 +512,7 @@ CREATE TABLE knowledge_base_build_runs (
   KEY idx_kb_build_status (knowledge_base_id, status),
   KEY idx_kb_build_user_status (requested_by_user_id, status),
   KEY idx_kb_build_created (knowledge_base_id, created_at, id),
+  KEY idx_kb_build_active_index (knowledge_base_id, active_index_run_id),
   CONSTRAINT fk_kb_build_runs_kb FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases(id)
 );
 ```
@@ -517,7 +525,7 @@ CREATE TABLE knowledge_base_build_runs (
 4. `activation_policy=index_success` 对应请求中的 `activateOnSuccess=true`；`manual` 对应 `false`。
 5. `build_metadata.stageSummary` 保存各阶段子状态、错误摘要、activation 结果和 QA 摘要，避免首轮新增过多阶段明细表。
 6. `active_index_run_id` 只有在该 build run 的 index run 真正成为当前 active 时才写入；自动激活被策略跳过、手动模式或激活失败时保持 `NULL`。
-7. active 切换时必须清空同知识库其他 build run 的 `active_index_run_id`，保证该字段只是 `knowledge_bases.active_index_run_id` 的冗余视图，不成为第二套权威状态。
+7. active 切换时只清空同知识库中 `active_index_run_id IS NOT NULL` 的 build run 行，保证该字段只是 `knowledge_bases.active_index_run_id` 的冗余视图，不成为第二套权威状态，也避免锁住大量历史行。
 8. 所有 `build_metadata` 更新必须与 `status`、`current_stage`、`qa_status` 或 `active_index_run_id` 的变更放在同一个数据库事务中；服务层应锁定 build run 行后整体更新，不允许 Controller 或异步任务单独覆盖 JSON 字段。
 
 ### 11.2 扩展 `index_runs`
@@ -867,7 +875,8 @@ POST /api/v1/knowledge-bases/{id}/build-runs/gc
 
 1. `dryRun=true` 只返回候选项，不改数据库和文件系统。
 2. `deleteWorkspace=true` 只作用于非 active、非 running、超出保留策略或已归档的 build run。
-3. 前端首轮可把该能力放到知识库详情的“维护动作”，不放在构建向导主流程。
+3. `dryRun=false` 时返回结构保持一致，`archivedBuildRunIds` 列出实际归档的 build run，`deletedWorkspaceCount` 是实际删除的 workspace 数量，`skippedActiveBuildRunIds` 仍返回被保护跳过的 build run。
+4. 前端首轮可把该能力放到知识库详情的“维护动作”，不放在构建向导主流程。
 
 ### 12.3 构建阶段动作 API
 
@@ -958,6 +967,28 @@ PATCH /api/v1/index-runs/{id}
 DELETE /api/v1/index-runs/{id}?deleteArtifacts=false
 POST /api/v1/knowledge-bases/{id}/active-index-run
 ```
+
+#### 手动激活索引运行
+
+```http
+POST /api/v1/knowledge-bases/{id}/active-index-run
+```
+
+请求：
+
+```json
+{
+  "indexRunId": 18
+}
+```
+
+规则：
+
+1. 请求参数以 `indexRunId` 为准，`buildRunId` 只可作为响应展示字段，不能作为激活依据。
+2. 目标 `index_run` 必须属于该知识库、状态为 `success`，且必要 artifact 状态为 `ready`。
+3. 手动激活使用与自动激活相同的事务：锁定目标 `knowledge_bases` 行，更新 `knowledge_bases.active_index_run_id`，清空同知识库中 `active_index_run_id IS NOT NULL` 的 build run 行，再把目标 run 所属 build run 的 `active_index_run_id` 写为 `indexRunId`。
+4. 历史兼容 run 若 `build_run_id=NULL`，只更新 `knowledge_bases.active_index_run_id` 和 `index_runs.run_metadata.activationResult=manual_activated_legacy`，前端显示为“历史索引运行”。
+5. 手动激活成功后返回最新 `KnowledgeBaseDetailResponse` 或包含 `activeIndexRunId`、`activeBuildRunId`、`activationResult` 的动作结果。
 
 兼容旧创建接口：
 
@@ -1152,8 +1183,11 @@ conda run -n graphrag-oneapi python -m pytest tests/
 10. `ProcessRunner` 将 stdout/stderr 写入 `index/logs/process.log`，详情接口能返回尾部日志。
 11. GC dry-run、归档、删除 workspace、跳过 active/running run 的行为都有服务层测试。
 12. `concurrent-builds-enabled=false` 时，同一知识库已有 `pending/running` build run 会让新建接口返回 409，其他知识库不受影响。
-13. 自动激活被跳过时，`knowledge_base_build_runs.active_index_run_id` 保持 `NULL`；真正激活时清空同知识库其他 build run 的冗余 active 指针。
+13. 自动激活被跳过时，`knowledge_base_build_runs.active_index_run_id` 保持 `NULL`；真正激活时只清空同知识库中 `active_index_run_id IS NOT NULL` 的冗余 active 指针。
 14. 阶段推进、`build_metadata` 写入和 `current_stage` / `status` 更新在同一事务内完成，避免 JSON 覆盖掉并发阶段摘要。
+15. index success 后未触发 QA 时，build run 进入 `done/success/qa_status=skipped`；触发 QA 时进入 `qa_smoke`，完成后回到 `done`。
+16. 手动激活接口以 `indexRunId` 为参数，并复用自动激活事务；只清理 `active_index_run_id IS NOT NULL` 的 build run 行。
+17. GC dry-run 与正式执行返回同一结构，正式执行会填充实际归档 ID 和删除数量。
 
 建议命令：
 
@@ -1236,6 +1270,10 @@ pnpm build
 | 定义 `concurrent-builds-enabled=false` 行为 | 采纳 | 范围限定同一知识库，已有 `pending/running` build run 时返回 HTTP 409 和建议业务码。 |
 | 查询上下文示例避免绝对路径 | 采纳 | 内部契约改用相对 `dataDirUri`，由 Python 在 `GRAPHRAG_BUILD_RUNS_ROOT` 下解析并校验。 |
 | 明确 `build_metadata` 并发更新规则 | 采纳 | 要求与阶段/status/active 字段同事务更新，服务层锁定 build run 行后整体写入，禁止单独覆盖 JSON。 |
+| 明确 index success 后 `current_stage` 推进时机 | 采纳 | 默认未触发 QA 时直接 `done/success/qa_status=skipped`；触发 QA 时短暂进入 `qa_smoke`，完成后回到 `done`。 |
+| 限定 active 冗余字段清理范围 | 采纳 | 激活事务只清空同知识库中 `active_index_run_id IS NOT NULL` 的 build run，并补索引避免锁住大量历史行。 |
+| 补手动激活接口内部逻辑 | 采纳 | `POST /active-index-run` 请求体使用 `indexRunId`，复用自动激活事务和冗余 active 指针维护规则。 |
+| 明确 GC 非 dry-run 返回体 | 采纳 | 正式执行与 dry-run 返回同一结构，实际填充归档 ID、删除数量和保护跳过项。 |
 | 近期改用 `graphrag.api.build_index()` | 暂不采纳 | 官方 API 存在，但本仓库已把 3.0.9 路径收口到 CLI；同时存在过 `build_index()` storage 相对路径 bug。首轮继续 subprocess + env 注入，后续单独评估。 |
 | 引入 Spring Statemachine | 暂不采纳 | Spring Statemachine 支持 machineId、Guard、持久化，但对当前 7 个顺序阶段偏重；首轮用 enum + 服务层 Guard，更符合最小可运行原则。 |
 | UUID v7 作为 build version 必选方案 | 暂不采纳 | UUID v7 有排序优势，但 Java 标准库无内置实现；当前展示版本号用时间戳毫秒 + 随机后缀足够，避免新增依赖。 |
