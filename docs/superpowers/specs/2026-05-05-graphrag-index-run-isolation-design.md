@@ -244,7 +244,6 @@ GRAPHRAG_OUTPUT_DIR={build_workspace}/index/output
 GRAPHRAG_STORAGE_DIR={build_workspace}/index/output
 GRAPHRAG_REPORTING_DIR={build_workspace}/index/reports
 GRAPHRAG_CACHE_DIR={build_workspace}/index/cache
-GRAPHRAG_LANCEDB_URI={build_workspace}/index/output/lancedb
 ```
 
 命令仍为：
@@ -254,6 +253,8 @@ python -m graphrag index --root .
 ```
 
 这样保留 GraphRAG CLI 路径，但让每个 CLI 进程读取自己的输入并写自己的输出。
+
+注意：索引阶段不要依赖 `GRAPHRAG_LANCEDB_URI`。当前 `settings.yaml` 的 `vector_store.db_uri` 是 `${GRAPHRAG_STORAGE_DIR}/lancedb`，因此 LanceDB 路径由 `GRAPHRAG_STORAGE_DIR` 派生。`GRAPHRAG_LANCEDB_URI` 只保留给 Python API 运行时配置、健康检查或兼容旧脚本使用，不能作为索引 CLI 的生效配置来源。
 
 GraphRAG Python API 评估结论：
 
@@ -374,6 +375,12 @@ python utils/fetch_from_minio.py <course_id> \
   -> 创建 build workspace
   -> 保存资料选择快照
 
+前端 POST /api/v1/knowledge-base-build-runs/{buildRunId}/parse-check
+  -> Java 读取 course_materials / parse_results / parse_logs 的解析状态
+  -> 可按 parseMissing=true 触发缺失资料解析，首轮也可以只刷新已有状态
+  -> 写 parse/status_snapshot.json
+  -> 标记 build_run.stage=parse，若全部满足导出前置条件则允许进入 graph_input_export
+
 前端 POST /api/v1/knowledge-base-build-runs/{buildRunId}/graph-input
   -> Java 校验资料属于该知识库课程
   -> 按 material_id 拉取 GraphRAG 输入到 graph-input/
@@ -394,7 +401,7 @@ python utils/fetch_from_minio.py <course_id> \
   -> 扫描 index/output/reports/lancedb/input/manifest
   -> 写 index_artifacts
   -> markSuccess / markFailed
-  -> activateOnSuccess=true 时更新 knowledge_bases.active_index_run_id
+  -> activateOnSuccess=true 时按 activation_policy 和 auto-activation-policy 尝试更新 active 指针
   -> 更新 build_run 终态或等待 qa_smoke
 ```
 
@@ -408,6 +415,15 @@ python utils/fetch_from_minio.py <course_id> \
 6. active 切换在数据库事务内执行，并对目标 `knowledge_bases` 行加锁或使用等价乐观锁条件更新；首轮不引入 Redis 分布式锁。
 7. 默认允许同一知识库并发 build run，但 `auto-activation-policy=latest-build-only`：只有该知识库下创建时间或 ID 最新的 build run 才能自动激活。较早 build run 后完成时仍标记 `success`，但自动激活结果为 `skipped_newer_build_exists`。
 8. 管理员通过 `POST /api/v1/knowledge-bases/{id}/active-index-run` 手动激活历史 success run 时，可以覆盖上述自动激活策略。
+
+`activation_policy` 与系统级自动激活策略的交互：
+
+1. `knowledge_base_build_runs.activation_policy=manual` 时，索引成功只登记产物，不尝试更新 `knowledge_bases.active_index_run_id`；`activationResult=manual_required`。
+2. `activation_policy=index_success` 时，索引成功后进入系统级策略判断。
+3. `auto-activation-policy=latest-build-only` 时，只有该知识库下最新创建的 build run 可以自动激活；被较新 build run 压过的运行写 `activationResult=skipped_newer_build_exists`。
+4. 自动激活被跳过或失败时，`knowledge_base_build_runs.active_index_run_id` 保持 `NULL`，`knowledge_bases.active_index_run_id` 不变，原因写入 `index_runs.run_metadata.activationResult` 和 `build_metadata.activation`。
+5. 自动或手动激活真正成功时，事务内同时更新 `knowledge_bases.active_index_run_id={indexRunId}`，清空同知识库其他 build run 的 `active_index_run_id`，再写当前 build run 的 `active_index_run_id={indexRunId}`。
+6. `knowledge_bases.active_index_run_id` 是唯一权威的当前 active 指针；`knowledge_base_build_runs.active_index_run_id` 是面向列表和详情的冗余标记，必须跟随 active 切换同步维护。
 
 失败处理：
 
@@ -433,27 +449,29 @@ Python GraphRAG 内部任务接口增加内部字段：
   "mode": "local",
   "prompt": "请解释进程调度的基本思想",
   "indexRunId": 18,
-  "dataDir": "/.../runtime/kb-build-runs/user_2/kb_5/build_27/index/output"
+  "dataDirUri": "user_2/kb_5/build_27/index/output"
 }
 ```
 
 约束：
 
-1. `indexRunId` / `dataDir` 只由 Java 后端传给 Python，浏览器不可直接传。
-2. Python 侧校验 `dataDir` 必须位于允许的 `GRAPHRAG_BUILD_RUNS_ROOT` 之下。
-3. 查询命令使用：
+1. `indexRunId` / `dataDirUri` 只由 Java 后端传给 Python，浏览器不可直接传。
+2. `dataDirUri` 是相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的路径；Python 侧解析成绝对路径后必须校验其仍位于允许根目录下。
+3. 若为了兼容旧内部实现保留 `dataDir` 绝对路径字段，也只能由 Java 后端生成，并必须经过同样的根目录校验；公开文档和前端响应不展示绝对路径。
+4. 查询命令使用：
 
 ```bash
 graphrag query --root . --data <run_output_dir> --method <mode> "<prompt>"
 ```
 
-4. 查询任务环境同时注入：
+5. 查询任务环境同时注入：
 
 ```text
 GRAPHRAG_OUTPUT_DIR={build_workspace}/index/output
 GRAPHRAG_STORAGE_DIR={build_workspace}/index/output
-GRAPHRAG_LANCEDB_URI={build_workspace}/index/output/lancedb
 ```
+
+查询 CLI 的 LanceDB 路径同样由 `GRAPHRAG_STORAGE_DIR/lancedb` 派生。`GRAPHRAG_LANCEDB_URI` 可作为 Python API health/runtime 的兼容派生值，但不能作为 `settings.yaml` 索引或查询配置的唯一依据。
 
 `QueryTaskManager` 需要从“全局 env_factory”演进为“每个任务保存自己的 IndexRunContext”，避免一个 Python API 进程只能绑定一套输出目录。
 
@@ -475,7 +493,7 @@ CREATE TABLE knowledge_base_build_runs (
   qa_status enum('pending','running','success','failed','skipped') NOT NULL DEFAULT 'skipped' COMMENT '问答验证状态',
   activation_policy enum('manual','index_success') NOT NULL DEFAULT 'index_success' COMMENT '自动激活策略',
   selected_material_ids json DEFAULT NULL COMMENT '本次构建资料选择快照',
-  active_index_run_id bigint NULL COMMENT '本次构建最终激活的索引运行',
+  active_index_run_id bigint NULL COMMENT '当前由该构建承载的激活索引运行',
   workspace_uri varchar(512) NULL COMMENT '相对 GRAPHRAG_BUILD_RUNS_ROOT 的工作区路径',
   build_metadata json DEFAULT NULL COMMENT '构建元数据',
   started_at timestamp NULL DEFAULT NULL COMMENT '开始时间',
@@ -498,6 +516,9 @@ CREATE TABLE knowledge_base_build_runs (
 3. `workspace_uri` 只存相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的路径，例如 `user_2/kb_5/build_27`。
 4. `activation_policy=index_success` 对应请求中的 `activateOnSuccess=true`；`manual` 对应 `false`。
 5. `build_metadata.stageSummary` 保存各阶段子状态、错误摘要、activation 结果和 QA 摘要，避免首轮新增过多阶段明细表。
+6. `active_index_run_id` 只有在该 build run 的 index run 真正成为当前 active 时才写入；自动激活被策略跳过、手动模式或激活失败时保持 `NULL`。
+7. active 切换时必须清空同知识库其他 build run 的 `active_index_run_id`，保证该字段只是 `knowledge_bases.active_index_run_id` 的冗余视图，不成为第二套权威状态。
+8. 所有 `build_metadata` 更新必须与 `status`、`current_stage`、`qa_status` 或 `active_index_run_id` 的变更放在同一个数据库事务中；服务层应锁定 build run 行后整体更新，不允许 Controller 或异步任务单独覆盖 JSON 字段。
 
 ### 11.2 扩展 `index_runs`
 
@@ -538,6 +559,7 @@ ALTER TABLE index_runs
   "activateOnSuccess": true,
   "activationPolicy": "index_success",
   "activationResult": "activated",
+  "activationSkippedReason": null,
   "artifactCount": 12,
   "staleTimeoutRecovered": false,
   "errorSummary": null
@@ -1030,6 +1052,13 @@ deleteIndexArtifact(id)
 8. 创建索引运行时，所选资料必须已有 GraphRAG 输入导出产物；缺失时返回明确错误，由前端引导回“导出图谱输入”步骤。
 9. 查询问答时，如果 active run 的产物缺失，返回 `KNOWLEDGE_BASE_NOT_READY`，并在详情中给出缺失 artifact 类型。
 
+`concurrent-builds-enabled=false` 时：
+
+1. 限制范围是同一个 `knowledge_base_id`，不是全局所有知识库。
+2. 创建 build run 前，若该知识库已有 `status in ('pending','running')` 且未归档的 build run，返回 HTTP `409`。
+3. 建议新增业务码 `KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING`，默认文案为“当前知识库已有构建流水线未完成”。
+4. 已终态的 `success`、`failed`、`interrupted`、`archived` 不阻止新建 build run；但其 workspace 清理仍受 active/running 跳过规则保护。
+
 ## 15. 健康检查调整
 
 `GET /api/v1/system/health` 不能再只检查 `GRAPHRAG_ROOT/output` 和 `output/lancedb`，也不应该在每次健康检查里遍历所有知识库 active run。首轮拆成轻量健康检查和可用性检查：
@@ -1097,10 +1126,10 @@ GET /api/v1/knowledge-bases/{id}/readiness
 
 1. `fetch_from_minio.py` 新增 `--output-file` 单元测试。
 2. 多 material 同步到同一 `graph-input` 时不覆盖文件。
-3. Python `/v1/query-tasks` 支持每任务 `dataDir`，并拒绝 build-runs-root 外路径。
+3. Python `/v1/query-tasks` 支持每任务 `dataDirUri`，并拒绝 build-runs-root 外路径。
 4. `graphrag query` 命令构造包含 `--data <run_output_dir>`。
 5. 用两份最小 JSON 输入验证 GraphRAG 3.0.9 会合并 `index/input/` 下多个 JSON 文件；若失败，启用单文件合并 fallback 并补测试。
-6. `dataDir` 校验覆盖路径穿越、软链接逃逸和绝对路径不在 `GRAPHRAG_BUILD_RUNS_ROOT` 下的拒绝场景。
+6. `dataDirUri` 校验覆盖路径穿越、软链接逃逸和兼容绝对 `dataDir` 不在 `GRAPHRAG_BUILD_RUNS_ROOT` 下的拒绝场景。
 
 建议命令：
 
@@ -1122,6 +1151,9 @@ conda run -n graphrag-oneapi python -m pytest tests/
 9. 两个并发 build run 都 `activateOnSuccess=true` 时，只有最新 build run 自动激活，较早 run 记录 `skipped_newer_build_exists`。
 10. `ProcessRunner` 将 stdout/stderr 写入 `index/logs/process.log`，详情接口能返回尾部日志。
 11. GC dry-run、归档、删除 workspace、跳过 active/running run 的行为都有服务层测试。
+12. `concurrent-builds-enabled=false` 时，同一知识库已有 `pending/running` build run 会让新建接口返回 409，其他知识库不受影响。
+13. 自动激活被跳过时，`knowledge_base_build_runs.active_index_run_id` 保持 `NULL`；真正激活时清空同知识库其他 build run 的冗余 active 指针。
+14. 阶段推进、`build_metadata` 写入和 `current_stage` / `status` 更新在同一事务内完成，避免 JSON 覆盖掉并发阶段摘要。
 
 建议命令：
 
@@ -1162,11 +1194,11 @@ pnpm build
 
 ## 18. 实施切分建议
 
-后续实施计划应分为五步：
+后续实施计划应分为六步：
 
 1. **构建流水线控制面**：新增 `knowledge_base_build_runs` schema、实体、service、controller、workspace 路径计算和状态机。
 2. **GraphRAG 输入与索引隔离**：新增 `fetch_from_minio.py --output-file`，把 `graph-input` 和 `index/input/output/cache/reports` 全部绑定到 build workspace。
-3. **产物登记与 active 查询**：补 `index_artifacts` 服务、artifact 扫描、Python query-task 每任务 dataDir、Java QA 传 active run context，并实现 latest-build-only 自动激活。
+3. **产物登记与 active 查询**：补 `index_artifacts` 服务、artifact 扫描、Python query-task 每任务 `dataDirUri`、Java QA 传 active run context，并实现 latest-build-only 自动激活。
 4. **前端 build run 接入**：admin-app 构建向导从 URL/sessionStorage 主导改为 `buildRunId` 主导，补 CRUD/API 模块和状态展示。
 5. **日志、GC 与健康检查**：补 `index/logs/process.log`、GC dry-run/清理接口、轻量 health 与 readiness 拆分。
 6. **文档与回归**：更新 README、AGENTS、模块 README，跑 Python/Java/admin-app 验证和 repo drift audit。
@@ -1198,6 +1230,12 @@ pnpm build
 | 补充 workspace GC 触发时机 | 采纳 | 默认手动/dry-run，自动清理默认关闭，只在终态后异步触发且跳过 active/running。 |
 | 明确 `index/logs/` 写入方 | 采纳 | 由 Java `ProcessRunner` tee stdout/stderr 到 `index/logs/process.log`，不依赖 GraphRAG 自身日志。 |
 | 明确多 material 输入组装 | 采纳 | 默认唯一文件名复制到 `index/input`，并要求 GraphRAG 3.0.9 多 JSON 回归；失败时合并成单 JSON array。 |
+| 消除 `GRAPHRAG_LANCEDB_URI` 与 `settings.yaml` 的矛盾 | 采纳 | 索引和查询 CLI 的 LanceDB 路径由 `GRAPHRAG_STORAGE_DIR/lancedb` 派生；`GRAPHRAG_LANCEDB_URI` 仅作 API runtime/health 兼容派生值。 |
+| 索引流程图补 `parse-check` | 采纳 | 第 9 节补充解析状态快照写入和阶段推进，避免实现漏掉 `parse/status_snapshot.json`。 |
+| 明确 run 级 `activation_policy` 与系统级 `latest-build-only` 的关系 | 采纳 | 自动激活被跳过时 build run 的 `active_index_run_id` 保持 `NULL`；真正激活时同步更新 KB active 指针并清空其他 build run 冗余标记。 |
+| 定义 `concurrent-builds-enabled=false` 行为 | 采纳 | 范围限定同一知识库，已有 `pending/running` build run 时返回 HTTP 409 和建议业务码。 |
+| 查询上下文示例避免绝对路径 | 采纳 | 内部契约改用相对 `dataDirUri`，由 Python 在 `GRAPHRAG_BUILD_RUNS_ROOT` 下解析并校验。 |
+| 明确 `build_metadata` 并发更新规则 | 采纳 | 要求与阶段/status/active 字段同事务更新，服务层锁定 build run 行后整体写入，禁止单独覆盖 JSON。 |
 | 近期改用 `graphrag.api.build_index()` | 暂不采纳 | 官方 API 存在，但本仓库已把 3.0.9 路径收口到 CLI；同时存在过 `build_index()` storage 相对路径 bug。首轮继续 subprocess + env 注入，后续单独评估。 |
 | 引入 Spring Statemachine | 暂不采纳 | Spring Statemachine 支持 machineId、Guard、持久化，但对当前 7 个顺序阶段偏重；首轮用 enum + 服务层 Guard，更符合最小可运行原则。 |
 | UUID v7 作为 build version 必选方案 | 暂不采纳 | UUID v7 有排序优势，但 Java 标准库无内置实现；当前展示版本号用时间戳毫秒 + 随机后缀足够，避免新增依赖。 |
