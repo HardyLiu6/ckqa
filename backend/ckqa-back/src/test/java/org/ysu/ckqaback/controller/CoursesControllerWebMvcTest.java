@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.ysu.ckqaback.api.ApiResultCode;
@@ -12,6 +13,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
+import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
@@ -24,9 +26,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -104,6 +108,7 @@ class CoursesControllerWebMvcTest {
                 .courseName("数据库系统")
                 .status("active")
                 .accessPolicy("restricted")
+                .coverUrl("/api/v1/course-covers/default-course-cover.svg")
                 .teachers(List.of(CourseTeacherResponse.builder()
                         .userId(8L)
                         .userCode("t008")
@@ -128,8 +133,50 @@ class CoursesControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courseId").value("crs-20260504-7f3k2a"))
                 .andExpect(jsonPath("$.data.courseName").value("数据库系统"))
+                .andExpect(jsonPath("$.data.coverUrl").value("/api/v1/course-covers/default-course-cover.svg"))
                 .andExpect(jsonPath("$.data.status").value("active"))
                 .andExpect(jsonPath("$.data.teachers[0].userId").value(8));
+    }
+
+    @Test
+    void shouldUploadCourseCoverBeforeCourseCreation() throws Exception {
+        given(courseCommandService.storeCourseCover(any())).willReturn(CourseCoverUploadResponse.builder()
+                .coverUrl("/api/v1/course-covers/course-cover-test.png")
+                .fileName("course-cover-test.png")
+                .contentType("image/png")
+                .fileSize(128L)
+                .build());
+        MockMultipartFile cover = new MockMultipartFile(
+                "file",
+                "cover.png",
+                "image/png",
+                new byte[]{1, 2, 3}
+        );
+
+        mockMvc.perform(multipart(ApiPaths.COURSES + "/covers").file(cover))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.coverUrl").value("/api/v1/course-covers/course-cover-test.png"))
+                .andExpect(jsonPath("$.data.contentType").value("image/png"));
+    }
+
+    @Test
+    void shouldUploadAndAssignCourseCover() throws Exception {
+        given(courseCommandService.updateCourseCover(anyString(), any())).willReturn(CourseCoverUploadResponse.builder()
+                .coverUrl("/api/v1/course-covers/os.png")
+                .fileName("os.png")
+                .contentType("image/png")
+                .fileSize(128L)
+                .build());
+        MockMultipartFile cover = new MockMultipartFile(
+                "file",
+                "os.png",
+                "image/png",
+                new byte[]{1, 2, 3}
+        );
+
+        mockMvc.perform(multipart(ApiPaths.COURSES + "/os/cover").file(cover))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.coverUrl").value("/api/v1/course-covers/os.png"));
     }
 
     @Test

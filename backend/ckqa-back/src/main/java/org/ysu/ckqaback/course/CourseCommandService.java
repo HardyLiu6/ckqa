@@ -9,8 +9,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
+import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CourseTeacherResponse;
 import org.ysu.ckqaback.entity.CourseMemberships;
@@ -45,6 +47,7 @@ public class CourseCommandService {
     private final UsersService usersService;
     private final CourseIdGenerator courseIdGenerator;
     private final ApplicationEventPublisher eventPublisher;
+    private final CourseCoverService courseCoverService;
 
     @Transactional(propagation = Propagation.REQUIRED)
     public CourseDetailResponse createCourse(CourseCreateRequest request) {
@@ -85,6 +88,26 @@ public class CourseCommandService {
         );
     }
 
+    public CourseCoverUploadResponse storeCourseCover(MultipartFile file) {
+        return courseCoverService.store(file);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRED)
+    public CourseCoverUploadResponse updateCourseCover(String courseId, MultipartFile file) {
+        Courses course = coursesService.getOne(new LambdaQueryWrapper<Courses>()
+                .eq(Courses::getCourseId, courseId)
+                .last("LIMIT 1"));
+        if (course == null) {
+            throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND, "课程不存在");
+        }
+
+        CourseCoverUploadResponse response = courseCoverService.store(file);
+        course.setCoverUrl(response.getCoverUrl());
+        course.setUpdatedAt(LocalDateTime.now());
+        coursesService.updateById(course);
+        return response;
+    }
+
     private void validateInitialTeacher(Users teacher) {
         if (!ACTIVE.equalsIgnoreCase(teacher.getStatus())) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "初始教师状态不可用");
@@ -101,6 +124,7 @@ public class CourseCommandService {
         course.setCourseId(courseId);
         course.setCourseName(normalizeText(request.getCourseName()));
         course.setDescription(normalizeNullableText(request.getDescription()));
+        course.setCoverUrl(CourseCoverService.normalizeCoverUrl(request.getCoverUrl()));
         course.setStatus(defaultIfBlank(request.getStatus(), ACTIVE));
         course.setAccessPolicy(defaultIfBlank(request.getAccessPolicy(), DEFAULT_ACCESS_POLICY));
         course.setCreatedAt(now);
@@ -135,6 +159,7 @@ public class CourseCommandService {
                 .courseId(course.getCourseId())
                 .courseName(course.getCourseName())
                 .description(course.getDescription())
+                .coverUrl(CourseCoverService.resolveResponseCoverUrl(course.getCoverUrl()))
                 .status(course.getStatus())
                 .accessPolicy(course.getAccessPolicy())
                 .materialCount(0L)

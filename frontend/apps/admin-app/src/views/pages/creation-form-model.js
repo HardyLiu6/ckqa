@@ -29,6 +29,7 @@ export function createCreationForm(type, options = {}) {
   return {
     courseName: '',
     teacherUserId: '',
+    coverUrl: '',
     description: '',
     status: 'active',
     accessPolicy: 'restricted',

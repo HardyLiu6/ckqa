@@ -76,7 +76,7 @@ import {
   resolveQaPollingInterval,
   resolveQaStaleTimeout,
 } from './views/pages/qa-polling.js'
-import { createCourse } from './api/courses.js'
+import { createCourse, uploadCourseCover } from './api/courses.js'
 import {
   exportGraphRag,
   getMaterial,
@@ -408,6 +408,7 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', asyn
   )
 
   assert.equal(liveResult.rows[0].to, '/app/courses/os')
+  assert.equal(liveResult.rows[0].thumbnailUrl, '/api/v1/course-covers/default-course-cover.svg')
   assert.equal(getRowCells(liveResult.rows[0])[0], '操作系统')
   assert.equal(getCellText(getRowCells(liveResult.rows[0])[1]), '未绑定教师')
   assert.equal(getCellText(getRowCells(liveResult.rows[0])[2]), '开课中')
@@ -422,6 +423,7 @@ test('课程列表行使用教师可读状态、进度和索引摘要', async ()
         items: [{
           courseId: 'os',
           courseName: '操作系统',
+          coverUrl: '/api/v1/course-covers/os.png',
           teachers: [
             { userId: 8, userCode: 'T008', displayName: '张老师' },
           ],
@@ -441,6 +443,7 @@ test('课程列表行使用教师可读状态、进度和索引摘要', async ()
   )
 
   const cells = getRowCells(liveResult.rows[0])
+  assert.equal(liveResult.rows[0].thumbnailUrl, '/api/v1/course-covers/os.png')
   assert.deepEqual(cells[1], {
     kind: 'text',
     label: '张老师',
@@ -871,17 +874,28 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
       return { data: { code: 200, message: 'ok', data: { items: [], current: 1, size: 20, total: 0, pages: 0 } } }
     },
     post: async (url, payload) => {
-      calls.push(['post', url, payload])
+      const normalizedPayload = payload instanceof FormData
+        ? {
+            fileName: payload.get('file')?.name,
+            fileType: payload.get('file')?.type,
+          }
+        : payload
+      calls.push(['post', url, normalizedPayload])
       return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
     },
   }
 
   await createCourse({ courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }, client)
+  const coverFile = new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' })
+  await uploadCourseCover(coverFile, null, client)
+  await uploadCourseCover(coverFile, 'os', client)
   await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
   await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)
 
   assert.deepEqual(calls, [
     ['post', '/courses', { courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }],
+    ['post', '/courses/covers', { fileName: 'cover.png', fileType: 'image/png' }],
+    ['post', '/courses/os/cover', { fileName: 'cover.png', fileType: 'image/png' }],
     ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
     ['post', '/knowledge-bases', { courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }],
   ])
@@ -905,6 +919,7 @@ test('课程创建表单移除手填课程标识并使用教师候选选项', ()
   assert.deepEqual(createCreationForm('course'), {
     courseName: '',
     teacherUserId: '',
+    coverUrl: '',
     description: '',
     status: 'active',
     accessPolicy: 'restricted',
@@ -2132,6 +2147,9 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /<el-select[\s\S]*v-model="creationForm\.teacherUserId"[\s\S]*filterable[\s\S]*remote[\s\S]*:remote-method="loadCreationTeachers"/)
   assert.match(modulePage, /暂无可用教师，请先创建或启用教师账号。/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.accessPolicy"/)
+  assert.match(modulePage, /<el-upload[\s\S]*class="course-cover-uploader"/)
+  assert.match(modulePage, /uploadCourseCover/)
+  assert.match(modulePage, /v-if="creationForm\.coverUrl"/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.status"/)
   assert.match(modulePage, /<el-select\s+v-model\.trim="creationForm\.courseId"/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.description"[\s\S]*type="textarea"/)
@@ -2143,6 +2161,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
   assert.match(modulePage, /:title="tableTitle"/)
   assert.match(modulePage, /data-course-section="materials"/)
+  assert.match(modulePage, /class="course-cover-panel"/)
   assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId: String\(route\.params\.courseId \?\? ''\) \}\)/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
 

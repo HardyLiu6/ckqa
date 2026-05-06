@@ -9,18 +9,22 @@ import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
+import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
 import org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -50,9 +54,22 @@ public class CoursesController {
         return ApiResponseUtils.success(courseCommandService.createCourse(request));
     }
 
+    @PostMapping(value = "/covers", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<CourseCoverUploadResponse> uploadCourseCover(@RequestParam("file") MultipartFile file) {
+        return ApiResponseUtils.success(courseCommandService.storeCourseCover(file));
+    }
+
     @GetMapping("/{courseId}")
     public ApiResponse<CourseDetailResponse> getCourseDetail(@PathVariable String courseId) {
         return ApiResponseUtils.success(courseLookupService.getCourseDetail(courseId));
+    }
+
+    @PostMapping(value = "/{courseId}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<CourseCoverUploadResponse> updateCourseCover(
+            @PathVariable String courseId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ApiResponseUtils.success(courseCommandService.updateCourseCover(courseId, file));
     }
 
     @GetMapping("/{courseId}/pdf-files")

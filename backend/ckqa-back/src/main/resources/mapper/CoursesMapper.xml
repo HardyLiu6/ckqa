@@ -9,6 +9,7 @@
         <result column="course_id" property="courseId" />
         <result column="course_name" property="courseName" />
         <result column="description" property="description" />
+        <result column="cover_url" property="coverUrl" />
         <result column="status" property="status" />
         <result column="access_policy" property="accessPolicy" />
         <result column="created_at" property="createdAt" />
@@ -17,7 +18,7 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, is_deleted, course_id, course_name, description, status, access_policy, created_at, updated_at
+        id, is_deleted, course_id, course_name, description, cover_url, status, access_policy, created_at, updated_at
     </sql>
 
 </mapper>

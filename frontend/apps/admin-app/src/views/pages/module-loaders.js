@@ -28,6 +28,8 @@ import {
 } from './module-content.js'
 import { resolveBuildRunIdQuery, resolveBuildSelectionFromQuery } from './module-page-model.js'
 
+export const DEFAULT_COURSE_COVER_URL = '/api/v1/course-covers/default-course-cover.svg'
+
 const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
 const COURSE_STATUS_LABELS = {
@@ -157,6 +159,7 @@ function mapCourseRow(course) {
     id: courseId ?? course.courseName,
     to: encodedCourseId ? `/app/courses/${encodedCourseId}` : '',
     subtitle: courseId ? `#${courseId}` : '',
+    thumbnailUrl: resolveCourseCoverUrl(course),
     actions: encodedCourseId ? [
       { label: '详情', to: `/app/courses/${encodedCourseId}` },
       { label: '成员', to: `/app/course-memberships?keyword=${encodedCourseId}` },
@@ -950,7 +953,10 @@ async function loadCourseDetail(route, services) {
     })
   }
 
-  const course = courseResult.value
+  const course = {
+    ...courseResult.value,
+    coverUrl: resolveCourseCoverUrl(courseResult.value),
+  }
   const materialBlock = createSettledListBlock(materialsResult, mapMaterialItem)
   const knowledgeBaseBlock = createSettledListBlock(knowledgeBasesResult, mapKnowledgeBaseItem)
 
@@ -1082,6 +1088,10 @@ function buildCourseFacts(course = {}) {
     { label: '知识库数量', value: formatCount(course.knowledgeBaseCount) },
     { label: '更新时间', value: course.updatedAt ?? '-' },
   ]
+}
+
+function resolveCourseCoverUrl(course = {}) {
+  return course.coverUrl || DEFAULT_COURSE_COVER_URL
 }
 
 function buildMaterialFacts(material = {}) {

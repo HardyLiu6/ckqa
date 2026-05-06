@@ -32,6 +32,8 @@
 - `GET /api/v1/system/readiness`
 - `GET /api/v1/courses`
 - `GET /api/v1/courses/{courseId}`
+- `POST /api/v1/courses/covers`
+- `POST /api/v1/courses/{courseId}/cover`
 - `GET /api/v1/courses/{courseId}/pdf-files`
 - `GET /api/v1/courses/{courseId}/knowledge-bases`
 - `GET /api/v1/knowledge-bases`
@@ -76,6 +78,13 @@
 }
 ```
 
+课程封面：
+
+- `courses.cover_url` 为空或创建请求未传 `coverUrl` 时，后端返回默认封面 `/api/v1/course-covers/default-course-cover.svg`。
+- `POST /api/v1/courses/covers` 接收 `multipart/form-data` 字段 `file`，用于创建课程前先上传封面并取得 `coverUrl`。
+- `POST /api/v1/courses/{courseId}/cover` 接收同样的 `file` 字段，用于替换已有课程封面。
+- 上传文件默认保存到 MinIO 的 `course-artifacts/course-covers/`，并通过 `/api/v1/course-covers/**` 由后端代理访问；仅支持 PNG、JPG、WEBP，默认上限 2MB。
+
 ## 目录说明
 
 | 路径 | 作用 |
@@ -102,6 +111,14 @@ export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD=your-password
+
+export MINIO_ENDPOINT=localhost:9000
+export MINIO_ACCESS_KEY=admin
+export MINIO_SECRET_KEY=12345678
+export MINIO_SECURE=false
+export COURSE_COVER_BUCKET=course-artifacts
+export COURSE_COVER_OBJECT_PREFIX=course-covers
+export COURSE_COVER_MAX_FILE_SIZE_BYTES=2097152
 
 export PDF_INGEST_PYTHON=/path/to/courseKg/bin/python
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest

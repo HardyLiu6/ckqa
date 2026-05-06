@@ -353,6 +353,34 @@ textarea.text-input {
   margin-top: 2px;
 }
 
+.course-cover-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.course-cover-field__preview,
+.course-cover-field__placeholder {
+  width: 168px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface-muted);
+}
+
+.course-cover-field__preview {
+  object-fit: cover;
+}
+
+.course-cover-field__placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--ckqa-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .console-layout {
   display: grid;
   min-height: 100vh;
@@ -1160,6 +1188,29 @@ textarea.text-input {
   align-self: start;
 }
 
+.course-cover-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.course-cover-panel__image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  object-fit: cover;
+  background: var(--ckqa-surface-muted);
+}
+
+.course-cover-panel__actions {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
 .course-info-block {
   display: grid;
   gap: 1px;
@@ -1274,6 +1325,26 @@ textarea.text-input {
 .ckqa-table-primary,
 .ckqa-table-secondary {
   display: block;
+}
+
+.ckqa-table-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.ckqa-table-identity__copy {
+  min-width: 0;
+}
+
+.ckqa-table-thumbnail {
+  width: 72px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-xs);
+  object-fit: cover;
+  background: var(--ckqa-surface-muted);
 }
 
 .ckqa-table-secondary {
@@ -2146,6 +2217,7 @@ textarea.text-input {
   .dashboard-grid,
   .flow-rail,
   .production-track__list,
+  .course-cover-panel,
   .two-columns,
   .workflow-panel,
   .workflow-stepper {

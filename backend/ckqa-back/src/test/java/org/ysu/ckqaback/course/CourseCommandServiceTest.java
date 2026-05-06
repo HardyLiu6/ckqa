@@ -38,6 +38,7 @@ class CourseCommandServiceTest {
     private UsersService usersService;
     private CourseIdGenerator courseIdGenerator;
     private ApplicationEventPublisher eventPublisher;
+    private CourseCoverService courseCoverService;
     private CourseCommandService service;
 
     @BeforeEach
@@ -47,12 +48,14 @@ class CourseCommandServiceTest {
         usersService = mock(UsersService.class);
         courseIdGenerator = mock(CourseIdGenerator.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
+        courseCoverService = mock(CourseCoverService.class);
         service = new CourseCommandService(
                 coursesService,
                 courseMembershipsService,
                 usersService,
                 courseIdGenerator,
-                eventPublisher
+                eventPublisher,
+                courseCoverService
         );
     }
 
@@ -78,6 +81,7 @@ class CourseCommandServiceTest {
 
         assertThat(response.getId()).isEqualTo(12L);
         assertThat(response.getCourseId()).matches("^crs-[0-9]{8}-[a-z0-9]{6}$");
+        assertThat(response.getCoverUrl()).isEqualTo(CourseCoverService.DEFAULT_COURSE_COVER_URL);
         assertThat(response.getTeachers()).singleElement()
                 .satisfies(teacher -> assertThat(teacher.getUserId()).isEqualTo(8L));
 
@@ -86,6 +90,7 @@ class CourseCommandServiceTest {
         ArgumentCaptor<Courses> courseCaptor = ArgumentCaptor.forClass(Courses.class);
         saveOrder.verify(coursesService).save(courseCaptor.capture());
         assertThat(courseCaptor.getValue().getCourseId()).isEqualTo("crs-20260504-7f3k2a");
+        assertThat(courseCaptor.getValue().getCoverUrl()).isEqualTo(CourseCoverService.DEFAULT_COURSE_COVER_URL);
 
         ArgumentCaptor<CourseMemberships> membershipCaptor = ArgumentCaptor.forClass(CourseMemberships.class);
         saveOrder.verify(courseMembershipsService).save(membershipCaptor.capture());
@@ -103,6 +108,33 @@ class CourseCommandServiceTest {
         assertThat(eventCaptor.getValue().courseId()).isEqualTo("crs-20260504-7f3k2a");
         assertThat(eventCaptor.getValue().teacherUserId()).isEqualTo(8L);
         assertThat(eventCaptor.getValue().operatorUserId()).isNull();
+    }
+
+    @Test
+    void shouldPersistUploadedCoverUrlWhenCreatingCourse() {
+        CourseCreateRequest request = createRequest();
+        request.setCoverUrl("/api/v1/course-covers/course-cover-test.png");
+        when(usersService.getRequiredById(8L)).thenReturn(activeTeacher());
+        when(usersService.hasRole(8L, "teacher")).thenReturn(true);
+        when(courseIdGenerator.generate()).thenReturn("crs-20260504-7f3k2a");
+        when(coursesService.count(any())).thenReturn(0L);
+        when(coursesService.save(any(Courses.class))).thenAnswer(invocation -> {
+            Courses saved = invocation.getArgument(0);
+            saved.setId(12L);
+            return true;
+        });
+        when(courseMembershipsService.save(any(CourseMemberships.class))).thenAnswer(invocation -> {
+            CourseMemberships saved = invocation.getArgument(0);
+            saved.setId(21L);
+            return true;
+        });
+
+        CourseDetailResponse response = service.createCourse(request);
+
+        assertThat(response.getCoverUrl()).isEqualTo("/api/v1/course-covers/course-cover-test.png");
+        ArgumentCaptor<Courses> courseCaptor = ArgumentCaptor.forClass(Courses.class);
+        verify(coursesService).save(courseCaptor.capture());
+        assertThat(courseCaptor.getValue().getCoverUrl()).isEqualTo("/api/v1/course-covers/course-cover-test.png");
     }
 
     @Test

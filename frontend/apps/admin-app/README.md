@@ -6,7 +6,7 @@
 
 - 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
+- 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页、课程封面上传、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
@@ -100,7 +100,7 @@ VITE_API_TIMEOUT=15000
 5. 登录页支持管理员/教师开发态身份切换，并明确标记“当前为开发态身份切换，正式登录接口待接入”。
 6. 未开放页面统一显示模块、规划状态和恢复入口，避免空白路由。
 7. 系统健康页调用 Java `/api/v1/system/health`，并识别 `graphrag-build-runs-root` / `graphrag-ready`；更重的共享输出检查由后端 `/api/v1/system/readiness` 承担。
-8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`。
+8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`；课程创建和详情页支持通过 Java 上传课程封面。
 9. 知识库构建向导以 `buildRunId` 为运行态来源：URL 有 `buildRunId` 时加载对应 build run；没有时保持草稿选择，首次用户确认动作才创建 build run 并写回 query。
 10. 构建向导动作走 build-run API：资料选择、解析检查、图谱输入同步、Prompt 确认、索引构建和 QA 冒烟验证都由 Java `/api/v1/knowledge-base-build-runs/*` 编排。
 11. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。

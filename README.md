@@ -107,6 +107,12 @@ export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
 
+export MINIO_ENDPOINT=localhost:9000
+export MINIO_ACCESS_KEY=admin
+export MINIO_SECRET_KEY=12345678
+export MINIO_SECURE=false
+export COURSE_COVER_BUCKET=course-artifacts
+export COURSE_COVER_OBJECT_PREFIX=course-covers
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_API_HOST=127.0.0.1
@@ -174,6 +180,12 @@ export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
 
+export MINIO_ENDPOINT=localhost:9000
+export MINIO_ACCESS_KEY=admin
+export MINIO_SECRET_KEY=12345678
+export MINIO_SECURE=false
+export COURSE_COVER_BUCKET=course-artifacts
+export COURSE_COVER_OBJECT_PREFIX=course-covers
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output

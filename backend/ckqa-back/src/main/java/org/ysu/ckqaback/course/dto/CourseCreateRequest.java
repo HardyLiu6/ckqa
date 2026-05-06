@@ -29,6 +29,12 @@ public class CourseCreateRequest {
     private String description;
 
     /**
+     * 上传后得到的课程封面访问地址。为空时使用系统默认封面。
+     */
+    @Size(max = 512, message = "coverUrl长度不能超过512")
+    private String coverUrl;
+
+    /**
      * 课程状态。
      */
     @Pattern(regexp = "active|inactive|archived", message = "status取值不合法")

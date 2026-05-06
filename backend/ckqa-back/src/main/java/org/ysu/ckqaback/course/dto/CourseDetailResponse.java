@@ -17,6 +17,7 @@ public class CourseDetailResponse {
     private final String courseId;
     private final String courseName;
     private final String description;
+    private final String coverUrl;
     private final String status;
     private final String accessPolicy;
     private final Long materialCount;

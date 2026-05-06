@@ -5,6 +5,7 @@ import {
   Check,
   DatabaseZap,
   Hammer,
+  ImagePlus,
   Play,
   Plus,
   RefreshCw,
@@ -15,7 +16,7 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import { createApiError, normalizePageData } from '../../api/client.js'
-import { createCourse, listCourses } from '../../api/courses.js'
+import { createCourse, listCourses, uploadCourseCover } from '../../api/courses.js'
 import { http } from '../../axios/index.js'
 import { listUsers } from '../../api/users.js'
 import {
@@ -69,7 +70,7 @@ import {
   createParallelParseTaskOptions,
   resolveMaterialExportPayload,
 } from './material-lifecycle-actions.js'
-import { loadCourseDetailBlock, loadModulePage } from './module-loaders.js'
+import { DEFAULT_COURSE_COVER_URL, loadCourseDetailBlock, loadModulePage } from './module-loaders.js'
 import {
   buildPageQuery,
   createRouteSnapshot,
@@ -120,6 +121,10 @@ const creationCourseError = ref(null)
 const creationTeacherOptions = ref([])
 const creationTeacherState = ref('idle')
 const creationTeacherError = ref(null)
+const creationCoverState = ref('idle')
+const creationCoverError = ref(null)
+const courseCoverState = ref('idle')
+const courseCoverError = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -146,8 +151,11 @@ const actionRunning = computed(() => ['running', 'confirming'].includes(actionSt
 const creationSubmitting = computed(() => creationState.value === 'running')
 const creationCourseLoading = computed(() => creationCourseState.value === 'loading')
 const creationTeacherLoading = computed(() => creationTeacherState.value === 'loading')
+const creationCoverUploading = computed(() => creationCoverState.value === 'loading')
+const courseCoverUploading = computed(() => courseCoverState.value === 'loading')
 const creationSubmitDisabled = computed(() => (
   creationSubmitting.value
+  || creationCoverUploading.value
   || (creationDialog.value === 'course' && (
     !creationForm.value.courseName?.trim()
     || !creationForm.value.teacherUserId
@@ -257,6 +265,7 @@ const qaOperationFeedback = computed(() => (
   operationFeedback.value?.scope === 'qa' ? operationFeedback.value : null
 ))
 const courseBlock = computed(() => config.value.blocks?.course)
+const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAULT_COURSE_COVER_URL)
 const materialsBlock = computed(() => config.value.blocks?.materials)
 const knowledgeBasesBlock = computed(() => config.value.blocks?.knowledgeBases)
 const materialBlock = computed(() => config.value.blocks?.material)
@@ -528,6 +537,8 @@ function openCreationDialog(typeOverride = '', defaults = {}) {
   creationError.value = null
   creationCourseError.value = null
   creationTeacherError.value = null
+  creationCoverState.value = 'idle'
+  creationCoverError.value = null
 
   if (type === 'knowledge-base') {
     void loadCreationCourses()
@@ -543,6 +554,7 @@ function closeCreationDialog() {
 
   creationDialog.value = ''
   creationError.value = null
+  creationCoverError.value = null
 }
 
 async function loadCreationCourses() {
@@ -603,6 +615,69 @@ async function loadCreationTeachers(keyword = '') {
   }
 }
 
+async function uploadCreationCourseCover({ file, onSuccess, onError }) {
+  const validationMessage = validateCourseCoverFile(file)
+  if (validationMessage) {
+    creationCoverState.value = 'failed'
+    creationCoverError.value = { message: validationMessage }
+    onError?.(new Error(validationMessage))
+    return
+  }
+
+  creationCoverState.value = 'loading'
+  creationCoverError.value = null
+  try {
+    const result = await uploadCourseCover(file)
+    creationForm.value = {
+      ...creationForm.value,
+      coverUrl: result.coverUrl,
+    }
+    creationCoverState.value = 'success'
+    onSuccess?.(result)
+  } catch (error) {
+    creationCoverState.value = 'failed'
+    creationCoverError.value = createApiError(error)
+    onError?.(error)
+  }
+}
+
+async function uploadExistingCourseCover({ file, onSuccess, onError }) {
+  const validationMessage = validateCourseCoverFile(file)
+  if (validationMessage) {
+    courseCoverState.value = 'failed'
+    courseCoverError.value = { message: validationMessage }
+    onError?.(new Error(validationMessage))
+    return
+  }
+
+  courseCoverState.value = 'loading'
+  courseCoverError.value = null
+  try {
+    const result = await uploadCourseCover(file, String(route.params.courseId ?? ''))
+    courseCoverState.value = 'success'
+    onSuccess?.(result)
+    await loadPage()
+  } catch (error) {
+    courseCoverState.value = 'failed'
+    courseCoverError.value = createApiError(error)
+    onError?.(error)
+  }
+}
+
+function validateCourseCoverFile(file) {
+  const supportedTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+  if (!file) {
+    return '请选择课程封面文件'
+  }
+  if (!supportedTypes.has(file.type)) {
+    return '课程封面仅支持PNG、JPG或WEBP格式'
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    return '课程封面文件不能超过2MB'
+  }
+  return ''
+}
+
 async function submitCreation() {
   creationState.value = 'running'
   creationError.value = null
@@ -632,6 +707,7 @@ async function submitCreation() {
       teacherUserId: creationForm.value.teacherUserId
         ? Number(creationForm.value.teacherUserId)
         : undefined,
+      coverUrl: creationForm.value.coverUrl || undefined,
       description: creationForm.value.description.trim() || undefined,
       status: creationForm.value.status,
       accessPolicy: creationForm.value.accessPolicy,
@@ -1184,6 +1260,32 @@ onBeforeUnmount(() => cancelLongTask())
               />
             </el-select>
           </el-form-item>
+          <el-form-item class="creation-field creation-form__wide" label="课程封面">
+            <div class="course-cover-field">
+              <img
+                v-if="creationForm.coverUrl"
+                class="course-cover-field__preview"
+                :src="creationForm.coverUrl"
+                alt="课程封面预览"
+              />
+              <div v-else class="course-cover-field__placeholder">默认封面</div>
+              <el-upload
+                class="course-cover-uploader"
+                accept="image/png,image/jpeg,image/webp"
+                :show-file-list="false"
+                :http-request="uploadCreationCourseCover"
+              >
+                <el-button
+                  class="ckqa-el-button ckqa-el-button--secondary"
+                  native-type="button"
+                  :disabled="creationCoverUploading"
+                >
+                  <ImagePlus class="button-icon" :size="16" aria-hidden="true" />
+                  {{ creationCoverUploading ? '上传中' : '上传封面' }}
+                </el-button>
+              </el-upload>
+            </div>
+          </el-form-item>
           <el-form-item class="creation-field" label="访问策略">
             <el-select v-model="creationForm.accessPolicy" name="accessPolicy">
               <el-option
@@ -1265,6 +1367,12 @@ onBeforeUnmount(() => cancelLongTask())
           class="inline-error creation-form__wide"
         >
           {{ creationTeacherError.message }}
+        </p>
+        <p
+          v-if="creationDialog === 'course' && creationCoverError"
+          class="inline-error creation-form__wide"
+        >
+          {{ creationCoverError.message }}
         </p>
         <p
           v-if="creationDialog === 'knowledge-base' && creationCourseState === 'empty'"
@@ -1428,6 +1536,27 @@ onBeforeUnmount(() => cancelLongTask())
           :status="courseBlock.item?.status || 'neutral'"
           :label="resolveCourseStatusLabel(courseBlock.item?.status)"
         />
+      </div>
+      <div class="course-cover-panel">
+        <img class="course-cover-panel__image" :src="courseCoverUrl" alt="课程封面" />
+        <div class="course-cover-panel__actions">
+          <el-upload
+            class="course-cover-uploader"
+            accept="image/png,image/jpeg,image/webp"
+            :show-file-list="false"
+            :http-request="uploadExistingCourseCover"
+          >
+            <el-button
+              class="ckqa-el-button ckqa-el-button--secondary"
+              native-type="button"
+              :disabled="courseCoverUploading"
+            >
+              <ImagePlus class="button-icon" :size="16" aria-hidden="true" />
+              {{ courseCoverUploading ? '上传中' : '更新封面' }}
+            </el-button>
+          </el-upload>
+          <p v-if="courseCoverError" class="inline-error">{{ courseCoverError.message }}</p>
+        </div>
       </div>
       <dl class="course-info-block">
         <div v-for="field in courseBlock.facts" :key="field.label" class="course-info-row">

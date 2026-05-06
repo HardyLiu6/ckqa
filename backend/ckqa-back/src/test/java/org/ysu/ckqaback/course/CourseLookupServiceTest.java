@@ -94,6 +94,7 @@ class CourseLookupServiceTest {
         assertThat(page.getItems()).hasSize(1);
         CourseSummaryResponse summary = page.getItems().getFirst();
         assertThat(summary.getCourseId()).isEqualTo("os");
+        assertThat(summary.getCoverUrl()).isEqualTo(CourseCoverService.DEFAULT_COURSE_COVER_URL);
         assertThat(summary.getMaterialCount()).isEqualTo(3L);
         assertThat(summary.getParsedMaterialCount()).isEqualTo(1L);
         assertThat(summary.getFailedMaterialCount()).isEqualTo(1L);
@@ -152,6 +153,7 @@ class CourseLookupServiceTest {
     @Test
     void shouldHandleEmptyMaterialsAndKnowledgeBases() {
         Courses os = course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30));
+        os.setCoverUrl("/api/v1/course-covers/os.png");
         when(coursesService.list()).thenReturn(List.of(os));
         when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
         when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
@@ -159,6 +161,7 @@ class CourseLookupServiceTest {
 
         CourseSummaryResponse summary = service.listCourses(new CourseQueryRequest()).getItems().getFirst();
 
+        assertThat(summary.getCoverUrl()).isEqualTo("/api/v1/course-covers/os.png");
         assertThat(summary.getMaterialCount()).isZero();
         assertThat(summary.getParsedMaterialCount()).isZero();
         assertThat(summary.getFailedMaterialCount()).isZero();

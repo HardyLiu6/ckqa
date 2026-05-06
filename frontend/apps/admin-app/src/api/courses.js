@@ -9,6 +9,15 @@ export async function createCourse(payload, client = http) {
   return unwrapApiResponse(await client.post('/courses', payload))
 }
 
+export async function uploadCourseCover(file, courseId = null, client = http) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const path = courseId
+    ? `/courses/${encodeURIComponent(courseId)}/cover`
+    : '/courses/covers'
+  return unwrapApiResponse(await client.post(path, formData))
+}
+
 export async function getCourse(courseId) {
   return unwrapApiResponse(await http.get(`/courses/${encodeURIComponent(courseId)}`))
 }

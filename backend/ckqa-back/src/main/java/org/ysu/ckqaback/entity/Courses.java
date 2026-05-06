@@ -60,6 +60,12 @@ public class Courses implements Serializable {
     private String description;
 
     /**
+     * 课程封面访问地址
+     */
+    @TableField("cover_url")
+    private String coverUrl;
+
+    /**
      * 课程状态
      */
     @TableField("status")

@@ -101,7 +101,7 @@ function getCellLabel(row, index) {
 
 function getColumnMinWidth(index) {
   const column = props.columns[index] ?? ''
-  if (index === 0) return 210
+  if (index === 0) return 260
   if (column.includes('状态')) return 112
   if (column.includes('进度') || column.includes('知识库')) return 190
   if (column.includes('更新时间')) return 168
@@ -236,11 +236,21 @@ function resolveProgressStatus(status) {
         >
           <template #default="{ row, $index }">
             <template v-if="index === 0">
-              <RouterLink v-if="row.to" :to="row.to">
-                <strong class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
-              </RouterLink>
-              <strong v-else class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
-              <small v-if="row.subtitle" class="ckqa-table-secondary">{{ row.subtitle }}</small>
+              <div class="ckqa-table-identity">
+                <img
+                  v-if="row.thumbnailUrl"
+                  class="ckqa-table-thumbnail"
+                  :src="row.thumbnailUrl"
+                  :alt="`${getCellLabel(row, index)}封面`"
+                />
+                <div class="ckqa-table-identity__copy">
+                  <RouterLink v-if="row.to" :to="row.to">
+                    <strong class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
+                  </RouterLink>
+                  <strong v-else class="ckqa-table-primary">{{ getCellLabel(row, index) }}</strong>
+                  <small v-if="row.subtitle" class="ckqa-table-secondary">{{ row.subtitle }}</small>
+                </div>
+              </div>
             </template>
             <div v-else-if="isProgressCell(getCell(row, index))" class="table-progress-cell">
               <el-progress
