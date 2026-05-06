@@ -896,7 +896,7 @@ async function loadCreationCourses() {
   creationCourseOptions.value = []
 
   try {
-    const pageData = normalizePageData(await listCourses({ page: 1, size: 200, keyword: '', status: '' }))
+    const pageData = normalizePageData(await listCourses({ page: 1, size: 100, keyword: '', status: '' }))
     const options = resolveCourseSelectOptions(pageData.items)
     creationCourseOptions.value = options
     if (options.length === 0) {

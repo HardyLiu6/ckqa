@@ -79,6 +79,7 @@ import {
 import {
   createCourse,
   deleteCourse,
+  listCourses,
   updateCourse,
   uploadCourseCover,
 } from './api/courses.js'
@@ -945,6 +946,7 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   const coverFile = new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' })
   await uploadCourseCover(coverFile, null, client)
   await uploadCourseCover(coverFile, 'os', client)
+  await listCourses({ page: 1, size: 200, keyword: '', status: '' }, client)
   await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
   await listCourseMembers({ courseId: 'os', status: 'active', membershipRole: '', keyword: '', page: 1, size: 20 }, client)
   await createCourseMember({ courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }, client)
@@ -957,6 +959,7 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
     ['delete', '/courses/empty-course', null],
     ['post', '/courses/covers', { fileName: 'cover.png', fileType: 'image/png' }],
     ['post', '/courses/os/cover', { fileName: 'cover.png', fileType: 'image/png' }],
+    ['get', '/courses', { page: 1, size: 100 }],
     ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
     ['get', '/course-memberships', { courseId: 'os', status: 'active', page: 1, size: 20 }],
     ['post', '/course-memberships', { courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }],
