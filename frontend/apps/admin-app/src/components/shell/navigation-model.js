@@ -3,7 +3,7 @@ export const NAV_GROUPS = [
   { key: 'courses', label: '课程与资料', hint: '课程、资料、解析', accent: 'blue' },
   { key: 'knowledge', label: '知识库构建', hint: '导出、索引、激活', accent: 'teal' },
   { key: 'qa', label: '问答运维', hint: '会话、验证、检索', accent: 'purple' },
-  { key: 'users', label: '用户与权限', hint: '角色、成员、审计', accent: 'amber' },
+  { key: 'users', label: '用户与权限', hint: '用户、角色、权限', accent: 'amber' },
   { key: 'system', label: '系统与审计', hint: '健康、配置、日志', accent: 'slate' },
 ]
 

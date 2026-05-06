@@ -1,6 +1,15 @@
 <script setup>
 import { computed, reactive } from 'vue'
-import { ArrowRight, Eye, Search } from 'lucide-vue-next'
+import {
+  ArrowRight,
+  BookOpen,
+  Eye,
+  Pencil,
+  Search,
+  Trash2,
+  Users,
+  Archive,
+} from 'lucide-vue-next'
 
 import StatusBadge from './StatusBadge.vue'
 import {
@@ -42,7 +51,7 @@ const props = defineProps({
   error: { type: [Object, String], default: null },
 })
 
-const emit = defineEmits(['pageChange', 'filterChange', 'searchChange'])
+const emit = defineEmits(['pageChange', 'filterChange', 'searchChange', 'rowAction'])
 
 const filterValues = reactive({})
 const localSearchText = reactive({ value: '' })
@@ -109,7 +118,9 @@ function getColumnMinWidth(index) {
 }
 
 function getRowActions(row) {
-  return Array.isArray(row?.actions) ? row.actions.filter((action) => action?.label && action?.to) : []
+  return Array.isArray(row?.actions)
+    ? row.actions.filter((action) => action?.label && (action?.to || action?.key))
+    : []
 }
 
 function getFilterValue(filter) {
@@ -144,18 +155,38 @@ function resolveSearchConfig(search) {
 
 function resolveActionClass(action) {
   return [
-    action.variant === 'primary' ? 'ckqa-el-button--primary' : 'ckqa-el-button--secondary',
+    action.variant === 'primary'
+      ? 'ckqa-el-button--primary'
+      : action.variant === 'danger'
+        ? 'ckqa-el-button--danger'
+        : action.variant === 'warning'
+          ? 'ckqa-el-button--warning'
+          : 'ckqa-el-button--secondary',
     'ckqa-el-button',
     'table-action-button',
   ]
 }
 
 function resolveActionType(action) {
+  if (action.variant === 'danger') return 'danger'
+  if (action.variant === 'warning') return 'warning'
   return action.variant === 'primary' ? 'primary' : 'default'
 }
 
 function resolveActionIcon(action) {
+  if (action.icon === 'edit') return Pencil
+  if (action.icon === 'delete') return Trash2
+  if (action.icon === 'archive') return Archive
+  if (action.icon === 'users') return Users
+  if (action.icon === 'knowledge') return BookOpen
   return action.variant === 'primary' ? ArrowRight : Eye
+}
+
+function handleRowAction(row, action, index) {
+  if (action.to || action.disabled) {
+    return
+  }
+  emit('rowAction', { row, action, index })
 }
 
 function resolveProgressStatus(status) {
@@ -282,23 +313,41 @@ function resolveProgressStatus(status) {
           v-if="hasRowActions"
           label="操作"
           fixed="right"
-          width="306"
+          width="390"
           class-name="ckqa-el-table__action-column"
           header-class-name="ckqa-el-table__action-column"
         >
           <template #default="{ row, $index }">
             <div class="data-table__actions">
-              <el-button
+              <template
                 v-for="action in getRowActions(row)"
                 :key="`${resolveRowKey(row, $index)}-${action.label}`"
-                :class="resolveActionClass(action)"
-                :type="resolveActionType(action)"
-                tag="router-link"
-                :to="action.to"
               >
-                <component :is="resolveActionIcon(action)" class="button-icon" :size="15" aria-hidden="true" />
-                {{ action.label }}
-              </el-button>
+                <el-button
+                  v-if="action.to"
+                  :class="resolveActionClass(action)"
+                  :type="resolveActionType(action)"
+                  :disabled="Boolean(action.disabled)"
+                  tag="router-link"
+                  :to="action.to"
+                  :title="action.title"
+                >
+                  <component :is="resolveActionIcon(action)" class="button-icon" :size="15" aria-hidden="true" />
+                  {{ action.label }}
+                </el-button>
+                <el-button
+                  v-else
+                  :class="resolveActionClass(action)"
+                  :type="resolveActionType(action)"
+                  :disabled="Boolean(action.disabled)"
+                  native-type="button"
+                  :title="action.title"
+                  @click="handleRowAction(row, action, $index)"
+                >
+                  <component :is="resolveActionIcon(action)" class="button-icon" :size="15" aria-hidden="true" />
+                  {{ action.label }}
+                </el-button>
+              </template>
             </div>
           </template>
         </el-table-column>

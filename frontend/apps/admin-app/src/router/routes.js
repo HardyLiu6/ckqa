@@ -122,6 +122,20 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/courses/:courseId/members',
+    name: 'course-members',
+    componentKey: 'ModulePage',
+    meta: {
+      title: '课程成员',
+      layout: 'detail',
+      permissions: ['membership:read'],
+      status: 'mvp',
+      navGroup: 'courses',
+      resource: 'courseMembers',
+      scope: 'course',
+    },
+  },
+  {
     path: '/app/materials/:materialId',
     name: 'material-detail',
     componentKey: 'ModulePage',
@@ -291,7 +305,7 @@ export const APP_ROUTES = [
     name: 'roles',
     componentKey: 'ModulePage',
     meta: {
-      title: '角色权限矩阵',
+      title: '角色列表',
       layout: 'console',
       permissions: ['role:read'],
       status: 'mvp',
@@ -299,13 +313,13 @@ export const APP_ROUTES = [
     },
   },
   {
-    path: '/app/course-memberships',
-    name: 'course-memberships',
+    path: '/app/permissions',
+    name: 'permissions',
     componentKey: 'ModulePage',
     meta: {
-      title: '课程成员列表',
+      title: '权限列表',
       layout: 'console',
-      permissions: ['membership:read'],
+      permissions: ['permission:read'],
       status: 'mvp',
       navGroup: 'users',
     },
@@ -360,7 +374,7 @@ export const primaryNavigation = [
   {
     key: 'users',
     label: '用户与权限',
-    description: 'RBAC 与课程成员',
+    description: '用户、角色、权限',
     path: '/app/users',
     permissions: ['user:read'],
   },

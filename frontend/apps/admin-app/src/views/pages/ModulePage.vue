@@ -4,11 +4,14 @@ import {
   ChevronLeft,
   Check,
   DatabaseZap,
+  Pencil,
+  Archive,
   Hammer,
   ImagePlus,
   Play,
   Plus,
   RefreshCw,
+  Trash2,
   UploadCloud,
   WandSparkles,
   X,
@@ -16,7 +19,13 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 
 import { createApiError, normalizePageData } from '../../api/client.js'
-import { createCourse, listCourses, uploadCourseCover } from '../../api/courses.js'
+import {
+  createCourse,
+  deleteCourse,
+  listCourses,
+  updateCourse,
+  uploadCourseCover,
+} from '../../api/courses.js'
 import { http } from '../../axios/index.js'
 import { listUsers } from '../../api/users.js'
 import {
@@ -125,6 +134,11 @@ const creationCoverState = ref('idle')
 const creationCoverError = ref(null)
 const courseCoverState = ref('idle')
 const courseCoverError = ref(null)
+const courseActionDialog = ref('')
+const courseActionState = ref('idle')
+const courseActionError = ref(null)
+const courseActionCourse = ref(null)
+const courseEditForm = ref(createCourseEditForm())
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -153,6 +167,19 @@ const creationCourseLoading = computed(() => creationCourseState.value === 'load
 const creationTeacherLoading = computed(() => creationTeacherState.value === 'loading')
 const creationCoverUploading = computed(() => creationCoverState.value === 'loading')
 const courseCoverUploading = computed(() => courseCoverState.value === 'loading')
+const courseActionRunning = computed(() => courseActionState.value === 'running')
+const courseActionCourseName = computed(() => (
+  courseActionCourse.value?.courseName
+  ?? courseActionCourse.value?.name
+  ?? courseActionCourse.value?.courseId
+  ?? ''
+))
+const courseEditSubmitDisabled = computed(() => (
+  courseActionRunning.value
+  || !courseEditForm.value.courseName?.trim()
+  || !courseEditForm.value.status
+  || !courseEditForm.value.accessPolicy
+))
 const creationSubmitDisabled = computed(() => (
   creationSubmitting.value
   || creationCoverUploading.value
@@ -266,12 +293,27 @@ const qaOperationFeedback = computed(() => (
 ))
 const courseBlock = computed(() => config.value.blocks?.course)
 const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAULT_COURSE_COVER_URL)
+const courseCanDelete = computed(() => isEmptyCourse(courseBlock.value?.item))
 const materialsBlock = computed(() => config.value.blocks?.materials)
 const knowledgeBasesBlock = computed(() => config.value.blocks?.knowledgeBases)
 const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+
+function createCourseEditForm(course = {}) {
+  return {
+    courseName: course.courseName ?? course.name ?? '',
+    description: course.description ?? '',
+    status: course.status ?? 'active',
+    accessPolicy: course.accessPolicy ?? 'restricted',
+  }
+}
+
+function isEmptyCourse(course = {}) {
+  return Number(course?.materialCount ?? 0) <= 0
+    && Number(course?.knowledgeBaseCount ?? 0) <= 0
+}
 
 async function loadPage(query = route.query) {
   cancelLongTask()
@@ -512,10 +554,7 @@ async function handleBuildPrimaryAction() {
 
 async function handleSecondaryAction() {
   if (route.name === 'course-detail') {
-    await router.push({
-      path: '/app/course-memberships',
-      query: { keyword: String(route.params.courseId ?? '') },
-    })
+    await router.push(`/app/courses/${encodeURIComponent(String(route.params.courseId ?? ''))}/members`)
     return
   }
 
@@ -524,6 +563,149 @@ async function handleSecondaryAction() {
   }
 
   await runMaterialExport()
+}
+
+function handleTableRowAction({ row, action } = {}) {
+  if (route.name !== 'courses') {
+    return
+  }
+
+  if (action?.key === 'edit-course') {
+    openCourseEditDialog(row?.raw ?? row)
+    return
+  }
+
+  if (action?.key === 'delete-course') {
+    openCourseDeleteDialog(row?.raw ?? row)
+    return
+  }
+
+  if (action?.key === 'archive-course') {
+    openCourseArchiveDialog(row?.raw ?? row)
+  }
+}
+
+function openCourseEditDialog(course = null) {
+  const targetCourse = course ?? courseBlock.value?.item
+  if (!targetCourse?.courseId) {
+    return
+  }
+
+  courseActionDialog.value = 'edit'
+  courseActionCourse.value = targetCourse
+  courseEditForm.value = createCourseEditForm(targetCourse)
+  courseActionState.value = 'idle'
+  courseActionError.value = null
+}
+
+function openCourseDeleteDialog(course = null) {
+  const targetCourse = course ?? courseBlock.value?.item
+  if (!targetCourse?.courseId) {
+    return
+  }
+
+  courseActionDialog.value = 'delete'
+  courseActionCourse.value = targetCourse
+  courseActionState.value = 'idle'
+  courseActionError.value = null
+}
+
+function openCourseArchiveDialog(course = null) {
+  const targetCourse = course ?? courseBlock.value?.item
+  if (!targetCourse?.courseId) {
+    return
+  }
+
+  courseActionDialog.value = 'archive'
+  courseActionCourse.value = targetCourse
+  courseActionState.value = 'idle'
+  courseActionError.value = null
+}
+
+function closeCourseActionDialog() {
+  if (courseActionRunning.value) {
+    return
+  }
+
+  courseActionDialog.value = ''
+  courseActionCourse.value = null
+  courseActionError.value = null
+  courseEditForm.value = createCourseEditForm()
+}
+
+async function submitCourseEdit() {
+  const courseId = courseActionCourse.value?.courseId
+  if (!courseId || courseEditSubmitDisabled.value) {
+    return
+  }
+
+  courseActionState.value = 'running'
+  courseActionError.value = null
+
+  try {
+    await updateCourse(courseId, {
+      courseName: courseEditForm.value.courseName.trim(),
+      description: courseEditForm.value.description.trim() || undefined,
+      status: courseEditForm.value.status,
+      accessPolicy: courseEditForm.value.accessPolicy,
+    })
+    courseActionState.value = 'success'
+    closeCourseActionDialog()
+    await loadPage()
+  } catch (error) {
+    courseActionState.value = 'failed'
+    courseActionError.value = createApiError(error)
+  }
+}
+
+async function submitCourseDelete() {
+  const courseId = courseActionCourse.value?.courseId
+  if (!courseId || courseActionRunning.value) {
+    return
+  }
+
+  courseActionState.value = 'running'
+  courseActionError.value = null
+
+  try {
+    await deleteCourse(courseId)
+    courseActionState.value = 'success'
+    closeCourseActionDialog()
+    if (route.name === 'course-detail') {
+      await router.push('/app/courses')
+    } else {
+      await loadPage()
+    }
+  } catch (error) {
+    courseActionState.value = 'failed'
+    courseActionError.value = createApiError(error)
+  }
+}
+
+async function submitCourseArchive() {
+  const course = courseActionCourse.value
+  const courseId = course?.courseId
+  if (!courseId || courseActionRunning.value) {
+    return
+  }
+
+  courseActionState.value = 'running'
+  courseActionError.value = null
+
+  try {
+    await updateCourse(courseId, {
+      courseName: (course.courseName ?? course.name ?? '').trim(),
+      description: course.description?.trim() || undefined,
+      status: 'archived',
+      accessPolicy: course.accessPolicy || 'restricted',
+    })
+    courseActionState.value = 'success'
+    closeCourseActionDialog()
+    await loadPage()
+  } catch (error) {
+    courseActionState.value = 'failed'
+    courseActionError.value = createApiError(error)
+  }
 }
 
 function openCreationDialog(typeOverride = '', defaults = {}) {
@@ -1084,6 +1266,13 @@ function renderFactLabel(field) {
   return typeof field === 'string' ? field : field.label
 }
 
+function resolveMetricProgressStatus(status) {
+  if (status === 'failed') return 'exception'
+  if (status === 'success') return 'success'
+  if (status === 'pending' || status === 'running') return 'warning'
+  return undefined
+}
+
 function countRowsByStatus(rows = [], status) {
   return rows.filter((row) => row.status === status).length
 }
@@ -1144,6 +1333,7 @@ function scrollToCourseSection(key) {
 function resolveCourseStatusLabel(status) {
   return {
     active: '开课中',
+    inactive: '已停用',
     draft: '草稿',
     archived: '已归档',
   }[status] ?? status
@@ -1425,6 +1615,205 @@ onBeforeUnmount(() => cancelLongTask())
     </section>
   </div>
 
+  <div v-if="courseActionDialog === 'edit'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-edit-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Edit</p>
+          <h2 id="course-edit-dialog-title">编辑课程信息</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="courseActionRunning"
+          aria-label="取消编辑"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+
+      <el-form class="creation-form" label-position="top" @submit.prevent="submitCourseEdit">
+        <el-form-item class="creation-field" label="课程名称" required>
+          <el-input
+            v-model.trim="courseEditForm.courseName"
+            name="editCourseName"
+            maxlength="255"
+            show-word-limit
+            required
+          />
+        </el-form-item>
+        <el-form-item class="creation-field" label="课程状态" required>
+          <el-select v-model="courseEditForm.status" name="editCourseStatus">
+            <el-option
+              v-for="option in COURSE_STATUS_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item class="creation-field" label="访问策略" required>
+          <el-select v-model="courseEditForm.accessPolicy" name="editCourseAccessPolicy">
+            <el-option
+              v-for="option in ACCESS_POLICY_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item class="creation-field creation-form__wide" label="说明">
+          <el-input
+            v-model.trim="courseEditForm.description"
+            type="textarea"
+            name="editCourseDescription"
+            :rows="5"
+            maxlength="2000"
+            show-word-limit
+          />
+        </el-form-item>
+        <p v-if="courseActionError" class="inline-error creation-form__wide">{{ courseActionError.message }}</p>
+        <div class="creation-form__actions">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="courseActionRunning"
+            @click="closeCourseActionDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
+            取消
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            native-type="submit"
+            :disabled="courseEditSubmitDisabled"
+          >
+            <Check class="button-icon" :size="16" aria-hidden="true" />
+            {{ courseActionRunning ? '保存中' : '保存修改' }}
+          </el-button>
+        </div>
+      </el-form>
+    </section>
+  </div>
+
+  <div v-if="courseActionDialog === 'delete'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog course-delete-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-delete-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Delete</p>
+          <h2 id="course-delete-dialog-title">删除课程</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="courseActionRunning"
+          aria-label="取消删除"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+      <div class="course-delete-warning">
+        <Trash2 :size="22" aria-hidden="true" />
+        <div>
+          <strong>{{ courseActionCourseName }}</strong>
+          <p>删除后课程会从列表中移除。已有资料或知识库的课程需要先清理关联数据，后端会拒绝直接删除。</p>
+        </div>
+      </div>
+      <p v-if="courseActionError" class="inline-error">{{ courseActionError.message }}</p>
+      <div class="creation-form__actions">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--danger"
+          type="danger"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="submitCourseDelete"
+        >
+          <Trash2 class="button-icon" :size="16" aria-hidden="true" />
+          {{ courseActionRunning ? '删除中' : '确认删除' }}
+        </el-button>
+      </div>
+    </section>
+  </div>
+
+  <div v-if="courseActionDialog === 'archive'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog course-archive-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-archive-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Archive</p>
+          <h2 id="course-archive-dialog-title">归档课程</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="courseActionRunning"
+          aria-label="取消归档"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+      <div class="course-archive-warning">
+        <Archive :size="22" aria-hidden="true" />
+        <div>
+          <strong>{{ courseActionCourseName }}</strong>
+          <p>归档会保留课程资料、知识库、索引和问答历史，只把课程从默认活跃列表中收起。</p>
+        </div>
+      </div>
+      <p v-if="courseActionError" class="inline-error">{{ courseActionError.message }}</p>
+      <div class="creation-form__actions">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--warning"
+          type="warning"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="submitCourseArchive"
+        >
+          <Archive class="button-icon" :size="16" aria-hidden="true" />
+          {{ courseActionRunning ? '归档中' : '确认归档' }}
+        </el-button>
+      </div>
+    </section>
+  </div>
+
   <section v-if="loadError" class="panel">
     <div class="panel-heading">
       <h2>实时数据加载失败</h2>
@@ -1526,20 +1915,38 @@ onBeforeUnmount(() => cancelLongTask())
     @page-change="handlePageChange"
     @search-change="handleTableSearch"
     @filter-change="handleTableFilterChange"
+    @row-action="handleTableRowAction"
   />
 
-  <section v-else-if="courseBlock" class="content-grid two-columns">
-    <article class="panel course-info-panel wide-panel">
-      <div class="panel-heading">
-        <h2>课程概览</h2>
-        <StatusBadge
-          :status="courseBlock.item?.status || 'neutral'"
-          :label="resolveCourseStatusLabel(courseBlock.item?.status)"
-        />
-      </div>
-      <div class="course-cover-panel">
-        <img class="course-cover-panel__image" :src="courseCoverUrl" alt="课程封面" />
-        <div class="course-cover-panel__actions">
+  <section v-else-if="courseBlock" class="course-detail-stage">
+    <article class="panel course-detail-hero-panel">
+      <div class="course-detail-hero">
+        <img class="course-detail-hero__cover" :src="courseCoverUrl" alt="课程封面" />
+        <div class="course-detail-hero__copy">
+          <div class="course-detail-title-row">
+            <p class="eyebrow">Course Detail</p>
+            <StatusBadge
+              :status="courseBlock.item?.status || 'neutral'"
+              :label="resolveCourseStatusLabel(courseBlock.item?.status)"
+            />
+          </div>
+          <h2>{{ courseBlock.item?.courseName || courseBlock.item?.courseId || '课程详情' }}</h2>
+          <p>{{ courseBlock.item?.description || '暂无课程说明，可在编辑信息中补充课程范围、授课对象或资料来源。' }}</p>
+          <div class="course-detail-meta-row">
+            <span>#{{ courseBlock.item?.courseId || '-' }}</span>
+            <span>{{ courseBlock.teachers?.summary || '未绑定教师' }}</span>
+            <span>{{ courseBlock.item?.accessPolicy === 'public' ? '公开访问' : '受限访问' }}</span>
+          </div>
+          <div class="course-detail-actions">
+            <el-button
+              class="ckqa-el-button ckqa-el-button--primary"
+              type="primary"
+              native-type="button"
+              @click="openCourseEditDialog()"
+            >
+              <Pencil class="button-icon" :size="16" aria-hidden="true" />
+              编辑信息
+            </el-button>
           <el-upload
             class="course-cover-uploader"
             accept="image/png,image/jpeg,image/webp"
@@ -1555,10 +1962,58 @@ onBeforeUnmount(() => cancelLongTask())
               {{ courseCoverUploading ? '上传中' : '更新封面' }}
             </el-button>
           </el-upload>
+            <el-button
+              v-if="courseCanDelete"
+              class="ckqa-el-button ckqa-el-button--danger"
+              type="danger"
+              native-type="button"
+              @click="openCourseDeleteDialog()"
+            >
+              <Trash2 class="button-icon" :size="16" aria-hidden="true" />
+              删除课程
+            </el-button>
+            <el-button
+              v-else
+              class="ckqa-el-button ckqa-el-button--warning"
+              type="warning"
+              native-type="button"
+              @click="openCourseArchiveDialog()"
+            >
+              <Archive class="button-icon" :size="16" aria-hidden="true" />
+              归档课程
+            </el-button>
           <p v-if="courseCoverError" class="inline-error">{{ courseCoverError.message }}</p>
         </div>
       </div>
-      <dl class="course-info-block">
+      </div>
+      <div class="course-progress-strip">
+        <div
+          v-for="metric in courseBlock.metrics"
+          :key="metric.label"
+          class="course-progress-strip__item"
+        >
+          <el-progress
+            type="circle"
+            :width="52"
+            :stroke-width="6"
+            :percentage="Number(metric.percent ?? 0)"
+            :status="resolveMetricProgressStatus(metric.status)"
+            :aria-label="`${metric.label}：${metric.value}`"
+          />
+          <div>
+            <span>{{ metric.label }}</span>
+            <strong>{{ metric.value }}</strong>
+            <small>{{ metric.detail }}</small>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel course-info-panel">
+      <div class="panel-heading">
+        <h2>基础信息</h2>
+      </div>
+      <dl class="course-info-block course-info-block--compact">
         <div v-for="field in courseBlock.facts" :key="field.label" class="course-info-row">
           <dt>{{ renderFactLabel(field) }}</dt>
           <dd>{{ renderFactValue(field) }}</dd>
@@ -1566,9 +2021,43 @@ onBeforeUnmount(() => cancelLongTask())
       </dl>
     </article>
 
+    <article class="panel course-teachers-panel">
+      <div class="panel-heading">
+        <h2>授课教师</h2>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          @click="handleSecondaryAction"
+        >
+          <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
+          管理成员
+        </el-button>
+      </div>
+      <ol v-if="courseBlock.teachers?.items?.length" class="course-teacher-list">
+        <li v-for="teacher in courseBlock.teachers.items" :key="teacher.id">
+          <strong>{{ teacher.name }}</strong>
+          <small>{{ teacher.detail || '教师账号' }}</small>
+        </li>
+      </ol>
+      <div v-else class="empty-action-state">
+        <p>暂无授课教师绑定。</p>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          @click="handleSecondaryAction"
+        >
+          <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
+          管理成员
+        </el-button>
+      </div>
+    </article>
+
     <article class="panel" data-course-section="materials">
       <div class="panel-heading">
-        <h2>资料区块</h2>
+        <div>
+          <h2>课程资料</h2>
+          <p>解析状态决定资料是否能进入知识库构建。</p>
+        </div>
         <el-button
           v-if="materialsBlock?.state === 'error'"
           class="ckqa-el-button ckqa-el-button--secondary"
@@ -1602,9 +2091,12 @@ onBeforeUnmount(() => cancelLongTask())
       </div>
     </article>
 
-    <article class="panel wide-panel" data-course-section="knowledgeBases">
+    <article class="panel" data-course-section="knowledgeBases">
       <div class="panel-heading">
-        <h2>知识库区块</h2>
+        <div>
+          <h2>知识库</h2>
+          <p>从课程资料创建并激活可问答索引。</p>
+        </div>
         <el-button
           v-if="knowledgeBasesBlock?.state === 'error'"
           class="ckqa-el-button ckqa-el-button--secondary"

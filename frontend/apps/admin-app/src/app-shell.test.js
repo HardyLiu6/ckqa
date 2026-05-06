@@ -76,7 +76,12 @@ import {
   resolveQaPollingInterval,
   resolveQaStaleTimeout,
 } from './views/pages/qa-polling.js'
-import { createCourse, uploadCourseCover } from './api/courses.js'
+import {
+  createCourse,
+  deleteCourse,
+  updateCourse,
+  uploadCourseCover,
+} from './api/courses.js'
 import {
   exportGraphRag,
   getMaterial,
@@ -427,6 +432,11 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', asyn
 
   assert.equal(liveResult.rows[0].to, '/app/courses/os')
   assert.equal(liveResult.rows[0].thumbnailUrl, '/api/v1/course-covers/default-course-cover.svg')
+  assert.deepEqual(liveResult.rows[0].actions.map((action) => action.label), ['查看', '编辑', '成员', '知识库', '删除'])
+  assert.equal(liveResult.rows[0].actions.find((action) => action.key === 'edit-course').variant, 'primary')
+  assert.equal(liveResult.rows[0].actions.find((action) => action.label === '成员').to, '/app/courses/os/members')
+  assert.equal(liveResult.rows[0].actions.find((action) => action.key === 'delete-course').variant, 'danger')
+  assert.equal(liveResult.rows[0].actions.some((action) => action.to?.includes('/app/course-memberships')), false)
   assert.equal(getRowCells(liveResult.rows[0])[0], '操作系统')
   assert.equal(getCellText(getRowCells(liveResult.rows[0])[1]), '未绑定教师')
   assert.equal(getCellText(getRowCells(liveResult.rows[0])[2]), '开课中')
@@ -482,6 +492,9 @@ test('课程列表行使用教师可读状态、进度和索引摘要', async ()
   assert.equal(cells[4].summary, '已激活 1/2')
   assert.equal(cells[5].label, '最近索引成功')
   assert.equal(cells[5].detail, '运行 9')
+  assert.deepEqual(liveResult.rows[0].actions.map((action) => action.label), ['查看', '编辑', '成员', '知识库', '归档'])
+  assert.equal(liveResult.rows[0].actions.find((action) => action.label === '成员').to, '/app/courses/os/members')
+  assert.equal(liveResult.rows[0].actions.find((action) => action.key === 'archive-course').variant, 'warning')
 })
 
 test('课程详情 loader 只在主资源失败时进入页面级错误', async () => {
@@ -496,6 +509,8 @@ test('课程详情 loader 只在主资源失败时进入页面级错误', async 
 
   assert.equal(partialResult.requestState, 'success')
   assert.equal(partialResult.blocks.course.state, 'success')
+  assert.deepEqual(partialResult.blocks.course.metrics.map((metric) => metric.label), ['资料解析', '知识库激活', '最近索引'])
+  assert.equal(partialResult.blocks.course.teachers.summary, '未绑定教师')
   assert.equal(partialResult.blocks.materials.state, 'error')
   assert.equal(partialResult.blocks.materials.error.message, '资料接口失败')
   assert.equal(partialResult.blocks.knowledgeBases.state, 'success')
@@ -901,9 +916,19 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
       calls.push(['post', url, normalizedPayload])
       return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
     },
+    put: async (url, payload) => {
+      calls.push(['put', url, payload])
+      return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
+    },
+    delete: async (url) => {
+      calls.push(['delete', url, null])
+      return { data: { code: 200, message: 'ok', data: null } }
+    },
   }
 
   await createCourse({ courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }, client)
+  await updateCourse('os', { courseName: '操作系统进阶', status: 'active', accessPolicy: 'restricted' }, client)
+  await deleteCourse('empty-course', client)
   const coverFile = new File([new Uint8Array([1, 2, 3])], 'cover.png', { type: 'image/png' })
   await uploadCourseCover(coverFile, null, client)
   await uploadCourseCover(coverFile, 'os', client)
@@ -912,6 +937,8 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
 
   assert.deepEqual(calls, [
     ['post', '/courses', { courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }],
+    ['put', '/courses/os', { courseName: '操作系统进阶', status: 'active', accessPolicy: 'restricted' }],
+    ['delete', '/courses/empty-course', null],
     ['post', '/courses/covers', { fileName: 'cover.png', fileType: 'image/png' }],
     ['post', '/courses/os/cover', { fileName: 'cover.png', fileType: 'image/png' }],
     ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
@@ -1905,9 +1932,13 @@ test('构建页 loadPage 统一规范化选择集和非法步骤 query', () => {
 
 test('业务页模型显式声明数据来源和主操作', () => {
   const courses = getModulePageConfig('courses')
+  const courseDetail = getModulePageConfig('course-detail')
+  const courseMembers = getModulePageConfig('course-members')
   const knowledgeBases = getModulePageConfig('knowledge-bases')
   const knowledgeBaseDetail = getModulePageConfig('knowledge-base-detail')
   const build = getModulePageConfig('knowledge-base-build')
+  const roles = getModulePageConfig('roles')
+  const permissions = getModulePageConfig('permissions')
 
   assert.equal(courses.dataSource, 'live')
   assert.equal(courses.tableTitle, '课程清单')
@@ -1915,6 +1946,11 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(courses.primaryAction.disabled, false)
   assert.equal(courses.primaryAction.title, '创建课程')
   assert.equal(courses.secondaryAction, null)
+  assert.equal(courseDetail.secondaryAction.label, '管理成员')
+  assert.equal(courseDetail.facts.includes('课程成员'), true)
+  assert.equal(courseMembers.variant, 'table')
+  assert.equal(courseMembers.primaryAction.label, '添加成员')
+  assert.deepEqual(courseMembers.columns, ['用户', '课程内角色', '状态', '授权来源', '更新时间'])
   assert.equal(knowledgeBases.dataSource, 'live')
   assert.equal(knowledgeBases.tableTitle, '知识库实例')
   assert.deepEqual(knowledgeBases.rows, [])
@@ -1926,6 +1962,10 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(build.dataSource, 'live')
   assert.equal(build.workflowSteps.every((step) => Boolean(step.status)), true)
   assert.equal(build.workflowSteps.every((step) => Array.isArray(step.conditions)), true)
+  assert.equal(roles.variant, 'table')
+  assert.equal(permissions.variant, 'table')
+  assert.equal(permissions.primaryAction.label, '新建权限')
+  assert.deepEqual(permissions.columns, ['权限编码', '权限名称', '资源', '操作', '状态'])
 })
 
 test('问答会话列表页面模型保留正式问答和冒烟验证过滤项', () => {
@@ -1961,7 +2001,7 @@ test('业务页列表筛选只按显式列匹配', () => {
       cells: [
         '数据结构',
         { kind: 'empty', label: '未绑定教师', filterValue: 'unbound' },
-        { kind: 'status', label: '草稿', status: 'draft', filterValue: 'draft' },
+        { kind: 'status', label: '已停用', status: 'inactive', filterValue: 'inactive' },
         { kind: 'progress', summary: '已解析 0/1', filterValue: 'incomplete' },
         { kind: 'progress', summary: '暂无知识库', filterValue: 'empty' },
         { kind: 'empty', label: '暂无索引', filterValue: 'none' },
@@ -2104,7 +2144,8 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
 
-  assert.match(tableShell, /label="操作"[\s\S]*width="306"/)
+  assert.match(tableShell, /label="操作"[\s\S]*width="390"/)
+  assert.match(tableShell, /'rowAction'/)
   assert.match(tableShell, /header-class-name="ckqa-el-table__action-column"/)
   assert.match(tableShell, /fixed="right"/)
   assert.match(componentsCss, /\.data-table__actions\s*\{[\s\S]*flex-wrap:\s*nowrap;[\s\S]*\}/)
@@ -2114,9 +2155,10 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   assert.match(componentsCss, /\.table-toolbar\s*\{[\s\S]*align-items:\s*center;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-toolbar-field--search\s*\{[\s\S]*flex:\s*1 1 320px;[\s\S]*\}/)
   assert.match(componentsCss, /\.data-table__actions\s+\.el-button\s*\+\s*\.el-button\s*\{[\s\S]*margin-left:\s*0;[\s\S]*\}/)
-  assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*width:\s*78px;[\s\S]*\}/)
-  assert.match(componentsCss, /\.table-action-button\.ckqa-el-button--primary\.el-button\s*\{[\s\S]*width:\s*104px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*width:\s*auto;[\s\S]*min-width:\s*64px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-action-button\.ckqa-el-button--primary\.el-button\s*\{[\s\S]*min-width:\s*70px;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*8px;[\s\S]*\}/)
+  assert.match(elementPlusCss, /\.ckqa-el-button--danger/)
   assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:\s*1px solid var\(--ckqa-border-subtle\);[\s\S]*\}/)
   assert.doesNotMatch(elementPlusCss, /scrollbar-gutter:\s*stable/)
   assert.doesNotMatch(elementPlusCss, /el-table-fixed-column--right[\s\S]*box-shadow/)
@@ -2176,10 +2218,15 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(modulePage, />\s*关闭\s*</)
   assert.match(modulePage, /@search-change="handleTableSearch"/)
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
+  assert.match(modulePage, /@row-action="handleTableRowAction"/)
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
   assert.match(modulePage, /:title="tableTitle"/)
   assert.match(modulePage, /data-course-section="materials"/)
-  assert.match(modulePage, /class="course-cover-panel"/)
+  assert.match(modulePage, /class="course-detail-hero"/)
+  assert.match(modulePage, /class="course-progress-strip"/)
+  assert.match(modulePage, /class="creation-dialog course-action-dialog course-delete-dialog"/)
+  assert.match(modulePage, /openCourseArchiveDialog/)
+  assert.match(modulePage, /submitCourseArchive/)
   assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId: String\(route\.params\.courseId \?\? ''\) \}\)/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
 
@@ -2362,8 +2409,13 @@ test('控制台侧栏区分单入口菜单和下拉子模块', () => {
   assert.equal(users.presentation, 'folder')
   assert.deepEqual(
     users.items.map((item) => item.path),
-    ['/app/users', '/app/roles', '/app/course-memberships'],
+    ['/app/users', '/app/roles', '/app/permissions'],
   )
+  assert.deepEqual(
+    users.items.map((item) => item.title),
+    ['用户列表', '角色列表', '权限列表'],
+  )
+  assert.equal(groups.find((group) => group.key === 'users').hint, '用户、角色、权限')
 })
 
 test('控制台导航不暴露动态详情路径并保留顶层未开放入口', () => {
@@ -2372,7 +2424,11 @@ test('控制台导航不暴露动态详情路径并保留顶层未开放入口',
   const paths = items.map((item) => item.path)
 
   assert.equal(paths.some((path) => path.includes(':')), false)
+  assert.equal(paths.includes('/app/course-memberships'), false)
+  assert.equal(paths.includes('/app/permissions'), true)
+  assert.equal(routeRecords.some((route) => route.path === '/app/courses/:courseId/members'), true)
   assert.equal(paths.includes('/app/courses/:courseId'), false)
+  assert.equal(paths.includes('/app/courses/:courseId/members'), false)
   assert.equal(paths.includes('/app/materials/:materialId'), false)
   assert.equal(paths.includes('/app/qa-sessions/:sessionId'), false)
 
@@ -2404,6 +2460,7 @@ test('控制台导航在详情路径回落高亮所属模块入口', () => {
   const groups = buildNavigationGroups(routeRecords, () => true)
 
   assert.equal(findActiveNavigationPath(groups, 'courses', '/app/materials/42'), '/app/courses')
+  assert.equal(findActiveNavigationPath(groups, 'courses', '/app/courses/os/members'), '/app/courses')
   assert.equal(
     findActiveNavigationPath(groups, 'courses', '/app/materials/42/parse-results'),
     '/app/courses',
@@ -2418,6 +2475,14 @@ test('控制台导航在详情路径回落高亮所属模块入口', () => {
     findActiveNavigationPath(groups, 'system', '/app/authorization-audit-logs'),
     '/app/authorization-audit-logs',
   )
+})
+
+test('课程详情源码只保留课程域成员管理跳转', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(modulePage, /\/app\/course-memberships/)
+  assert.match(modulePage, /\/app\/courses\/\$\{encodeURIComponent\(String\(route\.params\.courseId \?\? ''\)\)\}\/members/)
+  assert.match(modulePage, /管理成员/)
 })
 
 test('状态和数据来源有稳定映射', () => {

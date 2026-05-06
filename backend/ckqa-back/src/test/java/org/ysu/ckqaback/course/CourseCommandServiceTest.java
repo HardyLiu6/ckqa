@@ -10,19 +10,26 @@ import org.springframework.http.HttpStatus;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
+import org.ysu.ckqaback.course.dto.CourseUpdateRequest;
 import org.ysu.ckqaback.entity.CourseMemberships;
+import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.Courses;
+import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.Users;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.CourseMembershipsService;
 import org.ysu.ckqaback.service.CoursesService;
+import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.UsersService;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -35,6 +42,8 @@ class CourseCommandServiceTest {
 
     private CoursesService coursesService;
     private CourseMembershipsService courseMembershipsService;
+    private CourseMaterialsService courseMaterialsService;
+    private KnowledgeBasesService knowledgeBasesService;
     private UsersService usersService;
     private CourseIdGenerator courseIdGenerator;
     private ApplicationEventPublisher eventPublisher;
@@ -45,6 +54,8 @@ class CourseCommandServiceTest {
     void setUp() {
         coursesService = mock(CoursesService.class);
         courseMembershipsService = mock(CourseMembershipsService.class);
+        courseMaterialsService = mock(CourseMaterialsService.class);
+        knowledgeBasesService = mock(KnowledgeBasesService.class);
         usersService = mock(UsersService.class);
         courseIdGenerator = mock(CourseIdGenerator.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
@@ -52,6 +63,8 @@ class CourseCommandServiceTest {
         service = new CourseCommandService(
                 coursesService,
                 courseMembershipsService,
+                courseMaterialsService,
+                knowledgeBasesService,
                 usersService,
                 courseIdGenerator,
                 eventPublisher,
@@ -255,6 +268,56 @@ class CourseCommandServiceTest {
                 .isEqualTo(ApiResultCode.COURSE_ID_EXISTS.getCode());
     }
 
+    @Test
+    void shouldUpdateCourseBasicFields() {
+        CourseUpdateRequest request = new CourseUpdateRequest();
+        request.setCourseName("操作系统进阶");
+        request.setDescription("更新后的课程说明");
+        request.setStatus("archived");
+        request.setAccessPolicy("public");
+        Courses course = existingCourse();
+        when(coursesService.getOne(any())).thenReturn(course);
+
+        service.updateCourse("os", request);
+
+        ArgumentCaptor<Courses> courseCaptor = ArgumentCaptor.forClass(Courses.class);
+        verify(coursesService).updateById(courseCaptor.capture());
+        Courses updated = courseCaptor.getValue();
+        assertThat(updated.getCourseId()).isEqualTo("os");
+        assertThat(updated.getCourseName()).isEqualTo("操作系统进阶");
+        assertThat(updated.getDescription()).isEqualTo("更新后的课程说明");
+        assertThat(updated.getStatus()).isEqualTo("archived");
+        assertThat(updated.getAccessPolicy()).isEqualTo("public");
+        assertThat(updated.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void shouldSoftDeleteEmptyCourse() {
+        Courses course = existingCourse();
+        when(coursesService.getOne(any())).thenReturn(course);
+        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of());
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of());
+
+        service.deleteCourse("os");
+
+        verify(coursesService).removeById(12L);
+    }
+
+    @Test
+    void shouldRejectDeletingCourseWithMaterialsOrKnowledgeBases() {
+        Courses course = existingCourse();
+        when(coursesService.getOne(any())).thenReturn(course);
+        when(courseMaterialsService.listByCourseId("os")).thenReturn(List.of(new CourseMaterials()));
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of(new KnowledgeBases()));
+
+        assertThatThrownBy(() -> service.deleteCourse("os"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("课程仍有关联资料或知识库，请先清理后删除")
+                .extracting("status")
+                .isEqualTo(HttpStatus.CONFLICT);
+        verify(coursesService, never()).removeById(eq(12L));
+    }
+
     private CourseCreateRequest createRequest() {
         CourseCreateRequest request = new CourseCreateRequest();
         request.setCourseName("数据库系统");
@@ -279,5 +342,18 @@ class CourseCommandServiceTest {
         Users user = activeTeacher();
         user.setStatus("disabled");
         return user;
+    }
+
+    private Courses existingCourse() {
+        Courses course = new Courses();
+        course.setId(12L);
+        course.setCourseId("os");
+        course.setCourseName("操作系统");
+        course.setDescription("旧说明");
+        course.setStatus("active");
+        course.setAccessPolicy("restricted");
+        course.setCreatedAt(LocalDateTime.of(2026, 5, 4, 9, 0));
+        course.setUpdatedAt(LocalDateTime.of(2026, 5, 4, 9, 0));
+        return course;
     }
 }

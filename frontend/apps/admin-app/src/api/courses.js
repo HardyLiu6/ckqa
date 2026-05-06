@@ -9,6 +9,14 @@ export async function createCourse(payload, client = http) {
   return unwrapApiResponse(await client.post('/courses', payload))
 }
 
+export async function updateCourse(courseId, payload, client = http) {
+  return unwrapApiResponse(await client.put(`/courses/${encodeURIComponent(courseId)}`, payload))
+}
+
+export async function deleteCourse(courseId, client = http) {
+  return unwrapApiResponse(await client.delete(`/courses/${encodeURIComponent(courseId)}`))
+}
+
 export async function uploadCourseCover(file, courseId = null, client = http) {
   const formData = new FormData()
   formData.append('file', file)

@@ -78,6 +78,34 @@
   background: color-mix(in srgb, var(--ckqa-surface) 78%, transparent);
 }
 
+.ckqa-el-button--danger {
+  color: var(--ckqa-danger);
+  border-color: color-mix(in srgb, var(--ckqa-danger) 34%, var(--ckqa-border));
+  background: color-mix(in srgb, var(--ckqa-danger) 8%, var(--ckqa-surface));
+}
+
+.ckqa-el-button--danger:hover,
+.ckqa-el-button--danger:focus-visible {
+  border-color: color-mix(in srgb, var(--ckqa-danger) 52%, var(--ckqa-border));
+  box-shadow:
+    0 12px 28px rgb(239 68 68 / 12%),
+    0 0 0 1px color-mix(in srgb, var(--ckqa-danger) 18%, transparent);
+}
+
+.ckqa-el-button--warning {
+  color: #b7791f;
+  border-color: color-mix(in srgb, #b7791f 36%, var(--ckqa-border));
+  background: color-mix(in srgb, #b7791f 9%, var(--ckqa-surface));
+}
+
+.ckqa-el-button--warning:hover,
+.ckqa-el-button--warning:focus-visible {
+  border-color: color-mix(in srgb, #b7791f 52%, var(--ckqa-border));
+  box-shadow:
+    0 12px 28px rgb(183 121 31 / 12%),
+    0 0 0 1px rgb(183 121 31 / 18%);
+}
+
 .ckqa-el-button--ghost {
   color: var(--ckqa-text-muted);
   background: color-mix(in srgb, var(--ckqa-surface) 52%, transparent);

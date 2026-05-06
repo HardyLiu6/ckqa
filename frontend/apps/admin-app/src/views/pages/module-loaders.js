@@ -34,14 +34,24 @@ const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
 const COURSE_STATUS_LABELS = {
   active: '开课中',
+  inactive: '已停用',
   draft: '草稿',
   archived: '已归档',
+}
+const COURSE_ACCESS_POLICY_LABELS = {
+  restricted: '受限访问',
+  public: '公开访问',
 }
 const INDEX_STATUS_LABELS = {
   success: '最近索引成功',
   running: '索引构建中',
   failed: '最近索引失败',
   pending: '索引等待中',
+}
+
+function isEmptyCourse(course = {}) {
+  return Number(course.materialCount ?? 0) <= 0
+    && Number(course.knowledgeBaseCount ?? 0) <= 0
 }
 const defaultServices = {
   getCourse,
@@ -157,14 +167,11 @@ function mapCourseRow(course) {
 
   return {
     id: courseId ?? course.courseName,
+    raw: course,
     to: encodedCourseId ? `/app/courses/${encodedCourseId}` : '',
     subtitle: courseId ? `#${courseId}` : '',
     thumbnailUrl: resolveCourseCoverUrl(course),
-    actions: encodedCourseId ? [
-      { label: '详情', to: `/app/courses/${encodedCourseId}` },
-      { label: '成员', to: `/app/course-memberships?keyword=${encodedCourseId}` },
-      { label: '知识库', to: `/app/knowledge-bases?keyword=${encodedCourseId}`, variant: 'primary' },
-    ] : [],
+    actions: encodedCourseId ? createCourseRowActions(course, encodedCourseId) : [],
     cells: [
       course.courseName || course.courseId || '-',
       createTeacherCell(course),
@@ -175,6 +182,20 @@ function mapCourseRow(course) {
       course.updatedAt || '-',
     ],
   }
+}
+
+function createCourseRowActions(course, encodedCourseId) {
+  const destructiveAction = isEmptyCourse(course)
+    ? { label: '删除', key: 'delete-course', icon: 'delete', variant: 'danger' }
+    : { label: '归档', key: 'archive-course', icon: 'archive', variant: 'warning' }
+
+  return [
+    { label: '查看', to: `/app/courses/${encodedCourseId}`, icon: 'view' },
+    { label: '编辑', key: 'edit-course', icon: 'edit', variant: 'primary' },
+    { label: '成员', to: `/app/courses/${encodedCourseId}/members`, icon: 'users' },
+    { label: '知识库', to: `/app/knowledge-bases?keyword=${encodedCourseId}`, icon: 'knowledge' },
+    destructiveAction,
+  ]
 }
 
 function createTeacherCell(course = {}) {
@@ -970,6 +991,8 @@ async function loadCourseDetail(route, services) {
         state: 'success',
         item: course,
         facts: buildCourseFacts(course),
+        metrics: buildCourseMetrics(course),
+        teachers: buildCourseTeachers(course),
       },
       materials: materialBlock,
       knowledgeBases: knowledgeBaseBlock,
@@ -1082,12 +1105,69 @@ function createBuildRunBlock(result, buildRunId) {
 function buildCourseFacts(course = {}) {
   return [
     { label: '课程 ID', value: course.courseId ?? course.id ?? '-' },
-    { label: '课程名称', value: course.courseName ?? course.name ?? '-' },
-    { label: '状态', value: course.status ?? '-' },
+    { label: '课程状态', value: COURSE_STATUS_LABELS[course.status] ?? course.status ?? '-' },
+    { label: '访问策略', value: COURSE_ACCESS_POLICY_LABELS[course.accessPolicy] ?? course.accessPolicy ?? '-' },
     { label: '资料数量', value: formatCount(course.materialCount) },
     { label: '知识库数量', value: formatCount(course.knowledgeBaseCount) },
+    { label: '创建时间', value: course.createdAt ?? '-' },
     { label: '更新时间', value: course.updatedAt ?? '-' },
   ]
+}
+
+function buildCourseMetrics(course = {}) {
+  const materialTotal = Number(course.materialCount ?? 0)
+  const materialParsed = Number(course.parsedMaterialCount ?? 0)
+  const materialFailed = Number(course.failedMaterialCount ?? 0)
+  const knowledgeBaseTotal = Number(course.knowledgeBaseCount ?? 0)
+  const knowledgeBaseActive = Number(course.activeKnowledgeBaseCount ?? 0)
+  const latestIndexRunId = course.latestIndexRunId
+  const latestIndexRunStatus = String(course.latestIndexRunStatus ?? '').trim()
+
+  return [
+    {
+      label: '资料解析',
+      value: `${materialParsed}/${materialTotal}`,
+      detail: materialTotal > 0
+        ? (materialFailed > 0 ? `${materialFailed} 份失败` : '资料解析进度')
+        : '等待登记资料',
+      percent: resolvePercent(materialParsed, materialTotal),
+      status: materialFailed > 0 ? 'failed' : (materialTotal > 0 && materialParsed >= materialTotal ? 'success' : 'pending'),
+    },
+    {
+      label: '知识库激活',
+      value: `${knowledgeBaseActive}/${knowledgeBaseTotal}`,
+      detail: knowledgeBaseTotal > 0 ? '可问答知识库占比' : '可从详情页创建',
+      percent: resolvePercent(knowledgeBaseActive, knowledgeBaseTotal),
+      status: knowledgeBaseTotal > 0 && knowledgeBaseActive >= knowledgeBaseTotal ? 'success' : 'pending',
+    },
+    {
+      label: '最近索引',
+      value: latestIndexRunId ? `#${latestIndexRunId}` : '暂无',
+      detail: latestIndexRunId
+        ? (INDEX_STATUS_LABELS[latestIndexRunStatus] ?? latestIndexRunStatus) || '索引状态未知'
+        : '尚未产生索引运行',
+      percent: latestIndexRunId ? 100 : 0,
+      status: latestIndexRunStatus || 'blocked',
+    },
+  ]
+}
+
+function buildCourseTeachers(course = {}) {
+  const teachers = Array.isArray(course.teachers) ? course.teachers : []
+  const items = teachers.map((teacher) => ({
+    id: teacher.userId ?? teacher.id ?? teacher.userCode ?? teacher.username,
+    name: teacher.displayName ?? teacher.username ?? teacher.userCode ?? '教师',
+    detail: teacher.userCode ?? teacher.username ?? '',
+  }))
+
+  return {
+    state: items.length > 0 ? 'success' : 'empty',
+    count: Number(course.teacherCount ?? items.length),
+    summary: items.length > 0
+      ? items.map((teacher) => teacher.name).join('、')
+      : '未绑定教师',
+    items,
+  }
 }
 
 function resolveCourseCoverUrl(course = {}) {

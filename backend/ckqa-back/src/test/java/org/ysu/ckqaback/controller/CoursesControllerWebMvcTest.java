@@ -19,6 +19,7 @@ import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseTeacherResponse;
+import org.ysu.ckqaback.course.dto.CourseUpdateRequest;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 
@@ -28,10 +29,14 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.eq;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -136,6 +141,45 @@ class CoursesControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.coverUrl").value("/api/v1/course-covers/default-course-cover.svg"))
                 .andExpect(jsonPath("$.data.status").value("active"))
                 .andExpect(jsonPath("$.data.teachers[0].userId").value(8));
+    }
+
+    @Test
+    void shouldUpdateCourse() throws Exception {
+        given(courseLookupService.getCourseDetail("os")).willReturn(CourseDetailResponse.builder()
+                .id(1L)
+                .courseId("os")
+                .courseName("操作系统进阶")
+                .description("更新后的课程说明")
+                .status("active")
+                .accessPolicy("restricted")
+                .materialCount(0L)
+                .knowledgeBaseCount(0L)
+                .build());
+
+        mockMvc.perform(put(ApiPaths.COURSES + "/os")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseName": "操作系统进阶",
+                                  "description": "更新后的课程说明",
+                                  "status": "active",
+                                  "accessPolicy": "restricted"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.courseId").value("os"))
+                .andExpect(jsonPath("$.data.courseName").value("操作系统进阶"));
+
+        then(courseCommandService).should().updateCourse(eq("os"), any(CourseUpdateRequest.class));
+    }
+
+    @Test
+    void shouldDeleteCourse() throws Exception {
+        mockMvc.perform(delete(ApiPaths.COURSES + "/empty-course"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        then(courseCommandService).should().deleteCourse("empty-course");
     }
 
     @Test

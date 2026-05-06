@@ -15,12 +15,15 @@ import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CourseTeacherResponse;
+import org.ysu.ckqaback.course.dto.CourseUpdateRequest;
 import org.ysu.ckqaback.entity.CourseMemberships;
 import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.Users;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.CourseMembershipsService;
 import org.ysu.ckqaback.service.CoursesService;
+import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.UsersService;
 
 import java.time.LocalDateTime;
@@ -44,6 +47,8 @@ public class CourseCommandService {
 
     private final CoursesService coursesService;
     private final CourseMembershipsService courseMembershipsService;
+    private final CourseMaterialsService courseMaterialsService;
+    private final KnowledgeBasesService knowledgeBasesService;
     private final UsersService usersService;
     private final CourseIdGenerator courseIdGenerator;
     private final ApplicationEventPublisher eventPublisher;
@@ -93,14 +98,36 @@ public class CourseCommandService {
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
-    public CourseCoverUploadResponse updateCourseCover(String courseId, MultipartFile file) {
-        Courses course = coursesService.getOne(new LambdaQueryWrapper<Courses>()
-                .eq(Courses::getCourseId, courseId)
-                .last("LIMIT 1"));
-        if (course == null) {
-            throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND, "课程不存在");
+    public void updateCourse(String courseId, CourseUpdateRequest request) {
+        Courses course = getRequiredCourseByCourseId(courseId);
+        course.setCourseName(normalizeText(request.getCourseName()));
+        course.setDescription(normalizeNullableText(request.getDescription()));
+        course.setStatus(normalizeText(request.getStatus()));
+        course.setAccessPolicy(normalizeText(request.getAccessPolicy()));
+        course.setUpdatedAt(LocalDateTime.now());
+        coursesService.updateById(course);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void deleteCourse(String courseId) {
+        Courses course = getRequiredCourseByCourseId(courseId);
+        boolean hasMaterials = !courseMaterialsService.listByCourseId(courseId).isEmpty();
+        boolean hasKnowledgeBases = !knowledgeBasesService.listByCourseId(courseId).isEmpty();
+
+        if (hasMaterials || hasKnowledgeBases) {
+            throw new BusinessException(
+                    ApiResultCode.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
+                    "课程仍有关联资料或知识库，请先清理后删除"
+            );
         }
 
+        coursesService.removeById(course.getId());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRED)
+    public CourseCoverUploadResponse updateCourseCover(String courseId, MultipartFile file) {
+        Courses course = getRequiredCourseByCourseId(courseId);
         CourseCoverUploadResponse response = courseCoverService.store(file);
         course.setCoverUrl(response.getCoverUrl());
         course.setUpdatedAt(LocalDateTime.now());
@@ -176,6 +203,16 @@ public class CourseCommandService {
                 .accessPolicyDescription(null)
                 .memberCount(null)
                 .build();
+    }
+
+    private Courses getRequiredCourseByCourseId(String courseId) {
+        Courses course = coursesService.getOne(new LambdaQueryWrapper<Courses>()
+                .eq(Courses::getCourseId, courseId)
+                .last("LIMIT 1"));
+        if (course == null) {
+            throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND, "课程不存在");
+        }
+        return course;
     }
 
     private boolean isCourseIdUniqueConflict(RuntimeException ex) {

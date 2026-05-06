@@ -6,6 +6,7 @@ import {
   CircleHelp,
   DatabaseZap,
   Gauge,
+  KeyRound,
   MessageSquareText,
   ScrollText,
   Server,
@@ -44,6 +45,7 @@ function resolveGroupIcon(key) {
 function resolveItemIcon(item) {
   if (item.name === 'health' || item.path?.includes('/health')) return Wrench
   if (item.name?.includes('audit') || item.title?.includes('审计')) return ScrollText
+  if (item.name?.includes('permission') || item.title?.includes('权限')) return KeyRound
   if (item.name?.includes('user') || item.title?.includes('用户')) return UserCog
   if (item.name?.includes('qa') || item.title?.includes('问答')) return MessageSquareText
   if (item.name?.includes('knowledge') || item.title?.includes('知识库')) return Sparkles
