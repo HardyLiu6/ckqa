@@ -946,7 +946,7 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   await uploadCourseCover(coverFile, null, client)
   await uploadCourseCover(coverFile, 'os', client)
   await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
-  await listCourseMembers({ courseId: 'os', status: 'active', page: 1, size: 20 }, client)
+  await listCourseMembers({ courseId: 'os', status: 'active', membershipRole: '', keyword: '', page: 1, size: 20 }, client)
   await createCourseMember({ courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }, client)
   await updateCourseMember(21, { courseId: 'os', status: 'suspended' }, client)
   await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)

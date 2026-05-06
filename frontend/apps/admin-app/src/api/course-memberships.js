@@ -2,7 +2,7 @@ import { normalizePageData, unwrapApiResponse } from './client.js'
 import { http } from '../axios/index.js'
 
 export async function listCourseMembers(params = {}, client = http) {
-  return normalizePageData(unwrapApiResponse(await client.get('/course-memberships', { params })))
+  return normalizePageData(unwrapApiResponse(await client.get('/course-memberships', { params: cleanQueryParams(params) })))
 }
 
 export async function createCourseMember(payload, client = http) {
@@ -11,4 +11,10 @@ export async function createCourseMember(payload, client = http) {
 
 export async function updateCourseMember(id, payload, client = http) {
   return unwrapApiResponse(await client.patch(`/course-memberships/${encodeURIComponent(id)}`, payload))
+}
+
+function cleanQueryParams(params = {}) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  )
 }
