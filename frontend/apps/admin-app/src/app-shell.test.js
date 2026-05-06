@@ -145,7 +145,11 @@ import {
   selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
 import { normalizeHealthResponse } from './views/system/health-model.js'
-import { createViteConfig, resolveApiProxyTarget } from '../vite.config.js'
+import {
+  createViteConfig,
+  resolveAdminAppManualChunk,
+  resolveApiProxyTarget,
+} from '../vite.config.js'
 
 test('路由骨架包含首版关键入口和后续页面状态', () => {
   const paths = routeRecords.map((route) => route.path)
@@ -262,6 +266,20 @@ test('Vite 配置启用 Element Plus 自动导入插件且保留 API 代理', ()
   assert.ok(pluginNames.includes('unplugin-vue-components'))
   assert.equal(devConfig.server.proxy['/api/v1'].target, 'http://127.0.0.1:8080')
   assert.equal(devConfig.server.proxy['/api/v1'].changeOrigin, true)
+})
+
+test('Vite 构建把大型第三方依赖拆成稳定 vendor chunk', () => {
+  const buildConfig = createViteConfig({})
+
+  assert.equal(buildConfig.build.rolldownOptions.output.codeSplitting, true)
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/vue/dist/vue.runtime.esm-bundler.js'), 'vendor-vue')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/vue-router/dist/vue-router.mjs'), 'vendor-vue')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/pinia/dist/pinia.mjs'), 'vendor-vue')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/element-plus/es/index.mjs'), 'vendor-element-plus')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/@element-plus/icons-vue/dist/index.mjs'), 'vendor-icons')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/lucide-vue-next/dist/cjs/lucide-vue-next.js'), 'vendor-icons')
+  assert.equal(resolveAdminAppManualChunk('/repo/node_modules/axios/index.js'), 'vendor-http')
+  assert.equal(resolveAdminAppManualChunk('/repo/src/views/pages/ModulePage.vue'), null)
 })
 
 test('ApiResponse 解包只接受 CKQA envelope 和业务成功码 200', () => {
