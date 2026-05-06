@@ -11,6 +11,7 @@ SET @ckqa_demo_password_hash = 'pbkdf2$210000$Y2txYS1qd3QtZGVtby0yNg==$cUUPGgqb4
 INSERT INTO `permissions` (`permission_code`, `permission_name`, `description`)
 VALUES
   ('material:read', '查看课程资料', '允许查看课程资料列表与资料状态'),
+  ('material:write', '维护课程资料', '允许上传、编辑和删除课程资料记录'),
   ('material:parse', '触发资料解析', '允许触发课程资料解析任务'),
   ('material:export', '导出知识图谱输入', '允许导出 GraphRAG 构建输入'),
   ('kb:read', '查看知识库', '允许查看课程知识库与索引状态'),
@@ -33,6 +34,7 @@ JOIN `permissions` p ON p.permission_code IN (
   'membership:write',
   'user:read',
   'material:read',
+  'material:write',
   'material:parse',
   'material:export',
   'kb:read',

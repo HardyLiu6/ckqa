@@ -71,6 +71,30 @@ public class Users implements Serializable {
     private LocalDateTime lastLoginAt;
 
     /**
+     * 头像存储桶
+     */
+    @TableField("avatar_bucket")
+    private String avatarBucket;
+
+    /**
+     * 头像对象键
+     */
+    @TableField("avatar_object_key")
+    private String avatarObjectKey;
+
+    /**
+     * 头像内容类型
+     */
+    @TableField("avatar_content_type")
+    private String avatarContentType;
+
+    /**
+     * 头像更新时间
+     */
+    @TableField("avatar_updated_at")
+    private LocalDateTime avatarUpdatedAt;
+
+    /**
      * 扩展元数据
      */
     @TableField("extra_metadata")

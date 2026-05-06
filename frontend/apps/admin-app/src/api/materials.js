@@ -1,5 +1,47 @@
 import { http } from '../axios/index.js'
-import { unwrapApiResponse } from './client.js'
+import { normalizePageData, unwrapApiResponse } from './client.js'
+
+export async function listCourseMaterialPage(courseId, params = {}, client = http) {
+  const data = unwrapApiResponse(await client.get(
+    `/courses/${encodeURIComponent(courseId)}/materials`,
+    { params: normalizeCourseMaterialQueryParams(params) },
+  ))
+  return normalizePageData(data)
+}
+
+export async function uploadCourseMaterial(
+  courseId,
+  { file, displayName = '', materialType = 'textbook', onUploadProgress = null } = {},
+  client = http,
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (String(displayName ?? '').trim()) {
+    formData.append('displayName', String(displayName).trim())
+  }
+  if (String(materialType ?? '').trim()) {
+    formData.append('materialType', String(materialType).trim())
+  }
+
+  return unwrapApiResponse(await client.post(
+    `/courses/${encodeURIComponent(courseId)}/materials`,
+    formData,
+    onUploadProgress ? { onUploadProgress } : {},
+  ))
+}
+
+export async function updateCourseMaterial(courseId, materialId, payload = {}, client = http) {
+  return unwrapApiResponse(await client.patch(
+    `/courses/${encodeURIComponent(courseId)}/materials/${encodeURIComponent(materialId)}`,
+    payload,
+  ))
+}
+
+export async function deleteCourseMaterial(courseId, materialId, client = http) {
+  return unwrapApiResponse(await client.delete(
+    `/courses/${encodeURIComponent(courseId)}/materials/${encodeURIComponent(materialId)}`,
+  ))
+}
 
 export async function getMaterial(id, config = {}) {
   return unwrapApiResponse(await http.get(`/pdf-files/${encodeURIComponent(id)}`, config))
@@ -32,4 +74,10 @@ export function hasCompleteGraphRagExport(results = [], { mode = 'section', with
   }
 
   return required.every((fileName) => fileNames.has(fileName))
+}
+
+function normalizeCourseMaterialQueryParams(params = {}) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  )
 }

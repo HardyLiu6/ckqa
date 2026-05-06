@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -98,7 +100,43 @@ class AuthControllerWebMvcTest {
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, currentUser))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.userCode").value("ADM2026001"))
+                .andExpect(jsonPath("$.data.avatarUrl").value("/api/v1/user-avatars/default-user-avatar.svg"))
                 .andExpect(jsonPath("$.data.permissions[0]").value("*"));
+    }
+
+    @Test
+    void shouldUploadCurrentUserAvatar() throws Exception {
+        AuthenticatedUser currentUser = new AuthenticatedUser(
+                1L,
+                "ADM2026001",
+                "admin.heqh",
+                "何启航",
+                List.of("admin"),
+                List.of("*")
+        );
+        AuthUserProfile updatedProfile = AuthUserProfile.builder()
+                .id(1L)
+                .userCode("ADM2026001")
+                .username("admin.heqh")
+                .displayName("何启航")
+                .avatarUrl("/api/v1/user-avatars/user-avatar-1.png")
+                .roles(List.of("admin"))
+                .permissions(List.of("*"))
+                .dataScope("全部课程")
+                .build();
+        MockMultipartFile avatar = new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                new byte[]{1, 2, 3}
+        );
+        given(authService.uploadCurrentUserAvatar(eq(currentUser), any())).willReturn(updatedProfile);
+
+        mockMvc.perform(multipart(ApiPaths.AUTH + "/me/avatar")
+                        .file(avatar)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, currentUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avatarUrl").value("/api/v1/user-avatars/user-avatar-1.png"));
     }
 
     @Test
@@ -129,6 +167,7 @@ class AuthControllerWebMvcTest {
                 .userCode(userCode)
                 .username("admin.heqh")
                 .displayName("何启航")
+                .avatarUrl("/api/v1/user-avatars/default-user-avatar.svg")
                 .roles(roles)
                 .permissions(permissions)
                 .dataScope("全部课程")

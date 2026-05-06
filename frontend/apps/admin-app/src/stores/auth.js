@@ -8,6 +8,7 @@ import { getAdminPinia } from './pinia.js'
 
 const AUTH_STORAGE_KEY = 'ckqa-admin-auth-session'
 const LEGACY_AUTH_STORAGE_KEY = 'ckqa-admin-auth-role'
+const DEFAULT_AVATAR_URL = '/api/v1/user-avatars/default-user-avatar.svg'
 
 export const LOGIN_PRESETS = [
   {
@@ -33,6 +34,7 @@ export const ROLE_PROFILES = {
     username: 'admin.heqh',
     name: '平台管理员',
     displayName: '平台管理员',
+    avatarUrl: DEFAULT_AVATAR_URL,
     role: 'admin',
     roles: ['admin'],
     dataScope: '全部课程',
@@ -45,6 +47,7 @@ export const ROLE_PROFILES = {
     username: 'teacher.zhangwb',
     name: '示例教师',
     displayName: '示例教师',
+    avatarUrl: DEFAULT_AVATAR_URL,
     role: 'teacher',
     roles: ['teacher'],
     dataScope: '授权课程',
@@ -52,6 +55,7 @@ export const ROLE_PROFILES = {
     permissions: [
       'course:read',
       'material:read',
+      'material:write',
       'material:parse',
       'material:export',
       'kb:read',
@@ -80,6 +84,7 @@ export function cloneProfile(profile = {}) {
     username: profile.username ?? '',
     name: displayName,
     displayName,
+    avatarUrl: profile.avatarUrl || DEFAULT_AVATAR_URL,
     role: profile.role ?? roles[0] ?? 'teacher',
     roles,
     dataScope: profile.dataScope ?? '授权课程',

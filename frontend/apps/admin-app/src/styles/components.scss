@@ -463,6 +463,52 @@ textarea.text-input {
   font-weight: 800;
 }
 
+.material-action-dialog {
+  width: min(780px, 100%);
+}
+
+.material-upload-drop {
+  width: 100%;
+}
+
+.material-upload-drop .el-upload,
+.material-upload-drop .el-upload-dragger {
+  width: 100%;
+}
+
+.material-upload-drop .el-upload-dragger {
+  display: grid;
+  min-height: 178px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border-color: color-mix(in srgb, var(--ckqa-accent) 24%, var(--ckqa-border));
+  color: var(--ckqa-accent-strong);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 7%, transparent), transparent 48%),
+    var(--ckqa-surface-muted);
+}
+
+.material-upload-drop strong,
+.material-upload-drop small {
+  display: block;
+}
+
+.material-upload-drop small,
+.upload-progress-panel span {
+  color: var(--ckqa-text-muted);
+  font-size: 12px;
+}
+
+.upload-progress-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface-muted);
+}
+
 .console-layout {
   display: grid;
   min-height: 100vh;
@@ -528,6 +574,30 @@ textarea.text-input {
 
 .identity-chip strong {
   color: var(--ckqa-text);
+}
+
+.identity-avatar {
+  position: relative;
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 28%, var(--ckqa-border));
+  border-radius: var(--ckqa-radius-full);
+  color: var(--ckqa-accent-strong);
+  background: color-mix(in srgb, var(--ckqa-accent) 11%, var(--ckqa-surface));
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.identity-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .identity-cluster {
@@ -1448,11 +1518,48 @@ textarea.text-input {
 
 .course-teacher-list li {
   display: grid;
-  gap: 4px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
   padding: 12px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-sm);
   background: var(--ckqa-surface-muted);
+}
+
+.course-teacher-avatar {
+  position: relative;
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 24%, var(--ckqa-border));
+  border-radius: var(--ckqa-radius-sm);
+  color: var(--ckqa-accent-strong);
+  background: color-mix(in srgb, var(--ckqa-accent) 12%, var(--ckqa-surface));
+  font-weight: 900;
+}
+
+.course-teacher-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.course-teacher-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.course-teacher-copy strong,
+.course-teacher-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .course-teacher-list small {

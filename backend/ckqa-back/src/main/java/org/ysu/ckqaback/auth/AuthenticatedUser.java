@@ -2,6 +2,7 @@ package org.ysu.ckqaback.auth;
 
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.ysu.ckqaback.auth.dto.AuthUserProfile;
+import org.ysu.ckqaback.user.UserAvatarService;
 
 import java.util.List;
 
@@ -34,6 +35,7 @@ public record AuthenticatedUser(
                 .userCode(userCode)
                 .username(username)
                 .displayName(displayName)
+                .avatarUrl(UserAvatarService.DEFAULT_USER_AVATAR_URL)
                 .roles(roles == null ? List.of() : roles)
                 .permissions(permissions == null ? List.of() : permissions)
                 .dataScope(resolveDataScope(roles))

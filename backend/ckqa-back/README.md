@@ -34,10 +34,17 @@
 - `POST /api/v1/auth/student/login`
 - `POST /api/v1/auth/student/register`
 - `GET /api/v1/auth/me`
+- `POST /api/v1/auth/me/avatar`
+- `GET /api/v1/user-avatars/default-user-avatar.svg`
 - `GET /api/v1/courses`
 - `GET /api/v1/courses/{courseId}`
 - `POST /api/v1/courses/covers`
 - `POST /api/v1/courses/{courseId}/cover`
+- `GET /api/v1/courses/{courseId}/materials`
+- `POST /api/v1/courses/{courseId}/materials`
+- `GET /api/v1/courses/{courseId}/materials/{materialId}`
+- `PATCH /api/v1/courses/{courseId}/materials/{materialId}`
+- `DELETE /api/v1/courses/{courseId}/materials/{materialId}`
 - `GET /api/v1/courses/{courseId}/pdf-files`
 - `GET /api/v1/courses/{courseId}/knowledge-bases`
 - `GET /api/v1/knowledge-bases`
@@ -89,9 +96,21 @@
 - `POST /api/v1/courses/{courseId}/cover` 接收同样的 `file` 字段，用于替换已有课程封面。
 - 上传文件默认保存到 MinIO 的 `course-artifacts/course-covers/`，并通过 `/api/v1/course-covers/**` 由后端代理访问；仅支持 PNG、JPG、WEBP，默认上限 2MB。
 
+用户头像：
+
+- 登录态、用户列表与课程教师响应均返回非空 `avatarUrl`；用户未上传头像时返回 `/api/v1/user-avatars/default-user-avatar.svg`。
+- `POST /api/v1/auth/me/avatar` 接收 `multipart/form-data` 字段 `file`，支持 PNG、JPG、WEBP，默认上限 2MB。
+- 上传头像默认保存到 MinIO 的 `course-artifacts/user-avatars/`，数据库 `users.avatar_*` 只保存对象元信息。
+
+课程资料：
+
+- 新业务优先使用 `/api/v1/courses/{courseId}/materials` 系列接口做课程资料 CRUD；v1 上传仅接受 PDF。
+- 上传资料会按文件 MD5 创建或复用 `material_objects`，再在 `course_materials` 中创建课程内资料记录；同一课程重复资料或重复展示名返回 409。
+- 解析中的资料不能删除；旧 `/api/v1/courses/{courseId}/pdf-files` 与 `/api/v1/pdf-files/**` 仍保留给解析、结果查看和 GraphRAG 导出链路兼容使用。
+
 鉴权：
 
-- 后端已经接入 Spring Security Resource Server，`/api/v1/auth/admin/login`、`/api/v1/auth/student/login`、`/api/v1/auth/student/register`、`/api/v1/system/health` 与 `/api/v1/course-covers/**` 可匿名访问，其余 `/api/v1/**` 默认需要 `Authorization: Bearer <jwt>`。
+- 后端已经接入 Spring Security Resource Server，`/api/v1/auth/admin/login`、`/api/v1/auth/student/login`、`/api/v1/auth/student/register`、`/api/v1/system/health`、`/api/v1/course-covers/**` 与 `/api/v1/user-avatars/**` 可匿名访问，其余 `/api/v1/**` 默认需要 `Authorization: Bearer <jwt>`。
 - 管理端登录允许 `admin` / `teacher` 角色，学生端登录只允许 `student` 角色。
 - 课程列表、课程详情和课程成员授权接口会优先读取 JWT 中的 `userCode`；`X-CKQA-User-Code` 仅作为本地测试与兼容兜底。
 - 本地联调测试账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 补充密码哈希，演示密码统一为 `Ckqa@2026`。

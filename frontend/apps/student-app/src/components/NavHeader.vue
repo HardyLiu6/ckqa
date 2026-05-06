@@ -1,6 +1,6 @@
 <!-- 全站顶栏 · 居中胶囊导航 + 激活态荧光 · 详见设计稿 §5.2 -->
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useCurrentModule, MODULE_COLORS } from '@/composables/useCurrentModule'
@@ -13,6 +13,7 @@ const { moduleKey } = useCurrentModule()
 const globalSearch = ref('')
 const unreadCount = ref(3)
 const isScrolled = ref(false)
+const avatarLoadFailed = ref(false)
 
 // 顶栏主导航项
 const modules = [
@@ -25,6 +26,8 @@ const modules = [
 ]
 
 const activeModule = computed(() => moduleKey.value)
+const avatarUrl = computed(() => userStore.user?.avatarUrl || '')
+const userInitial = computed(() => userStore.user?.name?.trim()?.charAt(0) || 'U')
 
 function isActive(key) {
   return activeModule.value === key
@@ -64,6 +67,10 @@ function handleUserCommand(command) {
 function handleScroll() {
   isScrolled.value = window.scrollY > 80
 }
+
+watch(avatarUrl, () => {
+  avatarLoadFailed.value = false
+})
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })
@@ -117,7 +124,13 @@ onBeforeUnmount(() => {
 
         <el-dropdown trigger="click" @command="handleUserCommand">
           <div class="avatar">
-            {{ userStore.user?.name?.charAt(0) || 'U' }}
+            <img
+              v-if="avatarUrl && !avatarLoadFailed"
+              :src="avatarUrl"
+              :alt="`${userStore.user?.name || '用户'}头像`"
+              @error="avatarLoadFailed = true"
+            />
+            <span v-else>{{ userInitial }}</span>
           </div>
           <template #dropdown>
             <el-dropdown-menu>
@@ -314,8 +327,23 @@ onBeforeUnmount(() => {
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
     transition: transform $duration-fast $ease-out;
+    position: relative;
+    overflow: hidden;
 
     &:hover { transform: scale(1.05); }
+
+    img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    span {
+      position: relative;
+      z-index: 1;
+    }
   }
 }
 

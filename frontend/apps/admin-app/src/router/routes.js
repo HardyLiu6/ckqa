@@ -136,6 +136,20 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/courses/:courseId/materials',
+    name: 'course-materials',
+    componentKey: 'ModulePage',
+    meta: {
+      title: '课程资料',
+      layout: 'detail',
+      permissions: ['material:read'],
+      status: 'mvp',
+      navGroup: 'courses',
+      resource: 'courseMaterials',
+      scope: 'course',
+    },
+  },
+  {
     path: '/app/materials/:materialId',
     name: 'material-detail',
     componentKey: 'ModulePage',

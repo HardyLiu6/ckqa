@@ -82,7 +82,10 @@ class CourseLookupServiceTest {
         when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of(
                 teacherMembership(21L, 8L, "os", "active")
         ));
-        when(usersService.listByIds(anyCollection())).thenReturn(List.of(user(8L, "t008", "zhang", "张老师")));
+        Users teacherUser = user(8L, "t008", "zhang", "张老师");
+        teacherUser.setAvatarObjectKey("user-avatars/user-avatar-t008.png");
+        teacherUser.setExtraMetadata("{\"department\":\"计算机学院\",\"title\":\"副教授\",\"employee_no\":\"T008\"}");
+        when(usersService.listByIds(anyCollection())).thenReturn(List.of(teacherUser));
         when(indexRunsService.listByKnowledgeBaseId(10L)).thenReturn(List.of(
                 indexRun(7L, "success", LocalDateTime.of(2026, 4, 28, 10, 0))
         ));
@@ -112,6 +115,10 @@ class CourseLookupServiceTest {
                     assertThat(teacher.getUserId()).isEqualTo(8L);
                     assertThat(teacher.getUserCode()).isEqualTo("t008");
                     assertThat(teacher.getDisplayName()).isEqualTo("张老师");
+                    assertThat(teacher.getAvatarUrl()).isEqualTo("/api/v1/user-avatars/user-avatar-t008.png");
+                    assertThat(teacher.getDepartment()).isEqualTo("计算机学院");
+                    assertThat(teacher.getTitle()).isEqualTo("副教授");
+                    assertThat(teacher.getEmployeeNo()).isEqualTo("T008");
                 });
         assertThat(page.getTotal()).isEqualTo(2L);
         assertThat(page.getPages()).isEqualTo(2L);

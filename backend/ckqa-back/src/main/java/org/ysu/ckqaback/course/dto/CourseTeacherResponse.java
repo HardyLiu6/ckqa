@@ -14,4 +14,8 @@ public class CourseTeacherResponse {
     private final String userCode;
     private final String username;
     private final String displayName;
+    private final String avatarUrl;
+    private final String department;
+    private final String title;
+    private final String employeeNo;
 }

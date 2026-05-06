@@ -20,6 +20,8 @@ import org.ysu.ckqaback.service.AuthIdentitiesService;
 import org.ysu.ckqaback.service.RolesService;
 import org.ysu.ckqaback.service.UserRolesService;
 import org.ysu.ckqaback.service.UsersService;
+import org.ysu.ckqaback.user.UserAvatarService;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,6 +45,7 @@ public class AuthService {
     private final AuthIdentitiesService authIdentitiesService;
     private final PasswordService passwordService;
     private final JwtTokenService jwtTokenService;
+    private final UserAvatarService userAvatarService;
 
     public AuthResponse loginForAudience(AuthLoginRequest request, String audience) {
         Users user = findUserForLogin(request.getUsername());
@@ -96,7 +99,20 @@ public class AuthService {
         if (currentUser == null) {
             throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
         }
-        return currentUser.toProfile();
+        Users user = usersService.getById(currentUser.id());
+        if (user == null) {
+            return currentUser.toProfile();
+        }
+        return toProfile(user, currentUser.roles(), currentUser.permissions());
+    }
+
+    public AuthUserProfile uploadCurrentUserAvatar(AuthenticatedUser currentUser, MultipartFile file) {
+        if (currentUser == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        Users user = usersService.getRequiredById(currentUser.id());
+        Users updatedUser = userAvatarService.storeForUser(user, file);
+        return toProfile(updatedUser, currentUser.roles(), currentUser.permissions());
     }
 
     private Users findUserForLogin(String usernameOrCode) {
@@ -127,7 +143,20 @@ public class AuthService {
                 .accessToken(token.accessToken())
                 .tokenType("Bearer")
                 .expiresAt(token.expiresAt())
-                .user(authenticatedUser.toProfile())
+                .user(toProfile(user, roles, permissions))
+                .build();
+    }
+
+    private AuthUserProfile toProfile(Users user, List<String> roles, List<String> permissions) {
+        return AuthUserProfile.builder()
+                .id(user.getId())
+                .userCode(user.getUserCode())
+                .username(user.getUsername())
+                .displayName(user.getDisplayName())
+                .avatarUrl(UserAvatarService.resolveResponseAvatarUrl(user))
+                .roles(roles == null ? List.of() : roles)
+                .permissions(permissions == null ? List.of() : permissions)
+                .dataScope(resolveDataScope(roles))
                 .build();
     }
 
@@ -142,6 +171,7 @@ public class AuthService {
             permissions.addAll(List.of(
                     "course:read",
                     "material:read",
+                    "material:write",
                     "material:parse",
                     "material:export",
                     "kb:read",
@@ -170,6 +200,19 @@ public class AuthService {
 
     private String audienceErrorMessage(String audience) {
         return "student".equals(audience) ? "当前账号不能进入学生端" : "当前账号不能进入管理员端";
+    }
+
+    private String resolveDataScope(List<String> roles) {
+        if (roles == null) {
+            return "授权课程";
+        }
+        if (roles.contains("admin")) {
+            return "全部课程";
+        }
+        if (roles.contains("teacher")) {
+            return "授权课程";
+        }
+        return "已加入课程";
     }
 
     private String nextStudentCode() {

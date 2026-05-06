@@ -2,6 +2,7 @@ package org.ysu.ckqaback.user.dto;
 
 import lombok.Getter;
 import org.ysu.ckqaback.entity.Users;
+import org.ysu.ckqaback.user.UserAvatarService;
 
 import java.time.LocalDateTime;
 
@@ -35,6 +36,11 @@ public class UserResponse {
     private final String displayName;
 
     /**
+     * 头像访问地址。
+     */
+    private final String avatarUrl;
+
+    /**
      * 用户状态。
      */
     private final String status;
@@ -59,6 +65,7 @@ public class UserResponse {
             String userCode,
             String username,
             String displayName,
+            String avatarUrl,
             String status,
             LocalDateTime lastLoginAt,
             LocalDateTime createdAt,
@@ -68,6 +75,7 @@ public class UserResponse {
         this.userCode = userCode;
         this.username = username;
         this.displayName = displayName;
+        this.avatarUrl = avatarUrl;
         this.status = status;
         this.lastLoginAt = lastLoginAt;
         this.createdAt = createdAt;
@@ -86,6 +94,7 @@ public class UserResponse {
                 user.getUserCode(),
                 user.getUsername(),
                 user.getDisplayName(),
+                UserAvatarService.resolveResponseAvatarUrl(user),
                 user.getStatus(),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),

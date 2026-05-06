@@ -9,6 +9,7 @@ import { listCourseMembers } from '../../api/course-memberships.js'
 import {
   getMaterial,
   hasCompleteGraphRagExport,
+  listCourseMaterialPage,
   listParseResults,
 } from '../../api/materials.js'
 import {
@@ -33,6 +34,7 @@ export const DEFAULT_COURSE_COVER_URL = '/api/v1/course-covers/default-course-co
 
 const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间']
 const COURSE_MEMBER_COLUMNS = ['用户', '课程内角色', '状态', '授权来源', '更新时间']
+const COURSE_MATERIAL_COLUMNS = ['课程资料', '资料类型', '解析状态', '文件大小', '上传时间', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
 const COURSE_STATUS_LABELS = {
   active: '开课中',
@@ -61,6 +63,21 @@ const COURSE_MEMBER_SOURCE_LABELS = {
   self_join: '自主加入',
   sync: '系统同步',
 }
+const COURSE_MATERIAL_TYPE_LABELS = {
+  textbook: '教材',
+  handout: '讲义',
+  slides: '课件',
+  lab_guide: '实验指导',
+  exam: '试卷',
+  reference: '参考资料',
+  other: '其他',
+}
+const COURSE_MATERIAL_PARSE_STATUS_LABELS = {
+  pending: '待解析',
+  processing: '解析中',
+  done: '已完成',
+  failed: '失败',
+}
 const INDEX_STATUS_LABELS = {
   success: '最近索引成功',
   running: '索引构建中',
@@ -76,6 +93,7 @@ const defaultServices = {
   getCourse,
   listCourseKnowledgeBases,
   listCourseMaterials,
+  listCourseMaterialPage,
   listCourses,
   listCourseMembers,
   getMaterial,
@@ -110,6 +128,10 @@ export async function loadModulePage(route, query = {}, services = defaultServic
 
   if (route.name === 'course-members') {
     return loadCourseMembers(route, query, services)
+  }
+
+  if (route.name === 'course-materials') {
+    return loadCourseMaterials(route, query, services)
   }
 
   if (route.name === 'material-detail') {
@@ -192,6 +214,16 @@ export function buildCourseMemberListParams(route = {}, query = {}) {
   }
 }
 
+export function buildCourseMaterialListParams(route = {}, query = {}) {
+  return cleanQueryParams({
+    page: query.page ?? 1,
+    size: query.size ?? 20,
+    keyword: query.keyword ?? '',
+    materialType: query.materialType ?? '',
+    parseStatus: query.parseStatus ?? '',
+  })
+}
+
 export function resolveCoursesRequestState(items = []) {
   return items.length > 0 ? 'success' : 'empty'
 }
@@ -254,6 +286,113 @@ async function loadCourseMembers(route, query, services) {
       raw: error?.raw ?? error,
     })
   }
+}
+
+async function loadCourseMaterials(route, query, services) {
+  const courseId = String(route.params?.courseId ?? '')
+  try {
+    const response = await services.listCourseMaterialPage(
+      courseId,
+      buildCourseMaterialListParams(route, query),
+    )
+    const pageData = response?.pagination ? response : normalizePageData(response)
+    const rows = pageData.items.map((material) => mapCourseMaterialRow(material, courseId))
+    return createCoursesLoaderResult({
+      source: 'live',
+      requestState: rows.length > 0 ? 'success' : 'empty',
+      refreshedAt: new Date().toISOString(),
+      columns: COURSE_MATERIAL_COLUMNS,
+      rows,
+      pagination: pageData.pagination,
+      raw: pageData.raw,
+    })
+  } catch (error) {
+    return createCoursesLoaderResult({
+      source: 'live',
+      requestState: 'error',
+      columns: COURSE_MATERIAL_COLUMNS,
+      error: createApiError(error),
+      raw: error?.raw ?? error,
+    })
+  }
+}
+
+function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
+  const id = material.id ?? material.materialId ?? material.pdfFileId
+  const displayName = material.displayName ?? material.fileName ?? material.originalFileName ?? `资料 ${id ?? '-'}`
+  const parseStatus = String(material.parseStatus ?? '').trim() || 'pending'
+  const materialType = String(material.materialType ?? '').trim() || 'textbook'
+  const encodedId = id ? encodeURIComponent(id) : ''
+  const courseId = material.courseId ?? fallbackCourseId
+  return {
+    id,
+    raw: {
+      ...material,
+      id,
+      courseId,
+      displayName,
+      materialType,
+      parseStatus,
+    },
+    to: encodedId ? `/app/materials/${encodedId}` : '',
+    subtitle: material.fileName ?? material.originalFileName ?? '',
+    actions: createCourseMaterialRowActions({ ...material, id, courseId, parseStatus }),
+    cells: [
+      {
+        kind: 'text',
+        label: displayName,
+        detail: material.fileName ?? material.originalFileName ?? material.fileMd5 ?? '',
+        filterValue: `${displayName} ${material.fileName ?? ''} ${material.fileMd5 ?? ''}`.trim(),
+      },
+      {
+        kind: 'status',
+        status: materialType,
+        label: COURSE_MATERIAL_TYPE_LABELS[materialType] ?? materialType,
+        filterValue: materialType,
+      },
+      {
+        kind: 'status',
+        status: parseStatus,
+        label: COURSE_MATERIAL_PARSE_STATUS_LABELS[parseStatus] ?? parseStatus,
+        detail: material.parseErrorMsg ?? '',
+        filterValue: parseStatus,
+      },
+      formatFileSize(material.fileSize),
+      material.uploadTime ?? material.createdAt ?? '-',
+      material.updatedAt ?? '-',
+    ],
+  }
+}
+
+function createCourseMaterialRowActions(material = {}) {
+  const id = material.id ?? material.materialId ?? material.pdfFileId
+  if (!id) {
+    return []
+  }
+  const encodedId = encodeURIComponent(id)
+  const parseStatus = String(material.parseStatus ?? '').trim()
+  const processing = parseStatus === 'processing'
+  return [
+    { label: '详情', to: `/app/materials/${encodedId}`, icon: 'view' },
+    {
+      label: '解析',
+      to: `/app/materials/${encodedId}`,
+      icon: 'parse',
+      variant: 'primary',
+      disabled: processing,
+      title: processing ? '资料解析中' : '进入资料详情触发解析',
+    },
+    { label: '结果', to: `/app/materials/${encodedId}/parse-results`, icon: 'knowledge' },
+    { label: '编辑', key: 'edit-course-material', icon: 'edit', variant: 'primary' },
+    {
+      label: '删除',
+      key: 'delete-course-material',
+      icon: 'delete',
+      variant: 'danger',
+      disabled: processing,
+      title: processing ? '解析中的资料不能删除' : '',
+    },
+  ]
 }
 
 function mapCourseMemberRow(member) {
@@ -1270,7 +1409,19 @@ function buildCourseTeachers(course = {}) {
   const items = teachers.map((teacher) => ({
     id: teacher.userId ?? teacher.id ?? teacher.userCode ?? teacher.username,
     name: teacher.displayName ?? teacher.username ?? teacher.userCode ?? '教师',
-    detail: teacher.userCode ?? teacher.username ?? '',
+    avatarUrl: teacher.avatarUrl ?? '',
+    title: teacher.title ?? '',
+    department: teacher.department ?? '',
+    employeeNo: teacher.employeeNo ?? '',
+    username: teacher.username ?? '',
+    userCode: teacher.userCode ?? '',
+    detail: [
+      teacher.title,
+      teacher.department,
+    ].filter(Boolean).join(' · ') || teacher.userCode || teacher.username || '教师账号',
+    meta: teacher.employeeNo
+      ? `工号 ${teacher.employeeNo}`
+      : (teacher.userCode ?? teacher.username ?? '账号待补充'),
   }))
 
   return {
@@ -1333,6 +1484,20 @@ function mapMaterialItem(material = {}) {
     detail: material.fileMd5 ?? material.md5 ?? '',
     to: id ? `/app/materials/${id}` : '',
   }
+}
+
+function cleanQueryParams(params = {}) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  )
+}
+
+function formatFileSize(value) {
+  const size = Number(value)
+  if (!Number.isFinite(size) || size <= 0) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
 function mapKnowledgeBaseItem(knowledgeBase = {}) {

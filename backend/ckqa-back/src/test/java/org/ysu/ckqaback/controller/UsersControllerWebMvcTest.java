@@ -56,6 +56,7 @@ class UsersControllerWebMvcTest {
                 .andExpect(jsonPath("$.message").value("操作成功"))
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.username").value("tom"))
+                .andExpect(jsonPath("$.data.avatarUrl").value("/api/v1/user-avatars/default-user-avatar.svg"))
                 .andExpect(jsonPath("$.data.passwordHash").doesNotExist());
     }
 

@@ -1,5 +1,5 @@
 import { http } from '../axios/index.js'
-import { unwrapApiResponse } from './client.js'
+import { normalizePageData, unwrapApiResponse } from './client.js'
 
 const COURSE_PAGE_SIZE_MAX = 100
 
@@ -32,8 +32,15 @@ export async function getCourse(courseId) {
   return unwrapApiResponse(await http.get(`/courses/${encodeURIComponent(courseId)}`))
 }
 
-export async function listCourseMaterials(courseId) {
-  return unwrapApiResponse(await http.get(`/courses/${encodeURIComponent(courseId)}/pdf-files`))
+export async function listCourseMaterials(courseId, params = {}, client = http) {
+  const data = unwrapApiResponse(await client.get(
+    `/courses/${encodeURIComponent(courseId)}/materials`,
+    { params: normalizeCourseMaterialQueryParams({ page: 1, size: 100, ...params }) },
+  ))
+  if (Array.isArray(data)) {
+    return data
+  }
+  return normalizePageData(data).items
 }
 
 export async function listCourseKnowledgeBases(courseId) {
@@ -49,4 +56,10 @@ function normalizeCourseQueryParams(params = {}) {
     cleanParams.size = COURSE_PAGE_SIZE_MAX
   }
   return cleanParams
+}
+
+function normalizeCourseMaterialQueryParams(params = {}) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  )
 }

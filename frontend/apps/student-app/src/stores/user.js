@@ -1,10 +1,16 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { fetchCurrentUser, loginStudent, registerStudent } from '@/api/auth'
+import {
+  fetchCurrentUser,
+  loginStudent,
+  registerStudent,
+  uploadCurrentUserAvatar,
+} from '@/api/auth'
 import { setAuthSessionProvider } from '@/axios'
 
 const AUTH_STORAGE_KEY = 'ckqa-student-auth-session'
+export const DEFAULT_USER_AVATAR_URL = '/api/v1/user-avatars/default-user-avatar.svg'
 
 function createGuestUser() {
   return {
@@ -13,6 +19,7 @@ function createGuestUser() {
     username: '',
     name: '',
     displayName: '',
+    avatarUrl: DEFAULT_USER_AVATAR_URL,
     email: '',
     role: 'guest',
     roles: [],
@@ -33,6 +40,7 @@ function normalizeUser(profile = {}) {
     username: profile.username ?? '',
     name: displayName,
     displayName,
+    avatarUrl: profile.avatarUrl || DEFAULT_USER_AVATAR_URL,
     email: profile.email ?? '',
     role: profile.role ?? roles[0] ?? 'student',
     roles,
@@ -81,6 +89,13 @@ export const useUserStore = defineStore('user', () => {
 
   async function getUserInfo() {
     const profile = await fetchCurrentUser()
+    user.value = normalizeUser(profile)
+    writeStoredSession(snapshotSession())
+    return user.value
+  }
+
+  async function uploadAvatar(file, onUploadProgress = null) {
+    const profile = await uploadCurrentUserAvatar(file, onUploadProgress)
     user.value = normalizeUser(profile)
     writeStoredSession(snapshotSession())
     return user.value
@@ -135,6 +150,7 @@ export const useUserStore = defineStore('user', () => {
     login,
     register,
     getUserInfo,
+    uploadAvatar,
     restoreSession,
     setUser,
     logout,

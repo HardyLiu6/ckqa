@@ -79,6 +79,7 @@ import {
 import {
   createCourse,
   deleteCourse,
+  listCourseMaterials,
   listCourses,
   updateCourse,
   uploadCourseCover,
@@ -92,8 +93,12 @@ import {
   exportGraphRag,
   getMaterial,
   hasCompleteGraphRagExport,
+  listCourseMaterialPage,
   listParseResults,
   startParse,
+  updateCourseMaterial,
+  uploadCourseMaterial,
+  deleteCourseMaterial,
 } from './api/materials.js'
 import {
   activateIndexRun,
@@ -169,6 +174,7 @@ test('路由骨架包含首版关键入口和后续页面状态', () => {
   assert.ok(paths.includes('/app/dashboard'))
   assert.ok(paths.includes('/app/system'))
   assert.ok(paths.includes('/app/health'))
+  assert.ok(paths.includes('/app/courses/:courseId/materials'))
   assert.ok(paths.includes('/app/knowledge-bases/:kbId/build'))
   assert.ok(paths.includes('/app/authorization-audit-logs'))
 
@@ -187,6 +193,8 @@ test('认证状态支持开发态管理员和教师身份切换', () => {
   assert.equal(auth.state.currentUser.role, 'teacher')
   assert.equal(auth.state.isAuthenticated, true)
   assert.equal(auth.canAccess(['course:read']), true)
+  assert.equal(auth.canAccess(['material:write']), true)
+  assert.equal(auth.state.currentUser.avatarUrl, '/api/v1/user-avatars/default-user-avatar.svg')
   assert.equal(auth.canAccess(['user:write']), false)
 
   auth.loginAs('admin')
@@ -949,6 +957,12 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   await listCourses({ page: 1, size: 200, keyword: '', status: '' }, client)
   await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
   await listCourseMembers({ courseId: 'os', status: 'active', membershipRole: '', keyword: '', page: 1, size: 20 }, client)
+  await listCourseMaterials('os', { keyword: '', parseStatus: '' }, client)
+  await listCourseMaterialPage('os', { page: 2, size: 10, materialType: 'textbook' }, client)
+  const materialFile = new File([new Uint8Array([1, 2, 3])], 'book.pdf', { type: 'application/pdf' })
+  await uploadCourseMaterial('os', { file: materialFile, displayName: '教材', materialType: 'textbook' }, client)
+  await updateCourseMaterial('os', 9, { displayName: '教材新版', materialType: 'reference' }, client)
+  await deleteCourseMaterial('os', 9, client)
   await createCourseMember({ courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }, client)
   await updateCourseMember(21, { courseId: 'os', status: 'suspended' }, client)
   await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)
@@ -962,6 +976,11 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
     ['get', '/courses', { page: 1, size: 100 }],
     ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
     ['get', '/course-memberships', { courseId: 'os', status: 'active', page: 1, size: 20 }],
+    ['get', '/courses/os/materials', { page: 1, size: 100 }],
+    ['get', '/courses/os/materials', { page: 2, size: 10, materialType: 'textbook' }],
+    ['post', '/courses/os/materials', { fileName: 'book.pdf', fileType: 'application/pdf' }],
+    ['patch', '/courses/os/materials/9', { displayName: '教材新版', materialType: 'reference' }],
+    ['delete', '/courses/os/materials/9', null],
     ['post', '/course-memberships', { courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }],
     ['patch', '/course-memberships/21', { courseId: 'os', status: 'suspended' }],
     ['post', '/knowledge-bases', { courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }],
@@ -2292,13 +2311,15 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
   assert.match(modulePage, /:title="tableTitle"/)
-  assert.match(modulePage, /data-course-section="materials"/)
+  assert.match(modulePage, /openCourseMaterialsPage/)
+  assert.match(modulePage, /class="creation-dialog course-action-dialog material-action-dialog"/)
   assert.match(modulePage, /class="course-detail-hero"/)
   assert.match(modulePage, /class="course-progress-strip"/)
   assert.match(modulePage, /class="creation-dialog course-action-dialog course-delete-dialog"/)
   assert.match(modulePage, /openCourseArchiveDialog/)
   assert.match(modulePage, /submitCourseArchive/)
-  assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId: String\(route\.params\.courseId \?\? ''\) \}\)/)
+  assert.match(modulePage, /openCourseKnowledgeAction/)
+  assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId \}\)/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
 
   assert.match(qaCheckStep, /<el-input[\s\S]*id="smoke-question"[\s\S]*@input="\$emit\('update-smoke-question'/)
@@ -2307,6 +2328,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(modulePage, /<textarea/)
 
   assert.match(topbar, /<el-input[\s\S]*class="topbar-search-input"/)
+  assert.match(topbar, /class="identity-avatar"/)
   assert.doesNotMatch(topbar, /role-switch/)
   assert.doesNotMatch(topbar, /role-switch-select/)
   assert.doesNotMatch(topbar, /role-change/)

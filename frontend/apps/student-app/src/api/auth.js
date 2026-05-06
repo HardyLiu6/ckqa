@@ -11,3 +11,9 @@ export function registerStudent(payload) {
 export function fetchCurrentUser() {
   return get('/auth/me')
 }
+
+export function uploadCurrentUserAvatar(file, onUploadProgress = null) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return post('/auth/me/avatar', formData, onUploadProgress ? { onUploadProgress } : {})
+}

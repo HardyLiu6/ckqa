@@ -6,11 +6,18 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestClient;
+import org.ysu.ckqaback.course.CourseMaterialProperties;
 import org.ysu.ckqaback.course.CourseCoverProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.user.UserAvatarProperties;
 
 @MapperScan("org.ysu.ckqaback.mapper")
-@EnableConfigurationProperties({CkqaIntegrationProperties.class, CourseCoverProperties.class})
+@EnableConfigurationProperties({
+        CkqaIntegrationProperties.class,
+        CourseCoverProperties.class,
+        CourseMaterialProperties.class,
+        UserAvatarProperties.class
+})
 @SpringBootApplication
 public class CkqaBackApplication {
 

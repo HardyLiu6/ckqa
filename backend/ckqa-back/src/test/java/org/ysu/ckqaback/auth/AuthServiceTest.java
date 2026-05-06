@@ -15,6 +15,7 @@ import org.ysu.ckqaback.service.AuthIdentitiesService;
 import org.ysu.ckqaback.service.RolesService;
 import org.ysu.ckqaback.service.UserRolesService;
 import org.ysu.ckqaback.service.UsersService;
+import org.ysu.ckqaback.user.UserAvatarService;
 
 import java.time.Duration;
 import java.util.List;
@@ -52,7 +53,8 @@ class AuthServiceTest {
                 userRolesService,
                 authIdentitiesService,
                 passwordService,
-                new JwtTokenService(jwtProperties)
+                new JwtTokenService(jwtProperties),
+                mock(UserAvatarService.class)
         );
     }
 

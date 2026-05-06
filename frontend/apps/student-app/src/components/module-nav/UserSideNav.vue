@@ -1,6 +1,6 @@
 <!-- 个人中心模块副导航 · 中性灰系 -->
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { User, Setting, Bell, Star } from '@element-plus/icons-vue'
@@ -16,17 +16,32 @@ const items = [
 ]
 
 const activePath = computed(() => route.path)
+const avatarLoadFailed = ref(false)
 
 const profile = computed(() => ({
-  name: userStore.user?.name || '刘俊达',
-  meta: '计算机学院 · 大三',
+  name: userStore.user?.name || '未登录用户',
+  meta: userStore.user?.userCode || userStore.user?.username || '个人中心',
+  avatarUrl: userStore.user?.avatarUrl || '',
+  initial: (userStore.user?.name || 'U').trim().charAt(0) || 'U',
 }))
+
+watch(() => profile.value.avatarUrl, () => {
+  avatarLoadFailed.value = false
+})
 </script>
 
 <template>
   <nav class="side-nav user-side-nav">
     <div class="profile-card">
-      <div class="avatar"></div>
+      <div class="avatar">
+        <img
+          v-if="profile.avatarUrl && !avatarLoadFailed"
+          :src="profile.avatarUrl"
+          :alt="`${profile.name}头像`"
+          @error="avatarLoadFailed = true"
+        />
+        <span v-else>{{ profile.initial }}</span>
+      </div>
       <div>
         <div class="profile-name">{{ profile.name }}</div>
         <div class="profile-meta">{{ profile.meta }}</div>
@@ -76,11 +91,26 @@ const profile = computed(() => ({
   margin-bottom: 8px;
 
   .avatar {
+    position: relative;
+    display: grid;
     width: 36px;
     height: 36px;
+    place-items: center;
+    overflow: hidden;
     background: linear-gradient(135deg, #64748b, #94a3b8);
     border-radius: $radius-lg;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
     flex-shrink: 0;
+
+    img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
   .profile-name {
     font-size: 13px;

@@ -5,6 +5,7 @@ import {
   BookOpen,
   Eye,
   Pencil,
+  Play,
   Search,
   Trash2,
   Users,
@@ -179,6 +180,7 @@ function resolveActionIcon(action) {
   if (action.icon === 'archive') return Archive
   if (action.icon === 'users') return Users
   if (action.icon === 'knowledge') return BookOpen
+  if (action.icon === 'parse') return Play
   return action.variant === 'primary' ? ArrowRight : Eye
 }
 

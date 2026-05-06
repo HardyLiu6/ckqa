@@ -43,12 +43,14 @@ import {
   updateBuildRunMaterialSelection as submitBuildRunMaterialSelection,
   getBuildRun,
 } from '../../api/knowledge-bases.js'
-import { authStore } from '../../stores/auth.js'
 import {
+  deleteCourseMaterial,
   exportGraphRag,
   getMaterial,
   listParseResults,
   startParse,
+  updateCourseMaterial,
+  uploadCourseMaterial,
 } from '../../api/materials.js'
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DataTableShell from '../../components/common/DataTableShell.vue'
@@ -83,7 +85,7 @@ import {
   createParallelParseTaskOptions,
   resolveMaterialExportPayload,
 } from './material-lifecycle-actions.js'
-import { DEFAULT_COURSE_COVER_URL, loadCourseDetailBlock, loadModulePage } from './module-loaders.js'
+import { DEFAULT_COURSE_COVER_URL, loadModulePage } from './module-loaders.js'
 import {
   buildPageQuery,
   createRouteSnapshot,
@@ -113,6 +115,15 @@ const COURSE_MEMBER_ACCESS_SOURCE_OPTIONS = [
   { value: 'imported', label: '批量导入' },
   { value: 'sync', label: '系统同步' },
 ]
+const COURSE_MATERIAL_TYPE_OPTIONS = [
+  { value: 'textbook', label: '教材' },
+  { value: 'handout', label: '讲义' },
+  { value: 'slides', label: '课件' },
+  { value: 'lab_guide', label: '实验指导' },
+  { value: 'exam', label: '试卷' },
+  { value: 'reference', label: '参考资料' },
+  { value: 'other', label: '其他' },
+]
 const buildStepComponents = {
   material: BuildStepMaterial,
   parse: BuildStepParse,
@@ -134,7 +145,6 @@ const activeStepKey = ref('')
 const actionState = ref('idle')
 const actionSnapshot = ref(null)
 const activeOperationKey = ref('')
-const blockLoadingKey = ref('')
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
@@ -164,6 +174,12 @@ const memberForm = ref(createCourseMemberForm())
 const memberUserOptions = ref([])
 const memberUserState = ref('idle')
 const memberUserError = ref(null)
+const materialActionDialog = ref('')
+const materialActionState = ref('idle')
+const materialActionError = ref(null)
+const materialActionTarget = ref(null)
+const materialUploadProgress = ref(0)
+const materialForm = ref(createCourseMaterialForm())
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -195,6 +211,19 @@ const courseCoverUploading = computed(() => courseCoverState.value === 'loading'
 const courseActionRunning = computed(() => courseActionState.value === 'running')
 const memberActionRunning = computed(() => memberActionState.value === 'running')
 const memberUserLoading = computed(() => memberUserState.value === 'loading')
+const materialActionRunning = computed(() => materialActionState.value === 'running')
+const materialDialogTitle = computed(() => {
+  if (materialActionDialog.value === 'upload') return '上传课程资料'
+  if (materialActionDialog.value === 'edit') return '编辑资料信息'
+  if (materialActionDialog.value === 'delete') return '删除课程资料'
+  return '课程资料'
+})
+const materialSubmitDisabled = computed(() => (
+  materialActionRunning.value
+  || (materialActionDialog.value === 'upload' && !materialForm.value.file)
+  || !materialForm.value.displayName?.trim()
+  || !materialForm.value.materialType
+))
 const courseActionCourseName = computed(() => (
   courseActionCourse.value?.courseName
   ?? courseActionCourse.value?.name
@@ -328,8 +357,6 @@ const qaOperationFeedback = computed(() => (
 const courseBlock = computed(() => config.value.blocks?.course)
 const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAULT_COURSE_COVER_URL)
 const courseCanDelete = computed(() => isEmptyCourse(courseBlock.value?.item))
-const materialsBlock = computed(() => config.value.blocks?.materials)
-const knowledgeBasesBlock = computed(() => config.value.blocks?.knowledgeBases)
 const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
@@ -350,6 +377,14 @@ function createCourseMemberForm() {
     membershipRole: 'student',
     status: 'active',
     accessSource: 'manual',
+  }
+}
+
+function createCourseMaterialForm(material = {}) {
+  return {
+    displayName: material.displayName ?? material.fileName ?? '',
+    materialType: material.materialType ?? 'textbook',
+    file: null,
   }
 }
 
@@ -505,28 +540,6 @@ async function goBuildPreviousStep() {
   await updateBuildActiveStep(buildNavigation.value.previousKey)
 }
 
-async function retryCourseBlock(key) {
-  if (route.name !== 'course-detail' || blockLoadingKey.value) {
-    return
-  }
-
-  blockLoadingKey.value = key
-  const routeSnapshot = createRouteSnapshot(route, route.query)
-
-  try {
-    const block = await loadCourseDetailBlock(routeSnapshot, key)
-    liveState.value = {
-      ...(liveState.value ?? {}),
-      blocks: {
-        ...(liveState.value?.blocks ?? {}),
-        [key]: block,
-      },
-    }
-  } finally {
-    blockLoadingKey.value = ''
-  }
-}
-
 async function handlePrimaryAction() {
   if (route.name === 'courses' || route.name === 'knowledge-bases') {
     openCreationDialog()
@@ -538,8 +551,13 @@ async function handlePrimaryAction() {
     return
   }
 
+  if (route.name === 'course-materials') {
+    openMaterialUploadDialog()
+    return
+  }
+
   if (route.name === 'course-detail') {
-    scrollToCourseSection('materials')
+    await router.push(`/app/courses/${encodeURIComponent(String(route.params.courseId ?? ''))}/materials`)
     return
   }
 
@@ -613,9 +631,31 @@ async function handleSecondaryAction() {
   await runMaterialExport()
 }
 
+async function openCourseMaterialsPage() {
+  await router.push(`/app/courses/${encodeURIComponent(String(route.params.courseId ?? ''))}/materials`)
+}
+
+async function openCourseKnowledgeAction() {
+  const courseId = String(route.params.courseId ?? '')
+  if (!courseId) {
+    return
+  }
+  const knowledgeBaseCount = Number(courseBlock.value?.item?.knowledgeBaseCount ?? 0)
+  if (knowledgeBaseCount > 0) {
+    await router.push(`/app/knowledge-bases?keyword=${encodeURIComponent(courseId)}`)
+    return
+  }
+  openCreationDialog('knowledge-base', { courseId })
+}
+
 function handleTableRowAction({ row, action } = {}) {
   if (route.name === 'course-members') {
     void handleCourseMemberRowAction(row, action)
+    return
+  }
+
+  if (route.name === 'course-materials') {
+    void handleCourseMaterialRowAction(row, action)
     return
   }
 
@@ -654,6 +694,22 @@ async function handleCourseMemberRowAction(row, action) {
   }
   if (action?.key === 'remove-course-member') {
     await submitCourseMemberStatus(member, 'removed')
+  }
+}
+
+async function handleCourseMaterialRowAction(row, action) {
+  const material = row?.raw ?? row
+  if (!material?.id || materialActionRunning.value) {
+    return
+  }
+
+  if (action?.key === 'edit-course-material') {
+    openMaterialEditDialog(material)
+    return
+  }
+
+  if (action?.key === 'delete-course-material') {
+    openMaterialDeleteDialog(material)
   }
 }
 
@@ -738,6 +794,164 @@ function closeCourseMemberDialog() {
   memberActionError.value = null
   memberUserError.value = null
   memberForm.value = createCourseMemberForm()
+}
+
+function openMaterialUploadDialog() {
+  materialActionDialog.value = 'upload'
+  materialActionTarget.value = null
+  materialForm.value = createCourseMaterialForm()
+  materialUploadProgress.value = 0
+  materialActionState.value = 'idle'
+  materialActionError.value = null
+}
+
+function openMaterialEditDialog(material = {}) {
+  materialActionDialog.value = 'edit'
+  materialActionTarget.value = material
+  materialForm.value = createCourseMaterialForm(material)
+  materialUploadProgress.value = 0
+  materialActionState.value = 'idle'
+  materialActionError.value = null
+}
+
+function openMaterialDeleteDialog(material = {}) {
+  materialActionDialog.value = 'delete'
+  materialActionTarget.value = material
+  materialForm.value = createCourseMaterialForm(material)
+  materialUploadProgress.value = 0
+  materialActionState.value = 'idle'
+  materialActionError.value = null
+}
+
+function closeMaterialActionDialog() {
+  if (materialActionRunning.value) {
+    return
+  }
+  materialActionDialog.value = ''
+  materialActionTarget.value = null
+  materialActionError.value = null
+  materialUploadProgress.value = 0
+  materialForm.value = createCourseMaterialForm()
+}
+
+function handleMaterialFileChange(uploadFile) {
+  const file = uploadFile?.raw ?? uploadFile
+  const message = validateCourseMaterialFile(file)
+  if (message) {
+    materialActionError.value = { message }
+    materialForm.value = {
+      ...materialForm.value,
+      file: null,
+    }
+    return
+  }
+  materialActionError.value = null
+  materialForm.value = {
+    ...materialForm.value,
+    file,
+    displayName: materialForm.value.displayName || file?.name?.replace(/\.pdf$/i, '') || '',
+  }
+}
+
+function handleMaterialFileRemove() {
+  materialForm.value = {
+    ...materialForm.value,
+    file: null,
+  }
+  materialUploadProgress.value = 0
+}
+
+function validateCourseMaterialFile(file) {
+  if (!file) {
+    return '请选择 PDF 资料文件'
+  }
+  const fileName = String(file.name ?? '')
+  if (file.type && file.type !== 'application/pdf') {
+    return '课程资料 v1 仅支持 PDF 文件'
+  }
+  if (!fileName.toLowerCase().endsWith('.pdf')) {
+    return '文件扩展名必须为 .pdf'
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    return 'PDF 文件不能超过 50MB'
+  }
+  return ''
+}
+
+async function submitMaterialUpload() {
+  const courseId = String(route.params.courseId ?? '')
+  if (!courseId || materialSubmitDisabled.value) {
+    return
+  }
+
+  materialActionState.value = 'running'
+  materialActionError.value = null
+  materialUploadProgress.value = 0
+
+  try {
+    await uploadCourseMaterial(courseId, {
+      file: materialForm.value.file,
+      displayName: materialForm.value.displayName,
+      materialType: materialForm.value.materialType,
+      onUploadProgress: (event) => {
+        if (event.total) {
+          materialUploadProgress.value = Math.min(100, Math.round((event.loaded / event.total) * 100))
+        }
+      },
+    })
+    materialUploadProgress.value = 100
+    materialActionState.value = 'success'
+    closeMaterialActionDialog()
+    await loadPage()
+  } catch (error) {
+    materialActionState.value = 'failed'
+    materialActionError.value = createApiError(error)
+  }
+}
+
+async function submitMaterialEdit() {
+  const courseId = String(route.params.courseId ?? '')
+  const materialId = materialActionTarget.value?.id
+  if (!courseId || !materialId || materialSubmitDisabled.value) {
+    return
+  }
+
+  materialActionState.value = 'running'
+  materialActionError.value = null
+
+  try {
+    await updateCourseMaterial(courseId, materialId, {
+      displayName: materialForm.value.displayName.trim(),
+      materialType: materialForm.value.materialType,
+    })
+    materialActionState.value = 'success'
+    closeMaterialActionDialog()
+    await loadPage()
+  } catch (error) {
+    materialActionState.value = 'failed'
+    materialActionError.value = createApiError(error)
+  }
+}
+
+async function submitMaterialDelete() {
+  const courseId = String(route.params.courseId ?? '')
+  const materialId = materialActionTarget.value?.id
+  if (!courseId || !materialId || materialActionRunning.value) {
+    return
+  }
+
+  materialActionState.value = 'running'
+  materialActionError.value = null
+
+  try {
+    await deleteCourseMaterial(courseId, materialId)
+    materialActionState.value = 'success'
+    closeMaterialActionDialog()
+    await loadPage()
+  } catch (error) {
+    materialActionState.value = 'failed'
+    materialActionError.value = createApiError(error)
+  }
 }
 
 async function loadMemberUsers(keyword = '') {
@@ -1417,6 +1631,10 @@ function renderFactLabel(field) {
   return typeof field === 'string' ? field : field.label
 }
 
+function handleInlineImageError(event) {
+  event.currentTarget.style.display = 'none'
+}
+
 function resolveMetricProgressStatus(status) {
   if (status === 'failed') return 'exception'
   if (status === 'success') return 'success'
@@ -1468,17 +1686,6 @@ function normalizeRunState(status) {
 
 function firstQueryValue(value) {
   return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
-}
-
-function scrollToCourseSection(key) {
-  if (typeof document === 'undefined') {
-    return
-  }
-
-  document.querySelector(`[data-course-section="${key}"]`)?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  })
 }
 
 function resolveCourseStatusLabel(status) {
@@ -2066,6 +2273,140 @@ onBeforeUnmount(() => cancelLongTask())
     </section>
   </div>
 
+  <div v-if="materialActionDialog" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog material-action-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-material-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Material</p>
+          <h2 id="course-material-dialog-title">{{ materialDialogTitle }}</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="materialActionRunning"
+          aria-label="取消课程资料操作"
+          @click="closeMaterialActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+
+      <template v-if="materialActionDialog === 'delete'">
+        <div class="course-delete-warning">
+          <Trash2 :size="22" aria-hidden="true" />
+          <div>
+            <strong>{{ materialActionTarget?.displayName || materialActionTarget?.fileName || '课程资料' }}</strong>
+            <p>删除只移除当前课程的资料记录，不会影响同一物理文件在其他课程中的复用。解析中的资料会被后端拒绝删除。</p>
+          </div>
+        </div>
+        <p v-if="materialActionError" class="inline-error">{{ materialActionError.message }}</p>
+        <div class="creation-form__actions">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="materialActionRunning"
+            @click="closeMaterialActionDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
+            取消
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--danger"
+            type="danger"
+            native-type="button"
+            :disabled="materialActionRunning"
+            @click="submitMaterialDelete"
+          >
+            <Trash2 class="button-icon" :size="16" aria-hidden="true" />
+            {{ materialActionRunning ? '删除中' : '确认删除' }}
+          </el-button>
+        </div>
+      </template>
+
+      <el-form
+        v-else
+        class="creation-form material-form"
+        label-position="top"
+        @submit.prevent="materialActionDialog === 'upload' ? submitMaterialUpload() : submitMaterialEdit()"
+      >
+        <el-form-item class="creation-field" label="展示名称" required>
+          <el-input
+            v-model.trim="materialForm.displayName"
+            name="materialDisplayName"
+            maxlength="255"
+            placeholder="例如：操作系统第 1 章讲义"
+            show-word-limit
+            required
+          />
+        </el-form-item>
+        <el-form-item class="creation-field" label="资料类型" required>
+          <el-select v-model="materialForm.materialType" name="materialType">
+            <el-option
+              v-for="option in COURSE_MATERIAL_TYPE_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          v-if="materialActionDialog === 'upload'"
+          class="creation-form__wide material-upload-field"
+          label="PDF 文件"
+          required
+        >
+          <el-upload
+            class="material-upload-drop"
+            drag
+            accept="application/pdf,.pdf"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleMaterialFileChange"
+            :on-remove="handleMaterialFileRemove"
+          >
+            <UploadCloud :size="26" aria-hidden="true" />
+            <strong>选择或拖入 PDF 文件</strong>
+            <small>上传进度代表浏览器到后端的文件传输进度。</small>
+          </el-upload>
+        </el-form-item>
+        <div
+          v-if="materialActionDialog === 'upload' && (materialActionRunning || materialUploadProgress > 0)"
+          class="creation-form__wide upload-progress-panel"
+        >
+          <span>上传进度</span>
+          <el-progress :percentage="materialUploadProgress" />
+        </div>
+        <p v-if="materialActionError" class="inline-error creation-form__wide">{{ materialActionError.message }}</p>
+        <div class="creation-form__actions creation-form__wide">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="materialActionRunning"
+            @click="closeMaterialActionDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
+            取消
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            native-type="submit"
+            :disabled="materialSubmitDisabled"
+          >
+            <Check class="button-icon" :size="16" aria-hidden="true" />
+            {{ materialActionRunning ? '处理中' : (materialActionDialog === 'upload' ? '上传资料' : '保存修改') }}
+          </el-button>
+        </div>
+      </el-form>
+    </section>
+  </div>
+
   <section v-if="loadError" class="panel">
     <div class="panel-heading">
       <h2>实时数据加载失败</h2>
@@ -2194,6 +2535,31 @@ onBeforeUnmount(() => cancelLongTask())
               class="ckqa-el-button ckqa-el-button--primary"
               type="primary"
               native-type="button"
+              @click="openCourseMaterialsPage"
+            >
+              <UploadCloud class="button-icon" :size="16" aria-hidden="true" />
+              管理资料
+            </el-button>
+            <el-button
+              class="ckqa-el-button ckqa-el-button--secondary"
+              native-type="button"
+              @click="handleSecondaryAction"
+            >
+              <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
+              管理成员
+            </el-button>
+            <el-button
+              class="ckqa-el-button ckqa-el-button--secondary"
+              native-type="button"
+              @click="openCourseKnowledgeAction"
+            >
+              <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
+              {{ Number(courseBlock.item?.knowledgeBaseCount ?? 0) > 0 ? '管理知识库' : '新建知识库' }}
+            </el-button>
+            <el-button
+              class="ckqa-el-button ckqa-el-button--primary"
+              type="primary"
+              native-type="button"
               @click="openCourseEditDialog()"
             >
               <Pencil class="button-icon" :size="16" aria-hidden="true" />
@@ -2287,8 +2653,20 @@ onBeforeUnmount(() => cancelLongTask())
       </div>
       <ol v-if="courseBlock.teachers?.items?.length" class="course-teacher-list">
         <li v-for="teacher in courseBlock.teachers.items" :key="teacher.id">
-          <strong>{{ teacher.name }}</strong>
-          <small>{{ teacher.detail || '教师账号' }}</small>
+          <span class="course-teacher-avatar">
+            <span>{{ teacher.name?.charAt(0) || '师' }}</span>
+            <img
+              v-if="teacher.avatarUrl"
+              :src="teacher.avatarUrl"
+              :alt="`${teacher.name}头像`"
+              @error="handleInlineImageError"
+            />
+          </span>
+          <span class="course-teacher-copy">
+            <strong>{{ teacher.name }}</strong>
+            <small>{{ teacher.detail || '职称与院系待补充' }}</small>
+            <small>{{ teacher.meta || '工号/账号待补充' }}</small>
+          </span>
         </li>
       </ol>
       <div v-else class="empty-action-state">
@@ -2304,84 +2682,6 @@ onBeforeUnmount(() => cancelLongTask())
       </div>
     </article>
 
-    <article class="panel" data-course-section="materials">
-      <div class="panel-heading">
-        <div>
-          <h2>课程资料</h2>
-          <p>解析状态决定资料是否能进入知识库构建。</p>
-        </div>
-        <el-button
-          v-if="materialsBlock?.state === 'error'"
-          class="ckqa-el-button ckqa-el-button--secondary"
-          native-type="button"
-          :disabled="blockLoadingKey === 'materials'"
-          @click="retryCourseBlock('materials')"
-        >
-          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
-          重试
-        </el-button>
-      </div>
-      <p v-if="materialsBlock?.state === 'error'" class="inline-error">{{ materialsBlock.error.message }}</p>
-      <ol v-else class="timeline-list">
-        <li v-for="item in materialsBlock?.items" :key="item.id">
-          <StatusBadge :status="item.meta" />
-          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
-          <small>{{ item.meta }} {{ item.detail }}</small>
-        </li>
-      </ol>
-      <div v-if="materialsBlock?.state === 'empty'" class="empty-action-state">
-        <p>暂无课程资料。</p>
-        <el-button
-          class="ckqa-el-button ckqa-el-button--secondary"
-          native-type="button"
-          :disabled="blockLoadingKey === 'materials'"
-          @click="retryCourseBlock('materials')"
-        >
-          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
-          刷新资料
-        </el-button>
-      </div>
-    </article>
-
-    <article class="panel" data-course-section="knowledgeBases">
-      <div class="panel-heading">
-        <div>
-          <h2>知识库</h2>
-          <p>从课程资料创建并激活可问答索引。</p>
-        </div>
-        <el-button
-          v-if="knowledgeBasesBlock?.state === 'error'"
-          class="ckqa-el-button ckqa-el-button--secondary"
-          native-type="button"
-          :disabled="blockLoadingKey === 'knowledgeBases'"
-          @click="retryCourseBlock('knowledgeBases')"
-        >
-          <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
-          重试
-        </el-button>
-      </div>
-      <p v-if="knowledgeBasesBlock?.state === 'error'" class="inline-error">{{ knowledgeBasesBlock.error.message }}</p>
-      <ol v-else class="timeline-list">
-        <li v-for="item in knowledgeBasesBlock?.items" :key="item.id">
-          <StatusBadge :status="item.meta" />
-          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
-          <RouterLink class="text-link" :to="item.buildTo">构建</RouterLink>
-          <small>{{ item.detail }}</small>
-        </li>
-      </ol>
-      <div v-if="knowledgeBasesBlock?.state === 'empty'" class="empty-action-state">
-        <p>暂无知识库。</p>
-        <el-button
-          class="ckqa-el-button ckqa-el-button--primary"
-          type="primary"
-          native-type="button"
-          @click="openCreationDialog('knowledge-base', { courseId: String(route.params.courseId ?? '') })"
-        >
-          <Plus class="button-icon" :size="16" aria-hidden="true" />
-          新建知识库
-        </el-button>
-      </div>
-    </article>
   </section>
 
   <section v-else-if="materialBlock" class="content-grid two-columns">

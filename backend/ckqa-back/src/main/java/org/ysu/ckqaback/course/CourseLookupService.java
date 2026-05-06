@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.course;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.UsersService;
+import org.ysu.ckqaback.user.UserAvatarService;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -44,6 +47,10 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class CourseLookupService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> STRING_OBJECT_MAP = new TypeReference<>() {
+    };
 
     private final CoursesService coursesService;
     private final CourseMaterialsService courseMaterialsService;
@@ -226,12 +233,33 @@ public class CourseLookupService {
     }
 
     private CourseTeacherResponse toTeacherResponse(Users user) {
+        Map<String, Object> metadata = parseMetadata(user.getExtraMetadata());
         return CourseTeacherResponse.builder()
                 .userId(user.getId())
                 .userCode(user.getUserCode())
                 .username(user.getUsername())
                 .displayName(user.getDisplayName())
+                .avatarUrl(UserAvatarService.resolveResponseAvatarUrl(user))
+                .department(metadataValue(metadata, "department"))
+                .title(metadataValue(metadata, "title"))
+                .employeeNo(metadataValue(metadata, "employee_no"))
                 .build();
+    }
+
+    private Map<String, Object> parseMetadata(String rawMetadata) {
+        if (!StringUtils.hasText(rawMetadata)) {
+            return Map.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(rawMetadata, STRING_OBJECT_MAP);
+        } catch (Exception ex) {
+            return Map.of();
+        }
+    }
+
+    private String metadataValue(Map<String, Object> metadata, String key) {
+        Object value = metadata.get(key);
+        return value == null ? null : String.valueOf(value);
     }
 
     private record CourseTeacherMembership(CourseMemberships membership, Users user) {

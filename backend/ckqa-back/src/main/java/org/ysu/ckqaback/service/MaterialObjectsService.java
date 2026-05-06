@@ -13,4 +13,5 @@ import org.ysu.ckqaback.entity.MaterialObjects;
  */
 public interface MaterialObjectsService extends IService<MaterialObjects> {
 
+    MaterialObjects getByFileMd5(String fileMd5);
 }

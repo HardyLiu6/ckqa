@@ -11,6 +11,10 @@
         <result column="password_hash" property="passwordHash" />
         <result column="status" property="status" />
         <result column="last_login_at" property="lastLoginAt" />
+        <result column="avatar_bucket" property="avatarBucket" />
+        <result column="avatar_object_key" property="avatarObjectKey" />
+        <result column="avatar_content_type" property="avatarContentType" />
+        <result column="avatar_updated_at" property="avatarUpdatedAt" />
         <result column="extra_metadata" property="extraMetadata" />
         <result column="created_at" property="createdAt" />
         <result column="updated_at" property="updatedAt" />
@@ -19,7 +23,8 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        u.id, u.user_code, u.username, u.display_name, u.password_hash, u.status, u.last_login_at, u.extra_metadata,
+        u.id, u.user_code, u.username, u.display_name, u.password_hash, u.status, u.last_login_at,
+        u.avatar_bucket, u.avatar_object_key, u.avatar_content_type, u.avatar_updated_at, u.extra_metadata,
         u.created_at, u.updated_at, u.is_deleted
     </sql>
 

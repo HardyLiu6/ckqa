@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { LogOut, Search, Server, ShieldCheck } from 'lucide-vue-next'
 import { RouterLink } from 'vue-router'
 
@@ -12,6 +12,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['logout'])
+const avatarLoadFailed = ref(false)
 
 function formatApiBaseline(apiBaseUrl) {
   try {
@@ -24,6 +25,12 @@ function formatApiBaseline(apiBaseUrl) {
 
 const apiBaseline = computed(() => formatApiBaseline(props.apiBaseUrl))
 const identityLabel = computed(() => props.currentUser?.name || '未登录')
+const avatarUrl = computed(() => props.currentUser?.avatarUrl || '')
+const identityInitial = computed(() => identityLabel.value.trim().charAt(0) || 'U')
+
+watch(avatarUrl, () => {
+  avatarLoadFailed.value = false
+})
 </script>
 
 <template>
@@ -59,6 +66,15 @@ const identityLabel = computed(() => props.currentUser?.name || '未登录')
 
     <div class="identity-cluster">
       <span class="identity-chip" title="当前身份和数据范围">
+        <span class="identity-avatar" aria-hidden="true">
+          <img
+            v-if="avatarUrl && !avatarLoadFailed"
+            :src="avatarUrl"
+            :alt="`${identityLabel}头像`"
+            @error="avatarLoadFailed = true"
+          />
+          <span v-else>{{ identityInitial }}</span>
+        </span>
         <ShieldCheck :size="15" aria-hidden="true" />
         <strong>{{ identityLabel }}</strong>
         <span>{{ dataScopeLabel }}</span>

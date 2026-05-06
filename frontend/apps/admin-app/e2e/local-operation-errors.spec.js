@@ -268,7 +268,7 @@ function knowledgeBaseBuildMocks({ activeIndexRunId }) {
       status: activeIndexRunId ? 'active' : 'draft',
       activeIndexRunId,
     }),
-    'GET /courses/os/pdf-files': () => [
+    'GET /courses/os/materials': () => [
       { id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' },
       { id: 10, courseId: 'os', fileName: 'slides.pdf', parseStatus: 'pending' },
     ],

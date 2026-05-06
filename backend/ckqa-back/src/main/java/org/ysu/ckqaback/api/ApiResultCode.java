@@ -136,6 +136,16 @@ public enum ApiResultCode {
     KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING(4099, "当前知识库已有构建流水线未完成"),
 
     /**
+     * 课程资料已存在。
+     */
+    COURSE_MATERIAL_EXISTS(4100, "课程资料已存在"),
+
+    /**
+     * 课程资料展示名已存在。
+     */
+    COURSE_MATERIAL_DISPLAY_NAME_EXISTS(4101, "课程资料展示名已存在"),
+
+    /**
      * PDF 解析执行失败。
      */
     PDF_PARSE_EXECUTION_FAILED(5003, "PDF解析执行失败"),

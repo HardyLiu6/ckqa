@@ -16,6 +16,7 @@ public class AuthUserProfile {
     private final String userCode;
     private final String username;
     private final String displayName;
+    private final String avatarUrl;
     private final List<String> roles;
     private final List<String> permissions;
     private final String dataScope;
