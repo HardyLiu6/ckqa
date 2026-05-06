@@ -9,23 +9,78 @@ export const LIST_ROUTE_BY_GROUP = {
 }
 
 const COURSE_CHILD_ROUTE_NAMES = new Set(['course-members', 'course-materials'])
+const MATERIAL_ROUTE_NAMES = new Set(['material-detail', 'parse-results'])
 
-function resolveCourseDetailParent(route = {}) {
-  if (!COURSE_CHILD_ROUTE_NAMES.has(route.name)) {
-    return null
-  }
-
-  const courseId = route.params?.courseId
+function resolveCourseId(route = {}) {
+  const courseId = route.params?.courseId ?? route.query?.courseId
   if (!courseId) {
-    return null
+    return ''
   }
 
+  return String(courseId)
+}
+
+function createCourseDetailParent(courseId) {
   return {
     label: '课程详情',
     name: 'course-detail',
     to: `/app/courses/${encodeURIComponent(String(courseId))}`,
     kind: 'link',
   }
+}
+
+function createCourseMaterialsParent(courseId) {
+  return {
+    label: '课程资料',
+    name: 'course-materials',
+    to: `/app/courses/${encodeURIComponent(String(courseId))}/materials`,
+    kind: 'link',
+  }
+}
+
+function createMaterialDetailParent(route = {}) {
+  const materialId = route.params?.materialId
+  const courseId = resolveCourseId(route)
+  if (!materialId) {
+    return null
+  }
+
+  const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''
+  return {
+    label: '资料详情',
+    name: 'material-detail',
+    to: `/app/materials/${encodeURIComponent(String(materialId))}${query}`,
+    kind: 'link',
+  }
+}
+
+function resolveCourseParents(route = {}) {
+  const courseId = resolveCourseId(route)
+  if (!courseId) {
+    return []
+  }
+
+  if (COURSE_CHILD_ROUTE_NAMES.has(route.name)) {
+    return [createCourseDetailParent(courseId)]
+  }
+
+  if (MATERIAL_ROUTE_NAMES.has(route.name)) {
+    const parents = [
+      createCourseDetailParent(courseId),
+      createCourseMaterialsParent(courseId),
+    ]
+
+    if (route.name === 'parse-results') {
+      const materialParent = createMaterialDetailParent(route)
+      if (materialParent) {
+        parents.push(materialParent)
+      }
+    }
+
+    return parents
+  }
+
+  return []
 }
 
 export function buildConsoleBreadcrumbItems(route = {}) {
@@ -41,10 +96,7 @@ export function buildConsoleBreadcrumbItems(route = {}) {
     items.push({ ...listRoute, kind: 'link' })
   }
 
-  const parent = resolveCourseDetailParent(route)
-  if (parent) {
-    items.push(parent)
-  }
+  items.push(...resolveCourseParents(route))
 
   items.push({ label: route.meta?.title || '当前页面', kind: 'current' })
 

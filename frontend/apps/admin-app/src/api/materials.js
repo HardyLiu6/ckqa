@@ -37,6 +37,12 @@ export async function updateCourseMaterial(courseId, materialId, payload = {}, c
   ))
 }
 
+export async function getCourseMaterial(courseId, materialId, client = http) {
+  return unwrapApiResponse(await client.get(
+    `/courses/${encodeURIComponent(courseId)}/materials/${encodeURIComponent(materialId)}`,
+  ))
+}
+
 export async function deleteCourseMaterial(courseId, materialId, client = http) {
   return unwrapApiResponse(await client.delete(
     `/courses/${encodeURIComponent(courseId)}/materials/${encodeURIComponent(materialId)}`,

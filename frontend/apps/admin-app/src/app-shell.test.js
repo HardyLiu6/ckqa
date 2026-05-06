@@ -93,6 +93,7 @@ import {
 } from './api/course-memberships.js'
 import {
   exportGraphRag,
+  getCourseMaterial,
   getMaterial,
   hasCompleteGraphRagExport,
   listCourseMaterialPage,
@@ -577,6 +578,7 @@ test('课程详情区块重试 helper 只加载指定资源', async () => {
 })
 
 test('资料 API 暴露生命周期方法并按文件名判断 GraphRAG 完整导出', async () => {
+  assert.equal(typeof getCourseMaterial, 'function')
   assert.equal(typeof getMaterial, 'function')
   assert.equal(typeof listParseResults, 'function')
   assert.equal(typeof startParse, 'function')
@@ -622,8 +624,58 @@ test('资料详情 loader 根据解析状态推导可执行按钮', async () => 
   })
 
   assert.equal(processingResult.actions.canParse, false)
-  assert.equal(processingResult.actions.parseHint, '解析任务执行中')
+  assert.equal(processingResult.actions.parseHint, '解析任务执行中，通常需要数分钟；页面会在后台刷新状态。')
   assert.equal(processingResult.actions.canExport, false)
+})
+
+test('资料详情 loader 通过课程资料接口补齐资料对象信息并中文化状态', async () => {
+  const route = { name: 'material-detail', query: {}, params: { materialId: '9' } }
+  const calls = []
+  const result = await loadModulePage(route, route.query, {
+    getMaterial: async () => ({
+      id: 9,
+      courseId: 'os',
+      fileName: '计算机操作系统教材',
+      parseStatus: 'pending',
+    }),
+    getCourseMaterial: async (courseId, materialId) => {
+      calls.push([courseId, materialId])
+      return {
+        id: 9,
+        courseId,
+        displayName: '计算机操作系统教材',
+        originalFileName: 'os-book.pdf',
+        materialType: 'textbook',
+        parseStatus: 'pending',
+        fileMd5: '0123456789abcdef0123456789abcdef',
+        fileSize: 2097152,
+        uploadTime: '2026-05-06T18:00:00',
+        updatedAt: '2026-05-06T18:19:00',
+      }
+    },
+    listParseResults: async () => ([]),
+  })
+
+  assert.deepEqual(calls, [['os', '9']])
+  assert.equal(result.blocks.material.item.fileMd5, '0123456789abcdef0123456789abcdef')
+  assert.equal(result.blocks.material.item.parseStatusLabel, '待解析')
+  assert.equal(result.actions.parseHint, '资料尚未解析。触发后将提交 MinerU 解析任务，页面会自动轮询状态。')
+  assert.deepEqual(
+    result.blocks.material.facts.map(({ label, value }) => [label, value]),
+    [
+      ['课程资料 ID', 9],
+      ['资料对象 ID', '-'],
+      ['资料类型', '教材'],
+      ['文件名', '计算机操作系统教材'],
+      ['原始文件名', 'os-book.pdf'],
+      ['MD5', '0123456789abcdef0123456789abcdef'],
+      ['文件大小', '2.0 MB'],
+      ['解析状态', '待解析'],
+      ['MinerU 批次 ID', '-'],
+      ['上传时间', '2026-05-06T18:00:00'],
+      ['更新时间', '2026-05-06T18:19:00'],
+    ],
+  )
 })
 
 test('长任务 fallback 识别超时/冲突并支持取消轮询', async () => {
@@ -973,6 +1025,7 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   await listCourseMembers({ courseId: 'os', status: 'active', membershipRole: '', keyword: '', page: 1, size: 20 }, client)
   await listCourseMaterials('os', { keyword: '', parseStatus: '' }, client)
   await listCourseMaterialPage('os', { page: 2, size: 10, materialType: 'textbook' }, client)
+  await getCourseMaterial('os', 9, client)
   const materialFile = new File([new Uint8Array([1, 2, 3])], 'book.pdf', { type: 'application/pdf' })
   await uploadCourseMaterial('os', { file: materialFile, displayName: '教材', materialType: 'textbook' }, client)
   await updateCourseMaterial('os', 9, { displayName: '教材新版', materialType: 'reference' }, client)
@@ -992,6 +1045,7 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
     ['get', '/course-memberships', { courseId: 'os', status: 'active', page: 1, size: 20 }],
     ['get', '/courses/os/materials', { page: 1, size: 100 }],
     ['get', '/courses/os/materials', { page: 2, size: 10, materialType: 'textbook' }],
+    ['get', '/courses/os/materials/9', null],
     ['post', '/courses/os/materials', { fileName: 'book.pdf', fileType: 'application/pdf' }],
     ['patch', '/courses/os/materials/9', { displayName: '教材新版', materialType: 'reference' }],
     ['delete', '/courses/os/materials/9', null],
@@ -2325,7 +2379,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@search-change="handleTableSearch"/)
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
-  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
+  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table' && route\.name !== 'material-detail'\)/)
   assert.match(modulePage, /const hasPrimaryAction = computed/)
   assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"/)
   assert.match(modulePage, /:title="tableTitle"/)
@@ -2647,6 +2701,29 @@ test('课程子页面面包屑保留课程详情父级', () => {
       { label: '课程与资料', kind: 'section', to: undefined },
       { label: '课程列表', kind: 'link', to: '/app/courses' },
       { label: '课程详情', kind: 'current', to: undefined },
+    ],
+  )
+})
+
+test('资料详情面包屑通过 courseId query 回到课程资料列表', () => {
+  const materialItems = buildConsoleBreadcrumbItems({
+    name: 'material-detail',
+    params: { materialId: '9' },
+    query: { courseId: 'os 2026' },
+    meta: {
+      title: '资料详情',
+      navGroup: 'courses',
+    },
+  })
+
+  assert.deepEqual(
+    materialItems.map(({ label, kind, to }) => ({ label, kind, to })),
+    [
+      { label: '课程与资料', kind: 'section', to: undefined },
+      { label: '课程列表', kind: 'link', to: '/app/courses' },
+      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
+      { label: '课程资料', kind: 'link', to: '/app/courses/os%202026/materials' },
+      { label: '资料详情', kind: 'current', to: undefined },
     ],
   )
 })

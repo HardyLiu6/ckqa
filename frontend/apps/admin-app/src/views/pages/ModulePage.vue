@@ -259,7 +259,7 @@ const creationSubmitDisabled = computed(() => (
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
 const tableTitle = computed(() => config.value.tableTitle || pageTitle.value)
-const showModuleHeroTitle = computed(() => config.value.variant !== 'table')
+const showModuleHeroTitle = computed(() => config.value.variant !== 'table' && route.name !== 'material-detail')
 const activeBuildStep = computed(() => {
   const steps = config.value.workflowSteps ?? []
   return steps.find((step) => step.key === activeStepKey.value)
@@ -316,7 +316,10 @@ const hasPrimaryAction = computed(() => Boolean(primaryActionLabel.value))
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
 const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
 const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
-const canManualRefresh = computed(() => config.value.dataSource === 'live' && route.name !== 'knowledge-base-build')
+const canManualRefresh = computed(() => (
+  config.value.dataSource === 'live'
+  && !['knowledge-base-build', 'material-detail'].includes(route.name)
+))
 const tableSearchText = computed(() => firstQueryValue(route.query.keyword))
 const tableFilterValues = computed(() => {
   const values = {}
@@ -453,6 +456,14 @@ async function loadPage(query = route.query) {
         ...loadError.value,
         message: action.message,
       }
+    }
+  }
+
+  if (['material-detail', 'parse-results'].includes(route.name)) {
+    const courseId = String(result.blocks?.material?.item?.courseId ?? result.raw?.material?.courseId ?? '').trim()
+    const currentCourseId = String(Array.isArray(route.query.courseId) ? route.query.courseId[0] : route.query.courseId ?? '').trim()
+    if (courseId && courseId !== currentCourseId) {
+      await router.replace({ query: { ...route.query, courseId } })
     }
   }
 
@@ -1729,6 +1740,7 @@ onBeforeUnmount(() => cancelLongTask())
         class="ckqa-el-button ckqa-el-button--secondary"
         native-type="button"
         :disabled="route.name === 'material-detail' && (!config.actions?.canExport || actionRunning)"
+        :title="route.name === 'material-detail' ? config.actions?.exportHint : ''"
         @click="handleSecondaryAction"
       >
         <component :is="secondaryActionIcon" class="button-icon" :size="16" aria-hidden="true" />
@@ -2689,19 +2701,40 @@ onBeforeUnmount(() => cancelLongTask())
 
   </section>
 
-  <section v-else-if="materialBlock" class="content-grid two-columns">
-    <article class="panel">
+  <section v-else-if="materialBlock" class="content-grid two-columns material-detail-grid">
+    <article class="panel material-overview-panel">
       <div class="panel-heading">
         <h2>资料概览</h2>
-        <StatusBadge :status="materialBlock.item.parseStatus" />
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost manual-refresh-button"
+          native-type="button"
+          :disabled="loading"
+          @click="loadPage()"
+        >
+          <RefreshCw class="button-icon" :size="15" aria-hidden="true" />
+          刷新
+        </el-button>
       </div>
-      <div class="field-grid">
+      <div class="field-grid material-field-grid">
         <div v-for="field in materialBlock.facts" :key="field.label" class="field-tile">
           <span>{{ renderFactLabel(field) }}</span>
           <strong>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
-      <p v-if="config.actions?.parseHint">{{ config.actions.parseHint }}</p>
+      <div
+        v-if="config.actions?.parseHint"
+        class="material-action-guide"
+        :data-status="materialBlock.item.parseStatus"
+      >
+        <div>
+          <strong>{{ config.actions.parseHintTitle || '解析提示' }}</strong>
+          <p>{{ config.actions.parseHint }}</p>
+        </div>
+        <StatusBadge
+          :status="materialBlock.item.parseStatus"
+          :label="materialBlock.item.parseStatusLabel"
+        />
+      </div>
       <div
         v-if="materialOperationFeedback"
         class="operation-feedback"
@@ -2717,7 +2750,7 @@ onBeforeUnmount(() => cancelLongTask())
       </div>
     </article>
 
-    <article class="panel">
+    <article class="panel material-results-panel">
       <div class="panel-heading">
         <h2>解析结果</h2>
         <el-button
@@ -2738,7 +2771,26 @@ onBeforeUnmount(() => cancelLongTask())
           <small>{{ item.detail }}</small>
         </li>
       </ol>
-      <p v-if="parseResultsBlock?.state === 'empty'">暂无解析产物。</p>
+      <div v-if="parseResultsBlock?.state === 'empty'" class="empty-action-state material-empty-state">
+        <strong>暂无解析产物</strong>
+        <p>
+          {{
+            config.actions?.canParse
+              ? '当前资料还没有解析输出。触发解析后，这里会显示 MinerU 产物和 GraphRAG 导出文件。'
+              : '解析或导出完成后，这里会显示 content_list、标准化文档和 GraphRAG 输入文件。'
+          }}
+        </p>
+        <el-button
+          v-if="config.actions?.canParse"
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="actionRunning"
+          @click="handlePrimaryAction"
+        >
+          <Play class="button-icon" :size="16" aria-hidden="true" />
+          触发解析
+        </el-button>
+      </div>
     </article>
   </section>
 

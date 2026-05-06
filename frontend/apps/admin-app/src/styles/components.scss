@@ -936,6 +936,7 @@ textarea.text-input {
 .breadcrumb-item[data-kind="current"] {
   color: var(--ckqa-text);
   background: color-mix(in srgb, var(--ckqa-text) 8%, var(--ckqa-surface));
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--ckqa-accent) 54%, transparent);
 }
 
 .status-badge,
@@ -1334,6 +1335,62 @@ textarea.text-input {
 
 .field-tile strong {
   color: var(--ckqa-text);
+  overflow-wrap: anywhere;
+}
+
+.material-detail-grid {
+  align-items: stretch;
+}
+
+.material-overview-panel,
+.material-results-panel {
+  min-height: 360px;
+}
+
+.material-field-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.material-field-grid .field-tile {
+  min-height: 84px;
+}
+
+.material-action-guide {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgb(37 99 235 / 20%);
+  border-radius: var(--ckqa-radius-sm);
+  background: rgb(37 99 235 / 6%);
+}
+
+.material-action-guide[data-status='done'] {
+  border-color: rgb(15 118 110 / 24%);
+  background: rgb(15 118 110 / 8%);
+}
+
+.material-action-guide[data-status='failed'] {
+  border-color: rgb(194 65 61 / 22%);
+  background: rgb(194 65 61 / 6%);
+}
+
+.material-action-guide strong,
+.material-empty-state strong {
+  color: var(--ckqa-text);
+}
+
+.material-action-guide p {
+  margin: 6px 0 0;
+  color: var(--ckqa-text-muted);
+  line-height: 1.65;
+}
+
+.material-empty-state {
+  min-height: 220px;
+  margin-top: 8px;
 }
 
 .course-info-panel {
@@ -2575,6 +2632,7 @@ textarea.text-input {
   .course-progress-strip,
   .course-cover-panel,
   .two-columns,
+  .material-field-grid,
   .workflow-panel,
   .workflow-stepper {
     grid-template-columns: 1fr;
@@ -2623,6 +2681,10 @@ textarea.text-input {
 
   .table-progress-cell {
     min-width: 148px;
+  }
+
+  .material-action-guide {
+    flex-direction: column;
   }
 }
 

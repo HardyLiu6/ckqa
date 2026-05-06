@@ -78,7 +78,7 @@ async function openAuthenticated(page, path) {
   await page.setViewportSize({ width: 1980, height: 720 })
   await page.goto(path)
   await page.getByRole('button', { name: '进入平台' }).click()
-  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(path)}$`))
+  await expect.poll(async () => isCurrentRoute(page.url(), path)).toBe(true)
 }
 
 async function installApiMocks(page, handlers) {
@@ -87,7 +87,7 @@ async function installApiMocks(page, handlers) {
     const url = new URL(request.url())
     const path = url.pathname.slice(API_PREFIX.length)
     const key = `${request.method()} ${path}`
-    const handler = handlers[key]
+    const handler = handlers[key] ?? E2E_DEFAULT_HANDLERS[key]
 
     if (request.method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: corsHeaders() })
@@ -119,6 +119,24 @@ async function installApiMocks(page, handlers) {
       }),
     })
   })
+}
+
+const E2E_DEFAULT_HANDLERS = {
+  'POST /auth/admin/login': () => ({
+    accessToken: 'e2e-admin-token',
+    tokenType: 'Bearer',
+    expiresAt: null,
+    user: {
+      id: 1,
+      userCode: 'ADM2026001',
+      username: 'admin.heqh',
+      displayName: '平台管理员',
+      role: 'admin',
+      roles: ['admin'],
+      dataScope: '全部课程',
+      permissions: ['*'],
+    },
+  }),
 }
 
 async function getElementRect(locator) {
@@ -155,6 +173,19 @@ function corsHeaders() {
   }
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+function isCurrentRoute(actualUrl, expectedPath) {
+  const actual = new URL(actualUrl)
+  const expected = new URL(expectedPath, actual.origin)
+
+  if (actual.pathname !== expected.pathname) {
+    return false
+  }
+
+  for (const [key, value] of expected.searchParams.entries()) {
+    if (actual.searchParams.get(key) !== value) {
+      return false
+    }
+  }
+
+  return true
 }

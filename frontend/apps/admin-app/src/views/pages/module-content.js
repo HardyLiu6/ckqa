@@ -180,8 +180,8 @@ const configs = {
   },
   'material-detail': {
     variant: 'overview',
-    dataSource: 'mock',
-    eyebrow: 'Material Lifecycle',
+    dataSource: 'live',
+    eyebrow: '课程资料',
     summary: '资料详情只处理解析、查看解析结果、导出 GraphRAG 输入和跳转构建向导。',
     primaryAction: { label: '触发解析', permission: 'material:write' },
     secondaryAction: { label: '导出输入', permission: 'material:write' },

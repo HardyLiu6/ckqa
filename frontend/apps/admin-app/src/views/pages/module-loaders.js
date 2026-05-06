@@ -7,6 +7,7 @@ import {
 } from '../../api/courses.js'
 import { listCourseMembers } from '../../api/course-memberships.js'
 import {
+  getCourseMaterial,
   getMaterial,
   hasCompleteGraphRagExport,
   listCourseMaterialPage,
@@ -96,6 +97,7 @@ const defaultServices = {
   listCourseMaterialPage,
   listCourses,
   listCourseMembers,
+  getCourseMaterial,
   getMaterial,
   listParseResults,
   getIndexRun,
@@ -334,7 +336,7 @@ function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
       materialType,
       parseStatus,
     },
-    to: encodedId ? `/app/materials/${encodedId}` : '',
+    to: buildMaterialDetailPath(id, courseId),
     subtitle: material.fileName ?? material.originalFileName ?? '',
     actions: createCourseMaterialRowActions({ ...material, id, courseId, parseStatus }),
     cells: [
@@ -364,25 +366,40 @@ function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
   }
 }
 
+function buildMaterialDetailPath(id, courseId = '') {
+  if (!id) {
+    return ''
+  }
+
+  const encodedId = encodeURIComponent(id)
+  const normalizedCourseId = String(courseId ?? '').trim()
+  const query = normalizedCourseId ? `?courseId=${encodeURIComponent(normalizedCourseId)}` : ''
+  return `/app/materials/${encodedId}${query}`
+}
+
 function createCourseMaterialRowActions(material = {}) {
   const id = material.id ?? material.materialId ?? material.pdfFileId
   if (!id) {
     return []
   }
   const encodedId = encodeURIComponent(id)
+  const detailPath = buildMaterialDetailPath(id, material.courseId)
+  const resultPath = `${detailPath.replace(/\?.*$/, '')}/parse-results${
+    String(material.courseId ?? '').trim() ? `?courseId=${encodeURIComponent(String(material.courseId).trim())}` : ''
+  }`
   const parseStatus = String(material.parseStatus ?? '').trim()
   const processing = parseStatus === 'processing'
   return [
-    { label: '详情', to: `/app/materials/${encodedId}`, icon: 'view' },
+    { label: '详情', to: detailPath || `/app/materials/${encodedId}`, icon: 'view' },
     {
       label: '解析',
-      to: `/app/materials/${encodedId}`,
+      to: detailPath || `/app/materials/${encodedId}`,
       icon: 'parse',
       variant: 'primary',
       disabled: processing,
       title: processing ? '资料解析中' : '进入资料详情触发解析',
     },
-    { label: '结果', to: `/app/materials/${encodedId}/parse-results`, icon: 'knowledge' },
+    { label: '结果', to: resultPath, icon: 'knowledge' },
     { label: '编辑', key: 'edit-course-material', icon: 'edit', variant: 'primary' },
     {
       label: '删除',
@@ -1272,14 +1289,14 @@ async function loadMaterialDetail(route, services) {
     })
   }
 
-  const material = materialResult.value
+  const material = await resolveMaterialDetail(materialResult.value, materialId, route, services)
   const parseResultsBlock = createSettledListBlock(parseResultsResult, mapParseResultItem)
   const actions = resolveMaterialActions(material, parseResultsBlock.items)
 
   return createOverviewLoaderResult({
     requestState: 'success',
     refreshedAt: new Date().toISOString(),
-    summary: material.fileName || material.displayName || '资料详情',
+    summary: buildMaterialSummary(material),
     facts: buildMaterialFacts(material),
     actions,
     blocks: {
@@ -1295,6 +1312,29 @@ async function loadMaterialDetail(route, services) {
       parseResults: parseResultsBlock.raw,
     },
   })
+}
+
+async function resolveMaterialDetail(material = {}, materialId, route = {}, services = {}) {
+  const courseId = String(material.courseId ?? material.course_id ?? route.query?.courseId ?? '').trim()
+  let enriched = material
+
+  if (courseId && typeof services.getCourseMaterial === 'function') {
+    try {
+      const courseMaterial = await services.getCourseMaterial(courseId, materialId)
+      enriched = {
+        ...material,
+        ...courseMaterial,
+        courseId: courseMaterial?.courseId ?? courseId,
+      }
+    } catch {
+      enriched = {
+        ...material,
+        courseId,
+      }
+    }
+  }
+
+  return normalizeMaterialDetail(enriched)
 }
 
 function createOverviewLoaderResult(overrides = {}) {
@@ -1438,14 +1478,87 @@ function resolveCourseCoverUrl(course = {}) {
   return course.coverUrl || DEFAULT_COURSE_COVER_URL
 }
 
+function normalizeMaterialDetail(material = {}) {
+  const parseStatus = normalizeMaterialParseStatus(material.parseState ?? material.parseStatus ?? material.status)
+  const materialType = String(material.materialType ?? '').trim() || 'other'
+  const materialObject = material.materialObject ?? material.object ?? {}
+  const fileMd5 = firstPresent(
+    material.fileMd5,
+    material.fileMD5,
+    material.file_md5,
+    material.md5,
+    material.md5Checksum,
+    materialObject.fileMd5,
+    materialObject.file_md5,
+    materialObject.md5,
+  )
+  const fileSize = firstPresent(
+    material.fileSize,
+    material.file_size,
+    materialObject.fileSize,
+    materialObject.file_size,
+  )
+
+  return {
+    ...material,
+    materialType,
+    materialTypeLabel: COURSE_MATERIAL_TYPE_LABELS[materialType] ?? materialType,
+    parseStatus,
+    parseStatusLabel: COURSE_MATERIAL_PARSE_STATUS_LABELS[parseStatus] ?? parseStatus,
+    fileName: material.fileName ?? material.displayName ?? material.originalFileName ?? '',
+    originalFileName: material.originalFileName ?? materialObject.originalFileName ?? materialObject.original_file_name ?? '',
+    fileMd5,
+    fileSize,
+  }
+}
+
+function normalizeMaterialParseStatus(status) {
+  const normalized = String(status ?? '').trim().toLowerCase()
+
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) {
+    return 'done'
+  }
+
+  if (['running', 'processing'].includes(normalized)) {
+    return 'processing'
+  }
+
+  if (['failed', 'error'].includes(normalized)) {
+    return 'failed'
+  }
+
+  if (['pending', 'todo', 'ready'].includes(normalized)) {
+    return 'pending'
+  }
+
+  return normalized || 'pending'
+}
+
+function firstPresent(...values) {
+  return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '') ?? null
+}
+
+function buildMaterialSummary(material = {}) {
+  const name = material.displayName || material.fileName || material.originalFileName || '课程资料'
+  const status = material.parseStatusLabel ?? COURSE_MATERIAL_PARSE_STATUS_LABELS[material.parseStatus] ?? material.parseStatus
+  const type = material.materialTypeLabel ?? COURSE_MATERIAL_TYPE_LABELS[material.materialType] ?? material.materialType
+
+  return [name, type, status].filter(Boolean).join(' · ')
+}
+
 function buildMaterialFacts(material = {}) {
   return [
     { label: '课程资料 ID', value: material.id ?? material.materialId ?? '-' },
     { label: '资料对象 ID', value: material.objectId ?? material.materialObjectId ?? '-' },
-    { label: '文件名', value: material.fileName ?? material.displayName ?? '-' },
-    { label: 'MD5', value: material.fileMd5 ?? material.md5 ?? '-' },
-    { label: '解析状态', value: material.parseStatus ?? '-' },
+    { label: '资料类型', value: material.materialTypeLabel ?? COURSE_MATERIAL_TYPE_LABELS[material.materialType] ?? material.materialType ?? '-' },
+    { label: '文件名', value: material.displayName ?? material.fileName ?? '-' },
+    { label: '原始文件名', value: material.originalFileName ?? '-' },
+    { label: 'MD5', value: material.fileMd5 ?? '-' },
+    { label: '文件大小', value: formatFileSize(material.fileSize) },
+    { label: '解析状态', value: material.parseStatusLabel ?? COURSE_MATERIAL_PARSE_STATUS_LABELS[material.parseStatus] ?? material.parseStatus ?? '-' },
     { label: 'MinerU 批次 ID', value: material.mineruBatchId ?? material.batchId ?? '-' },
+    { label: '上传时间', value: material.uploadTime ?? material.createdAt ?? '-' },
+    { label: '更新时间', value: material.updatedAt ?? '-' },
   ]
 }
 
@@ -1534,24 +1647,41 @@ function mapIndexRunItem(indexRun = {}) {
 }
 
 function resolveMaterialActions(material = {}, parseResults = []) {
-  const parseStatus = material.parseStatus ?? 'unknown'
+  const parseStatus = normalizeMaterialParseStatus(material.parseStatus ?? 'unknown')
   const exportPayload = { mode: 'section', withPageDocs: true, force: false }
   const hasCompleteExport = hasCompleteGraphRagExport(parseResults, exportPayload)
+  const canParse = ['pending', 'failed'].includes(parseStatus)
+  const canExport = parseStatus === 'done'
+  const parseHintByStatus = {
+    pending: '资料尚未解析。触发后将提交 MinerU 解析任务，页面会自动轮询状态。',
+    failed: '上次解析失败，可重新触发解析；新任务会覆盖解析状态并保留错误信息供排查。',
+    processing: '解析任务执行中，通常需要数分钟；页面会在后台刷新状态。',
+    done: hasCompleteExport
+      ? '解析和 GraphRAG 输入均已就绪，可直接进入知识库构建或重新导出。'
+      : '解析已完成，可导出 GraphRAG 输入后进入知识库构建。',
+  }
+  const exportHint = canExport
+    ? (hasCompleteExport ? '已存在完整 GraphRAG 输入；再次导出会先询问是否覆盖。' : '解析完成后可导出标准化文档、section_docs 和 page_docs。')
+    : '解析完成后才能导出 GraphRAG 输入。'
 
   if (parseStatus === 'processing') {
     return {
       canParse: false,
-      parseHint: '解析任务执行中',
+      parseHint: parseHintByStatus.processing,
+      parseHintTitle: '解析进行中',
       canExport: false,
+      exportHint,
       exportPayload,
       hasCompleteExport,
     }
   }
 
   return {
-    canParse: ['pending', 'failed'].includes(parseStatus),
-    parseHint: ['pending', 'failed'].includes(parseStatus) ? '可触发解析' : '当前状态不可触发解析',
-    canExport: parseStatus === 'done',
+    canParse,
+    parseHint: parseHintByStatus[parseStatus] ?? '当前解析状态暂不支持新的操作，请刷新后重试。',
+    parseHintTitle: canParse ? '可触发解析' : (canExport ? '可导出输入' : '等待状态更新'),
+    canExport,
+    exportHint,
     exportPayload,
     hasCompleteExport,
   }
