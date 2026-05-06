@@ -159,7 +159,9 @@
   padding: 22px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-md);
-  background: var(--ckqa-surface-muted);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--ckqa-accent) 8%, transparent), transparent 44%),
+    var(--ckqa-surface-muted);
 }
 
 .login-brand {
@@ -172,6 +174,28 @@
 .login-copy {
   color: var(--ckqa-text-muted);
   line-height: 1.7;
+}
+
+.login-card__header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.login-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 26%, var(--ckqa-border));
+  border-radius: var(--ckqa-radius-full);
+  color: var(--ckqa-accent-strong);
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface));
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .login-flow {
@@ -229,6 +253,48 @@
   gap: 12px;
 }
 
+.login-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.login-preset {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  color: var(--ckqa-text);
+  background: var(--ckqa-surface);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color var(--ckqa-duration-fast) ease,
+    box-shadow var(--ckqa-duration-fast) ease,
+    transform var(--ckqa-duration-fast) ease;
+}
+
+.login-preset strong,
+.login-preset span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-preset span {
+  color: var(--ckqa-text-muted);
+  font-size: 12px;
+}
+
+.login-preset:hover,
+.login-preset.active {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 42%, var(--ckqa-border));
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--ckqa-accent) 11%, transparent);
+  transform: translateY(-1px);
+}
+
 .login-role-facts,
 .route-state__facts {
   display: grid;
@@ -267,7 +333,23 @@
   font-size: 13px;
 }
 
-.login-role-select {
+.login-role-select,
+.login-input {
+  width: 100%;
+}
+
+.login-form-error {
+  padding: 10px 12px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--ckqa-danger) 36%, var(--ckqa-border));
+  border-radius: var(--ckqa-radius-sm);
+  color: var(--ckqa-danger);
+  background: color-mix(in srgb, var(--ckqa-danger) 8%, var(--ckqa-surface));
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.login-submit {
   width: 100%;
 }
 

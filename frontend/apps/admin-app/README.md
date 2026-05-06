@@ -6,7 +6,7 @@
 
 - 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、路由守卫、开发态身份切换、请求层、工作台、系统健康页、课程封面上传、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
+- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
@@ -38,11 +38,11 @@
 | `src/components/shell/` | 顶栏、侧边导航、主题控件和导航模型 |
 | `src/components/common/` | 状态徽标、数据来源、表格壳、工作流步骤、指标和诊断面板 |
 | `src/components/system/` | 系统健康矩阵 |
-| `src/stores/auth.js` | 开发态认证状态、角色和权限判断 |
+| `src/stores/auth.js` | JWT 会话持久化、当前用户、角色和权限判断 |
 | `src/stores/theme.js` | `light / dark / auto` 主题模式和固定主题色 |
 | `src/stores/pinia.js` | admin-app 共享 Pinia 实例 |
 | `src/axios/index.js` | Axios 实例、认证头注入和错误收敛 |
-| `src/api/` | Java `/api/v1` 业务 API 边界和 ApiResponse 解包 |
+| `src/api/` | Java `/api/v1` 认证与业务 API 边界、ApiResponse 解包 |
 | `src/views/pages/module-loaders.js` | 按路由加载 live 数据并映射页面状态 |
 | `e2e/local-operation-errors.spec.js` | Playwright 浏览器级故障注入验收 |
 | `src/views/` | 登录、工作台、系统健康、通用页面和状态页 |
@@ -91,13 +91,20 @@ VITE_API_TIMEOUT=15000
 
 正式业务代码不应直接请求 GraphRAG Python `/v1`。GraphRAG Python 服务仍由 Java 后端编排。
 
+本地 JWT 登录测试账号来自后端迁移 `sql/migrations/20260506_jwt_auth_credentials.sql`：
+
+| 端 | 用户名 | 密码 |
+| --- | --- | --- |
+| 管理员端 | `admin.heqh` | `Ckqa@2026` |
+| 教师端 | `teacher.zhangwb` | `Ckqa@2026` |
+
 ## 已落地的骨架能力
 
 1. 6 个一级导航：工作台、课程与资料、知识库构建、问答运维、用户与权限、系统与审计。
 2. `/app/system` 作为系统与审计聚合入口，当前默认跳转 `/app/health`。
 3. 路由元信息包含 `permissions`、`status`、`routeState`、`resource` 和 `scope`。
 4. 未登录访问业务页跳转 `/login`，无权限跳转 `/403`。
-5. 登录页支持管理员/教师开发态身份切换，并明确标记“当前为开发态身份切换，正式登录接口待接入”。
+5. 登录页接入 Java `/api/v1/auth/admin/login`，管理员和教师账号登录后以 JWT 访问业务接口。
 6. 未开放页面统一显示模块、规划状态和恢复入口，避免空白路由。
 7. 系统健康页调用 Java `/api/v1/system/health`，并识别 `graphrag-build-runs-root` / `graphrag-ready`；更重的共享输出检查由后端 `/api/v1/system/readiness` 承担。
 8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`；课程创建和详情页支持通过 Java 上传课程封面。
@@ -112,8 +119,7 @@ VITE_API_TIMEOUT=15000
 
 ## 当前限制
 
-1. 登录仍是开发态 mock 身份，正式登录接口待后端确认。
-2. `material:upload` 仅作为预留权限点，Java 上传链路确认前不提供上传 UI。
-3. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
-4. 403 页面当前使用兜底权限说明；若需要精确缺失权限，需要路由守卫跳转时附带 `required` 查询参数。
-5. 正式登录、细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。
+1. `material:upload` 仅作为预留权限点，Java 上传链路确认前不提供上传 UI。
+2. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
+3. 403 页面当前使用兜底权限说明；若需要精确缺失权限，需要路由守卫跳转时附带 `required` 查询参数。
+4. 细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。

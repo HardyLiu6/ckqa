@@ -1,13 +1,17 @@
 import axios from 'axios'
 
-import { authStore } from '../stores/auth.js'
-
 const viteEnv = import.meta.env ?? {}
 
 export const API_BASE_URL = viteEnv.VITE_API_BASE_URL ?? '/api/v1'
 export const API_TIMEOUT = Number(viteEnv.VITE_API_TIMEOUT ?? 15000)
 
-export function createHttpClient({ authStore: activeAuthStore = authStore } = {}) {
+let authSessionProvider = () => null
+
+export function setAuthSessionProvider(provider) {
+  authSessionProvider = typeof provider === 'function' ? provider : () => null
+}
+
+export function createHttpClient({ authStore: activeAuthStore = null, getAuthSession = null } = {}) {
   const client = axios.create({
     baseURL: API_BASE_URL,
     timeout: API_TIMEOUT,
@@ -15,12 +19,13 @@ export function createHttpClient({ authStore: activeAuthStore = authStore } = {}
 
   client.interceptors.request.use((config) => {
     const headers = { ...(config.headers ?? {}) }
+    const session = getAuthSession?.() ?? activeAuthStore?.state ?? authSessionProvider?.() ?? {}
 
-    if (activeAuthStore.state.token) {
-      headers.Authorization = `Bearer ${activeAuthStore.state.token}`
+    if (session.token) {
+      headers.Authorization = `Bearer ${session.token}`
     }
-    if (activeAuthStore.state.currentUser?.userCode) {
-      headers['X-CKQA-User-Code'] = activeAuthStore.state.currentUser.userCode
+    if (session.currentUser?.userCode) {
+      headers['X-CKQA-User-Code'] = session.currentUser.userCode
     }
 
     return {

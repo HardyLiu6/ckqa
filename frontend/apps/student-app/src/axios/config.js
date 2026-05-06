@@ -1,4 +1,4 @@
-export const DEFAULT_API_BASE_URL = '/api'
+export const DEFAULT_API_BASE_URL = '/api/v1'
 export const DEFAULT_API_TIMEOUT = 10000
 export const DEFAULT_ERROR_MESSAGE = '请求失败，请稍后重试'
 export const DEFAULT_TIMEOUT_ERROR_MESSAGE = '请求超时，请稍后重试'

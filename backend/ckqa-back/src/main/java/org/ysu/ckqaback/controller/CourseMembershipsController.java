@@ -16,6 +16,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.auth.AuthContext;
 import org.ysu.ckqaback.course.CourseAccessDecision;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseMembershipManagementService;
@@ -46,7 +47,11 @@ public class CourseMembershipsController {
             @Valid CourseMembershipQueryRequest request,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        return ApiResponseUtils.success(managementService.listCourseMembers(request.getCourseId(), request, actorUserCode));
+        return ApiResponseUtils.success(managementService.listCourseMembers(
+                request.getCourseId(),
+                request,
+                AuthContext.resolveUserCode(actorUserCode)
+        ));
     }
 
     @PostMapping
@@ -54,7 +59,11 @@ public class CourseMembershipsController {
             @Valid @RequestBody CourseMembershipCreateRequest request,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        return ApiResponseUtils.success(managementService.createCourseMember(request.getCourseId(), request, actorUserCode));
+        return ApiResponseUtils.success(managementService.createCourseMember(
+                request.getCourseId(),
+                request,
+                AuthContext.resolveUserCode(actorUserCode)
+        ));
     }
 
     @PatchMapping("/{id}")
@@ -63,7 +72,12 @@ public class CourseMembershipsController {
             @Valid @RequestBody CourseMembershipUpdateRequest request,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        return ApiResponseUtils.success(managementService.updateCourseMember(request.getCourseId(), id, request, actorUserCode));
+        return ApiResponseUtils.success(managementService.updateCourseMember(
+                request.getCourseId(),
+                id,
+                request,
+                AuthContext.resolveUserCode(actorUserCode)
+        ));
     }
 
     @GetMapping("/access")
@@ -72,7 +86,8 @@ public class CourseMembershipsController {
             @RequestParam(required = false) String userCode,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        String targetUserCode = userCode == null || userCode.isBlank() ? actorUserCode : userCode;
+        String currentUserCode = AuthContext.resolveUserCode(actorUserCode);
+        String targetUserCode = userCode == null || userCode.isBlank() ? currentUserCode : userCode;
         return ApiResponseUtils.success(accessService.resolveAccess(courseId, targetUserCode));
     }
 }

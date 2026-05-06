@@ -67,4 +67,21 @@
           and r.role_code = #{roleCode}
     </select>
 
+    <select id="selectRoleCodes" resultType="string">
+        select r.role_code
+        from user_roles ur
+        inner join roles r on r.id = ur.role_id
+        where ur.user_id = #{userId}
+        order by r.role_code asc
+    </select>
+
+    <select id="selectPermissionCodes" resultType="string">
+        select distinct p.permission_code
+        from user_roles ur
+        inner join role_permissions rp on rp.role_id = ur.role_id
+        inner join permissions p on p.id = rp.permission_id
+        where ur.user_id = #{userId}
+        order by p.permission_code asc
+    </select>
+
 </mapper>

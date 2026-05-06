@@ -6,6 +6,7 @@ import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.auth.AuthContext;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
@@ -54,10 +55,11 @@ public class CoursesController {
             @Valid @ModelAttribute CourseQueryRequest request,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        if (actorUserCode == null || actorUserCode.isBlank()) {
+        String resolvedUserCode = AuthContext.resolveUserCode(actorUserCode);
+        if (resolvedUserCode == null || resolvedUserCode.isBlank()) {
             return ApiResponseUtils.success(courseLookupService.listCourses(request));
         }
-        return ApiResponseUtils.success(courseLookupService.listCourses(request, actorUserCode));
+        return ApiResponseUtils.success(courseLookupService.listCourses(request, resolvedUserCode));
     }
 
     @PostMapping
@@ -90,10 +92,11 @@ public class CoursesController {
             @PathVariable String courseId,
             @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
     ) {
-        if (actorUserCode == null || actorUserCode.isBlank()) {
+        String resolvedUserCode = AuthContext.resolveUserCode(actorUserCode);
+        if (resolvedUserCode == null || resolvedUserCode.isBlank()) {
             return ApiResponseUtils.success(courseLookupService.getCourseDetail(courseId));
         }
-        return ApiResponseUtils.success(courseLookupService.getCourseDetail(courseId, actorUserCode));
+        return ApiResponseUtils.success(courseLookupService.getCourseDetail(courseId, resolvedUserCode));
     }
 
     @PostMapping(value = "/{courseId}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -1,16 +1,21 @@
 package org.ysu.ckqaback.controller;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.auth.AuthConstants;
 import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
 import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
@@ -48,11 +53,17 @@ class CoursesControllerWebMvcTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.clearContext();
         courseLookupService = Mockito.mock(CourseLookupService.class);
         courseCommandService = Mockito.mock(CourseCommandService.class);
         mockMvc = MockMvcBuilders.standaloneSetup(new CoursesController(courseLookupService, courseCommandService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -103,6 +114,19 @@ class CoursesControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.courseId").value("os"))
                 .andExpect(jsonPath("$.data.courseName").value("操作系统"));
+    }
+
+    @Test
+    void shouldUseJwtUserCodeWhenListingCourses() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(jwtAuthentication("TCH2026001"));
+        given(courseLookupService.listCourses(any(CourseQueryRequest.class), eq("TCH2026001")))
+                .willReturn(new ApiPageData<>(List.of(), 1, 20, 0, 0));
+
+        mockMvc.perform(get(ApiPaths.COURSES))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(0));
+
+        then(courseLookupService).should().listCourses(any(CourseQueryRequest.class), eq("TCH2026001"));
     }
 
     @Test
@@ -262,5 +286,13 @@ class CoursesControllerWebMvcTest {
                 .andExpect(jsonPath("$.data[0].materialId").value(7))
                 .andExpect(jsonPath("$.data[0].materialObjectId").value(17))
                 .andExpect(jsonPath("$.data[0].fileName").value("book.pdf"));
+    }
+
+    private JwtAuthenticationToken jwtAuthentication(String userCode) {
+        Jwt jwt = Jwt.withTokenValue("jwt." + userCode)
+                .header("alg", "HS256")
+                .claim(AuthConstants.USER_CODE_CLAIM, userCode)
+                .build();
+        return new JwtAuthenticationToken(jwt);
     }
 }

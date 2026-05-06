@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import org.ysu.ckqaback.user.dto.UserCreateRequest;
 import org.ysu.ckqaback.user.dto.UserQueryRequest;
 
+import java.util.List;
+
 /**
  * <p>
  * 平台用户表 服务类
@@ -21,6 +23,10 @@ public interface UsersService extends IService<Users> {
     IPage<Users> pageUsers(UserQueryRequest request);
 
     boolean hasRole(Long userId, String roleCode);
+
+    List<String> getRoleCodes(Long userId);
+
+    List<String> getPermissionCodes(Long userId);
 
     Users createUser(UserCreateRequest request);
 }

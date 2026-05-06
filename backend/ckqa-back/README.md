@@ -30,6 +30,10 @@
 
 - `GET /api/v1/system/health`
 - `GET /api/v1/system/readiness`
+- `POST /api/v1/auth/admin/login`
+- `POST /api/v1/auth/student/login`
+- `POST /api/v1/auth/student/register`
+- `GET /api/v1/auth/me`
 - `GET /api/v1/courses`
 - `GET /api/v1/courses/{courseId}`
 - `POST /api/v1/courses/covers`
@@ -85,11 +89,19 @@
 - `POST /api/v1/courses/{courseId}/cover` 接收同样的 `file` 字段，用于替换已有课程封面。
 - 上传文件默认保存到 MinIO 的 `course-artifacts/course-covers/`，并通过 `/api/v1/course-covers/**` 由后端代理访问；仅支持 PNG、JPG、WEBP，默认上限 2MB。
 
+鉴权：
+
+- 后端已经接入 Spring Security Resource Server，`/api/v1/auth/admin/login`、`/api/v1/auth/student/login`、`/api/v1/auth/student/register`、`/api/v1/system/health` 与 `/api/v1/course-covers/**` 可匿名访问，其余 `/api/v1/**` 默认需要 `Authorization: Bearer <jwt>`。
+- 管理端登录允许 `admin` / `teacher` 角色，学生端登录只允许 `student` 角色。
+- 课程列表、课程详情和课程成员授权接口会优先读取 JWT 中的 `userCode`；`X-CKQA-User-Code` 仅作为本地测试与兼容兜底。
+- 本地联调测试账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 补充密码哈希，演示密码统一为 `Ckqa@2026`。
+
 ## 目录说明
 
 | 路径 | 作用 |
 | --- | --- |
 | `src/main/java/org/ysu/ckqaback/api/` | 路由常量、统一响应体、业务响应码 |
+| `src/main/java/org/ysu/ckqaback/auth/` | Spring Security JWT 登录、注册、令牌签发与当前用户解析 |
 | `src/main/java/org/ysu/ckqaback/exception/` | 业务异常与全局异常处理 |
 | `src/main/java/org/ysu/ckqaback/integration/` | Python CLI 调用、GraphRAG HTTP 调用、数据库命名锁、运行配置 |
 | `src/main/java/org/ysu/ckqaback/pdf/` | PDF 查询、解析触发、GraphRAG 导出工作流与 DTO |
@@ -111,6 +123,10 @@ export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD=your-password
+
+export CKQA_JWT_SECRET=please-change-this-local-jwt-secret-at-least-32-chars
+export CKQA_JWT_ISSUER=ckqa-back
+export CKQA_JWT_TTL=PT8H
 
 export MINIO_ENDPOINT=localhost:9000
 export MINIO_ACCESS_KEY=admin

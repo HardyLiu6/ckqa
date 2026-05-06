@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+
 /**
  * <p>
  * 平台用户表 服务实现类
@@ -56,6 +58,22 @@ public class UsersServiceImpl extends ServiceImpl<UsersMapper, Users> implements
             return false;
         }
         return baseMapper.countUserRole(userId, roleCode.trim()) > 0;
+    }
+
+    @Override
+    public List<String> getRoleCodes(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        return baseMapper.selectRoleCodes(userId);
+    }
+
+    @Override
+    public List<String> getPermissionCodes(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        return baseMapper.selectPermissionCodes(userId);
     }
 
     @Override

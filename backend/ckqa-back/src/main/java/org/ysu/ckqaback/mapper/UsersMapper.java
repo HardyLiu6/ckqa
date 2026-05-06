@@ -6,6 +6,8 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.ysu.ckqaback.entity.Users;
 
+import java.util.List;
+
 /**
  * <p>
  * 平台用户表 Mapper 接口
@@ -26,4 +28,8 @@ public interface UsersMapper extends BaseMapper<Users> {
     );
 
     long countUserRole(@Param("userId") Long userId, @Param("roleCode") String roleCode);
+
+    List<String> selectRoleCodes(@Param("userId") Long userId);
+
+    List<String> selectPermissionCodes(@Param("userId") Long userId);
 }

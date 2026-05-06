@@ -9,6 +9,7 @@ package org.ysu.ckqaback.api;
 public final class ApiPaths {
 
     public static final String API_V1 = "/api/v1";
+    public static final String AUTH = API_V1 + "/auth";
     public static final String AUTH_IDENTITIES = API_V1 + "/auth-identities";
     public static final String AUTHORIZATION_AUDIT_LOGS = API_V1 + "/authorization-audit-logs";
     public static final String COURSE_MEMBERSHIP_EVENTS = API_V1 + "/course-membership-events";

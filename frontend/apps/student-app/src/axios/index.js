@@ -16,6 +16,29 @@ const request = axios.create({
   },
 })
 
+let authSessionProvider = () => null
+
+export function setAuthSessionProvider(provider) {
+  authSessionProvider = typeof provider === 'function' ? provider : () => null
+}
+
+request.interceptors.request.use((config) => {
+  const session = authSessionProvider?.() ?? {}
+  const headers = { ...(config.headers ?? {}) }
+
+  if (session.token) {
+    headers.Authorization = `Bearer ${session.token}`
+  }
+  if (session.user?.userCode) {
+    headers['X-CKQA-User-Code'] = session.user.userCode
+  }
+
+  return {
+    ...config,
+    headers,
+  }
+})
+
 request.interceptors.response.use(
   (response) => resolveResponsePayload(response.data),
   (error) => {

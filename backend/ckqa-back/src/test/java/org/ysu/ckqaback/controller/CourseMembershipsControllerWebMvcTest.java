@@ -1,15 +1,20 @@
 package org.ysu.ckqaback.controller;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.auth.AuthConstants;
 import org.ysu.ckqaback.course.CourseAccessDecision;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseMembershipManagementService;
@@ -41,6 +46,7 @@ class CourseMembershipsControllerWebMvcTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.clearContext();
         managementService = Mockito.mock(CourseMembershipManagementService.class);
         accessService = Mockito.mock(CourseAccessService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
@@ -49,6 +55,11 @@ class CourseMembershipsControllerWebMvcTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -144,6 +155,18 @@ class CourseMembershipsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.membershipRole").value("teacher"));
     }
 
+    @Test
+    void shouldResolveCourseAccessForJwtUser() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(jwtAuthentication("STU2026001"));
+        given(accessService.resolveAccess("os", "STU2026001"))
+                .willReturn(CourseAccessDecision.granted("os", 18L, "STU2026001", 31L, "student", "active-membership"));
+
+        mockMvc.perform(get(ApiPaths.COURSE_MEMBERSHIPS + "/access")
+                        .param("courseId", "os"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userCode").value("STU2026001"));
+    }
+
     private CourseMembershipResponse member() {
         return CourseMembershipResponse.builder()
                 .id(21L)
@@ -158,5 +181,13 @@ class CourseMembershipsControllerWebMvcTest {
                 .accessGranted(true)
                 .updatedAt(LocalDateTime.of(2026, 5, 6, 10, 0))
                 .build();
+    }
+
+    private JwtAuthenticationToken jwtAuthentication(String userCode) {
+        Jwt jwt = Jwt.withTokenValue("jwt." + userCode)
+                .header("alg", "HS256")
+                .claim(AuthConstants.USER_CODE_CLAIM, userCode)
+                .build();
+        return new JwtAuthenticationToken(jwt);
     }
 }

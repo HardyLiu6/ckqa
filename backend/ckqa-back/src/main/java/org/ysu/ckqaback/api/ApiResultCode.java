@@ -31,6 +31,21 @@ public enum ApiResultCode {
     VALIDATION_ERROR(4001, "参数校验失败"),
 
     /**
+     * 未提供认证信息。
+     */
+    AUTH_REQUIRED(4010, "请先登录"),
+
+    /**
+     * 认证凭据无效。
+     */
+    AUTH_INVALID(4011, "登录状态无效"),
+
+    /**
+     * 已认证但无权访问。
+     */
+    AUTH_FORBIDDEN(4030, "无权限访问"),
+
+    /**
      * 通用服务端异常。
      */
     INTERNAL_ERROR(5000, "服务器内部错误"),

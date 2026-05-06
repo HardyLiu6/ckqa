@@ -14,7 +14,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 - `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
 - `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
-- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整，但当前仍以本地状态和占位路由为主，尚未接入稳定后端契约。
+- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册已接入 Java `/api/v1/auth/student/*`，课程/问答等业务页仍在逐步接入真实契约。
 - `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
@@ -28,7 +28,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
 | `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 独立原型，已有最小请求层但未接稳定业务契约 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 登录注册已接入 Java `/api/v1`，业务页继续演进 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
@@ -94,7 +94,7 @@ cd frontend/apps/student-app
 pnpm dev:local
 ```
 
-admin-app 开发态默认从浏览器请求同源 `/api/v1`，由 Vite 代理到 Java 后端 `http://127.0.0.1:8080`。这样在远程开发或端口转发场景下，浏览器不需要直接访问后端所在环境的 `8080`。student-app 目前仍是原型，正式联调也应走 Java `/api/v1`。
+admin-app 和 student-app 开发态默认从浏览器请求同源 `/api/v1`，由 Vite 代理到 Java 后端 `http://127.0.0.1:8080`。这样在远程开发或端口转发场景下，浏览器不需要直接访问后端所在环境的 `8080`。
 
 ### 2. 一键启动 Java 后端和托管 GraphRAG API
 
@@ -119,6 +119,7 @@ export GRAPHRAG_API_HOST=127.0.0.1
 export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
 export GRAPHRAG_API_MANAGED_ENABLED=true
+export CKQA_JWT_SECRET=please-change-this-local-jwt-secret-at-least-32-chars
 
 ./mvnw spring-boot:run
 ```
@@ -226,7 +227,7 @@ http://127.0.0.1:5173/app/courses
 http://127.0.0.1:5173/app/knowledge-bases
 ```
 
-开发态登录页选择“平台管理员”或“教师”后即可进入控制台。
+登录页使用真实 JWT 鉴权。本地测试账号来自 `sql/migrations/20260506_jwt_auth_credentials.sql`：管理员端 `admin.heqh / Ckqa@2026`，教师端 `teacher.zhangwb / Ckqa@2026`，学生端 `student.zhouzh / Ckqa@2026`。
 
 ### 4. 前端/后端回归验证
 
@@ -252,7 +253,7 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
-- `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构，并已有最小 Axios 请求层；当前仍未接入稳定业务 API。
+- `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构；登录注册已接入 Java `/api/v1`，其余业务页仍在逐步接入稳定 API。
 - `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 

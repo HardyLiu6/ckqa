@@ -212,7 +212,10 @@ test('开发态认证身份持久化后支持刷新恢复', () => {
 
     auth.loginAs('teacher')
 
-    assert.equal(storage.get('ckqa-admin-auth-role'), 'teacher')
+    const storedSession = JSON.parse(storage.get('ckqa-admin-auth-session'))
+    assert.equal(storedSession.user.role, 'teacher')
+    assert.equal(storedSession.accessToken, 'dev-teacher-token')
+    assert.equal(storage.has('ckqa-admin-auth-role'), false)
 
     const restoredAuth = createAuthStore(createPinia())
 
@@ -222,7 +225,7 @@ test('开发态认证身份持久化后支持刷新恢复', () => {
 
     restoredAuth.logout()
 
-    assert.equal(storage.has('ckqa-admin-auth-role'), false)
+    assert.equal(storage.has('ckqa-admin-auth-session'), false)
   } finally {
     if (originalLocalStorage === undefined) {
       delete globalThis.localStorage
@@ -2164,14 +2167,15 @@ test('全局样式入口在 base 和 components 之间加载 Element Plus 覆盖
   assert.match(elementPlusCss, /\.el-drawer/)
 })
 
-test('登录页身份选择使用 Element Plus Select 并保留满宽样式', () => {
+test('登录页使用真实账号密码输入并保留满宽样式', () => {
   const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  assert.match(loginView, /<el-select\s+v-model="selectedRole"[\s\S]*aria-label="开发态身份"/)
-  assert.match(loginView, /<el-option[\s\S]*v-for="role in roleOptions"[\s\S]*:value="role\.value"/)
+  assert.match(loginView, /<el-input\s+v-model\.trim="form\.username"[\s\S]*autocomplete="username"/)
+  assert.match(loginView, /<el-input[\s\S]*v-model="form\.password"[\s\S]*type="password"/)
+  assert.match(loginView, /v-for="preset in LOGIN_PRESETS"/)
   assert.doesNotMatch(loginView, /<select\s+v-model="selectedRole"/)
-  assert.match(componentsCss, /\.login-role-select\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
+  assert.match(componentsCss, /\.login-role-select,\s*[\s\S]*\.login-input\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
 })
 
 test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {

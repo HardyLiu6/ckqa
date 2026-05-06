@@ -16,6 +16,12 @@ MEMBERSHIP_MIGRATION_PATH = (
     / "migrations"
     / "20260506_course_member_access_test_data.sql"
 )
+AUTH_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "sql"
+    / "migrations"
+    / "20260506_jwt_auth_credentials.sql"
+)
 
 
 class TestOCQABootstrapContract(unittest.TestCase):
@@ -80,3 +86,18 @@ class TestOCQABootstrapContract(unittest.TestCase):
         self.assertIn("'STU2026001', 'crs-20260506-113000', 'student', 'active'", migration)
         self.assertIn("SET `password_hash` = NULL", migration)
         self.assertNotIn("INSERT INTO `users` (`user_code`, `username`, `display_name`, `password_hash`", migration)
+
+    def test_jwt_auth_credential_migration_exists(self):
+        migration = AUTH_MIGRATION_PATH.read_text(encoding="utf-8")
+        self.assertIn("CKQA JWT auth credential migration", migration)
+        self.assertIn("演示账号统一测试密码：Ckqa@2026", migration)
+        self.assertRegex(
+            migration,
+            r"SET @ckqa_demo_password_hash = 'pbkdf2\$210000\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+';"
+        )
+        self.assertIn("UPDATE `users`", migration)
+        self.assertIn("'ADM2026001'", migration)
+        self.assertIn("'TCH2026001'", migration)
+        self.assertIn("'STU2026001'", migration)
+        self.assertIn("INSERT INTO `auth_identities`", migration)
+        self.assertIn("'20260506-jwt-auth'", migration)

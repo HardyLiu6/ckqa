@@ -57,11 +57,25 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore(getAdminPinia())
 
   if (to.meta.public) {
+    if (to.path === '/login' && authStore.state.isAuthenticated) {
+      return routeTargetAfterLogin(to.query.redirect)
+    }
     return true
+  }
+
+  if (!authStore.state.isAuthenticated && authStore.state.token) {
+    try {
+      await authStore.loadCurrentUser()
+    } catch {
+      return {
+        path: '/login',
+        query: { redirect: to.fullPath },
+      }
+    }
   }
 
   if (!authStore.state.isAuthenticated) {
@@ -77,5 +91,9 @@ router.beforeEach((to) => {
 
   return true
 })
+
+function routeTargetAfterLogin(redirect) {
+  return typeof redirect === 'string' && redirect.startsWith('/app') ? redirect : '/app/dashboard'
+}
 
 export default router
