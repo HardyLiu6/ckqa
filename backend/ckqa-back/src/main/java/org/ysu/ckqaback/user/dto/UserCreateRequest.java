@@ -37,7 +37,6 @@ public class UserCreateRequest {
     /**
      * 密码哈希值。
      */
-    @NotBlank(message = "passwordHash不能为空")
     @Size(max = 255, message = "passwordHash长度不能超过255")
     private String passwordHash;
 

@@ -82,13 +82,14 @@ SHOW TABLES LIKE 'knowledge_bases';
 SHOW TABLES LIKE 'qa_sessions';
 ```
 
-当前这套 schema 只负责数据库结构和基础种子，不代表运行态 API 已经接入这些表。初始化脚本会预置 `student`、`teacher`、`admin` 三类平台角色，并为每类生成 5 个测试用户；当前未接入真实登录/注册流程，所以这些测试用户的 `password_hash` 保留为空字符串。
+当前这套 schema 只负责数据库结构和基础种子，不代表运行态 API 已经接入这些表。初始化脚本会预置 `student`、`teacher`、`admin` 三类平台角色，并为每类生成 5 个测试用户；当前未接入真实登录/注册流程，所以这些测试用户不生成 `password_hash`。
 
-如果是已有本地库，不想重建整库，可执行本次角色与用户测试数据迁移：
+如果是已有本地库，不想重建整库，可依次执行角色/用户测试数据迁移，以及课程成员访问联调数据迁移：
 
 ```bash
 cd pdf_ingest
 mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < ../sql/migrations/20260504_role_user_test_data.sql
+mysql -h 127.0.0.1 -P 23306 -u root -p ocqa < ../sql/migrations/20260506_course_member_access_test_data.sql
 ```
 
 如果本机 MinIO 中已经保留了旧种子教材 PDF、MinerU 解析产物和 GraphRAG 导出，但 MySQL 被重置，可以执行幂等修复脚本恢复课程资料元数据：

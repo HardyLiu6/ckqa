@@ -51,14 +51,20 @@ public class CourseLookupService {
     private final IndexRunsService indexRunsService;
     private final CourseMembershipsService courseMembershipsService;
     private final UsersService usersService;
+    private final CourseAccessService courseAccessService;
 
     public ApiPageData<CourseSummaryResponse> listCourses(CourseQueryRequest request) {
+        return listCourses(request, null);
+    }
+
+    public ApiPageData<CourseSummaryResponse> listCourses(CourseQueryRequest request, String actorUserCode) {
         long page = request.getPage() == null ? 1L : Math.max(1L, request.getPage());
         long size = request.getSize() == null ? 20L : Math.max(1L, request.getSize());
 
         List<Courses> filtered = coursesService.list().stream()
                 .filter(course -> matchesStatus(course, request.getStatus()))
                 .filter(course -> matchesKeyword(course, request.getKeyword()))
+                .filter(course -> courseAccessService.canReadCourse(course, actorUserCode))
                 .sorted(Comparator.comparing(Courses::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
 
@@ -88,6 +94,11 @@ public class CourseLookupService {
     }
 
     public CourseDetailResponse getCourseDetail(String courseId) {
+        return getCourseDetail(courseId, null);
+    }
+
+    public CourseDetailResponse getCourseDetail(String courseId, String actorUserCode) {
+        courseAccessService.assertCourseReadable(courseId, actorUserCode);
         Courses course = coursesService.list().stream()
                 .filter(item -> Objects.equals(item.getCourseId(), courseId))
                 .findFirst()

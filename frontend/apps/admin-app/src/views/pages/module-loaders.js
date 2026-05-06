@@ -5,6 +5,7 @@ import {
   listCourseMaterials,
   listCourses,
 } from '../../api/courses.js'
+import { listCourseMembers } from '../../api/course-memberships.js'
 import {
   getMaterial,
   hasCompleteGraphRagExport,
@@ -31,6 +32,7 @@ import { resolveBuildRunIdQuery, resolveBuildSelectionFromQuery } from './module
 export const DEFAULT_COURSE_COVER_URL = '/api/v1/course-covers/default-course-cover.svg'
 
 const COURSE_COLUMNS = ['课程', '授课教师', '状态', '资料进度', '知识库', '最近索引', '更新时间']
+const COURSE_MEMBER_COLUMNS = ['用户', '课程内角色', '状态', '授权来源', '更新时间']
 const KNOWLEDGE_BASE_COLUMNS = ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间']
 const COURSE_STATUS_LABELS = {
   active: '开课中',
@@ -41,6 +43,23 @@ const COURSE_STATUS_LABELS = {
 const COURSE_ACCESS_POLICY_LABELS = {
   restricted: '受限访问',
   public: '公开访问',
+}
+const COURSE_MEMBER_ROLE_LABELS = {
+  teacher: '教师',
+  assistant: '助教',
+  student: '学生',
+}
+const COURSE_MEMBER_STATUS_LABELS = {
+  active: '已授权',
+  pending: '待确认',
+  suspended: '已停用',
+  removed: '已移除',
+}
+const COURSE_MEMBER_SOURCE_LABELS = {
+  manual: '手动授权',
+  imported: '批量导入',
+  self_join: '自主加入',
+  sync: '系统同步',
 }
 const INDEX_STATUS_LABELS = {
   success: '最近索引成功',
@@ -58,6 +77,7 @@ const defaultServices = {
   listCourseKnowledgeBases,
   listCourseMaterials,
   listCourses,
+  listCourseMembers,
   getMaterial,
   listParseResults,
   getIndexRun,
@@ -86,6 +106,10 @@ export async function loadModulePage(route, query = {}, services = defaultServic
 
   if (route.name === 'course-detail') {
     return loadCourseDetail(route, services)
+  }
+
+  if (route.name === 'course-members') {
+    return loadCourseMembers(route, query, services)
   }
 
   if (route.name === 'material-detail') {
@@ -157,6 +181,17 @@ export function buildCourseListParams(query = {}) {
   }
 }
 
+export function buildCourseMemberListParams(route = {}, query = {}) {
+  return {
+    courseId: String(route.params?.courseId ?? ''),
+    page: query.page ?? 1,
+    size: query.size ?? 20,
+    keyword: query.keyword ?? '',
+    membershipRole: query.membershipRole ?? '',
+    status: query.status ?? '',
+  }
+}
+
 export function resolveCoursesRequestState(items = []) {
   return items.length > 0 ? 'success' : 'empty'
 }
@@ -196,6 +231,84 @@ function createCourseRowActions(course, encodedCourseId) {
     { label: '知识库', to: `/app/knowledge-bases?keyword=${encodedCourseId}`, icon: 'knowledge' },
     destructiveAction,
   ]
+}
+
+async function loadCourseMembers(route, query, services) {
+  try {
+    const pageData = normalizePageData(await services.listCourseMembers(buildCourseMemberListParams(route, query)))
+    const rows = pageData.items.map(mapCourseMemberRow)
+    return createCoursesLoaderResult({
+      source: 'live',
+      requestState: rows.length > 0 ? 'success' : 'empty',
+      refreshedAt: new Date().toISOString(),
+      columns: COURSE_MEMBER_COLUMNS,
+      rows,
+      pagination: pageData.pagination,
+      raw: pageData.raw,
+    })
+  } catch (error) {
+    return createCoursesLoaderResult({
+      source: 'live',
+      requestState: 'error',
+      error: createApiError(error),
+      raw: error?.raw ?? error,
+    })
+  }
+}
+
+function mapCourseMemberRow(member) {
+  const status = String(member.status ?? '').trim() || 'unknown'
+  const role = String(member.membershipRole ?? '').trim() || 'student'
+  return {
+    id: member.id,
+    raw: member,
+    subtitle: member.userCode ?? member.username ?? '',
+    actions: createCourseMemberRowActions(member),
+    cells: [
+      {
+        kind: 'text',
+        label: member.displayName ?? member.username ?? member.userCode ?? `用户 ${member.userId}`,
+        detail: member.userCode ?? member.username ?? '',
+        filterValue: `${member.displayName ?? ''} ${member.username ?? ''} ${member.userCode ?? ''}`.trim(),
+      },
+      {
+        kind: 'status',
+        status: role,
+        label: COURSE_MEMBER_ROLE_LABELS[role] ?? role,
+        filterValue: role,
+      },
+      {
+        kind: 'status',
+        status,
+        label: COURSE_MEMBER_STATUS_LABELS[status] ?? status,
+        detail: member.accessGranted === false ? '当前不可访问' : '',
+        filterValue: status,
+      },
+      COURSE_MEMBER_SOURCE_LABELS[member.accessSource] ?? member.accessSource ?? '-',
+      member.updatedAt ?? '-',
+    ],
+  }
+}
+
+function createCourseMemberRowActions(member = {}) {
+  const status = String(member.status ?? '').trim()
+  const courseId = member.courseId
+  if (!member.id || !courseId) {
+    return []
+  }
+  const actions = status === 'active'
+    ? [
+        { label: '停用', key: 'suspend-course-member', icon: 'archive', variant: 'warning' },
+        { label: '移除', key: 'remove-course-member', icon: 'delete', variant: 'danger' },
+      ]
+    : [
+        { label: '启用', key: 'activate-course-member', icon: 'users', variant: 'primary' },
+      ]
+
+  if (status !== 'removed' && !actions.some((action) => action.key === 'remove-course-member')) {
+    actions.push({ label: '移除', key: 'remove-course-member', icon: 'delete', variant: 'danger' })
+  }
+  return actions
 }
 
 function createTeacherCell(course = {}) {

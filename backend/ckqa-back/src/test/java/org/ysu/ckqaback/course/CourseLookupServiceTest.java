@@ -25,6 +25,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -39,6 +40,7 @@ class CourseLookupServiceTest {
     private IndexRunsService indexRunsService;
     private CourseMembershipsService courseMembershipsService;
     private UsersService usersService;
+    private CourseAccessService courseAccessService;
     private CourseLookupService service;
 
     @BeforeEach
@@ -49,13 +51,16 @@ class CourseLookupServiceTest {
         indexRunsService = mock(IndexRunsService.class);
         courseMembershipsService = mock(CourseMembershipsService.class);
         usersService = mock(UsersService.class);
+        courseAccessService = mock(CourseAccessService.class);
+        when(courseAccessService.canReadCourse(any(Courses.class), any())).thenReturn(true);
         service = new CourseLookupService(
                 coursesService,
                 courseMaterialsService,
                 knowledgeBasesService,
                 indexRunsService,
                 courseMembershipsService,
-                usersService
+                usersService,
+                courseAccessService
         );
     }
 

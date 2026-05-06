@@ -159,14 +159,13 @@ class UsersControllerWebMvcTest {
         Users createdUser = buildUser(3L, "u003", "alice", "Alice", "active");
         given(usersService.createUser(any())).willReturn(createdUser);
 
-                mockMvc.perform(post(ApiPaths.USERS)
+        mockMvc.perform(post(ApiPaths.USERS)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "userCode": "u003",
                                   "username": "alice",
-                                  "displayName": "Alice",
-                                  "passwordHash": "hash-001"
+                                  "displayName": "Alice"
                                 }
                                 """))
                 .andExpect(status().isOk())

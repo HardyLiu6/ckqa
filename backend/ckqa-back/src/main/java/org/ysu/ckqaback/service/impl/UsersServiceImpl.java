@@ -71,7 +71,7 @@ public class UsersServiceImpl extends ServiceImpl<UsersMapper, Users> implements
         user.setUserCode(request.getUserCode());
         user.setUsername(request.getUsername());
         user.setDisplayName(request.getDisplayName());
-        user.setPasswordHash(request.getPasswordHash());
+        user.setPasswordHash(trimToNull(request.getPasswordHash()));
         user.setStatus(StringUtils.hasText(request.getStatus()) ? request.getStatus() : "active");
         save(user);
         return user;

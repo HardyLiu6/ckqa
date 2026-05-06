@@ -96,22 +96,43 @@ const configs = {
   },
   'course-members': {
     variant: 'table',
-    dataSource: 'mock',
+    dataSource: 'live',
     eyebrow: 'Course Members',
     tableTitle: '课程成员',
     summary: '课程成员管理属于课程域，用于维护当前课程下教师、助教和学生的访问范围。',
     primaryAction: { label: '添加成员', permission: 'membership:write' },
-    secondaryAction: { label: '调整角色', permission: 'membership:write' },
+    secondaryAction: null,
+    search: {
+      placeholder: '搜索姓名、账号或用户编码',
+      ariaLabel: '搜索课程成员',
+    },
     filters: [
-      { key: 'courseRole', label: '课程内角色', columnIndex: 1, options: ['全部', 'teacher', 'assistant', 'student'] },
-      { key: 'status', label: '成员状态', columnIndex: 2, options: ['全部', 'active', 'pending', 'suspended', 'removed'] },
+      {
+        key: 'membershipRole',
+        label: '课程内角色',
+        columnIndex: 1,
+        options: [
+          { label: '全部角色', value: '' },
+          { label: '教师', value: 'teacher' },
+          { label: '助教', value: 'assistant' },
+          { label: '学生', value: 'student' },
+        ],
+      },
+      {
+        key: 'status',
+        label: '成员状态',
+        columnIndex: 2,
+        options: [
+          { label: '全部状态', value: '' },
+          { label: '已授权', value: 'active' },
+          { label: '待确认', value: 'pending' },
+          { label: '已停用', value: 'suspended' },
+          { label: '已移除', value: 'removed' },
+        ],
+      },
     ],
     columns: ['用户', '课程内角色', '状态', '授权来源', '更新时间'],
-    rows: [
-      ['teacher-a', 'teacher', 'active', '初始教师', '今天'],
-      ['assistant-a', 'assistant', 'active', '手动授权', '昨天'],
-      ['student-a', 'student', 'pending', '课程导入', '本周'],
-    ],
+    rows: [],
   },
   'material-detail': {
     variant: 'overview',

@@ -127,7 +127,7 @@ CREATE TABLE `users` (
   `user_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '稳定业务ID',
   `username` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '登录用户名',
   `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '展示名称',
-  `password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '密码哈希',
+  `password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '密码哈希（登录注册未接入时可为空）',
   `status` enum('active','disabled','locked','pending') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '用户状态',
   `last_login_at` timestamp NULL DEFAULT NULL COMMENT '最后登录时间',
   `extra_metadata` json DEFAULT NULL COMMENT '扩展元数据',
@@ -549,27 +549,26 @@ JOIN `permissions` p ON p.permission_code IN (
 WHERE r.role_code = 'admin'
 ON DUPLICATE KEY UPDATE `permission_id` = VALUES(`permission_id`);
 
-INSERT INTO `users` (`user_code`, `username`, `display_name`, `password_hash`, `status`, `extra_metadata`)
+INSERT INTO `users` (`user_code`, `username`, `display_name`, `status`, `extra_metadata`)
 VALUES
-  ('STU2026001', 'student.zhouzh', '周子涵', '', 'active', '{"test_data": true, "role": "student", "student_no": "2026001", "grade": "2026级", "major": "计算机科学与技术"}'),
-  ('STU2026002', 'student.zhaoyn', '赵一诺', '', 'active', '{"test_data": true, "role": "student", "student_no": "2026002", "grade": "2026级", "major": "软件工程"}'),
-  ('STU2026003', 'student.sunhr', '孙浩然', '', 'active', '{"test_data": true, "role": "student", "student_no": "2026003", "grade": "2025级", "major": "数据科学与大数据技术"}'),
-  ('STU2026004', 'student.wujy', '吴佳怡', '', 'active', '{"test_data": true, "role": "student", "student_no": "2026004", "grade": "2025级", "major": "人工智能"}'),
-  ('STU2026005', 'student.zhengmx', '郑明轩', '', 'active', '{"test_data": true, "role": "student", "student_no": "2026005", "grade": "2024级", "major": "计算机科学与技术"}'),
-  ('TCH2026001', 'teacher.zhangwb', '张文博', '', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026001", "department": "计算机学院", "title": "副教授"}'),
-  ('TCH2026002', 'teacher.lisy', '李思雨', '', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026002", "department": "软件学院", "title": "讲师"}'),
-  ('TCH2026003', 'teacher.wangjn', '王嘉宁', '', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026003", "department": "计算机学院", "title": "教授"}'),
-  ('TCH2026004', 'teacher.chenxl', '陈晓琳', '', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026004", "department": "人工智能学院", "title": "副教授"}'),
-  ('TCH2026005', 'teacher.liuzy', '刘志远', '', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026005", "department": "网络空间安全学院", "title": "讲师"}'),
-  ('ADM2026001', 'admin.heqh', '何启航', '', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026001", "department": "教务信息化中心", "duty": "系统配置管理"}'),
-  ('ADM2026002', 'admin.gaomy', '高明远', '', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026002", "department": "教务信息化中心", "duty": "用户与权限管理"}'),
-  ('ADM2026003', 'admin.linshy', '林书瑶', '', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026003", "department": "数据治理中心", "duty": "数据质量巡检"}'),
-  ('ADM2026004', 'admin.majj', '马俊杰', '', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026004", "department": "平台运维中心", "duty": "运行监控"}'),
-  ('ADM2026005', 'admin.tangrc', '唐若晨', '', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026005", "department": "平台运维中心", "duty": "服务发布与应急"}')
+  ('STU2026001', 'student.zhouzh', '周子涵', 'active', '{"test_data": true, "role": "student", "student_no": "2026001", "grade": "2026级", "major": "计算机科学与技术"}'),
+  ('STU2026002', 'student.zhaoyn', '赵一诺', 'active', '{"test_data": true, "role": "student", "student_no": "2026002", "grade": "2026级", "major": "软件工程"}'),
+  ('STU2026003', 'student.sunhr', '孙浩然', 'active', '{"test_data": true, "role": "student", "student_no": "2026003", "grade": "2025级", "major": "数据科学与大数据技术"}'),
+  ('STU2026004', 'student.wujy', '吴佳怡', 'active', '{"test_data": true, "role": "student", "student_no": "2026004", "grade": "2025级", "major": "人工智能"}'),
+  ('STU2026005', 'student.zhengmx', '郑明轩', 'active', '{"test_data": true, "role": "student", "student_no": "2026005", "grade": "2024级", "major": "计算机科学与技术"}'),
+  ('TCH2026001', 'teacher.zhangwb', '张文博', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026001", "department": "计算机学院", "title": "副教授"}'),
+  ('TCH2026002', 'teacher.lisy', '李思雨', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026002", "department": "软件学院", "title": "讲师"}'),
+  ('TCH2026003', 'teacher.wangjn', '王嘉宁', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026003", "department": "计算机学院", "title": "教授"}'),
+  ('TCH2026004', 'teacher.chenxl', '陈晓琳', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026004", "department": "人工智能学院", "title": "副教授"}'),
+  ('TCH2026005', 'teacher.liuzy', '刘志远', 'active', '{"test_data": true, "role": "teacher", "employee_no": "T2026005", "department": "网络空间安全学院", "title": "讲师"}'),
+  ('ADM2026001', 'admin.heqh', '何启航', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026001", "department": "教务信息化中心", "duty": "系统配置管理"}'),
+  ('ADM2026002', 'admin.gaomy', '高明远', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026002", "department": "教务信息化中心", "duty": "用户与权限管理"}'),
+  ('ADM2026003', 'admin.linshy', '林书瑶', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026003", "department": "数据治理中心", "duty": "数据质量巡检"}'),
+  ('ADM2026004', 'admin.majj', '马俊杰', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026004", "department": "平台运维中心", "duty": "运行监控"}'),
+  ('ADM2026005', 'admin.tangrc', '唐若晨', 'active', '{"test_data": true, "role": "admin", "employee_no": "A2026005", "department": "平台运维中心", "duty": "服务发布与应急"}')
 ON DUPLICATE KEY UPDATE
   `username` = VALUES(`username`),
   `display_name` = VALUES(`display_name`),
-  `password_hash` = VALUES(`password_hash`),
   `status` = VALUES(`status`),
   `extra_metadata` = VALUES(`extra_metadata`);
 

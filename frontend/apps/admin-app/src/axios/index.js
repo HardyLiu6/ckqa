@@ -19,6 +19,9 @@ export function createHttpClient({ authStore: activeAuthStore = authStore } = {}
     if (activeAuthStore.state.token) {
       headers.Authorization = `Bearer ${activeAuthStore.state.token}`
     }
+    if (activeAuthStore.state.currentUser?.userCode) {
+      headers['X-CKQA-User-Code'] = activeAuthStore.state.currentUser.userCode
+    }
 
     return {
       ...config,

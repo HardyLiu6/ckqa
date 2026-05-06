@@ -83,6 +83,11 @@ import {
   uploadCourseCover,
 } from './api/courses.js'
 import {
+  createCourseMember,
+  listCourseMembers,
+  updateCourseMember,
+} from './api/course-memberships.js'
+import {
   exportGraphRag,
   getMaterial,
   hasCompleteGraphRagExport,
@@ -252,6 +257,7 @@ test('请求层默认使用同源 /api/v1 并保留认证头注入入口', async
   const requestConfig = await client.interceptors.request.handlers[0].fulfilled({ headers: {} })
 
   assert.equal(requestConfig.headers.Authorization, 'Bearer dev-teacher-token')
+  assert.equal(requestConfig.headers['X-CKQA-User-Code'], 'TCH2026001')
 })
 
 test('开发服务器把同源 /api/v1 代理到 Java 后端', () => {
@@ -920,6 +926,10 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
       calls.push(['put', url, payload])
       return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
     },
+    patch: async (url, payload) => {
+      calls.push(['patch', url, payload])
+      return { data: { code: 200, message: 'ok', data: { url, ...payload } } }
+    },
     delete: async (url) => {
       calls.push(['delete', url, null])
       return { data: { code: 200, message: 'ok', data: null } }
@@ -933,6 +943,9 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   await uploadCourseCover(coverFile, null, client)
   await uploadCourseCover(coverFile, 'os', client)
   await listUsers({ roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }, client)
+  await listCourseMembers({ courseId: 'os', status: 'active', page: 1, size: 20 }, client)
+  await createCourseMember({ courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }, client)
+  await updateCourseMember(21, { courseId: 'os', status: 'suspended' }, client)
   await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)
 
   assert.deepEqual(calls, [
@@ -942,8 +955,59 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
     ['post', '/courses/covers', { fileName: 'cover.png', fileType: 'image/png' }],
     ['post', '/courses/os/cover', { fileName: 'cover.png', fileType: 'image/png' }],
     ['get', '/users', { roleCode: 'teacher', status: 'active', keyword: 'zhang', page: 1, size: 20 }],
+    ['get', '/course-memberships', { courseId: 'os', status: 'active', page: 1, size: 20 }],
+    ['post', '/course-memberships', { courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }],
+    ['patch', '/course-memberships/21', { courseId: 'os', status: 'suspended' }],
     ['post', '/knowledge-bases', { courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }],
   ])
+})
+
+test('课程成员页面从 Java API 加载并映射成员操作', async () => {
+  const result = await loadModulePage(
+    { name: 'course-members', params: { courseId: 'os' } },
+    { status: 'active', page: 1 },
+    {
+      listCourseMembers: async (params) => {
+        assert.deepEqual(params, {
+          courseId: 'os',
+          page: 1,
+          size: 20,
+          keyword: '',
+          membershipRole: '',
+          status: 'active',
+        })
+        return {
+          items: [
+            {
+              id: 21,
+              courseId: 'os',
+              userId: 8,
+              userCode: 'TCH2026001',
+              username: 'teacher.zhangwb',
+              displayName: '张文博',
+              membershipRole: 'teacher',
+              status: 'active',
+              accessSource: 'manual',
+              accessGranted: true,
+              updatedAt: '2026-05-06T10:00:00',
+            },
+          ],
+          current: 1,
+          size: 20,
+          total: 1,
+          pages: 1,
+        }
+      },
+    },
+  )
+
+  assert.equal(result.source, 'live')
+  assert.equal(result.requestState, 'success')
+  assert.deepEqual(result.columns, ['用户', '课程内角色', '状态', '授权来源', '更新时间'])
+  assert.equal(result.rows[0].id, 21)
+  assert.equal(getCellText(getRowCells(result.rows[0])[0]), '张文博')
+  assert.equal(result.rows[0].actions.find((action) => action.key === 'suspend-course-member').label, '停用')
+  assert.equal(result.rows[0].actions.find((action) => action.key === 'remove-course-member').variant, 'danger')
 })
 
 test('知识库创建表单使用课程列表生成下拉选项并默认选中第一门课程', () => {

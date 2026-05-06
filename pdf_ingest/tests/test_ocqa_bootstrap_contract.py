@@ -10,6 +10,12 @@ MIGRATION_PATH = (
     / "migrations"
     / "20260504_role_user_test_data.sql"
 )
+MEMBERSHIP_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "sql"
+    / "migrations"
+    / "20260506_course_member_access_test_data.sql"
+)
 
 
 class TestOCQABootstrapContract(unittest.TestCase):
@@ -33,13 +39,14 @@ class TestOCQABootstrapContract(unittest.TestCase):
         self.assertIn("('system.admin_override', '管理员越权访问', '允许管理员绕过课程成员限制')", self.text)
 
     def test_realistic_user_seed_exists(self):
-        self.assertIn("INSERT INTO `users` (`user_code`, `username`, `display_name`, `password_hash`, `status`, `extra_metadata`)", self.text)
+        self.assertIn("INSERT INTO `users` (`user_code`, `username`, `display_name`, `status`, `extra_metadata`)", self.text)
+        self.assertNotIn("`password_hash` = VALUES(`password_hash`)", self.text)
         self.assertEqual(5, len(re.findall(r"\('STU2026\d{3}',", self.text)))
         self.assertEqual(5, len(re.findall(r"\('TCH2026\d{3}',", self.text)))
         self.assertEqual(5, len(re.findall(r"\('ADM2026\d{3}',", self.text)))
-        self.assertIn("('STU2026001', 'student.zhouzh', '周子涵', '', 'active'", self.text)
-        self.assertIn("('TCH2026001', 'teacher.zhangwb', '张文博', '', 'active'", self.text)
-        self.assertIn("('ADM2026001', 'admin.heqh', '何启航', '', 'active'", self.text)
+        self.assertIn("('STU2026001', 'student.zhouzh', '周子涵', 'active'", self.text)
+        self.assertIn("('TCH2026001', 'teacher.zhangwb', '张文博', 'active'", self.text)
+        self.assertIn("('ADM2026001', 'admin.heqh', '何启航', 'active'", self.text)
 
     def test_user_role_seed_exists(self):
         self.assertIn("INSERT INTO `user_roles` (`user_id`, `role_id`)", self.text)
@@ -58,3 +65,18 @@ class TestOCQABootstrapContract(unittest.TestCase):
         self.assertEqual(5, len(re.findall(r"\('STU2026\d{3}',", migration)))
         self.assertEqual(5, len(re.findall(r"\('TCH2026\d{3}',", migration)))
         self.assertEqual(5, len(re.findall(r"\('ADM2026\d{3}',", migration)))
+        self.assertIn("INSERT INTO `users` (`user_code`, `username`, `display_name`, `status`, `extra_metadata`)", migration)
+        self.assertNotIn("`password_hash` = VALUES(`password_hash`)", migration)
+        self.assertIn("SET `password_hash` = NULL", migration)
+
+    def test_course_member_access_seed_migration_exists(self):
+        migration = MEMBERSHIP_MIGRATION_PATH.read_text(encoding="utf-8")
+        self.assertIn("CKQA course member access test-data migration", migration)
+        self.assertIn("当前不生成 password_hash", migration)
+        self.assertIn("INSERT INTO `courses` (`course_id`, `course_name`, `description`, `status`, `access_policy`)", migration)
+        self.assertIn("'crs-20260506-113000'", migration)
+        self.assertIn("INSERT INTO `course_memberships`", migration)
+        self.assertIn("'TCH2026001' AS user_code", migration)
+        self.assertIn("'STU2026001', 'crs-20260506-113000', 'student', 'active'", migration)
+        self.assertIn("SET `password_hash` = NULL", migration)
+        self.assertNotIn("INSERT INTO `users` (`user_code`, `username`, `display_name`, `password_hash`", migration)

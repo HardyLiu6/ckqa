@@ -26,6 +26,10 @@ import {
   updateCourse,
   uploadCourseCover,
 } from '../../api/courses.js'
+import {
+  createCourseMember,
+  updateCourseMember,
+} from '../../api/course-memberships.js'
 import { http } from '../../axios/index.js'
 import { listUsers } from '../../api/users.js'
 import {
@@ -95,6 +99,20 @@ import {
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
+const COURSE_MEMBER_ROLE_OPTIONS = [
+  { value: 'teacher', label: '教师' },
+  { value: 'assistant', label: '助教' },
+  { value: 'student', label: '学生' },
+]
+const COURSE_MEMBER_STATUS_OPTIONS = [
+  { value: 'active', label: '已授权' },
+  { value: 'pending', label: '待确认' },
+]
+const COURSE_MEMBER_ACCESS_SOURCE_OPTIONS = [
+  { value: 'manual', label: '手动授权' },
+  { value: 'imported', label: '批量导入' },
+  { value: 'sync', label: '系统同步' },
+]
 const buildStepComponents = {
   material: BuildStepMaterial,
   parse: BuildStepParse,
@@ -139,6 +157,13 @@ const courseActionState = ref('idle')
 const courseActionError = ref(null)
 const courseActionCourse = ref(null)
 const courseEditForm = ref(createCourseEditForm())
+const memberActionDialog = ref('')
+const memberActionState = ref('idle')
+const memberActionError = ref(null)
+const memberForm = ref(createCourseMemberForm())
+const memberUserOptions = ref([])
+const memberUserState = ref('idle')
+const memberUserError = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -168,6 +193,8 @@ const creationTeacherLoading = computed(() => creationTeacherState.value === 'lo
 const creationCoverUploading = computed(() => creationCoverState.value === 'loading')
 const courseCoverUploading = computed(() => courseCoverState.value === 'loading')
 const courseActionRunning = computed(() => courseActionState.value === 'running')
+const memberActionRunning = computed(() => memberActionState.value === 'running')
+const memberUserLoading = computed(() => memberUserState.value === 'loading')
 const courseActionCourseName = computed(() => (
   courseActionCourse.value?.courseName
   ?? courseActionCourse.value?.name
@@ -179,6 +206,13 @@ const courseEditSubmitDisabled = computed(() => (
   || !courseEditForm.value.courseName?.trim()
   || !courseEditForm.value.status
   || !courseEditForm.value.accessPolicy
+))
+const memberSubmitDisabled = computed(() => (
+  memberActionRunning.value
+  || memberUserLoading.value
+  || !memberForm.value.userId
+  || !memberForm.value.membershipRole
+  || !memberForm.value.status
 ))
 const creationSubmitDisabled = computed(() => (
   creationSubmitting.value
@@ -307,6 +341,15 @@ function createCourseEditForm(course = {}) {
     description: course.description ?? '',
     status: course.status ?? 'active',
     accessPolicy: course.accessPolicy ?? 'restricted',
+  }
+}
+
+function createCourseMemberForm() {
+  return {
+    userId: '',
+    membershipRole: 'student',
+    status: 'active',
+    accessSource: 'manual',
   }
 }
 
@@ -490,6 +533,11 @@ async function handlePrimaryAction() {
     return
   }
 
+  if (route.name === 'course-members') {
+    openCourseMemberDialog()
+    return
+  }
+
   if (route.name === 'course-detail') {
     scrollToCourseSection('materials')
     return
@@ -566,6 +614,11 @@ async function handleSecondaryAction() {
 }
 
 function handleTableRowAction({ row, action } = {}) {
+  if (route.name === 'course-members') {
+    void handleCourseMemberRowAction(row, action)
+    return
+  }
+
   if (route.name !== 'courses') {
     return
   }
@@ -582,6 +635,41 @@ function handleTableRowAction({ row, action } = {}) {
 
   if (action?.key === 'archive-course') {
     openCourseArchiveDialog(row?.raw ?? row)
+  }
+}
+
+async function handleCourseMemberRowAction(row, action) {
+  const member = row?.raw ?? row
+  if (!member?.id || !member?.courseId || memberActionRunning.value) {
+    return
+  }
+
+  if (action?.key === 'activate-course-member') {
+    await submitCourseMemberStatus(member, 'active')
+    return
+  }
+  if (action?.key === 'suspend-course-member') {
+    await submitCourseMemberStatus(member, 'suspended')
+    return
+  }
+  if (action?.key === 'remove-course-member') {
+    await submitCourseMemberStatus(member, 'removed')
+  }
+}
+
+async function submitCourseMemberStatus(member, status) {
+  memberActionState.value = 'running'
+  memberActionError.value = null
+  try {
+    await updateCourseMember(member.id, {
+      courseId: member.courseId,
+      status,
+    })
+    memberActionState.value = 'success'
+    await loadPage()
+  } catch (error) {
+    memberActionState.value = 'failed'
+    memberActionError.value = createApiError(error)
   }
 }
 
@@ -631,6 +719,69 @@ function closeCourseActionDialog() {
   courseActionCourse.value = null
   courseActionError.value = null
   courseEditForm.value = createCourseEditForm()
+}
+
+function openCourseMemberDialog() {
+  memberActionDialog.value = 'add'
+  memberForm.value = createCourseMemberForm()
+  memberActionState.value = 'idle'
+  memberActionError.value = null
+  memberUserError.value = null
+  void loadMemberUsers('')
+}
+
+function closeCourseMemberDialog() {
+  if (memberActionRunning.value) {
+    return
+  }
+  memberActionDialog.value = ''
+  memberActionError.value = null
+  memberUserError.value = null
+  memberForm.value = createCourseMemberForm()
+}
+
+async function loadMemberUsers(keyword = '') {
+  memberUserState.value = 'loading'
+  memberUserError.value = null
+  memberUserOptions.value = []
+  try {
+    const pageData = await listUsers({
+      status: 'active',
+      keyword: String(keyword ?? '').trim(),
+      page: 1,
+      size: 50,
+    })
+    memberUserOptions.value = resolveTeacherSelectOptions(pageData.items)
+    memberUserState.value = memberUserOptions.value.length > 0 ? 'success' : 'empty'
+  } catch (error) {
+    memberUserState.value = 'failed'
+    memberUserError.value = createApiError(error)
+  }
+}
+
+async function submitCourseMember() {
+  const courseId = String(route.params.courseId ?? '')
+  if (!courseId || memberSubmitDisabled.value) {
+    return
+  }
+
+  memberActionState.value = 'running'
+  memberActionError.value = null
+  try {
+    await createCourseMember({
+      courseId,
+      userId: Number(memberForm.value.userId),
+      membershipRole: memberForm.value.membershipRole,
+      status: memberForm.value.status,
+      accessSource: memberForm.value.accessSource,
+    })
+    memberActionState.value = 'success'
+    closeCourseMemberDialog()
+    await loadPage()
+  } catch (error) {
+    memberActionState.value = 'failed'
+    memberActionError.value = createApiError(error)
+  }
 }
 
 async function submitCourseEdit() {
@@ -1811,6 +1962,107 @@ onBeforeUnmount(() => cancelLongTask())
           {{ courseActionRunning ? '归档中' : '确认归档' }}
         </el-button>
       </div>
+    </section>
+  </div>
+
+  <div v-if="memberActionDialog === 'add'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-member-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Member</p>
+          <h2 id="course-member-dialog-title">添加课程成员</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="memberActionRunning"
+          aria-label="取消添加课程成员"
+          @click="closeCourseMemberDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+
+      <el-form class="creation-form" label-position="top" @submit.prevent="submitCourseMember">
+        <el-form-item class="creation-form__wide" label="用户">
+          <el-select
+            v-model="memberForm.userId"
+            class="creation-select"
+            filterable
+            remote
+            clearable
+            :remote-method="loadMemberUsers"
+            :loading="memberUserLoading"
+            placeholder="搜索并选择用户"
+          >
+            <el-option
+              v-for="option in memberUserOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="课程内角色">
+          <el-select v-model="memberForm.membershipRole" class="creation-select" placeholder="选择课程内角色">
+            <el-option
+              v-for="option in COURSE_MEMBER_ROLE_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="成员状态">
+          <el-select v-model="memberForm.status" class="creation-select" placeholder="选择成员状态">
+            <el-option
+              v-for="option in COURSE_MEMBER_STATUS_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item class="creation-form__wide" label="授权来源">
+          <el-select v-model="memberForm.accessSource" class="creation-select" placeholder="选择授权来源">
+            <el-option
+              v-for="option in COURSE_MEMBER_ACCESS_SOURCE_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <p v-if="memberUserState === 'empty'" class="inline-error creation-form__wide">暂无可选用户，请先在用户列表中准备测试用户。</p>
+        <p v-if="memberUserError" class="inline-error creation-form__wide">{{ memberUserError.message }}</p>
+        <p v-if="memberActionError" class="inline-error creation-form__wide">{{ memberActionError.message }}</p>
+        <div class="creation-form__actions creation-form__wide">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="memberActionRunning"
+            @click="closeCourseMemberDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
+            取消
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            native-type="submit"
+            :disabled="memberSubmitDisabled"
+          >
+            <Plus class="button-icon" :size="16" aria-hidden="true" />
+            {{ memberActionRunning ? '添加中' : '添加成员' }}
+          </el-button>
+        </div>
+      </el-form>
     </section>
   </div>
 

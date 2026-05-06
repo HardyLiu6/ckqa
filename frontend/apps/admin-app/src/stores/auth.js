@@ -8,6 +8,7 @@ const AUTH_STORAGE_KEY = 'ckqa-admin-auth-role'
 export const ROLE_PROFILES = {
   admin: {
     id: 1,
+    userCode: 'ADM2026001',
     name: '平台管理员',
     role: 'admin',
     dataScope: '全部课程',
@@ -16,6 +17,7 @@ export const ROLE_PROFILES = {
   },
   teacher: {
     id: 2,
+    userCode: 'TCH2026001',
     name: '示例教师',
     role: 'teacher',
     dataScope: '授权课程',
@@ -40,6 +42,7 @@ export const ROLE_PROFILES = {
 export function cloneProfile(profile) {
   return {
     id: profile.id,
+    userCode: profile.userCode,
     name: profile.name,
     role: profile.role,
     dataScope: profile.dataScope,
