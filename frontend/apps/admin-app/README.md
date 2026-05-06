@@ -6,7 +6,7 @@
 
 - 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程/资料/知识库 live 页面、构建向导和 QA 冒烟验证
+- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程资料上传、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和统一错误页
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
@@ -35,6 +35,7 @@
 | `src/router/routes.js` | 页面清单、权限、状态和一级导航配置 |
 | `src/router/index.js` | Vue Router、布局映射和路由守卫 |
 | `src/layouts/` | `AuthLayout`、`ConsoleLayout`、`DetailLayout`、`WorkflowLayout` |
+| `src/layouts/console-breadcrumb-model.js` | 控制台面包屑模型，课程子页面会保留课程详情父级 |
 | `src/components/shell/` | 顶栏、侧边导航、主题控件和导航模型 |
 | `src/components/common/` | 状态徽标、数据来源、表格壳、工作流步骤、指标和诊断面板 |
 | `src/components/system/` | 系统健康矩阵 |
@@ -44,8 +45,10 @@
 | `src/axios/index.js` | Axios 实例、认证头注入和错误收敛 |
 | `src/api/` | Java `/api/v1` 认证与业务 API 边界、ApiResponse 解包 |
 | `src/views/pages/module-loaders.js` | 按路由加载 live 数据并映射页面状态 |
+| `src/views/pages/material-file-model.js` | 课程资料上传文件校验，当前与后端保持单 PDF 200MB 上限 |
 | `e2e/local-operation-errors.spec.js` | Playwright 浏览器级故障注入验收 |
-| `src/views/` | 登录、工作台、系统健康、通用页面和状态页 |
+| `src/views/` | 登录、工作台、系统健康、通用页面、未开放状态页和统一错误页 |
+| `src/views/status/UnifiedErrorView.vue` | 403 / 404 / 500 统一错误页 |
 | `src/main.js` | Vue 应用挂载入口 |
 | `src/styles/index.scss` | 唯一全局样式入口，聚合 token、base、Element Plus 覆盖和组件样式 |
 
@@ -106,20 +109,22 @@ VITE_API_TIMEOUT=15000
 4. 未登录访问业务页跳转 `/login`，无权限跳转 `/403`。
 5. 登录页接入 Java `/api/v1/auth/admin/login`，管理员和教师账号登录后以 JWT 访问业务接口。
 6. 未开放页面统一显示模块、规划状态和恢复入口，避免空白路由。
-7. 系统健康页调用 Java `/api/v1/system/health`，并识别 `graphrag-build-runs-root` / `graphrag-ready`；更重的共享输出检查由后端 `/api/v1/system/readiness` 承担。
-8. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`；课程创建和详情页支持通过 Java 上传课程封面。
-9. 知识库构建向导以 `buildRunId` 为运行态来源：URL 有 `buildRunId` 时加载对应 build run；没有时保持草稿选择，首次用户确认动作才创建 build run 并写回 query。
-10. 构建向导动作走 build-run API：资料选择、解析检查、图谱输入同步、Prompt 确认、索引构建和 QA 冒烟验证都由 Java `/api/v1/knowledge-base-build-runs/*` 编排。
-11. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
-12. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
-13. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
-14. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
-15. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
-16. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
+7. 403、404、500 使用统一错误页；403 会展示当前身份、数据范围和缺失权限提示。
+8. 系统健康页调用 Java `/api/v1/system/health`，并识别 `graphrag-build-runs-root` / `graphrag-ready`；更重的共享输出检查由后端 `/api/v1/system/readiness` 承担。
+9. 课程列表、课程详情、资料详情、知识库列表、知识库详情、索引运行详情和构建向导已通过 loader 接入 Java `/api/v1`；课程创建和详情页支持通过 Java 上传课程封面。
+10. 课程资料上传走 Java `/api/v1/courses/{courseId}/materials`，当前只接受 PDF，单文件默认上限 200MB，并在选择文件时提前提示。
+11. 知识库构建向导以 `buildRunId` 为运行态来源：URL 有 `buildRunId` 时加载对应 build run；没有时保持草稿选择，首次用户确认动作才创建 build run 并写回 query。
+12. 构建向导动作走 build-run API：资料选择、解析检查、图谱输入同步、Prompt 确认、索引构建和 QA 冒烟验证都由 Java `/api/v1/knowledge-base-build-runs/*` 编排。
+13. 资料解析、GraphRAG 导出、索引构建和 QA 冒烟验证使用局部操作反馈，不再把所有错误挤到顶部泛化状态。
+14. 工作台已使用指标块、生产链路轨道、近期任务和局部深色异常摘要。
+15. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
+16. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
+17. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
+18. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 
-1. `material:upload` 仅作为预留权限点，Java 上传链路确认前不提供上传 UI。
+1. 课程资料上传 v1 仅支持 PDF；如果后端调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 multipart 限制，需要同步 `src/views/pages/material-file-model.js`。
 2. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
-3. 403 页面当前使用兜底权限说明；若需要精确缺失权限，需要路由守卫跳转时附带 `required` 查询参数。
+3. 403 页面已支持展示缺失权限；若需要精确权限文案，需要路由守卫跳转时附带 `required` 查询参数。
 4. 细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。

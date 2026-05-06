@@ -1,20 +1,23 @@
 # CKQA Codex Project Config
 
-本仓库当前有五块主要目录。知识生产与检索主线仍然是两个 Python 子项目，Java 后端负责一期业务编排，前端仍以原型为主：
+本仓库当前有七块主要目录。知识生产与检索主线仍然是两个 Python 子项目，Java 后端负责一期业务编排，前端仍以原型为主：
 
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
 - `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API。
 - `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，已有最小 Axios 请求层，但尚未接入稳定业务契约。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页和核心运维页真实接入，但仍不是知识生产主链路入口。
-- `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
+- `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、课程资料、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
+- `infra/`：仓库根目录统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j。
+- `sql/`：仓库级 MySQL 初始化脚本和迁移脚本来源，`sql/ocqa.sql` 是 schema 基线。
 
 ## 必读顺序
 
 开始改动前，优先阅读：
 
-1. `AGENTS.md`
-2. `pdf_ingest/CLAUDE.md`
-3. `graphrag_pipeline/CLAUDE.md`
+1. `README.md`
+2. `AGENTS.md`
+3. `pdf_ingest/CLAUDE.md`
+4. `graphrag_pipeline/CLAUDE.md`
 
 按需补充阅读：
 
@@ -151,6 +154,8 @@
   - `pnpm build`
   - `pnpm dev`
 - 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证等核心运维页的 Java `/api/v1` 真实接入；正式浏览器接口边界仍是 Java `/api/v1`。
+- 课程资料上传 UI 已接 Java `/api/v1/courses/{courseId}/materials`，当前只接受 PDF，单文件默认 200MB；修改限制时要同步后端 `CourseMaterialProperties`、Spring multipart 配置和前端 `material-file-model.js`。
+- 403/404/500 已使用统一错误页承载，权限和缺失页面体验不要再回退到旧的通用“未开放”页。
 - `node_modules/` 已出现在仓库中，但它不是源码，不要把依赖目录当成改动目标。
 
 ### 5. `backend/ckqa-back/`
@@ -158,8 +163,20 @@
 - 当前是 Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 一期编排后端。
 - 统一响应格式为 `code / message / data / timestamp`，业务成功码为 `200`。
 - 已落地 `/api/v1/system/health`、课程/PDF 查询、解析触发、GraphRAG 导出、索引任务、问答会话与异步问答任务接口。
+- 课程资料上传默认单 PDF 200MB，上限由 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 与 Spring multipart 限制共同约束；前端 admin-app 校验必须保持一致。
 - 异步问答通过 `graphrag_pipeline` 的 `/v1/query-tasks` 工作；跨服务任务时间对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
 - 若用户请求未明确指向 Java 后端、`/api/v1`、编排或前端联调，优先排查两个 Python 模块。
+
+### 6. `infra/`
+
+- 统一 Docker Compose 入口在 `infra/docker-compose.yml`，管理 MySQL、MinIO、One API 和 Neo4j。
+- 本机数据挂载不要随意变更，尤其是 MySQL `/home/sunlight/mysql/data` 与 MinIO `/home/sunlight/minio/data`。
+- 不要运行 `docker compose down -v`，除非用户明确要求销毁本地数据。
+
+### 7. `sql/`
+
+- `sql/ocqa.sql` 是仓库级数据库初始化基线，迁移脚本在 `sql/migrations/`。
+- 不要再把数据库基线写回 `pdf_ingest/sql/`；从子模块引用时使用 `../sql/ocqa.sql` 或仓库根目录相对路径。
 
 ## 跨模块主链路
 

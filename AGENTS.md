@@ -10,7 +10,7 @@ This file applies to the whole repository.
 
 ## Project Layout
 
-This repository currently has five notable areas, with the two Python modules as the main workflow:
+This repository currently has seven notable areas, with the two Python modules as the main workflow:
 
 1. `pdf_ingest/`
    - Main PDF processing pipeline.
@@ -27,7 +27,7 @@ This repository currently has five notable areas, with the two Python modules as
    - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
-   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, knowledge-base build wizard, QA smoke validation, and Playwright browser fault-injection tests.
+   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, course material upload feedback, knowledge-base build wizard, QA smoke validation, unified 403/404/500 pages, and Playwright browser fault-injection tests.
    - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
@@ -92,6 +92,11 @@ Important files:
 - `migrations/20260423_course_materials.sql`
 - `migrations/20260429_qa_session_type.sql`
 - `migrations/20260504_role_user_test_data.sql`
+- `migrations/20260505_kb_build_runs.sql`
+- `migrations/20260506_course_cover.sql`
+- `migrations/20260506_course_member_access_test_data.sql`
+- `migrations/20260506_jwt_auth_credentials.sql`
+- `migrations/20260506_user_avatar_course_material_management.sql`
 
 Notes:
 
@@ -193,7 +198,8 @@ Notes:
 - Preferred commands: `pnpm install`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, `pnpm dev`, `pnpm preview`
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
-- Current state: shell, theme system, dashboard, health page, login/status pages, courses, course detail, material lifecycle, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Course material upload currently accepts PDF only and defaults to a single-file 200MB limit; keep `frontend/apps/admin-app/src/views/pages/material-file-model.js`, Java `CourseMaterialProperties`, and Spring multipart config aligned when changing this limit.
 - Knowledge-base build wizard state should be driven by Java build-run APIs and the URL `buildRunId`, not by browser-only query/sessionStorage state once a build run exists.
 - Playwright E2E uses mocked `/api/v1` fault injection to verify local operation error panels. Do not commit `test-results/`, `playwright-report/`, `dist/`, or `node_modules/`.
 
@@ -205,6 +211,7 @@ Notes:
 - Local admin-app integration expects MySQL, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, `GRAPHRAG_BUILD_RUNS_ROOT`, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
 - `/api/v1/system/health` is a lightweight dependency check and no longer requires shared `GRAPHRAG_ROOT/output/lancedb`; `/api/v1/system/readiness` includes that shared CLI/debug output check.
 - Knowledge-base build runs isolate input, output, logs, artifacts, active-index metadata, and QA smoke snapshots under `GRAPHRAG_BUILD_RUNS_ROOT`.
+- Course material upload v1 accepts PDF only and defaults to 200MB per file; `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES`, `CKQA_MULTIPART_MAX_FILE_SIZE`, and `CKQA_MULTIPART_MAX_REQUEST_SIZE` must stay compatible with the admin-app upload validator.
 - Treat it as secondary to the Python parsing/indexing chain unless the user explicitly wants Java backend, `/api/v1`, orchestration, or frontend integration work.
 
 ## Cross-Module Contract

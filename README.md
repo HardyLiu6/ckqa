@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-05-05
+> 审计日期：2026-05-06
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -15,7 +15,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 - `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
 - `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
 - `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册已接入 Java `/api/v1/auth/student/*`，课程/问答等业务页仍在逐步接入真实契约。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料生命周期、知识库、构建向导和 QA 冒烟验证。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、知识库、构建向导、QA 冒烟验证和统一错误页。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
@@ -29,7 +29,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
 | `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
 | `frontend/apps/student-app/` | 学员端前端原型 | 登录注册已接入 Java `/api/v1`，业务页继续演进 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
+| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本机启动前后端服务
@@ -113,6 +113,11 @@ export MINIO_SECRET_KEY=12345678
 export MINIO_SECURE=false
 export COURSE_COVER_BUCKET=course-artifacts
 export COURSE_COVER_OBJECT_PREFIX=course-covers
+export COURSE_MATERIAL_BUCKET=course-artifacts
+export COURSE_MATERIAL_OBJECT_PREFIX=course-materials
+export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
+export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
+export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_API_HOST=127.0.0.1
@@ -187,6 +192,11 @@ export MINIO_SECRET_KEY=12345678
 export MINIO_SECURE=false
 export COURSE_COVER_BUCKET=course-artifacts
 export COURSE_COVER_OBJECT_PREFIX=course-covers
+export COURSE_MATERIAL_BUCKET=course-artifacts
+export COURSE_MATERIAL_OBJECT_PREFIX=course-materials
+export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
+export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
+export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
@@ -254,7 +264,7 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
 - `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构；登录注册已接入 Java `/api/v1`，其余业务页仍在逐步接入稳定 API。
-- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、构建向导、QA 冒烟验证和 Playwright 浏览器级故障注入验收。
+- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、资料上传校验、构建向导、QA 冒烟验证、统一 403/404/500 错误页和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
 ## 人类与机器入口
@@ -308,13 +318,18 @@ ckqa/
 ├── docs/
 ├── scripts/
 │   └── audit_repo_drift.py
+├── infra/
+│   ├── README.md
+│   └── docker-compose.yml
+├── sql/
+│   ├── ocqa.sql
+│   └── migrations/
 ├── pdf_ingest/
 │   ├── README.md
 │   ├── CLAUDE.md
 │   ├── scripts/pdf_processor/
 │   ├── tests/
-│   ├── docs/
-│   └── sql/
+│   └── docs/
 ├── graphrag_pipeline/
 │   ├── README.md
 │   ├── CLAUDE.md
@@ -337,6 +352,20 @@ ckqa/
 ```
 
 ## 模块入口
+
+### `infra/`
+
+- 角色：本地 MySQL、MinIO、One API、Neo4j 统一容器入口
+- 主入口：`docker-compose.yml`
+- 运行态数据：MySQL 与 MinIO 保留本机既有外部挂载，Neo4j 与 One API 数据位于 `infra/` 下并被 Git 忽略
+- 文档入口：[infra/README.md](infra/README.md)
+
+### `sql/`
+
+- 角色：仓库级 MySQL schema 与迁移脚本来源
+- 主入口：`ocqa.sql`
+- 当前迁移：课程资料、QA 会话类型、角色测试数据、知识库 build-run、课程封面、成员权限测试数据、JWT 凭据、用户头像和课程资料管理
+- 使用边界：从 `pdf_ingest/` 或 Java 后端引用 SQL 时都应回到仓库根目录 `sql/`
 
 ### `pdf_ingest/`
 
@@ -369,7 +398,7 @@ ckqa/
 
 - 角色：管理员端/教师端共用控制台前端
 - 主入口：`src/App.vue`
-- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、知识库构建向导、QA 冒烟验证和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
+- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、课程资料上传、知识库构建向导、QA 冒烟验证、统一错误页和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
 - 文档入口：[frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - 结构设计入口：[docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 
@@ -445,6 +474,7 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - 本地重新抽取前如果要清空旧课程运行态数据，使用 `cd pdf_ingest && python scripts/cleanup_legacy_course_data.py --env-file .env` 先 dry-run，再加 `--execute` 执行；默认会把不符合 `crs-YYYYMMDD-HHMMSS` 的课程 ID 当作旧课程。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 对手工 CLI 查询缺一不可；Java 管理端构建会把输入、输出、日志和 QA smoke 快照隔离到 `runtime/kb-build-runs/` 下。
 - `backend/ckqa-back/` 的问答链路通过 `graphrag_pipeline` 的 `/v1/query-tasks` 异步任务接口工作；跨服务时间字段对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
+- `backend/ckqa-back/` 与 `frontend/apps/admin-app/` 的课程资料上传上限已经统一为单个 PDF 默认 200MB；如果调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 Spring multipart 限制，需要同步前端 `material-file-model.js` 校验文案。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
 - `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。

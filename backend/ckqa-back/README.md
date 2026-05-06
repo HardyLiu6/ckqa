@@ -105,6 +105,7 @@
 课程资料：
 
 - 新业务优先使用 `/api/v1/courses/{courseId}/materials` 系列接口做课程资料 CRUD；v1 上传仅接受 PDF。
+- 单个 PDF 默认上限为 200MB；后端会在读取文件字节前根据 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 拒绝超限文件，同时 Spring multipart 默认限制也设置为 200MB。
 - 上传资料会按文件 MD5 创建或复用 `material_objects`，再在 `course_materials` 中创建课程内资料记录；同一课程重复资料或重复展示名返回 409。
 - 解析中的资料不能删除；旧 `/api/v1/courses/{courseId}/pdf-files` 与 `/api/v1/pdf-files/**` 仍保留给解析、结果查看和 GraphRAG 导出链路兼容使用。
 
@@ -154,6 +155,11 @@ export MINIO_SECURE=false
 export COURSE_COVER_BUCKET=course-artifacts
 export COURSE_COVER_OBJECT_PREFIX=course-covers
 export COURSE_COVER_MAX_FILE_SIZE_BYTES=2097152
+export COURSE_MATERIAL_BUCKET=course-artifacts
+export COURSE_MATERIAL_OBJECT_PREFIX=course-materials
+export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
+export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
+export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
 
 export PDF_INGEST_PYTHON=/path/to/courseKg/bin/python
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
@@ -247,6 +253,9 @@ export GRAPHRAG_API_HOST=127.0.0.1
 export GRAPHRAG_API_PORT=8012
 export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
 export GRAPHRAG_API_MANAGED_ENABLED=true
+export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
+export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
+export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
 
 ./mvnw spring-boot:run
 ```
