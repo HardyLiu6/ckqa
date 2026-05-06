@@ -13,8 +13,8 @@ export const STATUS_ROUTES = [
   {
     path: '/403',
     name: 'forbidden',
-    componentKey: 'RouteState',
-    props: { state: 'forbidden' },
+    componentKey: 'UnifiedErrorView',
+    props: { status: 403 },
     meta: {
       title: '无权限',
       layout: 'auth',
@@ -25,8 +25,8 @@ export const STATUS_ROUTES = [
   {
     path: '/404',
     name: 'not-found',
-    componentKey: 'RouteState',
-    props: { state: 'not-found' },
+    componentKey: 'UnifiedErrorView',
+    props: { status: 404 },
     meta: {
       title: '页面不存在',
       layout: 'auth',
@@ -37,8 +37,8 @@ export const STATUS_ROUTES = [
   {
     path: '/500',
     name: 'server-error',
-    componentKey: 'RouteState',
-    props: { state: 'server-error' },
+    componentKey: 'UnifiedErrorView',
+    props: { status: 500 },
     meta: {
       title: '服务器错误',
       layout: 'auth',

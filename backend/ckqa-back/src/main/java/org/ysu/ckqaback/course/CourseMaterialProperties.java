@@ -16,7 +16,7 @@ public class CourseMaterialProperties {
 
     private String objectPrefix = "course-materials";
 
-    private long maxFileSizeBytes = 50L * 1024L * 1024L;
+    private long maxFileSizeBytes = 200L * 1024L * 1024L;
 
     public String normalizeObjectPrefix() {
         return objectPrefix == null

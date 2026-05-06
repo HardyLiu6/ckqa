@@ -21,6 +21,8 @@ import {
   buildNavigationGroups,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
+import { buildConsoleBreadcrumbItems } from './layouts/console-breadcrumb-model.js'
+import { validateCourseMaterialFile } from './views/pages/material-file-model.js'
 import {
   resolvePageChangeTarget,
   resolvePaginationState,
@@ -171,6 +173,10 @@ test('路由骨架包含首版关键入口和后续页面状态', () => {
   const paths = routeRecords.map((route) => route.path)
 
   assert.deepEqual(paths.slice(0, 4), ['/login', '/403', '/404', '/500'])
+  assert.deepEqual(
+    routeRecords.slice(1, 4).map((route) => route.componentKey),
+    ['UnifiedErrorView', 'UnifiedErrorView', 'UnifiedErrorView'],
+  )
   assert.ok(paths.includes('/app/dashboard'))
   assert.ok(paths.includes('/app/system'))
   assert.ok(paths.includes('/app/health'))
@@ -587,6 +593,14 @@ test('资料 API 暴露生命周期方法并按文件名判断 GraphRAG 完整�
   assert.equal(hasCompleteGraphRagExport(results.slice(0, 2), { mode: 'section', withPageDocs: true }), false)
   assert.equal(hasCompleteGraphRagExport(results, { mode: 'page', withPageDocs: false }), true)
   assert.equal(hasCompleteGraphRagExport([{ fileName: 'graphrag_section_docs.json' }], { mode: 'page' }), false)
+})
+
+test('课程资料 PDF 上传前校验单文件不超过 200MB', () => {
+  const maxPdf = { name: 'book.pdf', type: 'application/pdf', size: 200 * 1024 * 1024 }
+  const tooLargePdf = { name: 'book.pdf', type: 'application/pdf', size: 200 * 1024 * 1024 + 1 }
+
+  assert.equal(validateCourseMaterialFile(maxPdf), '')
+  assert.equal(validateCourseMaterialFile(tooLargePdf), 'PDF 文件不能超过 200MB')
 })
 
 test('资料详情 loader 根据解析状态推导可执行按钮', async () => {
@@ -2035,7 +2049,8 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(courses.primaryAction.disabled, false)
   assert.equal(courses.primaryAction.title, '创建课程')
   assert.equal(courses.secondaryAction, null)
-  assert.equal(courseDetail.secondaryAction.label, '管理成员')
+  assert.equal(courseDetail.primaryAction, null)
+  assert.equal(courseDetail.secondaryAction, null)
   assert.equal(courseDetail.facts.includes('课程成员'), true)
   assert.equal(courseMembers.variant, 'table')
   assert.equal(courseMembers.primaryAction.label, '添加成员')
@@ -2274,7 +2289,7 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.match(modulePage, /ChevronLeft/)
   assert.match(modulePage, /BuildStepMaterial/)
   assert.match(modulePage, /BuildStepQaCheck/)
-  assert.match(modulePage, /v-if="route\.name !== 'knowledge-base-build'"[\s\S]*:class="primaryHeroButtonClass"/)
+  assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"[\s\S]*:class="primaryHeroButtonClass"/)
   assert.doesNotMatch(modulePage, /v-if="route\.name === 'knowledge-base-build'"\s+class="content-grid two-columns"/)
   assert.doesNotMatch(modulePage, /buildSelectionBlock\?\.selectedMaterialId/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
@@ -2288,6 +2303,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
   const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
   const consoleLayout = readFileSync(new URL('./layouts/ConsoleLayout.vue', import.meta.url), 'utf8')
+  const breadcrumbModel = readFileSync(new URL('./layouts/console-breadcrumb-model.js', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
   assert.match(modulePage, /<el-form\s+class="creation-form"/)
@@ -2310,6 +2326,8 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table'\)/)
+  assert.match(modulePage, /const hasPrimaryAction = computed/)
+  assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"/)
   assert.match(modulePage, /:title="tableTitle"/)
   assert.match(modulePage, /openCourseMaterialsPage/)
   assert.match(modulePage, /class="creation-dialog course-action-dialog material-action-dialog"/)
@@ -2320,6 +2338,9 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /submitCourseArchive/)
   assert.match(modulePage, /openCourseKnowledgeAction/)
   assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId \}\)/)
+  assert.match(modulePage, /import \{ ElMessage \} from 'element-plus'/)
+  assert.match(modulePage, /ElMessage\.warning\(message\)/)
+  assert.match(modulePage, /<el-alert[\s\S]*:title="materialActionError\.message"/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
 
   assert.match(qaCheckStep, /<el-input[\s\S]*id="smoke-question"[\s\S]*@input="\$emit\('update-smoke-question'/)
@@ -2337,7 +2358,8 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(consoleLayout, /@role-change/)
   assert.doesNotMatch(consoleLayout, /function switchRole/)
   assert.match(consoleLayout, /const breadcrumbItems = computed/)
-  assert.match(consoleLayout, /LIST_ROUTE_BY_GROUP/)
+  assert.match(consoleLayout, /buildConsoleBreadcrumbItems\(route\)/)
+  assert.match(breadcrumbModel, /LIST_ROUTE_BY_GROUP/)
   assert.match(consoleLayout, /class="breadcrumb-list"/)
   assert.match(consoleLayout, /:data-kind="item\.kind"/)
   assert.match(componentsCss, /\.creation-field\s+\.el-input,\s*[\s\S]*\.creation-field\s+\.el-select/)
@@ -2363,12 +2385,13 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
   const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
   const routeState = readFileSync(new URL('./views/status/RouteState.vue', import.meta.url), 'utf8')
+  const unifiedErrorView = readFileSync(new URL('./views/status/UnifiedErrorView.vue', import.meta.url), 'utf8')
   const healthView = readFileSync(new URL('./views/system/HealthView.vue', import.meta.url), 'utf8')
   const dashboardView = readFileSync(new URL('./views/dashboard/DashboardView.vue', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  for (const source of [modulePage, tableShell, workflowStepper, topbar, loginView, routeState, healthView, dashboardView]) {
+  for (const source of [modulePage, tableShell, workflowStepper, topbar, loginView, routeState, unifiedErrorView, healthView, dashboardView]) {
     assert.doesNotMatch(source, /<button[\s\S]*(primary-button|secondary-button|plain-button|text-button)/)
     assert.doesNotMatch(source, /<RouterLink[\s\S]*(primary-button|secondary-button)/)
   }
@@ -2379,7 +2402,7 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(workflowStepper, /<el-button[\s\S]*class="workflow-progress-rail__step"/)
   assert.match(topbar, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--ghost"/)
   assert.match(loginView, /<el-button[\s\S]*native-type="submit"/)
-  assert.match(routeState, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
+  assert.match(unifiedErrorView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
   assert.match(healthView, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
   assert.match(dashboardView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/knowledge-bases"/)
   assert.match(elementPlusCss, /\.ckqa-el-button[\s\S]*backdrop-filter:\s*blur\(16px\)/)
@@ -2567,6 +2590,64 @@ test('控制台导航在详情路径回落高亮所属模块入口', () => {
   assert.equal(
     findActiveNavigationPath(groups, 'system', '/app/authorization-audit-logs'),
     '/app/authorization-audit-logs',
+  )
+})
+
+test('课程子页面面包屑保留课程详情父级', () => {
+  const memberItems = buildConsoleBreadcrumbItems({
+    name: 'course-members',
+    params: { courseId: 'os 2026' },
+    meta: {
+      title: '课程成员',
+      navGroup: 'courses',
+    },
+  })
+
+  assert.deepEqual(
+    memberItems.map(({ label, kind, to }) => ({ label, kind, to })),
+    [
+      { label: '课程与资料', kind: 'section', to: undefined },
+      { label: '课程列表', kind: 'link', to: '/app/courses' },
+      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
+      { label: '课程成员', kind: 'current', to: undefined },
+    ],
+  )
+
+  const materialItems = buildConsoleBreadcrumbItems({
+    name: 'course-materials',
+    params: { courseId: 'os 2026' },
+    meta: {
+      title: '课程资料',
+      navGroup: 'courses',
+    },
+  })
+
+  assert.deepEqual(
+    materialItems.map(({ label, kind, to }) => ({ label, kind, to })),
+    [
+      { label: '课程与资料', kind: 'section', to: undefined },
+      { label: '课程列表', kind: 'link', to: '/app/courses' },
+      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
+      { label: '课程资料', kind: 'current', to: undefined },
+    ],
+  )
+
+  const detailItems = buildConsoleBreadcrumbItems({
+    name: 'course-detail',
+    params: { courseId: 'os 2026' },
+    meta: {
+      title: '课程详情',
+      navGroup: 'courses',
+    },
+  })
+
+  assert.deepEqual(
+    detailItems.map(({ label, kind, to }) => ({ label, kind, to })),
+    [
+      { label: '课程与资料', kind: 'section', to: undefined },
+      { label: '课程列表', kind: 'link', to: '/app/courses' },
+      { label: '课程详情', kind: 'current', to: undefined },
+    ],
   )
 })
 

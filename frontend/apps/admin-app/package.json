@@ -15,7 +15,7 @@
     "@element-plus/icons-vue": "^2.3.2",
     "@fontsource/dm-mono": "^5.2.7",
     "@fontsource/dm-sans": "^5.2.8",
-    "axios": "^1.15.2",
+    "axios": "^1.16.0",
     "element-plus": "^2.13.7",
     "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.4",

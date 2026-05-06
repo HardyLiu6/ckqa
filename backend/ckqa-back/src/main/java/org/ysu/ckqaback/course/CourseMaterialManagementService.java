@@ -241,7 +241,11 @@ public class CourseMaterialManagementService {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "课程资料文件不能为空");
         }
         if (file.getSize() > properties.getMaxFileSizeBytes()) {
-            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "课程资料文件不能超过50MB");
+            throw new BusinessException(
+                    ApiResultCode.BAD_REQUEST,
+                    HttpStatus.BAD_REQUEST,
+                    "课程资料文件不能超过" + formatSizeMb(properties.getMaxFileSizeBytes()) + "MB"
+            );
         }
         String contentType = trimToNull(file.getContentType());
         String fileName = trimToNull(file.getOriginalFilename());
@@ -250,6 +254,10 @@ public class CourseMaterialManagementService {
         if (!looksLikePdf) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "课程资料仅支持PDF格式");
         }
+    }
+
+    private long formatSizeMb(long bytes) {
+        return Math.max(1L, bytes / 1024L / 1024L);
     }
 
     private byte[] readBytes(MultipartFile file) {

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   ChevronLeft,
   Check,
@@ -98,6 +99,7 @@ import {
   resolveCleanBuildStepQuery,
   resolveOperationFeedback,
 } from './module-page-model.js'
+import { validateCourseMaterialFile } from './material-file-model.js'
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
@@ -310,6 +312,7 @@ const primaryActionLabel = computed(() => (
     ? buildPrimaryAction.value.label
     : config.value.primaryAction?.label ?? config.value.primaryAction
 ))
+const hasPrimaryAction = computed(() => Boolean(primaryActionLabel.value))
 const secondaryActionLabel = computed(() => config.value.secondaryAction?.label ?? config.value.secondaryAction)
 const hasSecondaryAction = computed(() => Boolean(secondaryActionLabel.value))
 const canOpenCreationDialog = computed(() => ['courses', 'knowledge-bases'].includes(route.name))
@@ -839,6 +842,7 @@ function handleMaterialFileChange(uploadFile) {
   const message = validateCourseMaterialFile(file)
   if (message) {
     materialActionError.value = { message }
+    ElMessage.warning(message)
     materialForm.value = {
       ...materialForm.value,
       file: null,
@@ -859,23 +863,6 @@ function handleMaterialFileRemove() {
     file: null,
   }
   materialUploadProgress.value = 0
-}
-
-function validateCourseMaterialFile(file) {
-  if (!file) {
-    return '请选择 PDF 资料文件'
-  }
-  const fileName = String(file.name ?? '')
-  if (file.type && file.type !== 'application/pdf') {
-    return '课程资料 v1 仅支持 PDF 文件'
-  }
-  if (!fileName.toLowerCase().endsWith('.pdf')) {
-    return '文件扩展名必须为 .pdf'
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    return 'PDF 文件不能超过 50MB'
-  }
-  return ''
 }
 
 async function submitMaterialUpload() {
@@ -1724,7 +1711,7 @@ onBeforeUnmount(() => cancelLongTask())
 
     <div class="button-row">
       <el-button
-        v-if="route.name !== 'knowledge-base-build'"
+        v-if="hasPrimaryAction && route.name !== 'knowledge-base-build'"
         :class="primaryHeroButtonClass"
         :type="primaryHeroButtonType"
         native-type="button"
@@ -2305,7 +2292,13 @@ onBeforeUnmount(() => cancelLongTask())
             <p>删除只移除当前课程的资料记录，不会影响同一物理文件在其他课程中的复用。解析中的资料会被后端拒绝删除。</p>
           </div>
         </div>
-        <p v-if="materialActionError" class="inline-error">{{ materialActionError.message }}</p>
+        <el-alert
+          v-if="materialActionError"
+          type="error"
+          show-icon
+          :closable="false"
+          :title="materialActionError.message"
+        />
         <div class="creation-form__actions">
           <el-button
             class="ckqa-el-button ckqa-el-button--secondary"
@@ -2372,7 +2365,7 @@ onBeforeUnmount(() => cancelLongTask())
           >
             <UploadCloud :size="26" aria-hidden="true" />
             <strong>选择或拖入 PDF 文件</strong>
-            <small>上传进度代表浏览器到后端的文件传输进度。</small>
+            <small>单个 PDF 不超过 200MB，上传进度代表浏览器到后端的文件传输进度。</small>
           </el-upload>
         </el-form-item>
         <div
@@ -2382,7 +2375,14 @@ onBeforeUnmount(() => cancelLongTask())
           <span>上传进度</span>
           <el-progress :percentage="materialUploadProgress" />
         </div>
-        <p v-if="materialActionError" class="inline-error creation-form__wide">{{ materialActionError.message }}</p>
+        <el-alert
+          v-if="materialActionError"
+          class="creation-form__wide"
+          type="error"
+          show-icon
+          :closable="false"
+          :title="materialActionError.message"
+        />
         <div class="creation-form__actions creation-form__wide">
           <el-button
             class="ckqa-el-button ckqa-el-button--secondary"
@@ -2420,7 +2420,12 @@ onBeforeUnmount(() => cancelLongTask())
         重试
       </el-button>
     </div>
-    <p class="inline-error">{{ loadError.message }}</p>
+    <el-alert
+      type="error"
+      show-icon
+      :closable="false"
+      :title="loadError.message"
+    />
   </section>
 
   <WorkflowStepper
