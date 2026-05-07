@@ -2130,23 +2130,69 @@ textarea.text-input {
 
 .workflow-progress-rail__steps {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 10px;
   padding: 0;
   margin: 0;
   list-style: none;
 }
 
 .workflow-progress-rail__step.el-button {
+  position: relative;
   width: 100%;
   height: 100%;
-  min-height: 76px;
-  padding: 10px;
+  min-height: 104px;
+  padding: 12px 12px 12px 16px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-sm);
   color: var(--ckqa-text);
   text-align: left;
   background: var(--ckqa-surface-muted);
+  white-space: normal;
+  overflow: hidden;
+}
+
+.workflow-progress-rail__step.el-button::before {
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 4px;
+  border-radius: 0 var(--ckqa-radius-full) var(--ckqa-radius-full) 0;
+  content: '';
+  background: var(--ckqa-border);
+}
+
+.workflow-progress-rail__step.el-button[data-status='done']::before,
+.workflow-progress-rail__step.el-button[data-status='success']::before,
+.workflow-progress-rail__step.el-button[data-status='complete']::before {
+  background: #0f766e;
+}
+
+.workflow-progress-rail__step.el-button[data-status='ready']::before {
+  background: #2563eb;
+}
+
+.workflow-progress-rail__step.el-button[data-status='running'],
+.workflow-progress-rail__step.el-button[data-status='processing'] {
+  border-color: rgb(99 102 241 / 34%);
+  background: rgb(99 102 241 / 8%);
+}
+
+.workflow-progress-rail__step.el-button[data-status='running']::before,
+.workflow-progress-rail__step.el-button[data-status='processing']::before {
+  background: #6366f1;
+}
+
+.workflow-progress-rail__step.el-button[data-status='blocked'] {
+  color: color-mix(in srgb, var(--ckqa-text) 72%, var(--ckqa-text-muted));
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 72%, var(--ckqa-surface));
+}
+
+.workflow-progress-rail__step.el-button[data-status='blocked']::before {
+  background: #94a3b8;
+}
+
+.workflow-progress-rail__step.el-button[data-status='failed']::before {
+  background: #c2413d;
 }
 
 .workflow-progress-rail__step.el-button > span {
@@ -2158,8 +2204,9 @@ textarea.text-input {
 }
 
 .workflow-progress-rail__steps li.active .workflow-progress-rail__step.el-button {
-  border-color: color-mix(in srgb, var(--ckqa-accent) 44%, transparent);
-  background: color-mix(in srgb, var(--ckqa-accent) 9%, var(--ckqa-surface));
+  border-color: rgb(99 102 241 / 48%);
+  background: color-mix(in srgb, rgb(99 102 241) 10%, var(--ckqa-surface));
+  box-shadow: 0 14px 28px rgb(99 102 241 / 12%);
 }
 
 .workflow-step-index {
@@ -2182,18 +2229,30 @@ textarea.text-input {
 }
 
 .workflow-step-label {
+  overflow-wrap: anywhere;
   font-weight: 800;
 }
 
 .workflow-step-copy small {
   color: var(--ckqa-text-muted);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .workflow-progress-rail__step .status-badge {
   grid-column: 1 / -1;
   justify-self: start;
   white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .workflow-progress-rail__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workflow-progress-rail__steps {
+    grid-template-columns: minmax(220px, 1fr);
+  }
 }
 
 .build-step-stage {
@@ -2275,10 +2334,21 @@ textarea.text-input {
 }
 
 .build-step-stage__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ckqa-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ckqa-surface) 86%, transparent), var(--ckqa-surface) 34%);
+}
+
+.build-step-stage__actions .el-button {
+  min-height: 40px;
+  white-space: normal;
 }
 
 .build-step-toolbar {

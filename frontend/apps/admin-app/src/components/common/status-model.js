@@ -1,5 +1,6 @@
 export const STATUS_TONES = {
   done: 'success',
+  complete: 'success',
   ready: 'success',
   success: 'success',
   active: 'success',
@@ -15,6 +16,7 @@ export const STATUS_TONES = {
   processing: 'running',
   indexing: 'running',
   pending: 'warning',
+  missing: 'warning',
   skipped: 'warning',
   degraded: 'warning',
   failed: 'danger',

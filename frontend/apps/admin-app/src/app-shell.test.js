@@ -1236,6 +1236,33 @@ test('构建向导批量解析只提交待解析和失败资料且单项失败�
   assert.equal(options.isFailed(result), false)
 })
 
+test('构建向导批量解析任务在提交后继续轮询资料状态直到解析完成', async () => {
+  const snapshots = []
+  const options = createParallelParseTaskOptions({
+    rows: [
+      { id: '10', status: 'pending' },
+      { id: '11', status: 'failed' },
+    ],
+    startParseRequest: async (id) => ({ id, parseStatus: 'processing' }),
+    listMaterialsRequest: async () => {
+      snapshots.push('poll')
+      return [
+        { id: 10, parseStatus: snapshots.length > 1 ? 'done' : 'processing' },
+        { id: 11, parseStatus: 'done' },
+      ]
+    },
+  })
+
+  const result = await options.trigger({})
+  const firstPoll = await options.poll({})
+  const secondPoll = await options.poll({})
+
+  assert.equal(result.submitted, 2)
+  assert.equal(options.isSuccess(result), false)
+  assert.equal(options.isSuccess(firstPoll), false)
+  assert.equal(options.isSuccess(secondPoll), true)
+})
+
 test('构建向导缺失导出只提交缺失资料且单项失败不阻断整体', async () => {
   const calls = []
   const options = createExportMissingTaskOptions({
@@ -1259,6 +1286,36 @@ test('构建向导缺失导出只提交缺失资料且单项失败不阻断整�
   assert.equal(result.failed, 1)
   assert.equal(options.isSuccess(result), true)
   assert.equal(options.isFailed(result), false)
+})
+
+test('构建向导缺失导出任务在提交后继续轮询产物直到图谱输入完整', async () => {
+  const snapshots = []
+  const options = createExportMissingTaskOptions({
+    rows: [
+      { id: '10', status: 'missing' },
+    ],
+    payload: { mode: 'section', withPageDocs: true },
+    exportGraphRagRequest: async (id) => ({ id }),
+    listParseResultsRequest: async () => {
+      snapshots.push('poll')
+      return snapshots.length > 1
+        ? [
+            { fileName: 'graphrag_normalized_docs.json' },
+            { fileName: 'graphrag_section_docs.json' },
+            { fileName: 'graphrag_page_docs.json' },
+          ]
+        : [{ fileName: 'graphrag_normalized_docs.json' }]
+    },
+  })
+
+  const result = await options.trigger({})
+  const firstPoll = await options.poll({})
+  const secondPoll = await options.poll({})
+
+  assert.equal(result.submitted, 1)
+  assert.equal(options.isSuccess(result), false)
+  assert.equal(options.isSuccess(firstPoll), false)
+  assert.equal(options.isSuccess(secondPoll), true)
 })
 
 test('知识库 API 通过 Java /api/v1 边界访问列表、详情和索引运行', async () => {
@@ -2097,10 +2154,10 @@ test('step 与确认态 query 独立更新', () => {
 
 test('六步构建工作流进度、默认步骤和返回目标保持稳定语义', () => {
   const steps = [
-    { key: 'material', label: '选择课程资料', status: 'done' },
-    { key: 'parse', label: '解析状态检查', status: 'done' },
-    { key: 'export', label: '导出图谱输入', status: 'ready' },
-    { key: 'prompt', label: '提示词调优', status: 'blocked' },
+    { key: 'material', label: '资料选择', status: 'done' },
+    { key: 'parse', label: '解析检查', status: 'done' },
+    { key: 'export', label: '生成图谱输入', status: 'ready' },
+    { key: 'prompt', label: 'Prompt确认', status: 'blocked' },
     { key: 'index', label: '创建索引', status: 'blocked' },
     { key: 'qa_check', label: '问答效果验证', status: 'blocked' },
   ]
@@ -2118,7 +2175,7 @@ test('六步构建工作流进度、默认步骤和返回目标保持稳定语�
 
   assert.deepEqual(resolveBuildStepNavigation(steps, 'export'), {
     previousKey: 'parse',
-    previousLabel: '返回第 02 步：解析状态检查',
+    previousLabel: '返回第 02 步：解析检查',
     disabled: false,
   })
   assert.deepEqual(resolveBuildStepNavigation(steps, 'material'), {
@@ -2240,11 +2297,14 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
   assert.equal(resolveBuildPrimaryAction({ key: 'parse', status: 'ready' }, {
     parseSummary: { pending: 0, failed: 0, running: 0, done: 2 },
   }).label, '检查图谱输入')
+  assert.equal(resolveBuildPrimaryAction({ key: 'parse', status: 'ready' }, {
+    parseSummary: { pending: 1, failed: 0, running: 0, done: 1 },
+  }).label, '开始解析待处理资料')
   assert.equal(
     resolveBuildPrimaryAction({ key: 'export', status: 'ready' }, {
       exportSummary: { missing: 1, complete: 1 },
-    }).operationKey,
-    'export-missing',
+    }).label,
+    '生成缺失图谱输入',
   )
 
   const confirmAction = resolveBuildPrimaryAction({ key: 'material', status: 'ready' }, {
@@ -2266,15 +2326,22 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
     promptConfirmed: '1',
     step: 'prompt',
   })
-  assert.deepEqual(resolveBuildPrimaryAction('export', {
+  const completeExportAction = resolveBuildPrimaryAction('export', {
     parseRows: [{ id: '9', status: 'done' }],
     exportState: { status: 'complete' },
     query: { materialIds: '9', promptConfirmed: '1' },
-  }).nextQuery, {
+  })
+  assert.equal(completeExportAction.label, '确认图谱输入并进入 Prompt 确认')
+  assert.deepEqual(completeExportAction.nextQuery, {
     materialIds: '9',
     exportConfirmed: '1',
     step: 'prompt',
   })
+  assert.equal(resolveBuildPrimaryAction('export', {
+    parseRows: [{ id: '9', status: 'done' }],
+    exportState: { status: 'complete' },
+    query: { materialIds: '9', exportConfirmed: '1' },
+  }).label, '进入 Prompt 确认')
   assert.deepEqual(resolveBuildPrimaryAction('prompt', {
     promptState: { status: 'ready', confirmed: false },
     query: { materialIds: '9', exportConfirmed: '1' },
@@ -2382,6 +2449,51 @@ test('构建向导资料确认后不把第 01 步显示为执行中', () => {
   })
 
   assert.equal(steps.find((step) => step.key === 'material').status, 'done')
+})
+
+test('构建向导解析和图谱输入阶段优先使用资料真实状态避免卡片滞留执行中', () => {
+  const parseSteps = buildKnowledgeBaseWorkflowSteps({
+    query: {
+      materialIds: '9',
+      materialConfirmed: '1',
+    },
+    knowledgeBase: { id: 7, courseId: 'os' },
+    selection: {
+      materialIds: ['9'],
+      materials: [{ id: 9, parseStatus: 'done' }],
+    },
+    parseTaskRows: [{ id: '9', status: 'done' }],
+    buildRun: {
+      currentStage: 'parse',
+      status: 'running',
+    },
+  })
+
+  assert.equal(parseSteps.find((step) => step.key === 'parse').status, 'done')
+
+  const exportSteps = buildKnowledgeBaseWorkflowSteps({
+    query: {
+      materialIds: '9',
+      materialConfirmed: '1',
+    },
+    knowledgeBase: { id: 7, courseId: 'os' },
+    selection: {
+      materialIds: ['9'],
+      materials: [{ id: 9, parseStatus: 'done' }],
+    },
+    parseTaskRows: [{ id: '9', status: 'done' }],
+    exportArtifacts: {
+      rows: [{ id: '9', status: 'complete' }],
+      missingCount: 0,
+      completeCount: 1,
+    },
+    buildRun: {
+      currentStage: 'graph_input_export',
+      status: 'running',
+    },
+  })
+
+  assert.equal(exportSteps.find((step) => step.key === 'export').status, 'ready')
 })
 
 function createMemoryStorage(initialState = {}) {
@@ -2521,11 +2633,21 @@ test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义',
     config.workflowSteps.map((step) => step.key),
     ['material', 'parse', 'export', 'prompt', 'index', 'qa_check'],
   )
+  assert.equal(config.workflowSteps.find((step) => step.key === 'export').label, '生成图谱输入')
+  assert.equal(config.workflowSteps.find((step) => step.key === 'export').shortLabel, 'normalized / section / page 就绪')
   assert.equal(config.workflowSteps.at(-1).label, '问答效果验证')
 })
 
 test('构建页主操作统一走模型 operationKey 分发', () => {
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const parseBlock = modulePage.slice(
+    modulePage.indexOf('async function runBuildParseCheck'),
+    modulePage.indexOf('async function runBuildGraphInput'),
+  )
+  const graphInputBlock = modulePage.slice(
+    modulePage.indexOf('async function runBuildGraphInput'),
+    modulePage.indexOf('async function runBuildPromptConfirmation'),
+  )
 
   assert.match(modulePage, /async function handleBuildPrimaryAction\(\)/)
   assert.match(modulePage, /operationKey === 'parse-batch'/)
@@ -2536,6 +2658,10 @@ test('构建页主操作统一走模型 operationKey 分发', () => {
   assert.match(modulePage, /operationKey === 'index-build'/)
   assert.match(modulePage, /operationKey === 'qa-smoke'/)
   assert.doesNotMatch(modulePage, /if \(route\.name === 'knowledge-base-build'\) \{\n\s+await runKnowledgeBaseIndex\(\)/)
+  assert.match(parseBlock, /checkBuildRunParse\(buildRunId/)
+  assert.match(parseBlock, /startParse/)
+  assert.match(graphInputBlock, /exportGraphRag/)
+  assert.match(graphInputBlock, /syncBuildRunGraphInput\(buildRunId/)
 })
 
 test('构建页 QA smoke 提交后必须轮询 build-run 终态', () => {
@@ -2822,6 +2948,10 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
   const materialStep = readFileSync(new URL('./components/build-wizard/BuildStepMaterial.vue', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
+  const workflowStepsCss = componentsCss.slice(
+    componentsCss.indexOf('.workflow-progress-rail__steps'),
+    componentsCss.indexOf('.workflow-progress-rail__step.el-button'),
+  )
   const buildStepFiles = [
     './components/build-wizard/BuildStepMaterial.vue',
     './components/build-wizard/BuildStepParse.vue',
@@ -2833,6 +2963,8 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
 
   assert.match(workflowStepper, /class="workflow-progress-rail"/)
   assert.match(workflowStepper, /progress\.summary/)
+  assert.match(workflowStepper, /:title="step\.detail"/)
+  assert.match(workflowStepper, /:data-status="step\.status"/)
   assert.doesNotMatch(workflowStepper, /当前动作/)
   assert.match(modulePage, /class="build-step-stage"/)
   assert.match(modulePage, /ChevronLeft/)
@@ -2852,6 +2984,9 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.doesNotMatch(materialStep, /未勾选/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
   assert.match(componentsCss, /\.build-summary-chip\s*\{/)
+  assert.match(componentsCss, /grid-template-columns:\s*repeat\(3,\s*minmax\(220px,\s*1fr\)\)/)
+  assert.match(componentsCss, /white-space:\s*normal/)
+  assert.doesNotMatch(workflowStepsCss, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/)
   for (const file of buildStepFiles) {
     assert.equal(existsSync(new URL(file, import.meta.url)), true)
   }

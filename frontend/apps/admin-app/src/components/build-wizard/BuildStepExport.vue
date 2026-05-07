@@ -7,9 +7,18 @@ defineProps({
 })
 
 const fileLabels = {
-  'graphrag_normalized_docs.json': '标准化',
+  'graphrag_normalized_docs.json': '标准化文档',
   'graphrag_section_docs.json': '章节输入',
   'graphrag_page_docs.json': '分页输入',
+}
+
+const ARTIFACT_STATUS_LABELS = {
+  complete: '产物完整',
+  missing: '缺少产物',
+}
+
+function resolveArtifactStatusLabel(row = {}) {
+  return ARTIFACT_STATUS_LABELS[row.status] ?? row.displayStatus ?? '状态未知'
 }
 </script>
 
@@ -27,7 +36,7 @@ const fileLabels = {
       <article v-for="row in blocks.exportArtifacts?.items" :key="row.id" class="artifact-row">
         <header>
           <strong>{{ row.title }}</strong>
-          <StatusBadge :status="row.status" />
+          <StatusBadge :status="row.status" :label="resolveArtifactStatusLabel(row)" />
         </header>
         <div class="artifact-cells">
           <span v-for="file in row.requiredFiles" :key="`${row.id}-${file.fileName}`" class="artifact-cell" :data-status="file.status">

@@ -26,6 +26,7 @@ import { createApiError, normalizePageData } from '../../api/client.js'
 import {
   createCourse,
   deleteCourse,
+  listCourseMaterials,
   listCourses,
   updateCourse,
   uploadCourseCover,
@@ -831,7 +832,7 @@ async function handleBuildPrimaryAction() {
     return
   }
 
-  if (action.operationKey === 'parse-batch') {
+  if (action.operationKey === 'parse-batch' || action.operationKey === 'parse-refresh') {
     await runBuildParseCheck(action)
     return
   }
@@ -2017,22 +2018,123 @@ async function confirmBuildMaterialSelection(action) {
 }
 
 async function runBuildParseCheck(action) {
-  await runBuildRunRequest({
-    operationKey: 'material-parse',
-    request: (buildRunId) => checkBuildRunParse(buildRunId, { parseMissing: false }),
-    nextQuery: action.nextQuery,
+  if (actionRunning.value) {
+    return
+  }
+
+  const rows = config.value.blocks?.parseTasks?.items ?? []
+  const runnableRows = rows.filter((row) => ['pending', 'failed', 'todo'].includes(row.status))
+
+  if (action.operationKey === 'parse-refresh' || runnableRows.length === 0) {
+    await runBuildRunRequest({
+      operationKey: 'material-parse',
+      request: (buildRunId) => checkBuildRunParse(buildRunId, { parseMissing: false }),
+      nextQuery: action.nextQuery,
+    })
+    return
+  }
+
+  cancelLongTask()
+  activeOperationKey.value = 'material-parse'
+  actionState.value = 'running'
+  actionSnapshot.value = null
+
+  let buildRunId
+  try {
+    buildRunId = (await ensureBuildRun()).id
+    await checkBuildRunParse(buildRunId, { parseMissing: true })
+  } catch (error) {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+    return
+  }
+
+  const courseId = resolveBuildCourseId()
+  activeLongTaskController = createLongTaskController({
+    ...createParallelParseTaskOptions({
+      rows,
+      startParseRequest: startParse,
+      listMaterialsRequest: ({ signal } = {}) => listCourseMaterials(courseId, { page: 1, size: 100 }, createSignalHttpClient(signal)),
+    }),
+    limits: LONG_TASK_LIMITS.parse,
+    onState: (state, snapshot) => {
+      actionState.value = state
+      actionSnapshot.value = snapshot ?? null
+    },
+    onSuccess: async () => {
+      await navigateAfterBuildRunAction(buildRunId, action.nextQuery)
+    },
   })
+  startActiveLongTask(activeLongTaskController)
 }
 
 async function runBuildGraphInput(action) {
-  await runBuildRunRequest({
-    operationKey: 'material-export',
-    request: (buildRunId) => syncBuildRunGraphInput(buildRunId, {
-      jsonFile: 'section_docs.json',
-      exportMissing: false,
+  if (action.operationKey === 'export-confirm') {
+    await runBuildRunRequest({
+      operationKey: 'material-export',
+      request: (buildRunId) => syncBuildRunGraphInput(buildRunId, {
+        jsonFile: 'section_docs.json',
+        exportMissing: false,
+      }),
+      nextQuery: action.nextQuery,
+    })
+    return
+  }
+
+  if (actionRunning.value) {
+    return
+  }
+
+  const rows = config.value.blocks?.exportArtifacts?.items ?? []
+  const missingRows = rows.filter((row) => row.status === 'missing' || row.status === '待导出')
+
+  if (missingRows.length === 0) {
+    await runBuildRunRequest({
+      operationKey: 'material-export',
+      request: (buildRunId) => syncBuildRunGraphInput(buildRunId, {
+        jsonFile: 'section_docs.json',
+        exportMissing: false,
+      }),
+      nextQuery: action.nextQuery,
+    })
+    return
+  }
+
+  cancelLongTask()
+  activeOperationKey.value = 'material-export'
+  actionState.value = 'running'
+  actionSnapshot.value = null
+
+  let buildRunId
+  try {
+    buildRunId = (await ensureBuildRun()).id
+  } catch (error) {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+    return
+  }
+
+  activeLongTaskController = createLongTaskController({
+    ...createExportMissingTaskOptions({
+      rows,
+      payload: { mode: 'section', withPageDocs: true, force: false },
+      exportGraphRagRequest: exportGraphRag,
+      listParseResultsRequest: listParseResults,
     }),
-    nextQuery: action.nextQuery,
+    limits: LONG_TASK_LIMITS.export,
+    onState: (state, snapshot) => {
+      actionState.value = state
+      actionSnapshot.value = snapshot ?? null
+    },
+    onSuccess: async () => {
+      await syncBuildRunGraphInput(buildRunId, {
+        jsonFile: 'section_docs.json',
+        exportMissing: true,
+      })
+      await navigateAfterBuildRunAction(buildRunId, action.nextQuery)
+    },
   })
+  startActiveLongTask(activeLongTaskController)
 }
 
 async function runBuildPromptConfirmation(action) {
@@ -2087,6 +2189,21 @@ async function ensureBuildRun() {
   }
 
   return { id: buildRunId, created: true }
+}
+
+function resolveBuildCourseId() {
+  return String(
+    config.value.blocks?.knowledgeBase?.item?.courseId
+      ?? config.value.blocks?.buildRun?.item?.courseId
+      ?? config.value.raw?.knowledgeBase?.courseId
+      ?? '',
+  ).trim()
+}
+
+function createSignalHttpClient(signal) {
+  return {
+    get: (url, options = {}) => http.get(url, { ...options, signal }),
+  }
 }
 
 async function navigateAfterBuildRunAction(buildRunId, nextQuery = null) {

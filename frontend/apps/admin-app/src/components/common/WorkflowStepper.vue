@@ -44,6 +44,8 @@ function selectStep(step) {
         <el-button
           class="workflow-progress-rail__step"
           native-type="button"
+          :data-status="step.status"
+          :title="step.detail"
           @click="selectStep(step)"
         >
           <span class="workflow-step-index">{{ String(index + 1).padStart(2, '0') }}</span>

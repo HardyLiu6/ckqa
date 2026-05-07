@@ -5,11 +5,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
+import org.ysu.ckqaback.index.dto.BuildRunGraphInputRequest;
+import org.ysu.ckqaback.index.dto.BuildRunMaterialSelectionRequest;
 import org.ysu.ckqaback.index.dto.BuildRunQaSmokeRequest;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.QaWorkflowService;
@@ -19,9 +22,11 @@ import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.ParseResultsService;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,6 +54,8 @@ class KnowledgeBaseBuildRunServiceTest {
     private CkqaIntegrationProperties properties;
     private QaWorkflowService qaWorkflowService;
     private IndexRunsService indexRunsService;
+    private CourseMaterialsService courseMaterialsService;
+    private ParseResultsService parseResultsService;
     private KnowledgeBaseBuildRunService service;
 
     @BeforeEach
@@ -60,13 +67,17 @@ class KnowledgeBaseBuildRunServiceTest {
         properties.getGraphrag().setBuildRunsRoot(tempDir.toString());
         qaWorkflowService = mock(QaWorkflowService.class);
         indexRunsService = mock(IndexRunsService.class);
+        courseMaterialsService = mock(CourseMaterialsService.class);
+        parseResultsService = mock(ParseResultsService.class);
         service = new KnowledgeBaseBuildRunService(
                 knowledgeBasesService,
                 buildRunsStore,
                 workspaceService,
                 properties,
                 qaWorkflowService,
-                indexRunsService
+                indexRunsService,
+                courseMaterialsService,
+                parseResultsService
         );
     }
 
@@ -150,6 +161,65 @@ class KnowledgeBaseBuildRunServiceTest {
                 .extracting("code")
                 .isEqualTo(ApiResultCode.KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING.getCode());
         verify(buildRunsStore, never()).save(any());
+    }
+
+    @Test
+    void shouldRejectMaterialSelectionWhenMaterialBelongsToOtherCourse() {
+        KnowledgeBaseBuildRuns buildRun = buildRunWithoutActiveIndex();
+        when(buildRunsStore.getRequiredById(27L)).thenReturn(buildRun);
+        when(courseMaterialsService.getRequiredById(88L)).thenReturn(courseMaterial(88L, "ds"));
+
+        BuildRunMaterialSelectionRequest request = new BuildRunMaterialSelectionRequest();
+        request.setMaterialIds(List.of(88L));
+
+        assertThatThrownBy(() -> service.updateMaterialSelection(27L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("资料不属于当前知识库课程")
+                .extracting("code")
+                .isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+        verify(buildRunsStore, never()).updateById(any());
+    }
+
+    @Test
+    void shouldRejectGraphInputConfirmationWhenExportArtifactsMissing() {
+        KnowledgeBaseBuildRuns buildRun = buildRunWithoutActiveIndex();
+        buildRun.setSelectedMaterialIds("[31,32]");
+        when(buildRunsStore.getRequiredById(27L)).thenReturn(buildRun);
+        when(courseMaterialsService.getRequiredById(31L)).thenReturn(courseMaterial(31L, "os"));
+        when(courseMaterialsService.getRequiredById(32L)).thenReturn(courseMaterial(32L, "os"));
+        when(parseResultsService.hasCompleteGraphRagExport(31L, "section", true)).thenReturn(true);
+        when(parseResultsService.hasCompleteGraphRagExport(32L, "section", true)).thenReturn(false);
+
+        BuildRunGraphInputRequest request = new BuildRunGraphInputRequest();
+        request.setJsonFile("section_docs.json");
+        request.setExportMissing(false);
+
+        assertThatThrownBy(() -> service.syncGraphInput(27L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("图谱输入产物缺失，请先生成缺失图谱输入")
+                .extracting("code")
+                .isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+        verify(buildRunsStore, never()).updateById(any());
+    }
+
+    @Test
+    void shouldConfirmGraphInputWhenSelectedMaterialExportsAreComplete() {
+        KnowledgeBaseBuildRuns buildRun = buildRunWithoutActiveIndex();
+        buildRun.setSelectedMaterialIds("[31]");
+        when(buildRunsStore.getRequiredById(27L)).thenReturn(buildRun);
+        when(buildRunsStore.updateById(any(KnowledgeBaseBuildRuns.class))).thenReturn(true);
+        when(courseMaterialsService.getRequiredById(31L)).thenReturn(courseMaterial(31L, "os"));
+        when(parseResultsService.hasCompleteGraphRagExport(31L, "section", true)).thenReturn(true);
+
+        BuildRunGraphInputRequest request = new BuildRunGraphInputRequest();
+        request.setJsonFile("section_docs.json");
+        request.setExportMissing(false);
+
+        service.syncGraphInput(27L, request);
+
+        assertThat(buildRun.getCurrentStage()).isEqualTo("graph_input_export");
+        assertThat(buildRun.getBuildMetadata()).contains("\"exportMissing\":false");
+        verify(buildRunsStore).updateById(buildRun);
     }
 
     @Test
@@ -284,6 +354,15 @@ class KnowledgeBaseBuildRunServiceTest {
         knowledgeBase.setKbCode("os-main");
         knowledgeBase.setName("操作系统主知识库");
         return knowledgeBase;
+    }
+
+    private CourseMaterials courseMaterial(Long id, String courseId) {
+        CourseMaterials material = new CourseMaterials();
+        material.setId(id);
+        material.setCourseId(courseId);
+        material.setDisplayName("资料 " + id);
+        material.setParseStatus("done");
+        return material;
     }
 
     private KnowledgeBaseBuildRuns buildRunWithActiveIndex() {

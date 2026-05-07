@@ -6,7 +6,7 @@ import {
 export const BUILD_STEP_LABELS = {
   material: '资料选择',
   parse: '解析检查',
-  export: '图谱输入',
+  export: '生成图谱输入',
   prompt: 'Prompt确认',
   index: '索引构建',
   qa_check: '问答验证',
@@ -260,40 +260,44 @@ const configs = {
     workflowSteps: [
       {
         key: 'material',
-        label: '选择课程资料',
+        label: '资料选择',
         state: 'ready',
         status: 'ready',
         detail: '选择本次构建的课程资料',
+        shortLabel: '勾选本次构建资料',
         conditions: ['课程已创建', '当前用户具备课程资料读取权限'],
         actionLabel: '确认勾选',
         logLabel: '查看资料记录',
       },
       {
         key: 'parse',
-        label: '解析状态检查',
+        label: '解析检查',
         state: 'blocked',
         status: 'blocked',
         detail: '资料需达到 done 后才能建索引',
+        shortLabel: '资料解析完成后继续',
         conditions: ['资料对象已上传', 'MinerU 解析状态为 done'],
-        actionLabel: '并行解析未完成资料',
+        actionLabel: '开始解析待处理资料',
         logLabel: '查看解析日志',
       },
       {
         key: 'export',
-        label: '导出图谱输入',
+        label: '生成图谱输入',
         state: 'ready',
         status: 'ready',
         detail: '生成 normalized / section / page 图谱输入',
+        shortLabel: 'normalized / section / page 就绪',
         conditions: ['解析结果存在', '标准化文档通过导出校验'],
-        actionLabel: '导出缺失输入',
+        actionLabel: '生成缺失图谱输入',
         logLabel: '查看导出记录',
       },
       {
         key: 'prompt',
-        label: '提示词调优',
+        label: 'Prompt确认',
         state: 'blocked',
         status: 'blocked',
         detail: '确认本次索引沿用当前活动提示词',
+        shortLabel: '确认活动提示词',
         conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
         actionLabel: '确认提示词策略',
         logLabel: '查看提示词策略',
@@ -304,6 +308,7 @@ const configs = {
         state: 'blocked',
         status: 'blocked',
         detail: '等待导出输入确认',
+        shortLabel: '创建并激活索引',
         conditions: ['GraphRAG 导出产物存在', 'output/lancedb 可写'],
         actionLabel: '开始构建索引',
         logLabel: '查看索引日志',
@@ -314,6 +319,7 @@ const configs = {
         state: 'blocked',
         status: 'blocked',
         detail: '验证会话进入问答列表并可过滤',
+        shortLabel: '激活索引后验证',
         conditions: ['索引运行成功', 'Java /api/v1 问答入口可用'],
         actionLabel: '发起问答验证',
         logLabel: '查看验证会话',
@@ -779,7 +785,7 @@ function resolveParsePrimaryAction(context = {}) {
   }
 
   if (parseSummary && (Number(parseSummary.pending ?? 0) > 0 || Number(parseSummary.failed ?? 0) > 0)) {
-    return createBuildAction({ label: '并行解析未完成资料', operationKey: 'parse-batch' })
+    return createBuildAction({ label: '开始解析待处理资料', operationKey: 'parse-batch' })
   }
 
   const statuses = rows.map((row) => normalizeParseStatus(row.status))
@@ -788,7 +794,7 @@ function resolveParsePrimaryAction(context = {}) {
   }
 
   if (statuses.some((status) => ['pending', 'failed'].includes(status))) {
-    return createBuildAction({ label: '并行解析未完成资料', operationKey: 'parse-batch' })
+    return createBuildAction({ label: '开始解析待处理资料', operationKey: 'parse-batch' })
   }
 
   return createBuildAction({
@@ -805,7 +811,7 @@ function resolveExportPrimaryAction(context = {}) {
 
   if (parseSummary && resolveParseSummaryHasWork(parseSummary)) {
     return createBuildAction({
-      label: '导出图谱输入',
+      label: '生成图谱输入',
       operationKey: 'export-blocked',
       disabled: true,
       disabledReason: '请先完成所有资料解析',
@@ -816,7 +822,7 @@ function resolveExportPrimaryAction(context = {}) {
 
   if (parseStatuses.some((status) => ['running', 'pending', 'failed'].includes(status))) {
     return createBuildAction({
-      label: '导出图谱输入',
+      label: '生成图谱输入',
       operationKey: 'export-blocked',
       disabled: true,
       disabledReason: '请先完成所有资料解析',
@@ -830,7 +836,7 @@ function resolveExportPrimaryAction(context = {}) {
     : !isExportStateComplete(exportState)
 
   if (exportIncomplete) {
-    return createBuildAction({ label: '导出缺失输入', operationKey: 'export-missing' })
+    return createBuildAction({ label: '生成缺失图谱输入', operationKey: 'export-missing' })
   }
 
   if (!isQueryConfirmed(context.query?.exportConfirmed)) {
@@ -838,7 +844,7 @@ function resolveExportPrimaryAction(context = {}) {
     const { promptConfirmed, ...queryWithoutPromptConfirm } = queryWithConfirm
 
     return createBuildAction({
-      label: '确认图谱输入',
+      label: '确认图谱输入并进入 Prompt 确认',
       operationKey: 'export-confirm',
       nextStepKey: 'prompt',
       nextQuery: resolveBuildStepQuery(queryWithoutPromptConfirm, 'prompt'),
@@ -846,7 +852,7 @@ function resolveExportPrimaryAction(context = {}) {
   }
 
   return createBuildAction({
-    label: '进入提示词调优',
+    label: '进入 Prompt 确认',
     operationKey: 'step-prompt',
     nextStepKey: 'prompt',
     nextQuery: resolveBuildStepQuery(context.query ?? {}, 'prompt'),

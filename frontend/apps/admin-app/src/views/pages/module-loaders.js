@@ -1164,8 +1164,9 @@ export function buildKnowledgeBaseWorkflowSteps({
       key: 'parse',
       status: statusByStep.parse,
       detail: hasMaterialSelection ? `解析完成 ${parseSummary.done}/${parseTaskRows.length}` : '请先选择课程资料',
+      shortLabel: '资料解析完成后继续',
       conditions: ['资料对象已上传', 'MinerU 解析状态为 done'],
-      actionLabel: parseSummary.pending > 0 || parseSummary.failed > 0 ? '并行解析未完成资料' : '检查图谱输入',
+      actionLabel: parseSummary.pending > 0 || parseSummary.failed > 0 ? '开始解析待处理资料' : '检查图谱输入',
       logLabel: '查看解析日志',
       primaryAction: resolveBuildPrimaryAction('parse', {
         query,
@@ -1177,8 +1178,9 @@ export function buildKnowledgeBaseWorkflowSteps({
       key: 'export',
       status: statusByStep.export,
       detail: exportComplete ? 'GraphRAG 必需输入产物已完整' : '需要 normalized、section 与 page 导出产物',
+      shortLabel: 'normalized / section / page 就绪',
       conditions: ['解析结果存在', 'section_docs/page_docs 已导出'],
-      actionLabel: exportComplete ? '确认图谱输入' : '导出缺失输入',
+      actionLabel: exportComplete ? '确认图谱输入并进入 Prompt 确认' : '生成缺失图谱输入',
       logLabel: '查看导出记录',
       primaryAction: resolveBuildPrimaryAction('export', {
         query,
@@ -1194,6 +1196,7 @@ export function buildKnowledgeBaseWorkflowSteps({
       key: 'prompt',
       status: statusByStep.prompt,
       detail: promptConfirmed ? '已确认沿用当前活动提示词' : '确认本次索引沿用 GraphRAG 当前活动提示词',
+      shortLabel: '确认活动提示词',
       conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
       actionLabel: promptConfirmed ? '进入创建索引' : '确认提示词策略',
       logLabel: '查看提示词策略',
@@ -1206,6 +1209,7 @@ export function buildKnowledgeBaseWorkflowSteps({
       key: 'index',
       status: statusByStep.index,
       detail: indexAvailability.warning ?? (activeIndexRunId ? `激活索引 #${activeIndexRunId}` : '等待创建索引运行'),
+      shortLabel: '创建并激活索引',
       conditions: ['GraphRAG 导出产物存在', 'Java 后端可创建索引运行'],
       actionLabel: '开始构建索引',
       logLabel: '查看索引日志',
@@ -1220,6 +1224,7 @@ export function buildKnowledgeBaseWorkflowSteps({
       key: 'qa_check',
       status: statusByStep.qa_check,
       detail: activeIndexRunId ? `激活索引 #${activeIndexRunId} 可进入问答验证` : '缺少激活索引，暂不可验证',
+      shortLabel: '激活索引后验证',
       conditions: ['索引运行成功并激活', 'Java /api/v1 问答入口可用'],
       actionLabel: '发起问答验证',
       actionDisabled: !activeIndexRunId,
@@ -1354,6 +1359,8 @@ function applyBuildRunStageStatuses(baseStatuses, buildRun) {
       : runStatus === 'done'
         ? 'done'
         : baseStatuses.material
+  } else if (['parse', 'export'].includes(stageKey) && runStatus !== 'failed') {
+    nextStatuses[stageKey] = baseStatuses[stageKey]
   } else {
     nextStatuses[stageKey] = runStatus
   }

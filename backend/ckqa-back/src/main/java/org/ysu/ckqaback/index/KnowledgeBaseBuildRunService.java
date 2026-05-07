@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.index;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.IndexRuns;
+import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
@@ -32,9 +34,11 @@ import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.service.CourseMaterialsService;
 import org.ysu.ckqaback.service.IndexRunsService;
 import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.ParseResultsService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,6 +49,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -62,6 +67,8 @@ public class KnowledgeBaseBuildRunService {
     private final CkqaIntegrationProperties properties;
     private final QaWorkflowService qaWorkflowService;
     private final IndexRunsService indexRunsService;
+    private final CourseMaterialsService courseMaterialsService;
+    private final ParseResultsService parseResultsService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
@@ -231,7 +238,9 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse updateMaterialSelection(Long id, BuildRunMaterialSelectionRequest request) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
-        buildRun.setSelectedMaterialIds(toJson(request == null ? List.of() : nullToEmpty(request.getMaterialIds())));
+        List<Long> materialIds = request == null ? List.of() : nullToEmpty(request.getMaterialIds());
+        assertMaterialIdsBelongToBuildRun(buildRun, materialIds);
+        buildRun.setSelectedMaterialIds(toJson(materialIds));
         buildRun.setStatus("pending");
         updateStage(buildRun, "material_selection", stageMetadata("material_selection", Map.of("updated", true)));
         try {
@@ -255,9 +264,15 @@ public class KnowledgeBaseBuildRunService {
     public BuildRunDetailResponse syncGraphInput(Long id, BuildRunGraphInputRequest request) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         String jsonFile = request == null || request.getJsonFile() == null ? "section_docs.json" : request.getJsonFile();
+        boolean exportMissing = request == null || !Boolean.FALSE.equals(request.getExportMissing());
+        if (!exportMissing) {
+            assertGraphInputComplete(buildRun);
+        } else {
+            assertMaterialIdsBelongToBuildRun(buildRun, selectedMaterialIds(buildRun));
+        }
         updateStage(buildRun, "graph_input_export", stageMetadata("graph_input_export", Map.of(
                 "jsonFile", jsonFile,
-                "exportMissing", request == null || !Boolean.FALSE.equals(request.getExportMissing())
+                "exportMissing", exportMissing
         )));
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
     }
@@ -321,6 +336,61 @@ public class KnowledgeBaseBuildRunService {
         }
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
+    }
+
+    private void assertGraphInputComplete(KnowledgeBaseBuildRuns buildRun) {
+        List<Long> materialIds = selectedMaterialIds(buildRun);
+        if (materialIds.isEmpty()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "请先选择课程资料");
+        }
+        assertMaterialIdsBelongToBuildRun(buildRun, materialIds);
+        boolean hasMissing = materialIds.stream()
+                .anyMatch(materialId -> !parseResultsService.hasCompleteGraphRagExport(materialId, "section", true));
+        if (hasMissing) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "图谱输入产物缺失，请先生成缺失图谱输入");
+        }
+    }
+
+    private void assertMaterialIdsBelongToBuildRun(KnowledgeBaseBuildRuns buildRun, List<Long> materialIds) {
+        for (Long materialId : materialIds) {
+            if (materialId == null) {
+                continue;
+            }
+            CourseMaterials material = courseMaterialsService.getRequiredById(materialId);
+            if (!Objects.equals(buildRun.getCourseId(), material.getCourseId())) {
+                throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "资料不属于当前知识库课程");
+            }
+        }
+    }
+
+    private List<Long> selectedMaterialIds(KnowledgeBaseBuildRuns buildRun) {
+        if (buildRun == null || !StringUtils.hasText(buildRun.getSelectedMaterialIds())) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(buildRun.getSelectedMaterialIds(), new TypeReference<List<Object>>() {})
+                    .stream()
+                    .map(this::toLongOrNull)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+        } catch (Exception exception) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "资料选择快照格式非法");
+        }
+    }
+
+    private Long toLongOrNull(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 
     private List<KnowledgeBaseBuildRuns> gcCandidates(List<KnowledgeBaseBuildRuns> buildRuns) {
