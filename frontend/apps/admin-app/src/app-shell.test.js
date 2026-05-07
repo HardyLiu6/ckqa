@@ -38,6 +38,10 @@ import {
   STATUS_PILL_TONES,
   resolvePillTone,
 } from './components/common/status-pill-model.js'
+import {
+  PAGE_SIZE_OPTIONS,
+  resolveTotalPages,
+} from './components/common/pager-model.js'
 import { routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -3439,6 +3443,11 @@ test('CkStatusPill model exports are wired', () => {
   assert.ok(STATUS_PILL_TONES)
   assert.equal(typeof resolvePillTone, 'function')
   assert.equal(resolvePillTone('failed'), 'danger')
+})
+
+test('CkPager model exports are wired', () => {
+  assert.deepEqual(PAGE_SIZE_OPTIONS, [20, 50, 100])
+  assert.equal(resolveTotalPages({ total: 50, pageSize: 20 }), 3)
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
