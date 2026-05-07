@@ -5,3 +5,19 @@ $space-4: 16px;
 $space-5: 20px;
 $space-6: 24px;
 $space-8: 32px;
+$space-10: 40px;
+$space-12: 48px;
+$space-16: 64px;
+
+:root {
+  --ckqa-space-1: #{$space-1};
+  --ckqa-space-2: #{$space-2};
+  --ckqa-space-3: #{$space-3};
+  --ckqa-space-4: #{$space-4};
+  --ckqa-space-5: #{$space-5};
+  --ckqa-space-6: #{$space-6};
+  --ckqa-space-8: #{$space-8};
+  --ckqa-space-10: #{$space-10};
+  --ckqa-space-12: #{$space-12};
+  --ckqa-space-16: #{$space-16};
+}

@@ -1,4 +1,12 @@
-$shadow-xs: 0 1px 2px rgb(15 23 42 / 8%);
-$shadow-sm: 0 6px 18px rgb(15 23 42 / 8%);
-$shadow-md: 0 16px 40px rgb(15 23 42 / 10%);
-$shadow-lg: 0 18px 42px rgb(15 23 42 / 14%);
+$shadow-xs: 0 1px 2px rgb(26 23 17 / 6%);
+$shadow-sm: 0 6px 18px rgb(26 23 17 / 8%);
+$shadow-md: 0 12px 32px rgb(26 23 17 / 10%);
+$shadow-lg: 0 24px 56px rgb(26 23 17 / 14%);
+
+:root {
+  --ckqa-shadow-xs: #{$shadow-xs};
+  --ckqa-shadow-sm: #{$shadow-sm};
+  --ckqa-shadow-md: #{$shadow-md};
+  --ckqa-shadow-lg: #{$shadow-lg};
+  --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
+}

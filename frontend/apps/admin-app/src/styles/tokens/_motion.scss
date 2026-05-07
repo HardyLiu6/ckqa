@@ -2,6 +2,9 @@
   --ckqa-duration-fast: 160ms;
   --ckqa-duration-base: 220ms;
   --ckqa-duration-slow: 320ms;
+  --ckqa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ckqa-ease-entrance: cubic-bezier(0, 0, 0.2, 1);
+  --ckqa-ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 $duration-fast: 160ms;
