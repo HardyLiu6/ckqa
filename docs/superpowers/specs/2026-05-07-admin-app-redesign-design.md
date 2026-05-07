@@ -101,14 +101,15 @@
 --ckqa-accent-contrast: #ffffff;
 
 // semantic — each has solid + soft pair
---ckqa-success: #4a7c59;
+// 注：semantic 色相必须与 accent 色相错开，避免徽章看起来像主操作色
+--ckqa-success: #4a7c59;          // 苔藓绿
 --ckqa-success-soft: #eef5ee;
---ckqa-running: #b06c2c;
---ckqa-running-soft: #fdf3ee;
---ckqa-warning: #b8860b;
+--ckqa-running: #c08a3a;          // 蜂蜜琥珀（与 accent 橙赭区分）
+--ckqa-running-soft: #faf1e1;
+--ckqa-warning: #b8860b;          // 较深琥珀，与 running 拉开明度
 --ckqa-warning-soft: #fef5d7;
---ckqa-blocked: #6b6760;
---ckqa-blocked-soft: #f0ebe1;
+--ckqa-blocked: #8a847a;          // 中性偏冷灰（与 text-muted #6b6760 错开）
+--ckqa-blocked-soft: #ece8df;
 --ckqa-danger: #c4413a;
 --ckqa-danger-soft: #fceeec;
 
@@ -141,12 +142,12 @@
 
   --ckqa-success: #6a9b78;
   --ckqa-success-soft: #1f2d22;
-  --ckqa-running: #d4914c;
-  --ckqa-running-soft: #382a1d;
-  --ckqa-warning: #d4a13d;
-  --ckqa-warning-soft: #38301a;
-  --ckqa-blocked: #8a847a;
-  --ckqa-blocked-soft: #2e2a24;
+  --ckqa-running: #d4a04c;          // 暗色蜂蜜
+  --ckqa-running-soft: #38301d;
+  --ckqa-warning: #d4914c;
+  --ckqa-warning-soft: #382a1d;
+  --ckqa-blocked: #6e6a62;          // 暗色冷中灰
+  --ckqa-blocked-soft: #2a2724;
   --ckqa-danger: #d96860;
   --ckqa-danger-soft: #38201e;
 
@@ -163,21 +164,36 @@
                   "Microsoft YaHei", system-ui, sans-serif;
 --ckqa-font-mono: "JetBrains Mono", "DM Mono", "Cascadia Code", ui-monospace, monospace;
 
-// type scale
---ckqa-text-xs:    11px / 16px;
---ckqa-text-sm:    12px / 18px;
---ckqa-text-base:  13px / 20px;
---ckqa-text-md:    14px / 22px;
---ckqa-text-lg:    15px / 24px;
---ckqa-text-xl:    18px / 26px;
---ckqa-text-2xl:   22px / 30px;
---ckqa-text-3xl:   28px / 36px;
+// type scale —— size / line-height 拆成两个变量，方便单独引用
+--ckqa-text-xs-size: 11px;     --ckqa-text-xs-line: 16px;
+--ckqa-text-sm-size: 12px;     --ckqa-text-sm-line: 18px;
+--ckqa-text-base-size: 13px;   --ckqa-text-base-line: 20px;
+--ckqa-text-md-size: 14px;     --ckqa-text-md-line: 22px;
+--ckqa-text-lg-size: 15px;     --ckqa-text-lg-line: 24px;
+--ckqa-text-xl-size: 18px;     --ckqa-text-xl-line: 26px;
+--ckqa-text-2xl-size: 22px;    --ckqa-text-2xl-line: 30px;
+--ckqa-text-3xl-size: 28px;    --ckqa-text-3xl-line: 36px;
 
 // weights
 --ckqa-fw-regular: 400;
 --ckqa-fw-medium: 500;
 --ckqa-fw-semibold: 600;
 ```
+
+配套 SCSS 工具混合（`styles/mixins/_typography.scss`）：
+
+```scss
+@mixin text-md {
+  font-size: var(--ckqa-text-md-size);
+  line-height: var(--ckqa-text-md-line);
+}
+// 其余等级类推
+```
+
+**字体加载策略**：Inter / DM Sans / JetBrains Mono **不强制托管**。
+
+- 默认依赖 `system-ui` + 中文系统字体（PingFang SC / Microsoft YaHei）兜底，保证零网络等待与零 CLS。
+- 如未来要强化品牌一致性，再用 `@font-face` 延迟加载 Inter Variable，且加 `font-display: optional` 防止首屏跳字。
 
 页面标题统一使用 `text-2xl / weight-medium`（仿 Anthropic 文档），不用 weight 700 的"硬粗体"。
 
@@ -235,9 +251,15 @@
 
 ```scss
 :root {
-  --el-color-primary: var(--ckqa-accent-strong);
-  --el-color-primary-light-3: var(--ckqa-accent);
+  // 把 base accent 给 primary，让 EL 自己派生 light-{1..9}/dark-2
+  --el-color-primary: var(--ckqa-accent);
+  --el-color-primary-dark-2: var(--ckqa-accent-strong);
+  // 为减少明显跳色，对最常用的 light-3 / light-9 显式指定
+  --el-color-primary-light-3: #e89377;
+  --el-color-primary-light-5: #f0ae97;
+  --el-color-primary-light-7: #f7c9b9;
   --el-color-primary-light-9: var(--ckqa-accent-soft);
+
   --el-color-success: var(--ckqa-success);
   --el-color-warning: var(--ckqa-warning);
   --el-color-danger: var(--ckqa-danger);
@@ -265,7 +287,8 @@
 }
 ```
 
-这样无论是 `el-button` / `el-input` / `el-table` / `el-dialog`，都自然继承 CKQA 视觉，不需要逐一改 class。
+- 关键修正：`--el-color-primary` 必须对应 base accent（`#d97757`），让 EL 内部 hover/active 派生的 `light-3..light-9` 走"由浅到深"的自然过渡，避免 hover 把按钮变得更暗。`--ckqa-accent-strong` 对应 `--el-color-primary-dark-2`（按下态）。
+- 这样无论是 `el-button` / `el-input` / `el-table` / `el-dialog`，都自然继承 CKQA 视觉，不需要逐一改 class。
 
 ## 5. 信息架构与导航
 
@@ -281,7 +304,7 @@
 ─────────────
 运维
   · 问答会话
-  · 检索日志
+  · 检索日志       ← 新增列表 placeholder（coming-soon），点击进入"敬请期待"页
   · 知识库验证   ← 原 "QA 冒烟" 改名
 ─────────────
 设置
@@ -291,6 +314,8 @@
 ```
 
 `primaryNavigation` 在 `router/routes.js` 中重写为带 `section` 字段的扁平数组，由 `SideNavigation.vue` 按 `section` 分段渲染。每个 item 可附 `count` 字段用于显示徽标（如未读、构建中数量）。
+
+> 关于"检索日志"：当前 `routes.js` 只定义了 `/app/retrieval-logs/:logId` 的详情 placeholder。重设计同时新增 `/app/retrieval-logs` 列表 placeholder（仍为 `state: 'coming-soon'`），保证侧栏点击有目的地，避免悬挂入口。详情何时落地不在本设计范围。
 
 ### 5.2 路由层调整
 
@@ -304,9 +329,42 @@
 [Logo + CKQA Console] ── [范围芯片 ◉ 教师 · 操作系统课程] ───── [⌘K 命令面板] [◐ 主题] [🔔 通知] [LJ 头像]
 ```
 
-- 范围芯片显示当前用户视角的实际数据范围；点击展开角色 / 课程切换。
-- ⌘K 是新增的全局命令面板，覆盖：跳转、搜索课程/资料/知识库、新建。
-- 通知图标点开下拉，展示进行中的任务、近期失败、需要操作的事项；这是 Dashboard "进行中任务"模块的轻量替身，让任意页都可一窥状态。
+#### 5.3.1 范围芯片（Scope Chip）
+
+显示当前用户视角下的"角色 + 默认课程过滤"，是 Dashboard 角色差异化的真正驱动。
+
+- **数据来源**：`useAuthStore.state.currentUser` 已有的 `roles[] / courseMemberships[]`。
+- **可切换性**：
+  - 平台管理员：芯片显示"管理员 · 全平台"，**不可切换**。
+  - 教师 / 助教：芯片显示"教师 · {当前课程名}"，**可切换**——下拉列出该用户参与的所有课程，以及"全部我的课程"聚合视图。
+- **作用域**：选中后写入 Pinia `useScopeStore.state.activeCourseId`（持久化到 `localStorage.ckqa.scope`）。所有列表/工作台数据的请求自动注入 `courseId` 过滤参数。
+- **是否影响 URL**：**不影响**，URL 保持当前页面 path；切换后只刷新当前页数据。这样切回"上次的资料详情链接"仍可命中。
+- **刷新后保留**：是。`localStorage` 持久化。
+
+#### 5.3.2 ⌘K 命令面板（CkCommandPalette）
+
+全局快捷搜索 + 跳转。
+
+- **快捷键**：`⌘K`（macOS）/ `Ctrl+K`（Win/Linux）。在所有 `INPUT/TEXTAREA/contenteditable` 焦点中**不**触发，避免破坏输入。
+- **结果分组**：① 跳转（导航 + 当前 scope 下的近期访问）② 课程 ③ 资料（按文件名搜索，调用现有 `/api/v1/materials?q=`）④ 知识库 ⑤ 操作（"新建知识库 / 上传资料 / 知识库验证"等动作）。
+- **权限过滤**：每条结果带 `permissions` 字段，`useAuthStore.canAccess` 过滤；无权访问的条目不出现。
+- **分页**：每组 ≤ 5 条，`Show all in {section} →` 点开跳到对应列表并预填搜索词。
+- **小屏退化**：`< 1024px` 顶栏图标退化为放大镜按钮，点击后展开全屏 modal。
+- **依赖**：可暂时不接 `/api/v1/global-search`，按"前端聚合各列表搜索接口"实现，每个分类一个并发请求 + 200ms 防抖。
+
+#### 5.3.3 通知下拉（顶栏 🔔）
+
+是 Dashboard 进行中任务的轻量替身，让任意页都能瞥一眼运行状态。**不引入独立通知系统**。
+
+- **数据源**：复用 `/api/v1/index-runs?status=running` + `/api/v1/material-parse-tasks?status=running` 两个接口，前端聚合（同 Dashboard "进行中任务"）。失败/异常类追加最近 24h 的 `status=failed`，最多 5 条。
+- **更新策略**：进入页面拉一次 + 每 60s 轮询；不引入 WebSocket。
+- **已读语义**：仅前端记忆——`localStorage.ckqa.notifications.lastSeenAt` 存"上次打开下拉的时间"，红点徽标只看"是否有比 lastSeenAt 更新的失败事件"。
+- **dismiss**：单条不支持 dismiss；任务终态后自动滚出。
+
+#### 5.3.4 主题与头像
+
+- 主题切换：`◐` 图标点击直接切换 light/dark，无下拉。
+- 头像点击：下拉显示当前用户 + 注销 + 系统健康 + 关于。
 
 ### 5.4 左侧栏
 
@@ -320,14 +378,21 @@
 ### 5.5 面包屑
 
 ```text
-[一级段名] / [所在路径资源] / [当前]
+[一级段名] / [上下文资源 1] / [上下文资源 2] / [当前]
 ```
 
 - 一级段名是导航段名（生产 / 运维 / 设置）或工作台。
-- 中间层级是上下文资源（如：操作系统课程）。
+- 中间层级是上下文资源（如 `操作系统课程` → `数据结构第3章.pdf`）；理论上可有多层。
 - 当前层不可点。
 
-`console-breadcrumb-model.js` 已经存在，扩展支持新的段映射；移除原始的 status badge（"mvp / upcoming"），改为只在 `RouteState` 页面内部显示。
+**层级超过 4 层时的截断规则**：当总层级 > 4，保留首段、末两段，中间用 `…` 折叠为可悬停展开的 dropdown。例：
+
+```text
+生产 / … / 数据结构第3章.pdf / 解析进度
+   悬停 …  →  展开 [操作系统课程, 第三章节]
+```
+
+`console-breadcrumb-model.js` 已经存在，扩展支持新的段映射 + 截断逻辑；移除原始的 status badge（"mvp / upcoming"），改为只在 `RouteState` 页面内部显示。
 
 ## 6. 布局壳
 
@@ -394,7 +459,7 @@ Side                Content
 └──────────┴─────────────────────────────┴───────────────────┘
 ```
 
-- 左侧为表单区（占 7/12），右侧为构建运行实时面板（占 5/12，sticky 可独立滚动）。
+- 左侧为表单区，右侧为构建运行实时面板（sticky 可独立滚动）。整体使用 CSS Grid `grid-template-columns: 7fr 5fr; gap: var(--ckqa-space-6)`；当宽度 `< 1280px` 退化为 `1fr`（表单与面板上下排列）。
 - 步骤指示器始终可见，每一步是一个 chip，已完成 = 暖橙实心，进行中 = 暖橙脉冲，未到 = 灰描边。
 - 构建尚未启动时，右侧面板显示"提交后将在此实时显示构建过程"。
 - 启动后右侧面板转为活动流：当前阶段、阶段进度条、日志摘要（最多 5 行）、错误高亮、继续/重试/取消按钮。
@@ -424,20 +489,35 @@ Side                Content
 | 组件 | 用途 | 关键 Props |
 | --- | --- | --- |
 | `<CkPageHero>` | 页头：标题 + 副标 + 操作区 | `title / subtitle / actions` slot |
-| `<CkBreadcrumbs>` | 重写后的面包屑 | `items[]` |
+| `<CkBreadcrumbs>` | 重写后的面包屑（含截断） | `items[]`, `maxVisible=4` |
 | `<CkStatusPill>` | 通用状态徽章 | `tone: success / running / warning / blocked / danger / neutral`, `label` |
 | `<CkPipelineHero>` | Dashboard 5 段生产流水线 | `stages[]`, `activeKey` |
 | `<CkActivityFeed>` | 活动时间线 | `events[]`（type / title / sub / when） |
 | `<CkTaskList>` | 进行中任务（带进度条） | `tasks[]` |
 | `<CkResourceCard>` | 资源列表卡片 | `title / description / status / meta / actions` |
 | `<CkEmptyState>` | 空态 | `icon / title / description / cta` |
+| `<CkSkeleton>` | 加载占位骨架 | `variant: card / row / text / avatar`, `count`, `animated` |
 | `<CkInfoTable>` | 详情页 key-value 信息块 | `entries[]` |
 | `<CkSplitProgress>` | 分阶段进度条（向导 + 解析共用） | `steps[]`, `currentStep`, `currentPct` |
 | `<CkLogStream>` | 滚动日志面板（向导右侧、解析进度共用） | `lines[]`, `autoFollow` |
 | `<CkRetrievalPanel>` | 问答检索诊断面板 | `chunks / subQueries / trace / sources` |
-| `<CkCommandPalette>` | ⌘K 命令面板 | 全局挂载 |
+| `<CkCommandPalette>` | ⌘K 命令面板，全局挂载（详见 5.3.2） | `groups[]`（外部注入数据源） |
+| `<CkPager>` | 列表分页控件（与 Element Plus 分页对齐） | `page / pageSize / total / variant: 'page' \| 'load-more'` |
 
 每个组件单文件 < 300 行，对应一个 `*.test.js` 单元测试（基于现有 vitest）。
+
+**加载态约定**：
+
+- **首屏 / 切换页面**：使用 `<CkSkeleton variant="card | row" />` 占位卡片轮廓，避免空白闪烁。
+- **页内局部刷新**（如表格筛选）：用 inline spinner（透明度蒙层），不替换整页骨架。
+- **行内异步动作**（如"重试"按钮触发后）：按钮自身进入 loading 状态。
+- **SSE 流式区域**：开始连接前显示一个 0.6 倍透明度的"等待开始"提示，连接成功后由实时内容替换；不使用骨架。
+
+**列表分页约定**：
+
+- **资源列表（课程 / 资料 / 知识库 / 问答会话）**：默认使用 `<CkPager variant="page">` 传统翻页，初始 `pageSize=20`，提供 `[20 / 50 / 100]` 切换。便于教师精确翻页查找。
+- **活动时间线 / 通知 / 日志类**：使用 `variant="load-more"`，默认加载 50 条，按 `加载更多` 追加。
+- **不使用**：无限滚动（无明确总量提示，对教务场景体验差）。
 
 ## 8. 重做交互详细方案
 
@@ -468,7 +548,7 @@ Side                Content
 
 | 区块 | 数据来源 |
 | --- | --- |
-| 流水线 5 段 | 已有 `/api/v1/courses?summary=1`、`/api/v1/materials?summary=1`、`/api/v1/knowledge-bases?summary=1`、`/api/v1/qa-sessions?summary=1`；如果 summary 接口不存在，先在前端聚合各列表分页 total |
+| 流水线 5 段 | **首选**调用统一接口 `/api/v1/dashboard/summary?courseId={?}`，返回 5 段计数。**该接口为 M3 前置依赖**，由后端在 M3 启动前提供。如临时未就绪，前端走降级方案：并发请求各资源 `?summary=1`（4–5 个请求）；分页 total 字段不能代表运行中状态，运行中计数走 `?status=running` 单独请求。降级方案下首屏额外耗时 ~300ms，可接受但不是长期方案。 |
 | 进行中任务 | `/api/v1/index-runs?status=running` + `/api/v1/material-parse-tasks?status=running` 聚合 |
 | 近期动态 | 短期前端聚合：从上述列表各取最近 N 条 + 状态变更时间，按时间倒序合并；后续可由后端提供统一 audit-events 接口 |
 | 快捷入口 | 静态 4 项，权限不足时隐藏 |
@@ -532,6 +612,13 @@ Side                Content
 - 在第 ⑤ 步之前每一步底部都有"上一步"按钮；表单状态保留在 Pinia `useBuildWizardStore`。
 - 启动后表单变只读；右上提供"复制为新构建"按钮，可基于本次参数立即开第二轮。
 
+角色权限差异：
+
+- 平台管理员：可对任意课程的知识库发起构建。
+- 教师 / 助教：仅可对自己作为 `teacher / assistant` 的课程的知识库发起构建；其他课程的"开始构建"按钮置灰，附 tooltip 解释。
+- 只读运维：整个向导不可写——`①~⑤` 表单只读，`开始构建` 按钮隐藏。仅可观察右侧实时面板。
+- 重试 / 取消等中断操作：与"开始构建"权限对齐，发起者本人或更高权限可操作。
+
 ### 8.3 资料详情 + 解析进度
 
 新页面 `MaterialDetailPage.vue`。
@@ -589,6 +676,12 @@ Side                Content
 
 时间倒序的事件列表（上传 / 重新解析 / 删除 / 复制等动作）；与系统审计日志同源但只过滤本资料。
 
+#### 角色权限差异
+
+- 平台管理员：所有 Tab 可读 + 所有操作可写。
+- 教师 / 助教：所属课程的资料可读；可发起"重新解析 / 删除 / 替换"，操作日志可看本人与其他教师的全部记录。
+- 只读运维：所有 Tab 可读，"更多操作"菜单隐藏，操作日志可读。
+
 ### 8.4 问答会话 + 检索诊断
 
 新页面 `QaSessionDetailPage.vue`。重做核心：把"我看到 AI 这段回答"和"它是怎么得到的"放在同一个屏内，方便教务做检查。
@@ -630,13 +723,21 @@ Side                Content
 数据来源：
 
 - 已有 `/api/v1/qa-sessions/:id` 返回会话与消息。
-- 新需求：每条消息扩展返回 `retrieval_trace`（子问题、片段、调用耗时、出处）；后端如已有则直接用，否则在本设计稿外通过单独工单跟进。如临时缺失，前端使用 N/A 占位，不阻塞本次重做。
+- **`retrieval_trace` 字段是本交互的核心数据，列为 M6 前置依赖**：每条 AI 消息需返回 `{ subQueries[], retrievedChunks[], callTrace{ retrievalMs, generationMs, postMs }, sources[] }`。M6 启动前由后端确认接口落地；如调研后判定后端工期不可控，本设计稿允许把 M6 拆为 `M6a 列表 + 消息流`（不依赖新字段）和 `M6b 检索诊断面板`（依赖新字段），分别交付。
+- 仅当后端确认无法在 M6b 前提供时，前端可用 N/A 占位**作为最终降级**，但需在右侧面板顶部明确提示"本会话的检索诊断信息暂未启用"。
 
 会话列表 `QaSessionListPage.vue` 同步重做：
 
 - 顶部筛选：知识库 / 课程 / 时间范围 / 异常会话。
 - 列表项使用 `<CkResourceCard>`：会话标题 + 学员 + 消息数 + 总耗时 + 是否含异常。
 - 异常会话用 `tone: warning` 角标标记，hover 显示原因。
+
+角色权限差异：
+
+- 平台管理员：可看所有课程的所有会话；可标记异常 / 删除。
+- 教师 / 助教：仅可看自己课程下的学员会话；可标记异常，不可删除。
+- 学员视角不在管理员端范围（学员端走 `student-app`，本设计无关）。
+- 只读运维：可看所有会话，无写权限。
 
 ## 9. 其他页面（重刷不重做）
 
@@ -655,6 +756,7 @@ Side                Content
 | 角色 / 权限 | `views/users/RoleListPage.vue / PermissionListPage.vue` | 信息表，整页 |
 | 系统健康 | `views/system/HealthPage.vue` | 顶部健康总览 + 各服务卡片，状态用 `<CkStatusPill>` |
 | 知识库验证 | `views/operations/KbValidationPage.vue` | 原 `/app/qa-smoke`，文案改"知识库验证" |
+| 检索日志（占位） | 沿用 `views/status/RouteState.vue` | 新增 `/app/retrieval-logs` 列表占位（coming-soon），与现有 `/app/retrieval-logs/:logId` 详情占位一致；本次只做视觉刷新 |
 | 路由占位 | `views/status/RouteState.vue` | 视觉对齐 AuthLayout，主题感染 |
 
 `ModulePage.vue` 拆完之后保留为兜底（路由 fallback），但所有 `componentKey: 'ModulePage'` 的路由都改指向上述具体页面。
@@ -705,7 +807,7 @@ Side                Content
 - 默认 `data-theme='light'`。
 - 用户在顶栏 ◐ 切换；切换状态写入 `localStorage` 并广播给 Pinia `useThemeStore`，应用根 `<html>` 标签上 `data-theme`。
 - Element Plus 暗色主题通过同名 CSS 变量自动接管，无需额外引入官方暗色 CSS。
-- 所有自研组件必须声明颜色都来自 Token，不写死色值；Lint 规则：`stylelint --custom-syntax postcss-html` + 自定义规则禁止 hex 与 rgb 直写。
+- 所有自研组件必须声明颜色都来自 Token，不写死色值。Lint 规则：`stylelint --custom-syntax postcss-html` + 自定义 `declaration-property-value-disallowed-list` 禁止 hex / rgb / rgba 直写。**忽略路径**：`node_modules/element-plus/**`、`src/styles/element-plus.scss`（EL 主题映射文件本身需要色值）、`src/styles/tokens/**`（Token 定义自身就是色值）。
 
 ### 11.2 可访问性
 
@@ -725,14 +827,22 @@ Side                Content
 
 预期里程碑（仅信息：实施计划会重新审视）：
 
-1. **M1 设计系统底座**：新增 token、Element Plus 主题映射、`<CkStatusPill>` 等基础组件。
-2. **M2 布局壳与导航**：重写 ConsoleLayout / DetailLayout / WorkflowLayout / AuthLayout，左侧栏分段渲染。
+1. **M1 设计系统底座**：新增 token、Element Plus 主题映射、`<CkStatusPill>` / `<CkSkeleton>` / `<CkPager>` 等基础组件。
+2. **M2 布局壳与导航**：重写 ConsoleLayout / DetailLayout / WorkflowLayout / AuthLayout，左侧栏分段渲染，顶栏范围芯片 + ⌘K + 通知 + 主题切换。
 3. **M3 Dashboard 重做**：流水线 hero、活动时间线、任务面板、快捷入口。
 4. **M4 课程 / 资料模块拆分 + 资料详情重做**：MaterialDetailPage 4 Tab。
 5. **M5 知识库 + 构建向导重做**：WorkflowLayout 分屏 + 实时面板。
 6. **M6 问答会话 + 检索诊断重做**：QaSessionDetailPage 双栏。
+   - 必要时拆分为 **M6a**（列表 + 消息流，不依赖新字段）和 **M6b**（检索诊断面板，依赖后端 `retrieval_trace`）。
 7. **M7 其他页面拆分与适配**：用户、角色、权限、系统健康、知识库验证、RouteState。
 8. **M8 文案巡检 + 暗色验证 + 可访问性巡检 + Playwright 用例同步**。
+
+**并行与依赖**：
+
+- 严格串行：`M1 → M2`（布局壳直接消费 M1 的 token 与基础组件）。
+- 强依赖 M2 的：`M3 / M4 / M5 / M6 / M7`，但**这五个里程碑彼此可并行**，因为它们各自落在独立的资源页面里，互不踩同一文件。
+- 后端联动：M3 启动前确认 `dashboard/summary` 接口；M6（或 M6b）启动前确认 `retrieval_trace` 字段。
+- M8 是收尾巡检，必须在 `M3~M7` 全部合并到默认分支后启动。
 
 ## 13. 风险与依赖
 
@@ -775,6 +885,9 @@ Side                Content
 | `views/status/UnifiedErrorView.vue` | 视觉升级，结构沿用 |
 | `styles/tokens/_colors.scss` | 扩展为 4.1 节定义的全套语义 token |
 | `styles/element-plus.scss` | 新增 4.5 节的 Element Plus 主题映射 |
+| `styles/mixins/_typography.scss` | 新增字号 / 行高 mixin（4.2 节） |
+| `copy/admin.ts` | **新增**——文案常量集中地，按页面 / 模块分组导出 |
+| `composables/useScopeStore.js` | **新增**——范围芯片的活动课程持久化（5.3.1 节） |
 | `components/shell/SideNavigation.vue` | 改为分段渲染 + 段标题 |
 | `components/shell/AppTopbar.vue` | 增加范围芯片、⌘K、通知、主题切换 |
 
