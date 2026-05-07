@@ -47,6 +47,10 @@ import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
+import {
+  filterGroups,
+  isCommandShortcut,
+} from './components/shell/command-palette-model.js'
 import { primaryNavigation, routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -3339,6 +3343,11 @@ test('CkPager model exports are wired', () => {
 test('NotificationDropdown model exports are wired', () => {
   assert.equal(typeof mergeFeed, 'function')
   assert.equal(typeof hasUnseenFailures, 'function')
+})
+
+test('CkCommandPalette model exports are wired', () => {
+  assert.equal(typeof filterGroups, 'function')
+  assert.equal(isCommandShortcut({ key: 'k', metaKey: true }), true)
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
