@@ -27,7 +27,7 @@ This repository currently has seven notable areas, with the two Python modules a
    - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
-   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, course material upload feedback, knowledge-base build wizard, QA smoke validation, unified 403/404/500 pages, and Playwright browser fault-injection tests.
+   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, unified 403/404/500 pages, and Playwright browser fault-injection tests.
    - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
@@ -198,7 +198,8 @@ Notes:
 - Preferred commands: `pnpm install`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, `pnpm dev`, `pnpm preview`
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
-- Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, live material detail, live parse-results detail, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- Material detail and parse-results pages should stay aligned with Java `/api/v1/pdf-files/*` compatibility routes: the detail page surfaces parse status plus `parseProgress`, while the parse-results page remains a read-only artifact list unless the task explicitly expands that scope.
 - Course material upload currently accepts PDF only and defaults to a single-file 200MB limit; keep `frontend/apps/admin-app/src/views/pages/material-file-model.js`, Java `CourseMaterialProperties`, and Spring multipart config aligned when changing this limit.
 - Knowledge-base build wizard state should be driven by Java build-run APIs and the URL `buildRunId`, not by browser-only query/sessionStorage state once a build run exists.
 - Playwright E2E uses mocked `/api/v1` fault injection to verify local operation error panels. Do not commit `test-results/`, `playwright-report/`, `dist/`, or `node_modules/`.

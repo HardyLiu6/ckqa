@@ -1388,6 +1388,58 @@ textarea.text-input {
   line-height: 1.65;
 }
 
+.material-parse-progress {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--ckqa-border) 78%, transparent);
+  border-radius: var(--ckqa-radius-sm);
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 74%, white);
+}
+
+.material-parse-progress[data-status='processing'] {
+  border-color: rgb(37 99 235 / 24%);
+  background: rgb(37 99 235 / 5%);
+}
+
+.material-parse-progress[data-status='done'] {
+  border-color: rgb(15 118 110 / 24%);
+  background: rgb(15 118 110 / 7%);
+}
+
+.material-parse-progress[data-status='failed'] {
+  border-color: rgb(194 65 61 / 22%);
+  background: rgb(194 65 61 / 6%);
+}
+
+.material-parse-progress__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.material-parse-progress__heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.material-parse-progress__heading strong {
+  color: var(--ckqa-text);
+}
+
+.material-parse-progress__heading small,
+.material-parse-progress small,
+.material-parse-progress p {
+  color: var(--ckqa-text-muted);
+}
+
+.material-parse-progress p {
+  margin: 0;
+  line-height: 1.65;
+}
+
 .material-empty-state {
   min-height: 220px;
   margin-top: 8px;

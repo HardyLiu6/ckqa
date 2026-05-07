@@ -136,7 +136,7 @@ export async function loadModulePage(route, query = {}, services = defaultServic
     return loadCourseMaterials(route, query, services)
   }
 
-  if (route.name === 'material-detail') {
+  if (['material-detail', 'parse-results'].includes(route.name)) {
     return loadMaterialDetail(route, services)
   }
 
@@ -1498,8 +1498,7 @@ function normalizeMaterialDetail(material = {}) {
     materialObject.fileSize,
     materialObject.file_size,
   )
-
-  return {
+  const normalizedMaterial = {
     ...material,
     materialType,
     materialTypeLabel: COURSE_MATERIAL_TYPE_LABELS[materialType] ?? materialType,
@@ -1509,6 +1508,11 @@ function normalizeMaterialDetail(material = {}) {
     originalFileName: material.originalFileName ?? materialObject.originalFileName ?? materialObject.original_file_name ?? '',
     fileMd5,
     fileSize,
+  }
+
+  return {
+    ...normalizedMaterial,
+    parseProgress: buildMaterialParseProgress(normalizedMaterial),
   }
 }
 
@@ -1544,6 +1548,74 @@ function buildMaterialSummary(material = {}) {
   const type = material.materialTypeLabel ?? COURSE_MATERIAL_TYPE_LABELS[material.materialType] ?? material.materialType
 
   return [name, type, status].filter(Boolean).join(' · ')
+}
+
+function buildMaterialParseProgress(material = {}) {
+  const status = normalizeMaterialParseStatus(material.parseStatus)
+  const rawPercentValue = resolveMaterialParsePercent(material)
+  const rawPercent = Number(rawPercentValue)
+  const hasPercent = rawPercentValue !== undefined && rawPercentValue !== null && Number.isFinite(rawPercent)
+  const fallbackPercent = {
+    pending: 0,
+    processing: 50,
+    done: 100,
+    failed: 100,
+  }
+  const labelByStatus = {
+    pending: '等待触发解析',
+    processing: 'MinerU 正在解析资料',
+    done: '解析已完成',
+    failed: '解析失败',
+  }
+  const detailByStatus = {
+    pending: '点击触发解析后，系统会提交 MinerU 任务并开始轮询资料状态。',
+    processing: resolveMaterialProcessingDetail(material),
+    done: resolveMaterialDoneDetail(material),
+    failed: material.parseErrorMsg ?? material.failureReason ?? material.errorMessage ?? '解析失败，请查看错误信息后重新触发。',
+  }
+
+  return {
+    status,
+    statusLabel: COURSE_MATERIAL_PARSE_STATUS_LABELS[status] ?? status,
+    percent: clampPercent(hasPercent ? rawPercent : fallbackPercent[status] ?? 0),
+    label: labelByStatus[status] ?? '解析状态待确认',
+    detail: detailByStatus[status] ?? '刷新后查看最新解析状态。',
+    pollHint: material.mineruBatchId
+      ? `MinerU 批次：${material.mineruBatchId}`
+      : '当前接口提供阶段状态；若后端返回 parseProgress，将直接展示真实百分比。',
+  }
+}
+
+function resolveMaterialParsePercent(material = {}) {
+  const progress = material.parseProgress
+  if (progress && typeof progress === 'object') {
+    return firstPresent(progress.percent, progress.percentage, progress.value)
+  }
+
+  return firstPresent(
+    progress,
+    material.progress,
+    material.extractProgress?.percent,
+    material.extract_progress?.percent,
+  )
+}
+
+function resolveMaterialProcessingDetail(material = {}) {
+  const startedAt = material.parseStartedAt ?? material.startedAt
+  if (startedAt) {
+    return `已于 ${startedAt} 开始解析，页面会继续轮询直到完成或失败。`
+  }
+
+  return '解析任务进行中，页面会继续轮询直到完成或失败。'
+}
+
+function resolveMaterialDoneDetail(material = {}) {
+  const finishedAt = material.parseFinishedAt ?? material.finishedAt
+  if (finishedAt) {
+    return `已于 ${finishedAt} 完成，可继续导出 GraphRAG 输入。`
+  }
+
+  return '解析已完成，可继续导出 GraphRAG 输入。'
 }
 
 function buildMaterialFacts(material = {}) {
@@ -1611,6 +1683,14 @@ function formatFileSize(value) {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function clampPercent(value) {
+  if (!Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.min(100, Math.max(0, Math.round(value)))
 }
 
 function mapKnowledgeBaseItem(knowledgeBase = {}) {

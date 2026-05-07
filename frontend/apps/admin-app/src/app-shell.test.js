@@ -626,6 +626,24 @@ test('资料详情 loader 根据解析状态推导可执行按钮', async () => 
   assert.equal(processingResult.actions.canParse, false)
   assert.equal(processingResult.actions.parseHint, '解析任务执行中，通常需要数分钟；页面会在后台刷新状态。')
   assert.equal(processingResult.actions.canExport, false)
+  assert.deepEqual(processingResult.blocks.material.item.parseProgress, {
+    status: 'processing',
+    statusLabel: '解析中',
+    percent: 50,
+    label: 'MinerU 正在解析资料',
+    detail: '解析任务进行中，页面会继续轮询直到完成或失败。',
+    pollHint: '当前接口提供阶段状态；若后端返回 parseProgress，将直接展示真实百分比。',
+  })
+
+  const parseResultsRoute = { name: 'parse-results', query: {}, params: { materialId: '9' } }
+  const parseResultsPage = await loadModulePage(parseResultsRoute, parseResultsRoute.query, {
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => ([{ id: 1, fileName: 'content_list.json' }]),
+  })
+
+  assert.equal(parseResultsPage.requestState, 'success')
+  assert.equal(parseResultsPage.blocks.material.item.parseStatusLabel, '已完成')
+  assert.equal(parseResultsPage.blocks.parseResults.items[0].title, 'content_list.json')
 })
 
 test('资料详情 loader 通过课程资料接口补齐资料对象信息并中文化状态', async () => {
@@ -647,6 +665,7 @@ test('资料详情 loader 通过课程资料接口补齐资料对象信息并中
         originalFileName: 'os-book.pdf',
         materialType: 'textbook',
         parseStatus: 'pending',
+        parseProgress: 12,
         fileMd5: '0123456789abcdef0123456789abcdef',
         fileSize: 2097152,
         uploadTime: '2026-05-06T18:00:00',
@@ -659,6 +678,8 @@ test('资料详情 loader 通过课程资料接口补齐资料对象信息并中
   assert.deepEqual(calls, [['os', '9']])
   assert.equal(result.blocks.material.item.fileMd5, '0123456789abcdef0123456789abcdef')
   assert.equal(result.blocks.material.item.parseStatusLabel, '待解析')
+  assert.equal(result.blocks.material.item.parseProgress.percent, 12)
+  assert.equal(result.blocks.material.item.parseProgress.label, '等待触发解析')
   assert.equal(result.actions.parseHint, '资料尚未解析。触发后将提交 MinerU 解析任务，页面会自动轮询状态。')
   assert.deepEqual(
     result.blocks.material.facts.map(({ label, value }) => [label, value]),
@@ -2093,6 +2114,8 @@ test('业务页模型显式声明数据来源和主操作', () => {
   const courseMembers = getModulePageConfig('course-members')
   const knowledgeBases = getModulePageConfig('knowledge-bases')
   const knowledgeBaseDetail = getModulePageConfig('knowledge-base-detail')
+  const materialDetail = getModulePageConfig('material-detail')
+  const parseResults = getModulePageConfig('parse-results')
   const build = getModulePageConfig('knowledge-base-build')
   const roles = getModulePageConfig('roles')
   const permissions = getModulePageConfig('permissions')
@@ -2117,6 +2140,11 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(knowledgeBases.secondaryAction, null)
   assert.equal(knowledgeBaseDetail.dataSource, 'live')
   assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看索引运行')
+  assert.equal(materialDetail.dataSource, 'live')
+  assert.equal(materialDetail.eyebrow, '')
+  assert.equal(parseResults.dataSource, 'live')
+  assert.equal(parseResults.primaryAction, null)
+  assert.equal(parseResults.secondaryAction, null)
   assert.equal(build.dataSource, 'live')
   assert.equal(build.workflowSteps.every((step) => Boolean(step.status)), true)
   assert.equal(build.workflowSteps.every((step) => Array.isArray(step.conditions)), true)
@@ -2379,7 +2407,9 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@search-change="handleTableSearch"/)
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
+  assert.match(modulePage, /v-if="config\.eyebrow"/)
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table' && route\.name !== 'material-detail'\)/)
+  assert.match(modulePage, /const materialParseProgress = computed/)
   assert.match(modulePage, /const hasPrimaryAction = computed/)
   assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"/)
   assert.match(modulePage, /:title="tableTitle"/)
@@ -2387,6 +2417,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /class="creation-dialog course-action-dialog material-action-dialog"/)
   assert.match(modulePage, /class="course-detail-hero"/)
   assert.match(modulePage, /class="course-progress-strip"/)
+  assert.match(modulePage, /class="material-parse-progress"/)
   assert.match(modulePage, /class="creation-dialog course-action-dialog course-delete-dialog"/)
   assert.match(modulePage, /openCourseArchiveDialog/)
   assert.match(modulePage, /submitCourseArchive/)

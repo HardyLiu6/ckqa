@@ -367,6 +367,12 @@ const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+const materialParseProgress = computed(() => (
+  resolveMaterialParseProgress(materialBlock.value?.item, {
+    active: activeOperationKey.value === 'material-parse',
+    actionState: actionState.value,
+  })
+))
 
 function createCourseEditForm(course = {}) {
   return {
@@ -1621,6 +1627,42 @@ function startActiveLongTask(controller) {
   })
 }
 
+function resolveMaterialParseProgress(material = null, { active = false, actionState = '' } = {}) {
+  const progress = material?.parseProgress
+  if (!progress) {
+    return null
+  }
+
+  const normalizedActionState = String(actionState ?? '').toLowerCase()
+  const activeParsing = active && ['running', 'confirming'].includes(normalizedActionState)
+  if (!activeParsing) {
+    return progress
+  }
+
+  const status = progress.status === 'pending' ? 'processing' : progress.status
+  const percent = Math.max(
+    Number(progress.percent ?? 0),
+    status === 'processing' ? 35 : Number(progress.percent ?? 0),
+  )
+
+  return {
+    ...progress,
+    status,
+    statusLabel: status === 'processing' ? '解析中' : progress.statusLabel,
+    percent: Math.min(100, Math.max(0, percent)),
+    label: normalizedActionState === 'confirming' ? '解析任务已提交，正在确认状态' : '解析任务已提交',
+    detail: '解析请求已发送，正在等待后端写入最新资料状态。',
+    pollHint: '页面会每 10 秒轮询一次资料状态；完成或失败后自动刷新解析结果。',
+  }
+}
+
+function resolveMaterialProgressStatus(status) {
+  if (status === 'done') return 'success'
+  if (status === 'failed') return 'exception'
+  if (status === 'processing') return 'warning'
+  return undefined
+}
+
 function renderFactValue(field) {
   return typeof field === 'string' ? '待确认' : field.value
 }
@@ -1702,7 +1744,7 @@ onBeforeUnmount(() => cancelLongTask())
 <template>
   <section class="module-hero">
     <div>
-      <p class="eyebrow">{{ config.eyebrow }}</p>
+      <p v-if="config.eyebrow" class="eyebrow">{{ config.eyebrow }}</p>
       <div class="module-title-row">
         <h2 v-if="showModuleHeroTitle">{{ pageTitle }}</h2>
         <DataSourceChip :source="config.dataSource" :refreshed-at="config.refreshedAt" />
@@ -2736,6 +2778,29 @@ onBeforeUnmount(() => cancelLongTask())
         />
       </div>
       <div
+        v-if="materialParseProgress"
+        class="material-parse-progress"
+        :data-status="materialParseProgress.status"
+        aria-live="polite"
+      >
+        <div class="material-parse-progress__heading">
+          <div>
+            <strong>解析进度</strong>
+            <small>{{ materialParseProgress.label }}</small>
+          </div>
+          <StatusBadge
+            :status="materialParseProgress.status"
+            :label="materialParseProgress.statusLabel"
+          />
+        </div>
+        <el-progress
+          :percentage="materialParseProgress.percent"
+          :status="resolveMaterialProgressStatus(materialParseProgress.status)"
+        />
+        <p>{{ materialParseProgress.detail }}</p>
+        <small>{{ materialParseProgress.pollHint }}</small>
+      </div>
+      <div
         v-if="materialOperationFeedback"
         class="operation-feedback"
         :data-status="materialOperationFeedback.status"
@@ -2781,7 +2846,7 @@ onBeforeUnmount(() => cancelLongTask())
           }}
         </p>
         <el-button
-          v-if="config.actions?.canParse"
+          v-if="route.name === 'material-detail' && config.actions?.canParse"
           class="ckqa-el-button ckqa-el-button--secondary"
           native-type="button"
           :disabled="actionRunning"
