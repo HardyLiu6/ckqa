@@ -23,6 +23,7 @@ import org.ysu.ckqaback.service.ParseResultsService;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * PDF 查询与解析工作流服务。
@@ -36,6 +37,7 @@ public class PdfWorkflowService {
     private final PdfIngestOrchestrator pdfIngestOrchestrator;
     private final DatabaseNamedLockService databaseNamedLockService;
     private final CourseCoverObjectStorage objectStorage;
+    private final PdfParseTaskDispatcher parseTaskDispatcher;
 
     public PdfFileResponse getPdfFile(Long id) {
         return PdfFileResponse.fromEntity(courseMaterialsService.getRequiredById(id));
@@ -74,29 +76,16 @@ public class PdfWorkflowService {
         }
     }
 
-    public PdfOperationResponse startParse(Long pdfFileId) throws IOException, InterruptedException {
+    public PdfOperationResponse startParse(Long pdfFileId) {
         CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);
         if (!courseMaterialsService.claimParseStart(pdfFileId)) {
             throw new BusinessException(ApiResultCode.PDF_PARSE_STATE_CONFLICT, HttpStatus.CONFLICT);
         }
 
-        ProcessExecutionResult result;
         try {
-            result = pdfIngestOrchestrator.parse(material);
-        } catch (IOException ex) {
-            courseMaterialsService.markParseFailedIfStillProcessing(pdfFileId, ex.getMessage());
-            throw ex;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            courseMaterialsService.markParseFailedIfStillProcessing(pdfFileId, "解析任务被中断");
-            throw ex;
-        }
-
-        if (result.isTimedOut() || result.getExitCode() != 0) {
-            courseMaterialsService.markParseFailedIfStillProcessing(
-                    pdfFileId,
-                    result.isTimedOut() ? "解析命令执行超时" : result.getStderr()
-            );
+            parseTaskDispatcher.dispatch(material);
+        } catch (RejectedExecutionException ex) {
+            courseMaterialsService.markParseFailedIfStillProcessing(pdfFileId, "解析任务提交失败: " + ex.getMessage());
             throw new BusinessException(
                     ApiResultCode.PDF_PARSE_EXECUTION_FAILED,
                     HttpStatus.INTERNAL_SERVER_ERROR,
@@ -104,13 +93,12 @@ public class PdfWorkflowService {
             );
         }
 
-        CourseMaterials refreshed = courseMaterialsService.getRequiredById(pdfFileId);
         return PdfOperationResponse.success(
-                refreshed.getId(),
-                refreshed.getCourseId(),
-                refreshed.getDisplayName(),
-                refreshed.getParseStatus(),
-                "解析任务已启动"
+                material.getId(),
+                material.getCourseId(),
+                material.getDisplayName(),
+                "processing",
+                "解析任务已提交"
         );
     }
 

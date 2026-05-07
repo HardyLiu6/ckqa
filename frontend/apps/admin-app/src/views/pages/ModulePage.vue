@@ -50,8 +50,10 @@ import {
   deleteCourseMaterial,
   exportGraphRag,
   fetchParseResultContent,
+  createMaterialParseStreamToken,
   getMaterial,
   listParseResults,
+  openMaterialParseEventStream,
   startParse,
   updateCourseMaterial,
   uploadCourseMaterial,
@@ -91,6 +93,7 @@ import {
 } from './material-lifecycle-actions.js'
 import {
   DEFAULT_COURSE_COVER_URL,
+  applyMaterialParseSnapshotToRow,
   createMaterialParseProgressCell,
   loadModulePage,
 } from './module-loaders.js'
@@ -155,6 +158,7 @@ const actionState = ref('idle')
 const actionSnapshot = ref(null)
 const activeOperationKey = ref('')
 const activeOperationTargetId = ref('')
+const parseStreamSnapshots = ref({})
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
@@ -193,6 +197,7 @@ const materialForm = ref(createCourseMaterialForm())
 const parseResultActionState = ref('idle')
 const parseResultActionError = ref(null)
 let activeLongTaskController = null
+let materialParseStreams = new Map()
 const config = computed(() => {
   if (!liveState.value) {
     return baseConfig.value
@@ -381,6 +386,15 @@ const courseBlock = computed(() => config.value.blocks?.course)
 const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAULT_COURSE_COVER_URL)
 const courseCanDelete = computed(() => isEmptyCourse(courseBlock.value?.item))
 const materialBlock = computed(() => config.value.blocks?.material)
+const streamedMaterialItem = computed(() => {
+  const item = materialBlock.value?.item
+  if (!item) {
+    return null
+  }
+  const materialId = String(item.id ?? item.materialId ?? route.params.materialId ?? '')
+  const snapshot = parseStreamSnapshots.value[materialId]
+  return snapshot ? mergeMaterialSnapshot(item, snapshot) : item
+})
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
 const parseResultGroups = computed(() => {
   const block = parseResultsBlock.value
@@ -402,7 +416,7 @@ const parseResultGroups = computed(() => {
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
 const materialParseProgress = computed(() => (
-  resolveMaterialParseProgress(materialBlock.value?.item, {
+  resolveMaterialParseProgress(streamedMaterialItem.value, {
     active: activeOperationKey.value === 'material-parse',
     actionState: actionState.value,
   })
@@ -533,6 +547,8 @@ async function loadPage(query = route.query) {
       await router.replace({ query: nextQuery })
     }
   }
+
+  syncMaterialParseStreams(result)
 }
 
 function isSameQuery(left = {}, right = {}) {
@@ -580,12 +596,17 @@ function normalizeTableQuery(query = {}) {
 }
 
 function withActiveMaterialParsePreview(rows = []) {
+  const rowsWithStreamSnapshots = rows.map((row) => {
+    const materialId = String(row?.id ?? row?.raw?.id ?? '')
+    const snapshot = parseStreamSnapshots.value[materialId]
+    return snapshot ? applyMaterialParseSnapshotToRow(row, snapshot) : row
+  })
   const targetId = String(activeOperationTargetId.value ?? '')
   if (activeOperationKey.value !== 'material-parse' || !targetId) {
-    return rows
+    return rowsWithStreamSnapshots
   }
 
-  return rows.map((row) => {
+  return rowsWithStreamSnapshots.map((row) => {
     if (String(row?.id ?? row?.raw?.id ?? '') !== targetId) {
       return row
     }
@@ -604,7 +625,7 @@ function withActiveMaterialParsePreview(rows = []) {
             ...action,
             disabled: true,
             title: action.key === 'parse-course-material'
-              ? '解析任务已提交，正在轮询状态'
+              ? '解析任务已提交，正在接收实时状态'
               : '解析确认期间暂不删除资料',
           }
         }
@@ -612,6 +633,16 @@ function withActiveMaterialParsePreview(rows = []) {
       }),
     }
   })
+}
+
+function mergeMaterialSnapshot(material = {}, snapshot = {}) {
+  return {
+    ...material,
+    ...snapshot,
+    id: material.id ?? snapshot.id ?? snapshot.materialId,
+    parseStatus: snapshot.parseStatus ?? snapshot.parseState ?? material.parseStatus,
+    parseProgress: snapshot.parseProgress !== undefined ? snapshot.parseProgress : material.parseProgress,
+  }
 }
 
 function createMaterialParsePreview(row = {}) {
@@ -1404,12 +1435,7 @@ async function runMaterialParse() {
     return
   }
 
-  startLongTask({
-    operationKey: 'material-parse',
-    limits: LONG_TASK_LIMITS.parse,
-    trigger: ({ signal }) => startParse(materialId, { signal }),
-    poll: ({ signal }) => getMaterial(materialId, { signal }),
-  })
+  await submitMaterialParse(materialId)
 }
 
 async function runCourseMaterialParse(material = {}) {
@@ -1420,13 +1446,138 @@ async function runCourseMaterialParse(material = {}) {
     return
   }
 
-  startLongTask({
-    operationKey: 'material-parse',
-    targetId: String(materialId),
-    limits: LONG_TASK_LIMITS.parse,
-    trigger: ({ signal }) => startParse(materialId, { signal }),
-    poll: ({ signal }) => getMaterial(materialId, { signal }),
-  })
+  await submitMaterialParse(materialId, { targetId: String(materialId), baseMaterial: material })
+}
+
+async function submitMaterialParse(materialId, { targetId = String(materialId), baseMaterial = null } = {}) {
+  cancelLongTask()
+  activeOperationKey.value = 'material-parse'
+  activeOperationTargetId.value = targetId
+  actionState.value = 'running'
+  actionSnapshot.value = baseMaterial ? mergeMaterialSnapshot(baseMaterial, { parseStatus: 'processing' }) : null
+
+  try {
+    const result = await startParse(materialId)
+    const snapshot = mergeMaterialSnapshot(baseMaterial ?? {}, {
+      ...result,
+      id: result?.id ?? materialId,
+      parseStatus: result?.parseStatus ?? 'processing',
+    })
+    actionState.value = 'confirming'
+    actionSnapshot.value = snapshot
+    updateMaterialParseSnapshot(targetId, snapshot)
+    await openMaterialParseStream(materialId, { targetId, refreshOnTerminal: true })
+  } catch (error) {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+  }
+}
+
+async function openMaterialParseStream(materialId, { targetId = String(materialId), refreshOnTerminal = false } = {}) {
+  const key = String(targetId || materialId || '')
+  if (!key || materialParseStreams.has(key)) {
+    return
+  }
+
+  try {
+    const { token } = await createMaterialParseStreamToken(materialId)
+    const stream = openMaterialParseEventStream(materialId, {
+      token,
+      onSnapshot: (snapshot) => handleMaterialParseSnapshot(key, snapshot),
+      onDone: (snapshot) => handleMaterialParseTerminal(key, snapshot, 'success', refreshOnTerminal),
+      onFailed: (snapshot) => handleMaterialParseTerminal(key, snapshot, 'failed', refreshOnTerminal),
+      onError: (error) => handleMaterialParseStreamError(key, error),
+    })
+    materialParseStreams.set(key, stream)
+  } catch (error) {
+    handleMaterialParseStreamError(key, error)
+  }
+}
+
+function updateMaterialParseSnapshot(key, snapshot) {
+  if (!key || !snapshot) {
+    return
+  }
+  parseStreamSnapshots.value = {
+    ...parseStreamSnapshots.value,
+    [key]: snapshot,
+  }
+}
+
+function handleMaterialParseSnapshot(key, snapshot) {
+  updateMaterialParseSnapshot(key, snapshot)
+  if (activeOperationKey.value === 'material-parse' && String(activeOperationTargetId.value) === key) {
+    actionState.value = 'confirming'
+    actionSnapshot.value = snapshot
+  }
+}
+
+async function handleMaterialParseTerminal(key, snapshot, state, refreshOnTerminal) {
+  updateMaterialParseSnapshot(key, snapshot)
+  closeMaterialParseStream(key)
+  if (activeOperationKey.value === 'material-parse' && String(activeOperationTargetId.value) === key) {
+    actionState.value = state
+    actionSnapshot.value = snapshot
+  }
+  if (refreshOnTerminal || ['material-detail', 'parse-results'].includes(route.name)) {
+    await loadPage()
+  }
+}
+
+function handleMaterialParseStreamError(key, error) {
+  if (activeOperationKey.value === 'material-parse' && String(activeOperationTargetId.value) === key) {
+    actionState.value = 'confirming'
+    actionSnapshot.value = createApiError(error)
+  }
+}
+
+function closeMaterialParseStream(key) {
+  const stream = materialParseStreams.get(String(key))
+  if (stream) {
+    stream.close()
+    materialParseStreams.delete(String(key))
+  }
+}
+
+function closeAllMaterialParseStreams() {
+  for (const stream of materialParseStreams.values()) {
+    stream.close()
+  }
+  materialParseStreams = new Map()
+}
+
+function syncMaterialParseStreams(pageState = null) {
+  const desiredIds = new Set(resolveProcessingMaterialIds(pageState))
+  if (desiredIds.size === 0) {
+    return
+  }
+  for (const id of desiredIds) {
+    void openMaterialParseStream(id, {
+      targetId: id,
+      refreshOnTerminal: ['material-detail', 'parse-results'].includes(route.name),
+    })
+  }
+}
+
+function resolveProcessingMaterialIds(pageState = null) {
+  if (!['course-materials', 'material-detail', 'parse-results'].includes(route.name)) {
+    closeAllMaterialParseStreams()
+    return []
+  }
+
+  if (route.name === 'course-materials') {
+    return (pageState?.rows ?? [])
+      .map((row) => row.raw ?? row)
+      .filter((material) => String(material?.parseStatus ?? '').toLowerCase() === 'processing')
+      .map((material) => String(material.id ?? material.materialId ?? ''))
+      .filter(Boolean)
+  }
+
+  const material = pageState?.blocks?.material?.item
+  if (String(material?.parseStatus ?? '').toLowerCase() === 'processing') {
+    return [String(material.id ?? material.materialId ?? route.params.materialId ?? '')].filter(Boolean)
+  }
+  return []
 }
 
 async function runMaterialExport() {
@@ -1869,8 +2020,8 @@ function resolveMaterialParseProgress(material = null, { active = false, actionS
     hasPercent,
     progressMode: hasPercent ? 'percent' : 'stage',
     label: normalizedActionState === 'confirming' ? '解析任务已提交，正在确认状态' : '解析任务已提交',
-    detail: '解析请求已发送，正在等待后端写入最新资料状态。',
-    pollHint: '页面会每 10 秒轮询一次资料状态；完成或失败后自动刷新解析结果。',
+    detail: '解析请求已发送，正在等待后端事件流推送最新资料状态。',
+    pollHint: '页面会通过 SSE 实时接收解析状态；完成或失败后自动刷新解析结果。',
   }
 }
 
@@ -1982,7 +2133,10 @@ function resolveCourseStatusLabel(status) {
 }
 
 watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
-onBeforeUnmount(() => cancelLongTask())
+onBeforeUnmount(() => {
+  cancelLongTask()
+  closeAllMaterialParseStreams()
+})
 </script>
 
 <template>

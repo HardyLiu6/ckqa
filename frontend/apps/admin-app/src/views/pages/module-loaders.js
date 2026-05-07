@@ -1603,6 +1603,38 @@ export function createMaterialParseProgressCell(material = {}) {
   })
 }
 
+export function applyMaterialParseSnapshotToRow(row = {}, snapshot = {}) {
+  const raw = {
+    ...(row.raw ?? row),
+    ...snapshot,
+    id: row.raw?.id ?? row.id ?? snapshot.id ?? snapshot.materialId,
+    parseProgress: snapshot.parseProgress !== undefined
+      ? snapshot.parseProgress
+      : row.raw?.parseProgress,
+  }
+  const cells = [...(row.cells ?? [])]
+  cells[2] = createMaterialParseProgressCell(raw)
+  const streaming = normalizeMaterialParseStatus(raw.parseStatus) === 'processing'
+
+  return {
+    ...row,
+    raw,
+    cells,
+    actions: (row.actions ?? []).map((action) => {
+      if (streaming && ['parse-course-material', 'delete-course-material'].includes(action.key)) {
+        return {
+          ...action,
+          disabled: true,
+          title: action.key === 'parse-course-material'
+            ? '解析状态正在实时更新'
+            : '解析进行中暂不删除资料',
+        }
+      }
+      return action
+    }),
+  }
+}
+
 function buildMaterialParseProgress(material = {}) {
   const status = normalizeMaterialParseStatus(material.parseStatus)
   const rawProgress = material.parseProgress
@@ -1621,7 +1653,7 @@ function buildMaterialParseProgress(material = {}) {
     failed: '解析失败',
   }
   const detailByStatus = {
-    pending: '点击触发解析后，系统会提交 MinerU 任务并开始轮询资料状态。',
+    pending: '点击触发解析后，系统会提交 MinerU 任务并实时接收资料状态。',
     processing: resolveMaterialProcessingDetail(material),
     done: resolveMaterialDoneDetail(material),
     failed: material.parseErrorMsg ?? material.failureReason ?? material.errorMessage ?? '解析失败，请查看错误信息后重新触发。',
@@ -1670,10 +1702,10 @@ function resolveMaterialParsePercent(material = {}) {
 function resolveMaterialProcessingDetail(material = {}) {
   const startedAt = material.parseStartedAt ?? material.startedAt
   if (startedAt) {
-    return `已于 ${startedAt} 开始解析，页面会继续轮询直到完成或失败。`
+    return `已于 ${startedAt} 开始解析，页面会通过事件流持续更新直到完成或失败。`
   }
 
-  return '解析任务进行中，页面会继续轮询直到完成或失败。'
+  return '解析任务进行中，页面会通过事件流持续更新直到完成或失败。'
 }
 
 function resolveMaterialDoneDetail(material = {}) {
@@ -1889,9 +1921,9 @@ function resolveMaterialActions(material = {}, parseResults = []) {
   const canParse = ['pending', 'failed'].includes(parseStatus)
   const canExport = parseStatus === 'done'
   const parseHintByStatus = {
-    pending: '资料尚未解析。触发后将提交 MinerU 解析任务，页面会自动轮询状态。',
-    failed: '上次解析失败，可重新触发解析；新任务会覆盖解析状态并保留错误信息供排查。',
-    processing: '解析任务执行中，通常需要数分钟；页面会在后台刷新状态。',
+    pending: '资料尚未解析。触发后将提交 MinerU 解析任务，页面会实时接收状态。',
+    failed: '上次解析失败，可重新触发解析；新任务会实时推送状态并保留错误信息供排查。',
+    processing: '解析任务执行中，通常需要数分钟；页面会通过事件流刷新状态。',
     done: hasCompleteExport
       ? '解析和 GraphRAG 输入均已就绪，可直接进入知识库构建或重新导出。'
       : '解析已完成，可导出 GraphRAG 输入后进入知识库构建。',

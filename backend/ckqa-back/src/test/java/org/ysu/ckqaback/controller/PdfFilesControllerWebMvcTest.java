@@ -11,6 +11,9 @@ import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.ParseResults;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
+import org.ysu.ckqaback.pdf.ParseStreamTokenResponse;
+import org.ysu.ckqaback.pdf.PdfParseEventStreamService;
+import org.ysu.ckqaback.pdf.PdfParseStreamTokenService;
 import org.ysu.ckqaback.pdf.PdfWorkflowService;
 import org.ysu.ckqaback.pdf.dto.ExportGraphRagRequest;
 import org.ysu.ckqaback.pdf.dto.ParseResultContent;
@@ -19,6 +22,7 @@ import org.ysu.ckqaback.pdf.dto.PdfFileResponse;
 import org.ysu.ckqaback.pdf.dto.PdfOperationResponse;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -32,14 +36,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PdfFilesControllerWebMvcTest {
 
     private PdfWorkflowService pdfWorkflowService;
+    private PdfParseStreamTokenService parseStreamTokenService;
+    private PdfParseEventStreamService parseEventStreamService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         pdfWorkflowService = Mockito.mock(PdfWorkflowService.class);
+        parseStreamTokenService = Mockito.mock(PdfParseStreamTokenService.class);
+        parseEventStreamService = Mockito.mock(PdfParseEventStreamService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new PdfFilesController(pdfWorkflowService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new PdfFilesController(
+                        pdfWorkflowService,
+                        parseStreamTokenService,
+                        parseEventStreamService
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -144,6 +156,32 @@ class PdfFilesControllerWebMvcTest {
         mockMvc.perform(post(ApiPaths.PDF_FILES + "/7/parse"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.message").value("解析任务已启动"));
+    }
+
+    @Test
+    void shouldIssueParseEventStreamToken() throws Exception {
+        given(parseStreamTokenService.issue(7L)).willReturn(new ParseStreamTokenResponse(
+                "stream-token",
+                Instant.parse("2026-05-07T08:05:00Z")
+        ));
+
+        mockMvc.perform(post(ApiPaths.PDF_FILES + "/7/parse-events/token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.token").value("stream-token"))
+                .andExpect(jsonPath("$.data.expiresAt").value("2026-05-07T08:05:00Z"));
+    }
+
+    @Test
+    void shouldOpenParseEventStream() throws Exception {
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
+                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter();
+        given(parseEventStreamService.openStream(7L, "stream-token")).willReturn(emitter);
+
+        mockMvc.perform(get(ApiPaths.PDF_FILES + "/7/parse-events")
+                        .param("token", "stream-token"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM));
     }
 
     @Test

@@ -61,7 +61,8 @@ class PdfParseResultMinioSmokeTest {
                 parseResultsService,
                 mock(PdfIngestOrchestrator.class),
                 mock(DatabaseNamedLockService.class),
-                new MinioCourseCoverObjectStorage(config.toStorageProperties())
+                new MinioCourseCoverObjectStorage(config.toStorageProperties()),
+                mock(PdfParseTaskDispatcher.class)
         );
 
         MockMvc mockMvc = createMockMvc(workflowService);
@@ -88,7 +89,11 @@ class PdfParseResultMinioSmokeTest {
     private static MockMvc createMockMvc(PdfWorkflowService workflowService) {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        return MockMvcBuilders.standaloneSetup(new PdfFilesController(workflowService))
+        return MockMvcBuilders.standaloneSetup(new PdfFilesController(
+                        workflowService,
+                        mock(PdfParseStreamTokenService.class),
+                        mock(PdfParseEventStreamService.class)
+                ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

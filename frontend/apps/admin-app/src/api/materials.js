@@ -1,4 +1,4 @@
-import { http } from '../axios/index.js'
+import { API_BASE_URL, http } from '../axios/index.js'
 import { normalizePageData, unwrapApiResponse } from './client.js'
 
 export async function listCourseMaterialPage(courseId, params = {}, client = http) {
@@ -59,6 +59,80 @@ export async function listParseResults(id, config = {}) {
 
 export async function startParse(id, config = {}) {
   return unwrapApiResponse(await http.post(`/pdf-files/${encodeURIComponent(id)}/parse`, null, config))
+}
+
+export async function createMaterialParseStreamToken(id, config = {}, client = http) {
+  return unwrapApiResponse(await client.post(
+    `/pdf-files/${encodeURIComponent(id)}/parse-events/token`,
+    null,
+    config,
+  ))
+}
+
+export function buildMaterialParseEventsUrl(id, token, baseUrl = API_BASE_URL) {
+  const normalizedBaseUrl = String(baseUrl ?? '').replace(/\/$/, '')
+  return `${normalizedBaseUrl}/pdf-files/${encodeURIComponent(id)}/parse-events?token=${encodeURIComponent(token)}`
+}
+
+export function openMaterialParseEventStream(id, options = {}) {
+  const {
+    token,
+    baseUrl = API_BASE_URL,
+    EventSourceCtor = globalThis.EventSource,
+    onSnapshot = () => {},
+    onDone = () => {},
+    onFailed = () => {},
+    onError = () => {},
+  } = options
+
+  if (typeof EventSourceCtor !== 'function') {
+    throw new Error('当前浏览器不支持 EventSource')
+  }
+
+  const source = new EventSourceCtor(buildMaterialParseEventsUrl(id, token, baseUrl))
+  let closed = false
+
+  function close() {
+    if (!closed) {
+      closed = true
+      source.close()
+    }
+  }
+
+  function readSnapshot(event) {
+    try {
+      return JSON.parse(event?.data ?? '{}')
+    } catch (error) {
+      onError(error)
+      return null
+    }
+  }
+
+  source.addEventListener('snapshot', (event) => {
+    const snapshot = readSnapshot(event)
+    if (snapshot) {
+      onSnapshot(snapshot)
+    }
+  })
+  source.addEventListener('done', (event) => {
+    const snapshot = readSnapshot(event)
+    if (snapshot) {
+      onDone(snapshot)
+    }
+    close()
+  })
+  source.addEventListener('failed', (event) => {
+    const snapshot = readSnapshot(event)
+    if (snapshot) {
+      onFailed(snapshot)
+    }
+    close()
+  })
+  source.onerror = (event) => {
+    onError(event)
+  }
+
+  return { source, close }
 }
 
 export async function exportGraphRag(id, payload, config = {}) {

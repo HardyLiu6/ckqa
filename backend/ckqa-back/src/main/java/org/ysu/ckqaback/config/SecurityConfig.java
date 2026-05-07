@@ -59,7 +59,8 @@ public class SecurityConfig {
                                 ApiPaths.AUTH + "/student/register",
                                 ApiPaths.SYSTEM_HEALTH,
                                 ApiPaths.API_V1 + "/course-covers/**",
-                                ApiPaths.API_V1 + "/user-avatars/**"
+                                ApiPaths.API_V1 + "/user-avatars/**",
+                                ApiPaths.PDF_FILES + "/*/parse-events"
                         ).permitAll()
                         .requestMatchers(ApiPaths.API_V1 + "/**").authenticated()
                         .anyRequest().permitAll())

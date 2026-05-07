@@ -16,6 +16,7 @@ import org.ysu.ckqaback.service.ParseResultsService;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +35,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = new CourseMaterials();
         material.setId(7L);
         material.setCourseId("os");
@@ -50,46 +51,40 @@ class PdfWorkflowServiceTest {
     }
 
     @Test
-    void shouldFallbackToFailedWhenParseProcessReturnsError() throws Exception {
+    void shouldDispatchParseTaskAndReturnImmediately() throws Exception {
         CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+        PdfParseTaskDispatcher parseTaskDispatcher = mock(PdfParseTaskDispatcher.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class), parseTaskDispatcher);
         CourseMaterials material = new CourseMaterials();
         material.setId(7L);
         material.setCourseId("os");
         material.setDisplayName("book.pdf");
         material.setParseStatus("pending");
 
-        given(courseMaterialsService.getRequiredById(7L)).willReturn(material, material);
+        given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
         given(courseMaterialsService.claimParseStart(7L)).willReturn(true);
-        given(orchestrator.parse(material)).willReturn(ProcessExecutionResult.builder()
-                .command(List.of("python", "mineru_parser.py"))
-                .exitCode(1)
-                .stdout("")
-                .stderr("spawn failed")
-                .elapsedSeconds(1L)
-                .timedOut(false)
-                .terminatedByShutdown(false)
-                .build());
 
-        assertThatThrownBy(() -> workflowService.startParse(7L))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("PDF解析执行失败");
+        var response = workflowService.startParse(7L);
 
-        then(courseMaterialsService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
+        assertThat(response.getParseStatus()).isEqualTo("processing");
+        assertThat(response.getMessage()).isEqualTo("解析任务已提交");
+        then(parseTaskDispatcher).should().dispatch(material);
+        then(orchestrator).should(never()).parse(material);
     }
 
     @Test
-    void shouldFallbackToFailedWhenParseCommandThrowsException() throws Exception {
+    void shouldMarkFailedWhenParseTaskDispatchIsRejected() {
         CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
         ParseResultsService parseResultsService = mock(ParseResultsService.class);
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+        PdfParseTaskDispatcher parseTaskDispatcher = mock(PdfParseTaskDispatcher.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class), parseTaskDispatcher);
         CourseMaterials material = new CourseMaterials();
         material.setId(7L);
         material.setCourseId("os");
@@ -97,13 +92,13 @@ class PdfWorkflowServiceTest {
 
         given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
         given(courseMaterialsService.claimParseStart(7L)).willReturn(true);
-        willThrow(new IOException("spawn failed")).given(orchestrator).parse(material);
+        willThrow(new RejectedExecutionException("executor full")).given(parseTaskDispatcher).dispatch(material);
 
         assertThatThrownBy(() -> workflowService.startParse(7L))
-                .isInstanceOf(IOException.class)
-                .hasMessageContaining("spawn failed");
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("PDF解析执行失败");
 
-        then(courseMaterialsService).should().markParseFailedIfStillProcessing(7L, "spawn failed");
+        then(courseMaterialsService).should().markParseFailedIfStillProcessing(7L, "解析任务提交失败: executor full");
     }
 
     @Test
@@ -113,7 +108,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
 
         CourseMaterials material = new CourseMaterials();
         material.setId(9L);
@@ -141,7 +136,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = new CourseMaterials();
         material.setId(9L);
         material.setCourseId("os");
@@ -171,7 +166,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = new CourseMaterials();
         material.setId(9L);
         material.setCourseId("os");
@@ -202,7 +197,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = doneMaterial();
         ExportGraphRagRequest request = exportRequest(true);
 
@@ -231,7 +226,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = doneMaterial();
         ExportGraphRagRequest request = exportRequest(true);
 
@@ -258,7 +253,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = doneMaterial();
         ExportGraphRagRequest request = exportRequest(true);
 
@@ -280,7 +275,7 @@ class PdfWorkflowServiceTest {
         PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, mock(CourseCoverObjectStorage.class));
         CourseMaterials material = doneMaterial();
         ExportGraphRagRequest request = exportRequest(true);
 
@@ -303,7 +298,7 @@ class PdfWorkflowServiceTest {
         DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
         CourseCoverObjectStorage objectStorage = mock(CourseCoverObjectStorage.class);
 
-        PdfWorkflowService workflowService = new PdfWorkflowService(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, objectStorage);
+        PdfWorkflowService workflowService = newWorkflow(courseMaterialsService, parseResultsService, orchestrator, databaseNamedLockService, objectStorage);
         ParseResults parseResult = new ParseResults();
         parseResult.setId(31L);
         parseResult.setCourseMaterialId(9L);
@@ -347,5 +342,40 @@ class PdfWorkflowServiceTest {
                 .stderr("")
                 .timedOut(false)
                 .build();
+    }
+
+    private static PdfWorkflowService newWorkflow(
+            CourseMaterialsService courseMaterialsService,
+            ParseResultsService parseResultsService,
+            PdfIngestOrchestrator orchestrator,
+            DatabaseNamedLockService databaseNamedLockService,
+            CourseCoverObjectStorage objectStorage
+    ) {
+        return newWorkflow(
+                courseMaterialsService,
+                parseResultsService,
+                orchestrator,
+                databaseNamedLockService,
+                objectStorage,
+                mock(PdfParseTaskDispatcher.class)
+        );
+    }
+
+    private static PdfWorkflowService newWorkflow(
+            CourseMaterialsService courseMaterialsService,
+            ParseResultsService parseResultsService,
+            PdfIngestOrchestrator orchestrator,
+            DatabaseNamedLockService databaseNamedLockService,
+            CourseCoverObjectStorage objectStorage,
+            PdfParseTaskDispatcher parseTaskDispatcher
+    ) {
+        return new PdfWorkflowService(
+                courseMaterialsService,
+                parseResultsService,
+                orchestrator,
+                databaseNamedLockService,
+                objectStorage,
+                parseTaskDispatcher
+        );
     }
 }
