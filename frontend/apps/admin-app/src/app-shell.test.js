@@ -43,6 +43,10 @@ import {
   PAGE_SIZE_OPTIONS,
   resolveTotalPages,
 } from './components/common/pager-model.js'
+import {
+  mergeFeed,
+  hasUnseenFailures,
+} from './components/shell/notification-feed-model.js'
 import { primaryNavigation, routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -3330,6 +3334,11 @@ test('CkStatusPill model exports are wired', () => {
 test('CkPager model exports are wired', () => {
   assert.deepEqual(PAGE_SIZE_OPTIONS, [20, 50, 100])
   assert.equal(resolveTotalPages({ total: 50, pageSize: 20 }), 3)
+})
+
+test('NotificationDropdown model exports are wired', () => {
+  assert.equal(typeof mergeFeed, 'function')
+  assert.equal(typeof hasUnseenFailures, 'function')
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
