@@ -6,7 +6,7 @@
 
 - 上传课程 PDF 到 MinIO
 - 调用 MinerU 云 API 解析 PDF
-- 使用 MySQL 跟踪 `material_objects`、`course_materials`、批次和解析状态
+- 使用 MySQL 跟踪 `material_objects`、`course_materials`、MinerU 批次、解析状态和页级解析进度
 - 导出 `normalized_docs.json`
 - 导出下游使用的 `section_docs.json` / `page_docs.json`
 
@@ -56,7 +56,7 @@ pip install -e ".[dev]"
 - MySQL
 - MinerU API 凭据
 
-运行时配置来自 `.env`，通过 `Config.from_env()` 加载。
+运行时配置来自 `.env`，通过 `Config.from_env()` 加载。MinerU 官方页级进度只在任务 `state=running` 时返回，`pdf_ingest` 会在该阶段按 `MINERU_PROGRESS_POLL_INTERVAL` 更短间隔轮询并保存真实 `extract_progress`；未拿到总页数时不会写入假百分比。
 
 ## 数据库初始化
 
@@ -161,7 +161,7 @@ python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --mate
 
 - 一个课程可以有多份 PDF。
 - 多 PDF 场景下，后续命令优先显式传 `--material-id`；旧 `--file-id` / `--file-name` 仅作为兼容入口。
-- 当前系统使用 `material_objects` 按 MD5 对原始资料对象去重，并使用 `course_materials` 表达课程与资料的关联关系。同一份资料可以被多门课程复用，但解析状态、解析产物与 GraphRAG 导出仍按 `course_material_id` 独立管理。
+- 当前系统使用 `material_objects` 按 MD5 对原始资料对象去重，并使用 `course_materials` 表达课程与资料的关联关系。同一份资料可以被多门课程复用，但解析状态、MinerU 页级解析进度、解析产物与 GraphRAG 导出仍按 `course_material_id` 独立管理。
 - 历史阶段里曾有“Task 1 只更新数据库 schema/migration/docs contract”的过渡约束；当前该过渡已经结束，CLI、服务层和导出链路都已经按 `course_materials` / `material_objects` 模型落地，只保留旧参数作为兼容入口。
 - 兼容与回滚安全上，仍然不要单独用新 ocqa.sql 配旧代码跑生产流程；升级数据库结构时，应保证当前 CLI、服务层和下游抓取逻辑一并处于新模型版本。
 - 新推荐参数是 `--material-id`；旧 `--file-id` / `--file-name` 仍可作为兼容入口使用。

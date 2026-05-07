@@ -16,6 +16,12 @@ SESSION_TYPE_MIGRATION_PATH = (
     / "migrations"
     / "20260429_qa_session_type.sql"
 )
+PARSE_PROGRESS_MIGRATION_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "sql"
+    / "migrations"
+    / "20260507_course_material_parse_progress.sql"
+)
 
 
 class TestOCQABusinessSchemaContract(unittest.TestCase):
@@ -88,6 +94,11 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
             "INDEX `idx_course_materials_course_status`(`course_id` ASC, `parse_status` ASC)",
             self.text,
         )
+        self.assertIn("`parse_progress_extracted_pages` int NULL DEFAULT NULL", self.text)
+        self.assertIn("`parse_progress_total_pages` int NULL DEFAULT NULL", self.text)
+        self.assertIn("`parse_progress_percent` tinyint unsigned NULL DEFAULT NULL", self.text)
+        self.assertIn("`parse_progress_started_at` timestamp NULL DEFAULT NULL", self.text)
+        self.assertIn("`parse_progress_updated_at` timestamp NULL DEFAULT NULL", self.text)
         self.assertIn("INDEX `idx_course_materials_upload_time`(`upload_time` ASC)", self.text)
 
         self.assertNotIn("CREATE TABLE `pdf_files`", self.text)
@@ -131,6 +142,9 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
         self.assertIn("`cm`.`display_name` AS `display_name`", self.text)
         self.assertIn("`cm`.`display_name` AS `file_name`", self.text)
         self.assertIn("`cm`.`material_type` AS `material_type`", self.text)
+        self.assertIn("`cm`.`parse_progress_percent` AS `parse_progress_percent`", self.text)
+        self.assertIn("`cm`.`parse_progress_extracted_pages` AS `parse_progress_extracted_pages`", self.text)
+        self.assertIn("`cm`.`parse_progress_total_pages` AS `parse_progress_total_pages`", self.text)
         self.assertIn("`material_objects` `mo`", self.text)
         self.assertIn("`course_materials` `cm`", self.text)
         self.assertIn("`pr`.`course_material_id` = `cm`.`id`", self.text)
@@ -165,3 +179,17 @@ class TestOCQABusinessSchemaContract(unittest.TestCase):
             "fk_parse_logs_course_material",
         ]:
             self.assertNotIn(fk_name, migration)
+
+    def test_course_material_parse_progress_migration_is_idempotent(self):
+        migration = PARSE_PROGRESS_MIGRATION_PATH.read_text(encoding="utf-8")
+        for column in [
+            "parse_progress_extracted_pages",
+            "parse_progress_total_pages",
+            "parse_progress_percent",
+            "parse_progress_started_at",
+            "parse_progress_updated_at",
+        ]:
+            self.assertIn(f"`{column}`", migration)
+            self.assertIn(f"COLUMN_NAME = '{column}'", migration)
+        self.assertIn("CREATE PROCEDURE `ckqa_add_course_material_parse_progress_if_missing`", migration)
+        self.assertIn("DROP PROCEDURE IF EXISTS `ckqa_add_course_material_parse_progress_if_missing`", migration)

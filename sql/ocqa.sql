@@ -72,6 +72,11 @@ CREATE TABLE `course_materials` (
   `parse_finished_at` timestamp NULL DEFAULT NULL COMMENT '解析完成时间',
   `parse_error_msg` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '解析错误信息',
   `mineru_batch_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'MinerU批次ID',
+  `parse_progress_extracted_pages` int NULL DEFAULT NULL COMMENT 'MinerU已解析页数',
+  `parse_progress_total_pages` int NULL DEFAULT NULL COMMENT 'MinerU总页数',
+  `parse_progress_percent` tinyint unsigned NULL DEFAULT NULL COMMENT 'MinerU页级解析进度百分比',
+  `parse_progress_started_at` timestamp NULL DEFAULT NULL COMMENT 'MinerU页级解析开始时间',
+  `parse_progress_updated_at` timestamp NULL DEFAULT NULL COMMENT 'MinerU页级解析进度更新时间',
   `upload_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -641,6 +646,6 @@ ALTER TABLE `knowledge_bases`
 -- View structure for v_course_parse_overview
 -- ----------------------------
 DROP VIEW IF EXISTS `v_course_parse_overview`;
-CREATE ALGORITHM = UNDEFINED SQL SECURITY DEFINER VIEW `v_course_parse_overview` AS select `c`.`course_id` AS `course_id`,`c`.`course_name` AS `course_name`,`cm`.`id` AS `course_material_id`,`cm`.`id` AS `pdf_file_id`,`cm`.`display_name` AS `display_name`,`cm`.`display_name` AS `file_name`,`mo`.`file_md5` AS `file_md5`,`mo`.`file_size` AS `file_size`,`cm`.`material_type` AS `material_type`,`cm`.`parse_status` AS `parse_status`,`cm`.`upload_time` AS `upload_time`,`cm`.`parse_started_at` AS `parse_started_at`,`cm`.`parse_finished_at` AS `parse_finished_at`,timestampdiff(SECOND,`cm`.`parse_started_at`,`cm`.`parse_finished_at`) AS `parse_duration_seconds`,(select count(0) from `parse_results` `pr` where (`pr`.`course_material_id` = `cm`.`id`)) AS `result_file_count` from ((`courses` `c` left join `course_materials` `cm` on((`c`.`course_id` = `cm`.`course_id`))) left join `material_objects` `mo` on((`cm`.`material_object_id` = `mo`.`id`)));
+CREATE ALGORITHM = UNDEFINED SQL SECURITY DEFINER VIEW `v_course_parse_overview` AS select `c`.`course_id` AS `course_id`,`c`.`course_name` AS `course_name`,`cm`.`id` AS `course_material_id`,`cm`.`id` AS `pdf_file_id`,`cm`.`display_name` AS `display_name`,`cm`.`display_name` AS `file_name`,`mo`.`file_md5` AS `file_md5`,`mo`.`file_size` AS `file_size`,`cm`.`material_type` AS `material_type`,`cm`.`parse_status` AS `parse_status`,`cm`.`parse_progress_percent` AS `parse_progress_percent`,`cm`.`parse_progress_extracted_pages` AS `parse_progress_extracted_pages`,`cm`.`parse_progress_total_pages` AS `parse_progress_total_pages`,`cm`.`parse_progress_started_at` AS `parse_progress_started_at`,`cm`.`parse_progress_updated_at` AS `parse_progress_updated_at`,`cm`.`upload_time` AS `upload_time`,`cm`.`parse_started_at` AS `parse_started_at`,`cm`.`parse_finished_at` AS `parse_finished_at`,timestampdiff(SECOND,`cm`.`parse_started_at`,`cm`.`parse_finished_at`) AS `parse_duration_seconds`,(select count(0) from `parse_results` `pr` where (`pr`.`course_material_id` = `cm`.`id`)) AS `result_file_count` from ((`courses` `c` left join `course_materials` `cm` on((`c`.`course_id` = `cm`.`course_id`))) left join `material_objects` `mo` on((`cm`.`material_object_id` = `mo`.`id`)));
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -113,4 +113,4 @@ pip install -e ".[dev]"
 
 ## Configuration
 
-All runtime config lives in `.env`: MinerU API credentials, MinIO connection, MySQL connection, processing options (model version, language, OCR, formula/table detection), polling timeouts.
+All runtime config lives in `.env`: MinerU API credentials, MinIO connection, MySQL connection, processing options (model version, language, OCR, formula/table detection), polling timeouts. `MINERU_PROGRESS_POLL_INTERVAL` controls the shorter polling cadence used only while MinerU reports `state=running`, so the parser can persist official page-level `extract_progress` without inventing fallback percentages.

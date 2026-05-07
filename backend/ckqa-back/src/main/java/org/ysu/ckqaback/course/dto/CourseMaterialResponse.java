@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.MaterialObjects;
+import org.ysu.ckqaback.pdf.dto.ParseProgressResponse;
 
 import java.time.LocalDateTime;
 
@@ -24,6 +25,9 @@ public class CourseMaterialResponse {
     private final String originalFileName;
     private final String materialType;
     private final String parseStatus;
+    private final String parseStage;
+    private final Integer parseProgressPercent;
+    private final ParseProgressResponse parseProgress;
     private final LocalDateTime parseStartedAt;
     private final LocalDateTime parseFinishedAt;
     private final String parseErrorMsg;
@@ -38,6 +42,7 @@ public class CourseMaterialResponse {
     public static CourseMaterialResponse fromEntity(CourseMaterials material, MaterialObjects object) {
         String displayName = material.getDisplayName();
         String originalFileName = object == null ? null : object.getOriginalFileName();
+        ParseProgressResponse parseProgress = ParseProgressResponse.fromMaterial(material);
         return CourseMaterialResponse.builder()
                 .id(material.getId())
                 .materialId(material.getId())
@@ -49,6 +54,9 @@ public class CourseMaterialResponse {
                 .originalFileName(originalFileName)
                 .materialType(material.getMaterialType())
                 .parseStatus(material.getParseStatus())
+                .parseStage(parseProgress.getStage())
+                .parseProgressPercent(parseProgress.getPercent())
+                .parseProgress(parseProgress)
                 .parseStartedAt(material.getParseStartedAt())
                 .parseFinishedAt(material.getParseFinishedAt())
                 .parseErrorMsg(material.getParseErrorMsg())

@@ -7,7 +7,7 @@
 - ✅ **MD5去重**：上传前校验文件MD5，避免重复存储
 - ✅ **课程资料复用**：`material_objects` 负责物理对象去重，`course_materials` 负责课程内资料关系
 - ✅ **MinIO存储**：PDF文件和解析结果统一存储在MinIO
-- ✅ **MySQL元数据**：完整的课程资料、解析状态和日志管理
+- ✅ **MySQL元数据**：完整的课程资料、解析状态、MinerU 页级进度和日志管理
 - ✅ **状态追踪**：记录解析进度和日志
 
 ## 架构图
@@ -192,6 +192,7 @@ python scripts/pdf_processor/mineru_parser.py status <course_id> [--material-id 
 - 文件ID与文件名
 - 文件信息（MD5、大小）
 - 解析状态（pending/processing/done/failed）
+- MinerU 页级解析进度（`parse_progress_percent`、已解析页数、总页数）
 - 解析结果列表
 - 最近日志
 
@@ -217,7 +218,7 @@ python scripts/pdf_processor/mineru_parser.py list
 |------|------|
 | `courses` | 课程基本信息 |
 | `material_objects` | 物理资料对象信息，包含MD5、MinIO路径、文件大小 |
-| `course_materials` | 课程资料关系，包含课程内展示名、资料类型、解析状态 |
+| `course_materials` | 课程资料关系，包含课程内展示名、资料类型、解析状态和 MinerU 页级进度 |
 | `parse_results` | 解析结果文件信息 |
 | `parse_logs` | 解析过程日志 |
 
@@ -298,6 +299,8 @@ course-artifacts/               # 解析结果存储桶
 | `MODEL_VERSION` | 模型版本 | vlm |
 | `LANGUAGE` | 语言 | ch |
 | `TIMEOUT` | 超时时间(秒) | 600 |
+| `POLL_INTERVAL` | 常规任务状态轮询间隔(秒) | 5 |
+| `MINERU_PROGRESS_POLL_INTERVAL` | MinerU `state=running` 时页级进度轮询间隔(秒)，用于尽快捕获官方 `extract_progress.extracted_pages/total_pages` | `min(POLL_INTERVAL, 2)` |
 | `LOG_LEVEL` | 日志级别 | INFO |
 
 ## 获取 MinerU API Token

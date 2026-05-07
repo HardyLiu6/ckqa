@@ -197,6 +197,32 @@ function resolveProgressStatus(status) {
   if (status === 'pending' || status === 'running') return 'warning'
   return undefined
 }
+
+function getProgressPercentage(cell) {
+  const rawPercent = cell?.percent
+  const percent = Number(rawPercent)
+  if (rawPercent !== undefined && rawPercent !== null && Number.isFinite(percent)) {
+    return Math.min(100, Math.max(0, percent))
+  }
+
+  if (['success', 'done'].includes(String(cell?.status ?? ''))) {
+    return 100
+  }
+
+  return 0
+}
+
+function getProgressFormat(cell) {
+  if (cell?.hasPercent === false) {
+    return cell.progressLabel ?? cell.summary ?? '阶段'
+  }
+
+  if (cell?.estimated) {
+    return '估算'
+  }
+
+  return `${getProgressPercentage(cell)}%`
+}
 </script>
 
 <template>
@@ -291,8 +317,9 @@ function resolveProgressStatus(status) {
                 type="circle"
                 :width="42"
                 :stroke-width="5"
-                :percentage="Number(getCell(row, index).percent ?? 0)"
+                :percentage="getProgressPercentage(getCell(row, index))"
                 :status="resolveProgressStatus(getCell(row, index).status)"
+                :format="() => getProgressFormat(getCell(row, index))"
                 :aria-label="`${column}：${getCell(row, index).summary}`"
               />
               <div class="table-progress-cell__copy">

@@ -88,6 +88,36 @@ public class CourseMaterials implements Serializable {
     private String mineruBatchId;
 
     /**
+     * MinerU已解析页数
+     */
+    @TableField("parse_progress_extracted_pages")
+    private Integer parseProgressExtractedPages;
+
+    /**
+     * MinerU总页数
+     */
+    @TableField("parse_progress_total_pages")
+    private Integer parseProgressTotalPages;
+
+    /**
+     * MinerU页级解析进度百分比
+     */
+    @TableField("parse_progress_percent")
+    private Integer parseProgressPercent;
+
+    /**
+     * MinerU页级解析开始时间
+     */
+    @TableField("parse_progress_started_at")
+    private LocalDateTime parseProgressStartedAt;
+
+    /**
+     * MinerU页级解析进度更新时间
+     */
+    @TableField("parse_progress_updated_at")
+    private LocalDateTime parseProgressUpdatedAt;
+
+    /**
      * 上传时间
      */
     @TableField("upload_time")

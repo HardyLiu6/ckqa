@@ -65,6 +65,18 @@ export async function exportGraphRag(id, payload, config = {}) {
   return unwrapApiResponse(await http.post(`/pdf-files/${encodeURIComponent(id)}/export-graphrag`, payload, config))
 }
 
+export async function fetchParseResultContent(accessUrl, config = {}, client = http) {
+  const response = await client.get(normalizeParseResultAccessPath(accessUrl), {
+    ...config,
+    responseType: 'blob',
+  })
+  return {
+    blob: response.data,
+    fileName: resolveContentDispositionFileName(response.headers?.['content-disposition']) ?? 'parse-result',
+    contentType: response.headers?.['content-type'] ?? response.data?.type ?? 'application/octet-stream',
+  }
+}
+
 export function hasCompleteGraphRagExport(results = [], { mode = 'section', withPageDocs = false } = {}) {
   const fileNames = new Set(results.map((item) => item?.fileName).filter(Boolean))
   const required = ['graphrag_normalized_docs.json']
@@ -80,6 +92,31 @@ export function hasCompleteGraphRagExport(results = [], { mode = 'section', with
   }
 
   return required.every((fileName) => fileNames.has(fileName))
+}
+
+function normalizeParseResultAccessPath(accessUrl) {
+  const raw = String(accessUrl ?? '').trim()
+  if (!raw) return ''
+
+  const path = raw.startsWith('http://') || raw.startsWith('https://')
+    ? new URL(raw).pathname
+    : raw
+
+  return path.startsWith('/api/v1/')
+    ? path.slice('/api/v1'.length)
+    : path
+}
+
+function resolveContentDispositionFileName(value = '') {
+  const match = String(value).match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+  const encoded = match?.[1] ?? match?.[2]
+  if (!encoded) return null
+
+  try {
+    return decodeURIComponent(encoded)
+  } catch {
+    return encoded
+  }
 }
 
 function normalizeCourseMaterialQueryParams(params = {}) {

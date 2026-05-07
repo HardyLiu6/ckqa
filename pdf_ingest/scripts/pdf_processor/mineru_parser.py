@@ -56,7 +56,7 @@ import shutil
 import logging
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any
 
 # 尝试导入依赖
 try:
@@ -103,6 +103,7 @@ class Config:
     # 运行配置
     timeout: int
     poll_interval: int
+    progress_poll_interval: int
     log_level: str
     
     @classmethod
@@ -135,6 +136,12 @@ class Config:
         else:
             project_root = default_project_root
         
+        poll_interval = int(os.getenv("POLL_INTERVAL", "5"))
+        progress_poll_interval = int(os.getenv(
+            "MINERU_PROGRESS_POLL_INTERVAL",
+            str(min(poll_interval, 2)),
+        ))
+
         return cls(
             api_token=os.getenv("MINERU_API_TOKEN", ""),
             api_base_url=os.getenv("MINERU_API_BASE_URL", "https://mineru.net/api/v4"),
@@ -148,7 +155,8 @@ class Config:
             enable_table=str_to_bool(os.getenv("ENABLE_TABLE", "true")),
             enable_ocr=str_to_bool(os.getenv("ENABLE_OCR", "true")),
             timeout=int(os.getenv("TIMEOUT", "600")),
-            poll_interval=int(os.getenv("POLL_INTERVAL", "5")),
+            poll_interval=poll_interval,
+            progress_poll_interval=max(1, progress_poll_interval),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
     
@@ -233,7 +241,11 @@ class MinerUParser:
         
         return response.status_code == 200
     
-    def get_batch_results(self, batch_id: str) -> dict:
+    def get_batch_results(
+        self,
+        batch_id: str,
+        on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> dict:
         """轮询获取解析结果"""
         url = f"{self.config.api_base_url}/extract-results/batch/{batch_id}"
         
@@ -271,6 +283,8 @@ class MinerUParser:
                 else:
                     all_done = False
                     progress = file_result.get("extract_progress", {})
+                    if on_progress and progress:
+                        on_progress(progress)
                     self.logger.info(
                         f"解析中: {progress.get('extracted_pages', 0)}/"
                         f"{progress.get('total_pages', '?')} 页 ({int(elapsed)}秒)"
@@ -282,7 +296,17 @@ class MinerUParser:
                 self.logger.info("解析完成!")
                 return result["data"]
             
-            time.sleep(self.config.poll_interval)
+            time.sleep(self._next_poll_interval(extract_results))
+
+    def _next_poll_interval(self, extract_results: list[dict]) -> int:
+        """MinerU 只有 running 时暴露页级进度，运行中使用更短轮询间隔。"""
+        has_running_file = any(
+            file_result.get("state") == "running"
+            for file_result in extract_results
+        )
+        if has_running_file:
+            return getattr(self.config, "progress_poll_interval", self.config.poll_interval)
+        return self.config.poll_interval
     
     def download_results(self, extract_result: dict, output_dir: Path) -> list:
         """下载解析结果"""
@@ -613,7 +637,10 @@ class PDFParserApp:
             self.db.add_log(resolved_file_id, "文件已上传到MinerU")
             
             # 等待解析完成
-            batch_result = self.parser.get_batch_results(batch_id)
+            batch_result = self.parser.get_batch_results(
+                batch_id,
+                on_progress=lambda progress: self._record_parse_progress(resolved_file_id, progress),
+            )
             
             # 下载结果到临时目录
             artifact_prefix = f"material_{resolved_file_id}"
@@ -693,7 +720,7 @@ class PDFParserApp:
                 "status": "not_found",
                 "message": str(e),
             }
-        
+
         results = self.db.get_parse_results(pdf_file["id"])
         logs = self.db.get_logs(pdf_file["id"])
         
@@ -707,6 +734,14 @@ class PDFParserApp:
             "file_md5": pdf_file["file_md5"],
             "file_size": pdf_file["file_size"],
             "parse_status": pdf_file["parse_status"],
+            "parse_progress_percent": pdf_file.get("parse_progress_percent"),
+            "parse_progress_extracted_pages": pdf_file.get("parse_progress_extracted_pages"),
+            "parse_progress_total_pages": pdf_file.get("parse_progress_total_pages"),
+            "parse_progress_updated_at": (
+                str(pdf_file["parse_progress_updated_at"])
+                if pdf_file.get("parse_progress_updated_at")
+                else None
+            ),
             "upload_time": str(pdf_file["upload_time"]),
             "parse_started_at": str(pdf_file["parse_started_at"]) if pdf_file["parse_started_at"] else None,
             "parse_finished_at": str(pdf_file["parse_finished_at"]) if pdf_file["parse_finished_at"] else None,
@@ -720,6 +755,12 @@ class PDFParserApp:
                 for l in logs[-5:]
             ]
         }
+
+    def _record_parse_progress(self, course_material_id: int, progress: Dict[str, Any]):
+        try:
+            self.db.update_parse_progress(course_material_id, progress)
+        except Exception as exc:
+            self.logger.warning(f"写入 MinerU 页级进度失败，将继续等待解析结果: {exc}")
     
     def download(
         self,

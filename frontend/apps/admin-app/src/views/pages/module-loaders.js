@@ -352,13 +352,7 @@ function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
         label: COURSE_MATERIAL_TYPE_LABELS[materialType] ?? materialType,
         filterValue: materialType,
       },
-      {
-        kind: 'status',
-        status: parseStatus,
-        label: COURSE_MATERIAL_PARSE_STATUS_LABELS[parseStatus] ?? parseStatus,
-        detail: material.parseErrorMsg ?? '',
-        filterValue: parseStatus,
-      },
+      createMaterialParseProgressCell({ ...material, parseStatus }),
       formatFileSize(material.fileSize),
       material.uploadTime ?? material.createdAt ?? '-',
       material.updatedAt ?? '-',
@@ -389,15 +383,18 @@ function createCourseMaterialRowActions(material = {}) {
   }`
   const parseStatus = String(material.parseStatus ?? '').trim()
   const processing = parseStatus === 'processing'
+  const canParse = ['pending', 'failed'].includes(parseStatus)
   return [
     { label: '详情', to: detailPath || `/app/materials/${encodedId}`, icon: 'view' },
     {
       label: '解析',
-      to: detailPath || `/app/materials/${encodedId}`,
+      key: 'parse-course-material',
       icon: 'parse',
       variant: 'primary',
-      disabled: processing,
-      title: processing ? '资料解析中' : '进入资料详情触发解析',
+      disabled: !canParse || processing,
+      title: processing
+        ? '资料解析中'
+        : (canParse ? '直接提交 MinerU 解析任务' : '当前状态不支持触发解析'),
     },
     { label: '结果', to: resultPath, icon: 'knowledge' },
     { label: '编辑', key: 'edit-course-material', icon: 'edit', variant: 'primary' },
@@ -559,7 +556,17 @@ function createKnowledgeBaseProgressCell(course = {}) {
   })
 }
 
-function createProgressCell({ summary, detail, percent, status, filterValue }) {
+function createProgressCell({
+  summary,
+  detail,
+  percent,
+  status,
+  filterValue,
+  hasPercent,
+  progressMode,
+  progressLabel,
+  estimated,
+}) {
   return {
     kind: 'progress',
     summary,
@@ -567,6 +574,10 @@ function createProgressCell({ summary, detail, percent, status, filterValue }) {
     percent,
     status,
     filterValue,
+    hasPercent,
+    progressMode,
+    progressLabel,
+    estimated,
   }
 }
 
@@ -1550,17 +1561,44 @@ function buildMaterialSummary(material = {}) {
   return [name, type, status].filter(Boolean).join(' · ')
 }
 
+export function createMaterialParseProgressCell(material = {}) {
+  const progress = buildMaterialParseProgress(material)
+  const displayStatus = {
+    processing: 'running',
+    done: 'success',
+  }[progress.status] ?? progress.status
+
+  return createProgressCell({
+    summary: progress.statusLabel,
+    detail: progress.hasPercent
+      ? (progress.estimated ? `约 ${progress.percent}%` : `${progress.percent}%`)
+      : '阶段状态',
+    percent: progress.percent,
+    status: displayStatus,
+    filterValue: progress.status,
+    hasPercent: progress.hasPercent,
+    progressMode: progress.progressMode,
+    progressLabel: {
+      pending: '待解',
+      processing: '解析',
+      done: '完成',
+      failed: '失败',
+    }[progress.status] ?? '阶段',
+    estimated: progress.estimated,
+  })
+}
+
 function buildMaterialParseProgress(material = {}) {
   const status = normalizeMaterialParseStatus(material.parseStatus)
+  const rawProgress = material.parseProgress
   const rawPercentValue = resolveMaterialParsePercent(material)
   const rawPercent = Number(rawPercentValue)
   const hasPercent = rawPercentValue !== undefined && rawPercentValue !== null && Number.isFinite(rawPercent)
-  const fallbackPercent = {
-    pending: 0,
-    processing: 50,
-    done: 100,
-    failed: 100,
-  }
+  const estimated = hasPercent && rawProgress && typeof rawProgress === 'object'
+    ? rawProgress.estimated === true || rawProgress.isEstimated === true
+    : false
+  const backendProgressDetail = rawProgress && typeof rawProgress === 'object' ? rawProgress.detail : ''
+  const backendStageLabel = rawProgress && typeof rawProgress === 'object' ? rawProgress.stageLabel : ''
   const labelByStatus = {
     pending: '等待触发解析',
     processing: 'MinerU 正在解析资料',
@@ -1577,12 +1615,26 @@ function buildMaterialParseProgress(material = {}) {
   return {
     status,
     statusLabel: COURSE_MATERIAL_PARSE_STATUS_LABELS[status] ?? status,
-    percent: clampPercent(hasPercent ? rawPercent : fallbackPercent[status] ?? 0),
-    label: labelByStatus[status] ?? '解析状态待确认',
-    detail: detailByStatus[status] ?? '刷新后查看最新解析状态。',
+    percent: hasPercent ? clampPercent(rawPercent) : null,
+    hasPercent,
+    estimated,
+    progressMode: hasPercent ? 'percent' : 'stage',
+    label: backendStageLabel || labelByStatus[status] || '解析状态待确认',
+    detail: backendProgressDetail || detailByStatus[status] || '刷新后查看最新解析状态。',
+    ...(rawProgress && typeof rawProgress === 'object'
+      ? {
+          extractedPages: rawProgress.extractedPages ?? null,
+          totalPages: rawProgress.totalPages ?? null,
+          progressUpdatedAt: rawProgress.updatedAt ?? '',
+        }
+      : {}),
     pollHint: material.mineruBatchId
       ? `MinerU 批次：${material.mineruBatchId}`
-      : '当前接口提供阶段状态；若后端返回 parseProgress，将直接展示真实百分比。',
+      : (hasPercent
+          ? (estimated
+              ? '后端返回阶段估算百分比；若 MinerU 提供真实进度，将直接替换展示。'
+              : '当前接口已返回 parseProgress，直接展示真实百分比。')
+          : '后端暂未返回 parseProgress 百分比，当前仅展示阶段状态。'),
   }
 }
 
@@ -1712,6 +1764,11 @@ function mapParseResultItem(result = {}) {
     title: result.fileName ?? result.objectName ?? '-',
     meta: result.resultType ?? result.type ?? '-',
     detail: result.createdAt ?? result.updatedAt ?? '',
+    contentType: result.contentType ?? '',
+    fileSize: result.fileSize ?? null,
+    previewable: result.previewable ?? true,
+    previewUrl: result.previewUrl ?? '',
+    downloadUrl: result.downloadUrl ?? '',
   }
 }
 

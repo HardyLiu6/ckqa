@@ -405,6 +405,13 @@ class DatabaseService:
             
             if status == ParseStatus.PROCESSING:
                 updates.append("parse_started_at = NOW()")
+                updates.extend([
+                    "parse_progress_extracted_pages = NULL",
+                    "parse_progress_total_pages = NULL",
+                    "parse_progress_percent = NULL",
+                    "parse_progress_started_at = NULL",
+                    "parse_progress_updated_at = NULL",
+                ])
             elif status in (ParseStatus.DONE, ParseStatus.FAILED):
                 updates.append("parse_finished_at = NOW()")
             
@@ -421,6 +428,28 @@ class DatabaseService:
             cursor.execute(f"""
                 UPDATE course_materials SET {', '.join(updates)} WHERE id = %s
             """, params)
+
+    def update_parse_progress(self, file_id: int, progress: Dict[str, Any]):
+        """保存 MinerU 页级解析进度；file_id 兼容旧名，语义为 course_material_id。"""
+        extracted_pages = _optional_int(progress.get("extracted_pages"))
+        total_pages = _optional_int(progress.get("total_pages"))
+        if extracted_pages is None or total_pages is None or total_pages <= 0:
+            return
+
+        percent = _clamp_percent(round(extracted_pages * 100 / total_pages))
+        started_at = progress.get("start_time")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE course_materials
+                SET parse_progress_extracted_pages = %s,
+                    parse_progress_total_pages = %s,
+                    parse_progress_percent = %s,
+                    parse_progress_started_at = %s,
+                    parse_progress_updated_at = NOW()
+                WHERE id = %s
+            """, (extracted_pages, total_pages, percent, started_at, file_id))
     
     def delete_pdf_file(self, file_id: int):
         """删除PDF文件记录（会级联删除相关解析结果）"""
@@ -574,3 +603,16 @@ def infer_result_type(file_name: str) -> ResultType:
         return ResultType.ORIGIN_PDF
     else:
         return ResultType.OTHER
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_percent(value: int) -> int:
+    return max(0, min(100, value))

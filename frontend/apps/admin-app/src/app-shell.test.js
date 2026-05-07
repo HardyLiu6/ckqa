@@ -68,6 +68,7 @@ import {
 import {
   buildCourseListParams,
   buildKnowledgeBaseWorkflowSteps,
+  createMaterialParseProgressCell,
   createCoursesLoaderResult,
   loadCourseDetailBlock,
   loadModulePage,
@@ -93,6 +94,7 @@ import {
 } from './api/course-memberships.js'
 import {
   exportGraphRag,
+  fetchParseResultContent,
   getCourseMaterial,
   getMaterial,
   hasCompleteGraphRagExport,
@@ -629,21 +631,33 @@ test('资料详情 loader 根据解析状态推导可执行按钮', async () => 
   assert.deepEqual(processingResult.blocks.material.item.parseProgress, {
     status: 'processing',
     statusLabel: '解析中',
-    percent: 50,
+    percent: null,
+    hasPercent: false,
+    estimated: false,
+    progressMode: 'stage',
     label: 'MinerU 正在解析资料',
     detail: '解析任务进行中，页面会继续轮询直到完成或失败。',
-    pollHint: '当前接口提供阶段状态；若后端返回 parseProgress，将直接展示真实百分比。',
+    pollHint: '后端暂未返回 parseProgress 百分比，当前仅展示阶段状态。',
   })
 
   const parseResultsRoute = { name: 'parse-results', query: {}, params: { materialId: '9' } }
   const parseResultsPage = await loadModulePage(parseResultsRoute, parseResultsRoute.query, {
     getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
-    listParseResults: async () => ([{ id: 1, fileName: 'content_list.json' }]),
+    listParseResults: async () => ([{
+      id: 1,
+      fileName: 'content_list.json',
+      previewUrl: '/api/v1/pdf-files/9/results/1/preview',
+      downloadUrl: '/api/v1/pdf-files/9/results/1/download',
+      previewable: true,
+    }]),
   })
 
   assert.equal(parseResultsPage.requestState, 'success')
   assert.equal(parseResultsPage.blocks.material.item.parseStatusLabel, '已完成')
   assert.equal(parseResultsPage.blocks.parseResults.items[0].title, 'content_list.json')
+  assert.equal(parseResultsPage.blocks.parseResults.items[0].previewUrl, '/api/v1/pdf-files/9/results/1/preview')
+  assert.equal(parseResultsPage.blocks.parseResults.items[0].downloadUrl, '/api/v1/pdf-files/9/results/1/download')
+  assert.equal(parseResultsPage.blocks.parseResults.items[0].previewable, true)
 })
 
 test('资料详情 loader 通过课程资料接口补齐资料对象信息并中文化状态', async () => {
@@ -679,6 +693,8 @@ test('资料详情 loader 通过课程资料接口补齐资料对象信息并中
   assert.equal(result.blocks.material.item.fileMd5, '0123456789abcdef0123456789abcdef')
   assert.equal(result.blocks.material.item.parseStatusLabel, '待解析')
   assert.equal(result.blocks.material.item.parseProgress.percent, 12)
+  assert.equal(result.blocks.material.item.parseProgress.hasPercent, true)
+  assert.equal(result.blocks.material.item.parseProgress.progressMode, 'percent')
   assert.equal(result.blocks.material.item.parseProgress.label, '等待触发解析')
   assert.equal(result.actions.parseHint, '资料尚未解析。触发后将提交 MinerU 解析任务，页面会自动轮询状态。')
   assert.deepEqual(
@@ -697,6 +713,111 @@ test('资料详情 loader 通过课程资料接口补齐资料对象信息并中
       ['更新时间', '2026-05-06T18:19:00'],
     ],
   )
+})
+
+test('课程资料列表的解析按钮直接触发操作且解析状态用真实进度模型展示', async () => {
+  const route = { name: 'course-materials', query: {}, params: { courseId: 'os' } }
+  const result = await loadModulePage(route, route.query, {
+    listCourseMaterialPage: async () => ({
+      items: [
+        {
+          id: 9,
+          courseId: 'os',
+          displayName: '操作系统教材',
+          fileName: 'os-book.pdf',
+          materialType: 'textbook',
+          parseStatus: 'pending',
+        },
+        {
+          id: 10,
+          courseId: 'os',
+          displayName: '实验讲义',
+          materialType: 'handout',
+          parseStatus: 'processing',
+          parseProgress: 37,
+        },
+      ],
+      pagination: { page: 1, size: 20, total: 2, pages: 1 },
+    }),
+  })
+
+  assert.equal(result.rows[0].cells[2].kind, 'progress')
+  assert.equal(result.rows[0].cells[2].percent, null)
+  assert.equal(result.rows[0].cells[2].hasPercent, false)
+  assert.equal(result.rows[0].cells[2].summary, '待解析')
+  assert.equal(result.rows[0].cells[2].filterValue, 'pending')
+
+  const parseAction = result.rows[0].actions.find((action) => action.label === '解析')
+  assert.equal(parseAction.key, 'parse-course-material')
+  assert.equal(parseAction.to, undefined)
+  assert.equal(parseAction.disabled, false)
+
+  const processingParseAction = result.rows[1].actions.find((action) => action.label === '解析')
+  assert.equal(processingParseAction.disabled, true)
+  assert.equal(result.rows[1].cells[2].percent, 37)
+  assert.equal(result.rows[1].cells[2].hasPercent, true)
+  assert.equal(result.rows[1].cells[2].detail, '37%')
+
+  assert.equal(result.rows[0].actions.find((action) => action.label === '结果').to, '/app/materials/9/parse-results?courseId=os')
+})
+
+test('资料解析进度单元不把阶段状态伪装成百分比', () => {
+  const stageCell = createMaterialParseProgressCell({ id: 9, parseStatus: 'processing' })
+  assert.equal(stageCell.percent, null)
+  assert.equal(stageCell.hasPercent, false)
+  assert.equal(stageCell.detail, '阶段状态')
+  assert.equal(stageCell.progressLabel, '解析')
+
+  const percentCell = createMaterialParseProgressCell({ id: 10, parseStatus: 'processing', parseProgress: 68 })
+  assert.equal(percentCell.percent, 68)
+  assert.equal(percentCell.hasPercent, true)
+  assert.equal(percentCell.detail, '68%')
+
+  const estimatedCell = createMaterialParseProgressCell({
+    id: 11,
+    parseStatus: 'processing',
+    parseProgress: { percent: 35, estimated: true },
+  })
+  assert.equal(estimatedCell.percent, 35)
+  assert.equal(estimatedCell.hasPercent, true)
+  assert.equal(estimatedCell.estimated, true)
+  assert.equal(estimatedCell.detail, '约 35%')
+
+  const realPageCell = createMaterialParseProgressCell({
+    id: 12,
+    parseStatus: 'processing',
+    parseProgress: {
+      percent: 60,
+      estimated: false,
+      extractedPages: 3,
+      totalPages: 5,
+    },
+  })
+  assert.equal(realPageCell.percent, 60)
+  assert.equal(realPageCell.hasPercent, true)
+  assert.equal(realPageCell.estimated, false)
+  assert.equal(realPageCell.detail, '60%')
+})
+
+test('解析产物内容 API 使用 blob 请求并解析文件名', async () => {
+  const calls = []
+  const result = await fetchParseResultContent('/api/v1/pdf-files/9/results/1/download', {}, {
+    get: async (url, config) => {
+      calls.push([url, config])
+      return {
+        data: new Blob(['{}'], { type: 'application/json' }),
+        headers: {
+          'content-type': 'application/json',
+          'content-disposition': 'attachment; filename="content_list.json"',
+        },
+      }
+    },
+  })
+
+  assert.equal(calls[0][0], '/pdf-files/9/results/1/download')
+  assert.equal(calls[0][1].responseType, 'blob')
+  assert.equal(result.fileName, 'content_list.json')
+  assert.equal(result.contentType, 'application/json')
 })
 
 test('长任务 fallback 识别超时/冲突并支持取消轮询', async () => {
@@ -2418,6 +2539,12 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /class="course-detail-hero"/)
   assert.match(modulePage, /class="course-progress-strip"/)
   assert.match(modulePage, /class="material-parse-progress"/)
+  assert.doesNotMatch(modulePage, /class="material-action-guide"/)
+  assert.match(modulePage, /runCourseMaterialParse/)
+  assert.match(modulePage, /activeOperationTargetId/)
+  assert.match(modulePage, /handleParseResultPreview/)
+  assert.match(modulePage, /handleParseResultDownload/)
+  assert.match(modulePage, /parse-result-actions/)
   assert.match(modulePage, /class="creation-dialog course-action-dialog course-delete-dialog"/)
   assert.match(modulePage, /openCourseArchiveDialog/)
   assert.match(modulePage, /submitCourseArchive/)

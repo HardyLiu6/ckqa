@@ -51,6 +51,8 @@
 - `GET /api/v1/knowledge-bases/{id}`
 - `GET /api/v1/pdf-files/{id}`
 - `GET /api/v1/pdf-files/{id}/results`
+- `GET /api/v1/pdf-files/{id}/results/{resultId}/preview`
+- `GET /api/v1/pdf-files/{id}/results/{resultId}/download`
 - `POST /api/v1/pdf-files/{id}/parse`
 - `POST /api/v1/pdf-files/{id}/export-graphrag`
 - `POST /api/v1/knowledge-bases/{id}/index-runs`
@@ -108,6 +110,7 @@
 - 单个 PDF 默认上限为 200MB；后端会在读取文件字节前根据 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 拒绝超限文件，同时 Spring multipart 默认限制也设置为 200MB。
 - 上传资料会按文件 MD5 创建或复用 `material_objects`，再在 `course_materials` 中创建课程内资料记录；同一课程重复资料或重复展示名返回 409。
 - 解析中的资料不能删除；旧 `/api/v1/courses/{courseId}/pdf-files` 与 `/api/v1/pdf-files/**` 仍保留给解析、结果查看和 GraphRAG 导出链路兼容使用。
+- 资料详情响应会返回 `parseProgress`、`parseStage` 与 `parseProgressPercent`；当 `pdf_ingest` 在 MinerU `state=running` 阶段轮询到官方 `extract_progress.extracted_pages/total_pages` 时，`parseProgress` 会优先返回 `estimated=false` 的真实页级百分比、`extractedPages` 和 `totalPages`。解析产物响应会返回 `previewUrl` / `downloadUrl`，由 Java 后端代理读取 MinIO 对象后以 inline 或 attachment 方式输出。
 
 鉴权：
 
@@ -359,6 +362,23 @@ curl -s http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/$TASK_ID
 ```bash
 ./mvnw test
 ```
+
+### 本地 MinIO 解析产物 smoke
+
+默认不随普通测试执行，需显式打开，并指向本机 MinIO 中已经存在的解析产物对象：
+
+```bash
+export CKQA_RUN_MINIO_PARSE_RESULT_SMOKE=true
+export CKQA_SMOKE_PARSE_RESULT_OBJECT_KEY='crs-xxx/material_1/content_list.json'
+# 可选：默认读取 COURSE_MATERIAL_BUCKET / COURSE_COVER_BUCKET / course-artifacts
+export CKQA_SMOKE_PARSE_RESULT_BUCKET=course-artifacts
+export CKQA_SMOKE_PARSE_RESULT_FILE_NAME=content_list.json
+export CKQA_SMOKE_PARSE_RESULT_EXPECT_CONTAINS='content'
+
+./mvnw -Dtest=PdfParseResultMinioSmokeTest test
+```
+
+该 smoke 会使用当前 `MINIO_ENDPOINT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_SECURE` 读取真实对象，并通过 `/api/v1/pdf-files/{id}/results/{resultId}/preview` 与 `/download` 的控制器路径验证 inline / attachment 输出。
 
 ### 仅编译
 

@@ -5,6 +5,8 @@ import {
   ChevronLeft,
   Check,
   DatabaseZap,
+  Download,
+  Eye,
   Pencil,
   Archive,
   Hammer,
@@ -47,6 +49,7 @@ import {
 import {
   deleteCourseMaterial,
   exportGraphRag,
+  fetchParseResultContent,
   getMaterial,
   listParseResults,
   startParse,
@@ -86,7 +89,11 @@ import {
   createParallelParseTaskOptions,
   resolveMaterialExportPayload,
 } from './material-lifecycle-actions.js'
-import { DEFAULT_COURSE_COVER_URL, loadModulePage } from './module-loaders.js'
+import {
+  DEFAULT_COURSE_COVER_URL,
+  createMaterialParseProgressCell,
+  loadModulePage,
+} from './module-loaders.js'
 import {
   buildPageQuery,
   createRouteSnapshot,
@@ -147,6 +154,7 @@ const activeStepKey = ref('')
 const actionState = ref('idle')
 const actionSnapshot = ref(null)
 const activeOperationKey = ref('')
+const activeOperationTargetId = ref('')
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
@@ -182,6 +190,8 @@ const materialActionError = ref(null)
 const materialActionTarget = ref(null)
 const materialUploadProgress = ref(0)
 const materialForm = ref(createCourseMaterialForm())
+const parseResultActionState = ref('idle')
+const parseResultActionError = ref(null)
 let activeLongTaskController = null
 const config = computed(() => {
   if (!liveState.value) {
@@ -329,6 +339,13 @@ const tableFilterValues = computed(() => {
   }
 
   return values
+})
+const displayedTableRows = computed(() => {
+  if (route.name !== 'course-materials') {
+    return config.value.rows ?? []
+  }
+
+  return withActiveMaterialParsePreview(config.value.rows ?? [])
 })
 const primaryActionIcon = computed(() => {
   if (canOpenCreationDialog.value) return Plus
@@ -545,6 +562,85 @@ function normalizeTableQuery(query = {}) {
   )
 }
 
+function withActiveMaterialParsePreview(rows = []) {
+  const targetId = String(activeOperationTargetId.value ?? '')
+  if (activeOperationKey.value !== 'material-parse' || !targetId) {
+    return rows
+  }
+
+  return rows.map((row) => {
+    if (String(row?.id ?? row?.raw?.id ?? '') !== targetId) {
+      return row
+    }
+
+    const previewMaterial = createMaterialParsePreview(row)
+    const cells = [...(row.cells ?? [])]
+    cells[2] = createMaterialParseProgressCell(previewMaterial)
+
+    return {
+      ...row,
+      raw: previewMaterial,
+      cells,
+      actions: (row.actions ?? []).map((action) => {
+        if (['parse-course-material', 'delete-course-material'].includes(action.key)) {
+          return {
+            ...action,
+            disabled: true,
+            title: action.key === 'parse-course-material'
+              ? '解析任务已提交，正在轮询状态'
+              : '解析确认期间暂不删除资料',
+          }
+        }
+        return action
+      }),
+    }
+  })
+}
+
+function createMaterialParsePreview(row = {}) {
+  const raw = row.raw ?? row
+  const snapshot = actionSnapshot.value && typeof actionSnapshot.value === 'object'
+    ? actionSnapshot.value
+    : {}
+  const snapshotIsMaterial = [
+    'parseStatus',
+    'parseState',
+    'parseProgress',
+    'progress',
+    'mineruBatchId',
+  ].some((key) => snapshot[key] !== undefined)
+
+  return {
+    ...raw,
+    ...(snapshotIsMaterial ? snapshot : {}),
+    id: raw.id ?? row.id,
+    parseStatus: resolvePreviewParseStatus(raw, snapshot),
+    parseProgress: snapshotIsMaterial && snapshot.parseProgress !== undefined
+      ? snapshot.parseProgress
+      : raw.parseProgress,
+  }
+}
+
+function resolvePreviewParseStatus(raw = {}, snapshot = {}) {
+  const snapshotStatus = snapshot.parseStatus ?? snapshot.parseState
+  if (snapshotStatus) {
+    return snapshotStatus
+  }
+
+  const normalizedActionState = String(actionState.value ?? '').toLowerCase()
+  if (normalizedActionState === 'success') {
+    return 'done'
+  }
+  if (normalizedActionState === 'failed') {
+    return 'failed'
+  }
+  if (['running', 'confirming'].includes(normalizedActionState)) {
+    return 'processing'
+  }
+
+  return raw.parseStatus ?? raw.status ?? 'pending'
+}
+
 async function updateBuildActiveStep(stepKey) {
   activeStepKey.value = stepKey
   if (route.name === 'knowledge-base-build') {
@@ -720,6 +816,11 @@ async function handleCourseMemberRowAction(row, action) {
 async function handleCourseMaterialRowAction(row, action) {
   const material = row?.raw ?? row
   if (!material?.id || materialActionRunning.value) {
+    return
+  }
+
+  if (action?.key === 'parse-course-material') {
+    await runCourseMaterialParse(material)
     return
   }
 
@@ -1294,6 +1395,23 @@ async function runMaterialParse() {
   })
 }
 
+async function runCourseMaterialParse(material = {}) {
+  const materialId = material.id ?? material.materialId ?? material.pdfFileId
+  const parseStatus = String(material.parseStatus ?? '').trim()
+
+  if (!materialId || actionRunning.value || !['pending', 'failed'].includes(parseStatus)) {
+    return
+  }
+
+  startLongTask({
+    operationKey: 'material-parse',
+    targetId: String(materialId),
+    limits: LONG_TASK_LIMITS.parse,
+    trigger: ({ signal }) => startParse(materialId, { signal }),
+    poll: ({ signal }) => getMaterial(materialId, { signal }),
+  })
+}
+
 async function runMaterialExport() {
   const materialId = route.params.materialId
   const actions = config.value.actions ?? {}
@@ -1323,6 +1441,85 @@ async function runMaterialExport() {
       listParseResultsRequest: listParseResults,
     }),
   })
+}
+
+async function handleParseResultPreview(item = {}) {
+  if (!item.previewUrl || item.previewable === false || parseResultActionState.value === 'running') {
+    return
+  }
+
+  await openParseResultBlob(item.previewUrl, item.title, 'preview')
+}
+
+async function handleParseResultDownload(item = {}) {
+  if (!item.downloadUrl || parseResultActionState.value === 'running') {
+    return
+  }
+
+  await openParseResultBlob(item.downloadUrl, item.title, 'download')
+}
+
+async function openParseResultBlob(accessUrl, fallbackFileName, mode) {
+  parseResultActionState.value = 'running'
+  parseResultActionError.value = null
+
+  try {
+    const content = await fetchParseResultContent(accessUrl)
+    const blob = content.blob instanceof Blob
+      ? content.blob
+      : new Blob([content.blob], { type: content.contentType })
+    const objectUrl = URL.createObjectURL(blob)
+    const fileName = content.fileName || fallbackFileName || 'parse-result'
+
+    if (mode === 'download') {
+      triggerBlobDownload(objectUrl, fileName)
+    } else {
+      openBlobPreview(objectUrl, fileName)
+    }
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30000)
+    parseResultActionState.value = 'success'
+  } catch (error) {
+    const apiError = createApiError(error)
+    parseResultActionState.value = 'failed'
+    parseResultActionError.value = apiError
+    ElMessage.error(apiError.message)
+  }
+}
+
+function triggerBlobDownload(objectUrl, fileName) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+}
+
+function openBlobPreview(objectUrl, fileName) {
+  if (typeof window !== 'undefined' && typeof window.open === 'function') {
+    const previewWindow = window.open(objectUrl, '_blank', 'noopener')
+    if (previewWindow) {
+      return
+    }
+  }
+
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.target = '_blank'
+  anchor.rel = 'noopener'
+  anchor.download = fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
 }
 
 async function runBuildBatchParse() {
@@ -1362,9 +1559,10 @@ async function runBuildExportMissing() {
   })
 }
 
-function startLongTask({ operationKey, trigger, poll, isSuccess, isFailed, limits }) {
+function startLongTask({ operationKey, targetId = '', trigger, poll, isSuccess, isFailed, limits }) {
   cancelLongTask()
   activeOperationKey.value = operationKey
+  activeOperationTargetId.value = targetId
   actionSnapshot.value = null
   activeLongTaskController = createLongTaskController({
     trigger,
@@ -1618,6 +1816,7 @@ function cancelLongTask() {
   actionState.value = 'idle'
   actionSnapshot.value = null
   activeOperationKey.value = ''
+  activeOperationTargetId.value = ''
 }
 
 function startActiveLongTask(controller) {
@@ -1640,20 +1839,48 @@ function resolveMaterialParseProgress(material = null, { active = false, actionS
   }
 
   const status = progress.status === 'pending' ? 'processing' : progress.status
-  const percent = Math.max(
-    Number(progress.percent ?? 0),
-    status === 'processing' ? 35 : Number(progress.percent ?? 0),
-  )
+  const hasPercent = progress.hasPercent !== false
+    && progress.percent !== undefined
+    && progress.percent !== null
+    && Number.isFinite(Number(progress.percent))
 
   return {
     ...progress,
     status,
     statusLabel: status === 'processing' ? '解析中' : progress.statusLabel,
-    percent: Math.min(100, Math.max(0, percent)),
+    percent: hasPercent ? Math.min(100, Math.max(0, Number(progress.percent))) : null,
+    hasPercent,
+    progressMode: hasPercent ? 'percent' : 'stage',
     label: normalizedActionState === 'confirming' ? '解析任务已提交，正在确认状态' : '解析任务已提交',
     detail: '解析请求已发送，正在等待后端写入最新资料状态。',
     pollHint: '页面会每 10 秒轮询一次资料状态；完成或失败后自动刷新解析结果。',
   }
+}
+
+function getMaterialProgressPercentage(progress = {}) {
+  const rawPercent = progress.percent
+  const percent = Number(rawPercent)
+  if (rawPercent !== undefined && rawPercent !== null && Number.isFinite(percent)) {
+    return Math.min(100, Math.max(0, percent))
+  }
+
+  if (progress.status === 'done') {
+    return 100
+  }
+
+  return 0
+}
+
+function formatMaterialProgressLabel() {
+  if (materialParseProgress.value?.hasPercent === false) {
+    return materialParseProgress.value.statusLabel ?? '阶段'
+  }
+
+  if (materialParseProgress.value?.estimated) {
+    return `约 ${getMaterialProgressPercentage(materialParseProgress.value)}%`
+  }
+
+  return `${getMaterialProgressPercentage(materialParseProgress.value)}%`
 }
 
 function resolveMaterialProgressStatus(status) {
@@ -2556,7 +2783,7 @@ onBeforeUnmount(() => cancelLongTask())
     v-else-if="config.variant === 'table'"
     :title="tableTitle"
     :columns="config.columns"
-    :rows="config.rows"
+    :rows="displayedTableRows"
     :filters="config.filters"
     :pagination="config.pagination"
     :search="config.search"
@@ -2764,20 +2991,6 @@ onBeforeUnmount(() => cancelLongTask())
         </div>
       </div>
       <div
-        v-if="config.actions?.parseHint"
-        class="material-action-guide"
-        :data-status="materialBlock.item.parseStatus"
-      >
-        <div>
-          <strong>{{ config.actions.parseHintTitle || '解析提示' }}</strong>
-          <p>{{ config.actions.parseHint }}</p>
-        </div>
-        <StatusBadge
-          :status="materialBlock.item.parseStatus"
-          :label="materialBlock.item.parseStatusLabel"
-        />
-      </div>
-      <div
         v-if="materialParseProgress"
         class="material-parse-progress"
         :data-status="materialParseProgress.status"
@@ -2794,8 +3007,10 @@ onBeforeUnmount(() => cancelLongTask())
           />
         </div>
         <el-progress
-          :percentage="materialParseProgress.percent"
+          :percentage="getMaterialProgressPercentage(materialParseProgress)"
           :status="resolveMaterialProgressStatus(materialParseProgress.status)"
+          :indeterminate="!materialParseProgress.hasPercent && materialParseProgress.status === 'processing'"
+          :format="formatMaterialProgressLabel"
         />
         <p>{{ materialParseProgress.detail }}</p>
         <small>{{ materialParseProgress.pollHint }}</small>
@@ -2829,11 +3044,36 @@ onBeforeUnmount(() => cancelLongTask())
         </el-button>
       </div>
       <p v-if="parseResultsBlock?.state === 'error'" class="inline-error">{{ parseResultsBlock.error.message }}</p>
-      <ol v-else class="timeline-list">
+      <p v-if="parseResultActionError" class="inline-error">{{ parseResultActionError.message }}</p>
+      <ol v-if="parseResultsBlock?.state === 'success'" class="timeline-list">
         <li v-for="item in parseResultsBlock?.items" :key="item.id">
           <StatusBadge :status="item.meta" />
-          <strong>{{ item.title }}</strong>
-          <small>{{ item.detail }}</small>
+          <div class="parse-result-copy">
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.detail }}</small>
+          </div>
+          <div class="parse-result-actions">
+            <el-button
+              class="ckqa-el-button ckqa-el-button--secondary"
+              native-type="button"
+              :disabled="parseResultActionState === 'running' || !item.previewUrl || item.previewable === false"
+              :title="item.previewable === false ? '该产物暂不支持浏览器预览' : '预览解析产物'"
+              @click="handleParseResultPreview(item)"
+            >
+              <Eye class="button-icon" :size="15" aria-hidden="true" />
+              预览
+            </el-button>
+            <el-button
+              class="ckqa-el-button ckqa-el-button--secondary"
+              native-type="button"
+              :disabled="parseResultActionState === 'running' || !item.downloadUrl"
+              title="下载解析产物"
+              @click="handleParseResultDownload(item)"
+            >
+              <Download class="button-icon" :size="15" aria-hidden="true" />
+              下载
+            </el-button>
+          </div>
         </li>
       </ol>
       <div v-if="parseResultsBlock?.state === 'empty'" class="empty-action-state material-empty-state">
