@@ -34,6 +34,10 @@ import {
   getDataSourceLabel,
   getStatusTone,
 } from './components/common/status-model.js'
+import {
+  STATUS_PILL_TONES,
+  resolvePillTone,
+} from './components/common/status-pill-model.js'
 import { routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -3429,6 +3433,12 @@ test('状态和数据来源有稳定映射', () => {
   assert.equal(getDataSourceLabel('mock'), '示例数据')
   assert.equal(getDataSourceLabel('live'), '实时数据')
   assert.equal(DATA_SOURCE_LABELS.skeleton, '页面骨架')
+})
+
+test('CkStatusPill model exports are wired', () => {
+  assert.ok(STATUS_PILL_TONES)
+  assert.equal(typeof resolvePillTone, 'function')
+  assert.equal(resolvePillTone('failed'), 'danger')
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
