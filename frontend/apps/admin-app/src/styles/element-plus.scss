@@ -1,29 +1,51 @@
 @use "./tokens/shadow" as *;
 
 :root {
+  /* primary —— base accent 给 primary，让 EL 派生 light-{1..9}/dark-2 */
   --el-color-primary: var(--ckqa-accent);
+  --el-color-primary-dark-2: var(--ckqa-accent-strong);
+  /* 对最常用的 light-3 / 5 / 7 / 9 显式指定，避免 EL 自动派生跳暗 */
+  --el-color-primary-light-3: #e89377;
+  --el-color-primary-light-5: #f0ae97;
+  --el-color-primary-light-7: #f7c9b9;
+  --el-color-primary-light-9: var(--ckqa-accent-soft);
+
   --el-color-success: var(--ckqa-success);
   --el-color-warning: var(--ckqa-warning);
   --el-color-danger: var(--ckqa-danger);
   --el-color-info: var(--ckqa-running);
+
   --el-bg-color: var(--ckqa-surface);
   --el-bg-color-page: var(--ckqa-bg);
   --el-bg-color-overlay: var(--ckqa-surface);
+  --el-fill-color-light: var(--ckqa-surface-muted);
+
   --el-text-color-primary: var(--ckqa-text);
-  --el-text-color-regular: var(--ckqa-text);
+  --el-text-color-regular: var(--ckqa-text-muted);
   --el-text-color-secondary: var(--ckqa-text-muted);
+  --el-text-color-placeholder: var(--ckqa-text-weak);
+
   --el-border-color: var(--ckqa-border);
-  --el-border-color-light: var(--ckqa-border-subtle);
+  --el-border-color-light: var(--ckqa-border-soft);
+  --el-border-color-lighter: var(--ckqa-border-soft);
+
   --el-border-radius-base: var(--ckqa-radius-md);
+  --el-border-radius-small: var(--ckqa-radius-sm);
+  --el-border-radius-round: var(--ckqa-radius-full);
+
   --el-font-family: var(--ckqa-font-sans);
+
+  --el-box-shadow-light: var(--ckqa-shadow-sm);
+  --el-box-shadow: var(--ckqa-shadow-md);
+
   --ckqa-el-focus-border: var(--ckqa-accent);
-  --ckqa-el-focus-ring: 0 0 0 3px rgb(99 102 241 / 22%);
+  --ckqa-el-focus-ring: 0 0 0 3px var(--ckqa-focus);
 }
 
 @supports (color: color-mix(in srgb, white, black)) {
   :root {
     --el-border-color: color-mix(in srgb, var(--ckqa-border) 86%, var(--ckqa-text-muted));
-    --el-border-color-light: color-mix(in srgb, var(--ckqa-border-subtle) 90%, var(--ckqa-bg));
+    --el-border-color-light: color-mix(in srgb, var(--ckqa-border-soft) 90%, var(--ckqa-bg));
     --ckqa-el-focus-border: color-mix(in srgb, var(--ckqa-accent) 56%, var(--ckqa-border));
     --ckqa-el-focus-ring: 0 0 0 1px var(--ckqa-surface), 0 0 0 4px color-mix(in srgb, var(--ckqa-accent) 24%, transparent);
   }
@@ -205,7 +227,7 @@
 .el-dropdown__popper,
 .el-picker__popper {
   --el-bg-color-overlay: var(--ckqa-surface);
-  --el-border-color-light: var(--ckqa-border-subtle);
+  --el-border-color-light: var(--ckqa-border-soft);
   color: var(--ckqa-text);
 }
 
@@ -332,7 +354,7 @@
 
 .ckqa-el-table .el-table__body-wrapper td.el-table__cell {
   height: 48px;
-  border-bottom: 1px solid var(--ckqa-border-subtle);
+  border-bottom: 1px solid var(--ckqa-border-soft);
   background: var(--ckqa-surface);
 }
 
@@ -363,7 +385,7 @@
 }
 
 .ckqa-el-table .ckqa-el-table__action-column {
-  border-left: 1px solid var(--ckqa-border-subtle);
+  border-left: 1px solid var(--ckqa-border-soft);
 }
 
 .ckqa-el-table .el-progress-bar__outer {

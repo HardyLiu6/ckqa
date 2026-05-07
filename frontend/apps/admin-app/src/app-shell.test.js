@@ -2941,7 +2941,7 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   assert.match(componentsCss, /\.table-action-button\.ckqa-el-button--primary\.el-button\s*\{[\s\S]*min-width:\s*70px;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*8px;[\s\S]*\}/)
   assert.match(elementPlusCss, /\.ckqa-el-button--danger/)
-  assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:\s*1px solid var\(--ckqa-border-subtle\);[\s\S]*\}/)
+  assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:\s*1px solid var\(--ckqa-border-soft\);[\s\S]*\}/)
   assert.doesNotMatch(elementPlusCss, /scrollbar-gutter:\s*stable/)
   assert.doesNotMatch(elementPlusCss, /el-table-fixed-column--right[\s\S]*box-shadow/)
 })
