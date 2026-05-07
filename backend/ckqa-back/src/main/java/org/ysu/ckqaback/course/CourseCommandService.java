@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.course;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,6 +19,7 @@ import org.ysu.ckqaback.course.dto.CourseTeacherResponse;
 import org.ysu.ckqaback.course.dto.CourseUpdateRequest;
 import org.ysu.ckqaback.entity.CourseMemberships;
 import org.ysu.ckqaback.entity.Courses;
+import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.Users;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.service.CourseMaterialsService;
@@ -28,6 +30,7 @@ import org.ysu.ckqaback.service.UsersService;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 课程写操作服务。
@@ -39,6 +42,8 @@ public class CourseCommandService {
     private static final int MAX_COURSE_ID_ATTEMPTS = 5;
     private static final String TEACHER_ROLE = "teacher";
     private static final String ACTIVE = "active";
+    private static final String ARCHIVED = "archived";
+    private static final String DRAFT = "draft";
     private static final String DEFAULT_ACCESS_POLICY = "restricted";
     private static final String MANUAL_ACCESS_SOURCE = "manual";
     private static final String INITIAL_TEACHER_CHANGE_REASON = "COURSE_CREATION_INITIAL_TEACHER";
@@ -100,17 +105,36 @@ public class CourseCommandService {
     @Transactional(propagation = Propagation.REQUIRED)
     public void updateCourse(String courseId, CourseUpdateRequest request) {
         Courses course = getRequiredCourseByCourseId(courseId);
+        String targetStatus = normalizeText(request.getStatus());
+        LocalDateTime now = LocalDateTime.now();
+
+        if (ARCHIVED.equalsIgnoreCase(course.getStatus())) {
+            if (!isRestoreArchivedCourseRequest(course, request, targetStatus)) {
+                throwArchivedReadonly();
+            }
+            course.setStatus(ACTIVE);
+            course.setUpdatedAt(now);
+            coursesService.updateById(course);
+            restoreKnowledgeBasesArchivedByCourse(courseId, now);
+            return;
+        }
+
         course.setCourseName(normalizeText(request.getCourseName()));
         course.setDescription(normalizeNullableText(request.getDescription()));
-        course.setStatus(normalizeText(request.getStatus()));
+        course.setStatus(targetStatus);
         course.setAccessPolicy(normalizeText(request.getAccessPolicy()));
-        course.setUpdatedAt(LocalDateTime.now());
+        course.setUpdatedAt(now);
         coursesService.updateById(course);
+
+        if (ARCHIVED.equalsIgnoreCase(targetStatus)) {
+            archiveKnowledgeBasesForCourse(courseId, now);
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
     public void deleteCourse(String courseId) {
         Courses course = getRequiredCourseByCourseId(courseId);
+        assertCourseNotArchived(course);
         boolean hasMaterials = !courseMaterialsService.listByCourseId(courseId).isEmpty();
         boolean hasKnowledgeBases = !knowledgeBasesService.listByCourseId(courseId).isEmpty();
 
@@ -128,6 +152,7 @@ public class CourseCommandService {
     @Transactional(propagation = Propagation.REQUIRED)
     public CourseCoverUploadResponse updateCourseCover(String courseId, MultipartFile file) {
         Courses course = getRequiredCourseByCourseId(courseId);
+        assertCourseNotArchived(course);
         CourseCoverUploadResponse response = courseCoverService.store(file);
         course.setCoverUrl(response.getCoverUrl());
         course.setUpdatedAt(LocalDateTime.now());
@@ -215,6 +240,51 @@ public class CourseCommandService {
         return course;
     }
 
+    private boolean isRestoreArchivedCourseRequest(Courses course, CourseUpdateRequest request, String targetStatus) {
+        return ACTIVE.equalsIgnoreCase(targetStatus)
+                && Objects.equals(normalizeText(request.getCourseName()), normalizeText(course.getCourseName()))
+                && Objects.equals(normalizeNullableText(request.getDescription()), normalizeNullableText(course.getDescription()))
+                && Objects.equals(normalizeText(request.getAccessPolicy()), normalizeText(course.getAccessPolicy()));
+    }
+
+    private void archiveKnowledgeBasesForCourse(String courseId, LocalDateTime now) {
+        knowledgeBasesService.listByCourseId(courseId).stream()
+                .filter(knowledgeBase -> !ARCHIVED.equalsIgnoreCase(knowledgeBase.getStatus()))
+                .forEach(knowledgeBase -> {
+                    String previousStatus = normalizeKnowledgeBaseStatus(knowledgeBase.getStatus());
+                    knowledgeBasesService.update(new UpdateWrapper<KnowledgeBases>()
+                            .eq("id", knowledgeBase.getId())
+                            .set("status", ARCHIVED)
+                            .set("course_archive_previous_status", previousStatus)
+                            .set("updated_at", now));
+                });
+    }
+
+    private void restoreKnowledgeBasesArchivedByCourse(String courseId, LocalDateTime now) {
+        knowledgeBasesService.listByCourseId(courseId).stream()
+                .filter(knowledgeBase -> ARCHIVED.equalsIgnoreCase(knowledgeBase.getStatus()))
+                .filter(knowledgeBase -> StringUtils.hasText(knowledgeBase.getCourseArchivePreviousStatus()))
+                .forEach(knowledgeBase -> {
+                    String restoredStatus = normalizeKnowledgeBaseStatus(knowledgeBase.getCourseArchivePreviousStatus());
+                    knowledgeBasesService.update(new UpdateWrapper<KnowledgeBases>()
+                            .eq("id", knowledgeBase.getId())
+                            .set("status", restoredStatus)
+                            .set("course_archive_previous_status", null)
+                            .set("updated_at", now));
+                });
+    }
+
+    private String normalizeKnowledgeBaseStatus(String status) {
+        String normalized = normalizeText(status);
+        if (ACTIVE.equalsIgnoreCase(normalized)) {
+            return ACTIVE;
+        }
+        if (ARCHIVED.equalsIgnoreCase(normalized)) {
+            return ARCHIVED;
+        }
+        return DRAFT;
+    }
+
     private boolean isCourseIdUniqueConflict(RuntimeException ex) {
         Throwable current = ex;
         while (current != null) {
@@ -229,6 +299,20 @@ public class CourseCommandService {
 
     private String defaultIfBlank(String value, String fallback) {
         return StringUtils.hasText(value) ? normalizeText(value) : fallback;
+    }
+
+    private void assertCourseNotArchived(Courses course) {
+        if (course != null && ARCHIVED.equalsIgnoreCase(course.getStatus())) {
+            throwArchivedReadonly();
+        }
+    }
+
+    private void throwArchivedReadonly() {
+        throw new BusinessException(
+                ApiResultCode.BAD_REQUEST,
+                HttpStatus.CONFLICT,
+                "已归档课程不可编辑，请先撤销归档"
+        );
     }
 
     private String normalizeText(String value) {

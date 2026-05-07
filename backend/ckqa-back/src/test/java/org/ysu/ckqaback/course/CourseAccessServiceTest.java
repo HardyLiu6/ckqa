@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -84,6 +85,17 @@ class CourseAccessServiceTest {
 
         assertThat(decision.isGranted()).isTrue();
         assertThat(decision.getReason()).isEqualTo("admin-override");
+    }
+
+    @Test
+    void shouldRejectWriteWhenCourseIsArchivedEvenWithoutActor() {
+        Courses course = course("os", "restricted");
+        course.setStatus("archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+
+        assertThatThrownBy(() -> service.assertCourseMembershipWritable("os", null))
+                .isInstanceOf(org.ysu.ckqaback.exception.BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档");
     }
 
     @Test

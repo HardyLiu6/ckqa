@@ -8,6 +8,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseCoverProperties;
 import org.ysu.ckqaback.course.MinioCourseCoverObjectStorage;
 import org.ysu.ckqaback.controller.PdfFilesController;
@@ -62,7 +63,8 @@ class PdfParseResultMinioSmokeTest {
                 mock(PdfIngestOrchestrator.class),
                 mock(DatabaseNamedLockService.class),
                 new MinioCourseCoverObjectStorage(config.toStorageProperties()),
-                mock(PdfParseTaskDispatcher.class)
+                mock(PdfParseTaskDispatcher.class),
+                mock(CourseAccessService.class)
         );
 
         MockMvc mockMvc = createMockMvc(workflowService);

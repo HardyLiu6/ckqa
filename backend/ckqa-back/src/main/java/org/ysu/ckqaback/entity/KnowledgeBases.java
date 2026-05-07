@@ -58,6 +58,12 @@ public class KnowledgeBases implements Serializable {
     private String status;
 
     /**
+     * 课程归档联动前的知识库状态，仅用于撤销课程归档时恢复。
+     */
+    @TableField("course_archive_previous_status")
+    private String courseArchivePreviousStatus;
+
+    /**
      * 当前激活索引运行ID
      */
     @TableField("active_index_run_id")

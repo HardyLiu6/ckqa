@@ -2,6 +2,7 @@ package org.ysu.ckqaback.pdf;
 
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseCoverObjectStorage;
 import org.ysu.ckqaback.course.StoredCourseCoverObject;
 import org.ysu.ckqaback.entity.CourseMaterials;
@@ -48,6 +49,41 @@ class PdfWorkflowServiceTest {
         assertThatThrownBy(() -> workflowService.startParse(7L))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("PDF当前状态不允许再次触发解析");
+    }
+
+    @Test
+    void shouldRejectParseWhenCourseIsArchived() {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+
+        PdfWorkflowService workflowService = newWorkflow(
+                courseMaterialsService,
+                parseResultsService,
+                orchestrator,
+                databaseNamedLockService,
+                mock(CourseCoverObjectStorage.class),
+                mock(PdfParseTaskDispatcher.class),
+                courseAccessService
+        );
+        CourseMaterials material = new CourseMaterials();
+        material.setId(7L);
+        material.setCourseId("os");
+        material.setDisplayName("book.pdf");
+        material.setParseStatus("pending");
+
+        given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
+        willThrow(new BusinessException(ApiResultCode.BAD_REQUEST, org.springframework.http.HttpStatus.CONFLICT, "已归档课程不可编辑，请先撤销归档"))
+                .given(courseAccessService)
+                .assertCourseWritable("os");
+
+        assertThatThrownBy(() -> workflowService.startParse(7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档");
+
+        then(courseMaterialsService).should(never()).claimParseStart(7L);
     }
 
     @Test
@@ -127,6 +163,36 @@ class PdfWorkflowServiceTest {
         assertThatThrownBy(() -> workflowService.exportGraphRag(9L, request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("当前已有导出任务在执行");
+    }
+
+    @Test
+    void shouldRejectExportWhenCourseIsArchived() {
+        CourseMaterialsService courseMaterialsService = mock(CourseMaterialsService.class);
+        ParseResultsService parseResultsService = mock(ParseResultsService.class);
+        PdfIngestOrchestrator orchestrator = mock(PdfIngestOrchestrator.class);
+        DatabaseNamedLockService databaseNamedLockService = mock(DatabaseNamedLockService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+
+        PdfWorkflowService workflowService = newWorkflow(
+                courseMaterialsService,
+                parseResultsService,
+                orchestrator,
+                databaseNamedLockService,
+                mock(CourseCoverObjectStorage.class),
+                mock(PdfParseTaskDispatcher.class),
+                courseAccessService
+        );
+        CourseMaterials material = doneMaterial();
+        given(courseMaterialsService.getRequiredById(9L)).willReturn(material);
+        willThrow(new BusinessException(ApiResultCode.BAD_REQUEST, org.springframework.http.HttpStatus.CONFLICT, "已归档课程不可编辑，请先撤销归档"))
+                .given(courseAccessService)
+                .assertCourseWritable("os");
+
+        assertThatThrownBy(() -> workflowService.exportGraphRag(9L, exportRequest(false)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档");
+
+        then(databaseNamedLockService).should(never()).acquire("pdf-export:9", 1);
     }
 
     @Test
@@ -357,7 +423,8 @@ class PdfWorkflowServiceTest {
                 orchestrator,
                 databaseNamedLockService,
                 objectStorage,
-                mock(PdfParseTaskDispatcher.class)
+                mock(PdfParseTaskDispatcher.class),
+                mock(CourseAccessService.class)
         );
     }
 
@@ -369,13 +436,34 @@ class PdfWorkflowServiceTest {
             CourseCoverObjectStorage objectStorage,
             PdfParseTaskDispatcher parseTaskDispatcher
     ) {
+        return newWorkflow(
+                courseMaterialsService,
+                parseResultsService,
+                orchestrator,
+                databaseNamedLockService,
+                objectStorage,
+                parseTaskDispatcher,
+                mock(CourseAccessService.class)
+        );
+    }
+
+    private static PdfWorkflowService newWorkflow(
+            CourseMaterialsService courseMaterialsService,
+            ParseResultsService parseResultsService,
+            PdfIngestOrchestrator orchestrator,
+            DatabaseNamedLockService databaseNamedLockService,
+            CourseCoverObjectStorage objectStorage,
+            PdfParseTaskDispatcher parseTaskDispatcher,
+            CourseAccessService courseAccessService
+    ) {
         return new PdfWorkflowService(
                 courseMaterialsService,
                 parseResultsService,
                 orchestrator,
                 databaseNamedLockService,
                 objectStorage,
-                parseTaskDispatcher
+                parseTaskDispatcher,
+                courseAccessService
         );
     }
 }

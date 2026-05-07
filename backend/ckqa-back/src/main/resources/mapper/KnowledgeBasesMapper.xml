@@ -9,6 +9,7 @@
         <result column="kb_code" property="kbCode" />
         <result column="name" property="name" />
         <result column="status" property="status" />
+        <result column="course_archive_previous_status" property="courseArchivePreviousStatus" />
         <result column="active_index_run_id" property="activeIndexRunId" />
         <result column="description" property="description" />
         <result column="created_at" property="createdAt" />
@@ -17,7 +18,7 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, course_id, kb_code, name, status, active_index_run_id, description, created_at, updated_at
+        id, course_id, kb_code, name, status, course_archive_previous_status, active_index_run_id, description, created_at, updated_at
     </sql>
 
 </mapper>

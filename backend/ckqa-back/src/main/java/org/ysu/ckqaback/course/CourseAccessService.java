@@ -29,6 +29,8 @@ import java.util.Objects;
 public class CourseAccessService {
 
     public static final String ACTOR_USER_CODE_HEADER = "X-CKQA-User-Code";
+    private static final String ARCHIVED = "archived";
+    private static final String ARCHIVED_COURSE_READONLY_MESSAGE = "已归档课程不可编辑，请先撤销归档";
 
     private final CoursesService coursesService;
     private final CourseMembershipsService courseMembershipsService;
@@ -90,10 +92,12 @@ public class CourseAccessService {
     }
 
     public void assertCourseMembershipWritable(String courseId, String actorUserCode) {
+        Courses course = getRequiredCourse(courseId);
+        assertCourseWritable(course);
         if (!StringUtils.hasText(actorUserCode)) {
             return;
         }
-        CourseAccessDecision decision = resolveAccess(courseId, actorUserCode);
+        CourseAccessDecision decision = resolveAccess(course, actorUserCode);
         if (!decision.isGranted()) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程成员管理权限");
         }
@@ -104,6 +108,10 @@ public class CourseAccessService {
         if (!"teacher".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程成员管理权限");
         }
+    }
+
+    public void assertCourseWritable(String courseId) {
+        assertCourseWritable(getRequiredCourse(courseId));
     }
 
     public Users findActiveUserByCode(String userCode) {
@@ -142,6 +150,16 @@ public class CourseAccessService {
             throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
         return course;
+    }
+
+    private void assertCourseWritable(Courses course) {
+        if (course != null && ARCHIVED.equalsIgnoreCase(course.getStatus())) {
+            throw new BusinessException(
+                    ApiResultCode.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
+                    ARCHIVED_COURSE_READONLY_MESSAGE
+            );
+        }
     }
 
     private String normalize(String value) {

@@ -50,7 +50,7 @@ const configs = {
         label: '课程状态',
         columnIndex: 2,
         options: [
-          { label: '全部状态', value: '' },
+          { label: '全部状态', value: 'all' },
           { label: '开课中', value: 'active' },
           { label: '已停用', value: 'inactive' },
           { label: '已归档', value: 'archived' },
@@ -216,7 +216,18 @@ const configs = {
     },
     secondaryAction: null,
     filters: [
-      { key: 'status', label: '知识库状态', columnIndex: 2, options: ['全部', 'draft', 'active', 'archived'] },
+      {
+        key: 'status',
+        label: '知识库状态',
+        columnIndex: 2,
+        options: [
+          { label: '未归档', value: '' },
+          { label: '全部状态', value: 'all' },
+          { label: '草稿', value: 'draft' },
+          { label: '已启用', value: 'active' },
+          { label: '已归档', value: 'archived' },
+        ],
+      },
     ],
     columns: ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间'],
     rows: [],
@@ -425,7 +436,7 @@ export function filterRowsByFilters(rows = [], filters = [], values = {}) {
     filters.every((filter) => {
       const selected = normalizeFilterValue(values[filter.key])
 
-      if (!selected || selected === '全部') {
+      if (!selected || selected === '全部' || selected === 'all') {
         return true
       }
 

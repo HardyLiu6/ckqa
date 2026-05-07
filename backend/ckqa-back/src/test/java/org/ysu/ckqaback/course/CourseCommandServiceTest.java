@@ -7,6 +7,7 @@ import org.mockito.InOrder;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
@@ -292,6 +293,104 @@ class CourseCommandServiceTest {
     }
 
     @Test
+    void shouldArchiveCourseAndRememberKnowledgeBaseStatusesForRestore() {
+        CourseUpdateRequest request = updateRequest("操作系统", "旧说明", "archived", "restricted");
+        Courses course = existingCourse();
+        KnowledgeBases activeKb = knowledgeBase(10L, "active");
+        KnowledgeBases draftKb = knowledgeBase(11L, "draft");
+        KnowledgeBases archivedKb = knowledgeBase(12L, "archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of(activeKb, draftKb, archivedKb));
+
+        service.updateCourse("os", request);
+
+        ArgumentCaptor<Courses> courseCaptor = ArgumentCaptor.forClass(Courses.class);
+        verify(coursesService).updateById(courseCaptor.capture());
+        assertThat(courseCaptor.getValue().getStatus()).isEqualTo("archived");
+
+        verify(knowledgeBasesService, times(2))
+                .update(any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+    }
+
+    @Test
+    void shouldRestoreArchivedCourseAndKnowledgeBasesArchivedByCourse() {
+        CourseUpdateRequest request = updateRequest("操作系统", "旧说明", "active", "restricted");
+        Courses course = existingCourse();
+        course.setStatus("archived");
+        KnowledgeBases activeBeforeArchive = knowledgeBase(10L, "archived");
+        activeBeforeArchive.setCourseArchivePreviousStatus("active");
+        KnowledgeBases draftBeforeArchive = knowledgeBase(11L, "archived");
+        draftBeforeArchive.setCourseArchivePreviousStatus("draft");
+        KnowledgeBases alreadyArchived = knowledgeBase(12L, "archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+        when(knowledgeBasesService.listByCourseId("os")).thenReturn(List.of(
+                activeBeforeArchive,
+                draftBeforeArchive,
+                alreadyArchived
+        ));
+
+        service.updateCourse("os", request);
+
+        ArgumentCaptor<Courses> courseCaptor = ArgumentCaptor.forClass(Courses.class);
+        verify(coursesService).updateById(courseCaptor.capture());
+        assertThat(courseCaptor.getValue().getStatus()).isEqualTo("active");
+
+        verify(knowledgeBasesService, times(2))
+                .update(any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+    }
+
+    @Test
+    void shouldRejectEditingArchivedCourseUntilItIsRestored() {
+        CourseUpdateRequest request = updateRequest("操作系统进阶", "旧说明", "active", "restricted");
+        Courses course = existingCourse();
+        course.setStatus("archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+
+        assertThatThrownBy(() -> service.updateCourse("os", request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档")
+                .extracting("status")
+                .isEqualTo(HttpStatus.CONFLICT);
+        verify(coursesService, never()).updateById(any(Courses.class));
+        verify(knowledgeBasesService, never()).updateById(any(KnowledgeBases.class));
+        verify(knowledgeBasesService, never())
+                .update(any(com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper.class));
+    }
+
+    @Test
+    void shouldRejectDeletingArchivedCourseUntilItIsRestored() {
+        Courses course = existingCourse();
+        course.setStatus("archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+
+        assertThatThrownBy(() -> service.deleteCourse("os"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档")
+                .extracting("status")
+                .isEqualTo(HttpStatus.CONFLICT);
+        verify(courseMaterialsService, never()).listByCourseId(any());
+        verify(knowledgeBasesService, never()).listByCourseId(any());
+        verify(coursesService, never()).removeById(eq(12L));
+    }
+
+    @Test
+    void shouldRejectCoverUpdateWhenCourseIsArchived() {
+        Courses course = existingCourse();
+        course.setStatus("archived");
+        when(coursesService.getOne(any())).thenReturn(course);
+
+        MockMultipartFile cover = new MockMultipartFile("file", "cover.png", "image/png", new byte[] { 1 });
+
+        assertThatThrownBy(() -> service.updateCourseCover("os", cover))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档")
+                .extracting("status")
+                .isEqualTo(HttpStatus.CONFLICT);
+        verify(courseCoverService, never()).store(any());
+        verify(coursesService, never()).updateById(any(Courses.class));
+    }
+
+    @Test
     void shouldSoftDeleteEmptyCourse() {
         Courses course = existingCourse();
         when(coursesService.getOne(any())).thenReturn(course);
@@ -326,6 +425,15 @@ class CourseCommandServiceTest {
         return request;
     }
 
+    private CourseUpdateRequest updateRequest(String courseName, String description, String status, String accessPolicy) {
+        CourseUpdateRequest request = new CourseUpdateRequest();
+        request.setCourseName(courseName);
+        request.setDescription(description);
+        request.setStatus(status);
+        request.setAccessPolicy(accessPolicy);
+        return request;
+    }
+
     private Users activeTeacher() {
         Users user = new Users();
         user.setId(8L);
@@ -355,5 +463,14 @@ class CourseCommandServiceTest {
         course.setCreatedAt(LocalDateTime.of(2026, 5, 4, 9, 0));
         course.setUpdatedAt(LocalDateTime.of(2026, 5, 4, 9, 0));
         return course;
+    }
+
+    private KnowledgeBases knowledgeBase(Long id, String status) {
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setId(id);
+        knowledgeBase.setCourseId("os");
+        knowledgeBase.setStatus(status);
+        knowledgeBase.setUpdatedAt(LocalDateTime.of(2026, 5, 4, 9, 0));
+        return knowledgeBase;
     }
 }

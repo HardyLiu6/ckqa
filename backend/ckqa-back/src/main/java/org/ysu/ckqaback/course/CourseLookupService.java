@@ -266,7 +266,17 @@ public class CourseLookupService {
     }
 
     private boolean matchesStatus(Courses course, String status) {
-        return !StringUtils.hasText(status) || Objects.equals(course.getStatus(), status);
+        if (!StringUtils.hasText(status)) {
+            return "active".equalsIgnoreCase(course.getStatus());
+        }
+        if ("all".equalsIgnoreCase(status)) {
+            return true;
+        }
+        return Objects.equals(normalizeStatus(course.getStatus()), normalizeStatus(status));
+    }
+
+    private String normalizeStatus(String status) {
+        return status == null ? null : status.trim().toLowerCase(Locale.ROOT);
     }
 
     private boolean matchesKeyword(Courses course, String keyword) {

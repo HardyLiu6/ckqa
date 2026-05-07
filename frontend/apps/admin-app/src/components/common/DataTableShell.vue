@@ -10,6 +10,7 @@ import {
   Trash2,
   Users,
   Archive,
+  RotateCcw,
 } from 'lucide-vue-next'
 
 import StatusBadge from './StatusBadge.vue'
@@ -178,6 +179,7 @@ function resolveActionIcon(action) {
   if (action.icon === 'edit') return Pencil
   if (action.icon === 'delete') return Trash2
   if (action.icon === 'archive') return Archive
+  if (action.icon === 'restore') return RotateCcw
   if (action.icon === 'users') return Users
   if (action.icon === 'knowledge') return BookOpen
   if (action.icon === 'parse') return Play

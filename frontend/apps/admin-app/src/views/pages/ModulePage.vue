@@ -14,6 +14,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   UploadCloud,
   WandSparkles,
@@ -214,6 +215,12 @@ const config = computed(() => {
     workflowSteps: liveState.value.workflowSteps ?? baseConfig.value.workflowSteps,
     blocks: liveState.value.blocks ?? baseConfig.value.blocks,
     actions: liveState.value.actions ?? {},
+    primaryAction: liveState.value.primaryAction !== undefined
+      ? liveState.value.primaryAction
+      : baseConfig.value.primaryAction,
+    secondaryAction: liveState.value.secondaryAction !== undefined
+      ? liveState.value.secondaryAction
+      : baseConfig.value.secondaryAction,
     refreshedAt: liveState.value.refreshedAt,
     raw: liveState.value.raw,
   }
@@ -340,7 +347,11 @@ const tableFilterValues = computed(() => {
   const values = {}
 
   for (const filter of config.value.filters ?? []) {
-    values[filter.key] = firstQueryValue(route.query[filter.key])
+    if (route.name === 'courses' && filter.key === 'status' && !Object.prototype.hasOwnProperty.call(route.query, 'status')) {
+      values[filter.key] = 'active'
+    } else {
+      values[filter.key] = firstQueryValue(route.query[filter.key])
+    }
   }
 
   return values
@@ -385,6 +396,7 @@ const qaOperationFeedback = computed(() => (
 const courseBlock = computed(() => config.value.blocks?.course)
 const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAULT_COURSE_COVER_URL)
 const courseCanDelete = computed(() => isEmptyCourse(courseBlock.value?.item))
+const courseIsArchived = computed(() => String(courseBlock.value?.item?.status ?? '').toLowerCase() === 'archived')
 const materialBlock = computed(() => config.value.blocks?.material)
 const streamedMaterialItem = computed(() => {
   const item = materialBlock.value?.item
@@ -705,6 +717,11 @@ async function goBuildPreviousStep() {
 }
 
 async function handlePrimaryAction() {
+  if (config.value.primaryAction?.disabled || config.value.actions?.readonly) {
+    ElMessage.warning(config.value.actions?.readonlyReason ?? config.value.primaryAction?.title ?? '当前页面只读')
+    return
+  }
+
   if (route.name === 'courses' || route.name === 'knowledge-bases') {
     openCreationDialog()
     return
@@ -809,6 +826,10 @@ async function openCourseKnowledgeAction() {
     await router.push(`/app/knowledge-bases?keyword=${encodeURIComponent(courseId)}`)
     return
   }
+  if (courseIsArchived.value) {
+    ElMessage.warning('已归档课程需要先撤销归档后才能新建知识库。')
+    return
+  }
   openCreationDialog('knowledge-base', { courseId })
 }
 
@@ -839,6 +860,11 @@ function handleTableRowAction({ row, action } = {}) {
 
   if (action?.key === 'archive-course') {
     openCourseArchiveDialog(row?.raw ?? row)
+    return
+  }
+
+  if (action?.key === 'restore-course') {
+    openCourseRestoreDialog(row?.raw ?? row)
   }
 }
 
@@ -903,6 +929,10 @@ function openCourseEditDialog(course = null) {
   if (!targetCourse?.courseId) {
     return
   }
+  if (String(targetCourse.status ?? '').toLowerCase() === 'archived') {
+    ElMessage.warning('已归档课程需要先撤销归档后才能编辑。')
+    return
+  }
 
   courseActionDialog.value = 'edit'
   courseActionCourse.value = targetCourse
@@ -928,8 +958,24 @@ function openCourseArchiveDialog(course = null) {
   if (!targetCourse?.courseId) {
     return
   }
+  if (String(targetCourse.status ?? '').toLowerCase() === 'archived') {
+    openCourseRestoreDialog(targetCourse)
+    return
+  }
 
   courseActionDialog.value = 'archive'
+  courseActionCourse.value = targetCourse
+  courseActionState.value = 'idle'
+  courseActionError.value = null
+}
+
+function openCourseRestoreDialog(course = null) {
+  const targetCourse = course ?? courseBlock.value?.item
+  if (!targetCourse?.courseId) {
+    return
+  }
+
+  courseActionDialog.value = 'restore'
   courseActionCourse.value = targetCourse
   courseActionState.value = 'idle'
   courseActionError.value = null
@@ -1226,6 +1272,32 @@ async function submitCourseArchive() {
   }
 }
 
+async function submitCourseRestore() {
+  const course = courseActionCourse.value
+  const courseId = course?.courseId
+  if (!courseId || courseActionRunning.value) {
+    return
+  }
+
+  courseActionState.value = 'running'
+  courseActionError.value = null
+
+  try {
+    await updateCourse(courseId, {
+      courseName: (course.courseName ?? course.name ?? '').trim(),
+      description: course.description?.trim() || undefined,
+      status: 'active',
+      accessPolicy: course.accessPolicy || 'restricted',
+    })
+    courseActionState.value = 'success'
+    closeCourseActionDialog()
+    await loadPage()
+  } catch (error) {
+    courseActionState.value = 'failed'
+    courseActionError.value = createApiError(error)
+  }
+}
+
 function openCreationDialog(typeOverride = '', defaults = {}) {
   const type = typeOverride || (route.name === 'knowledge-bases' ? 'knowledge-base' : 'course')
   creationDialog.value = type
@@ -1342,6 +1414,14 @@ async function uploadCreationCourseCover({ file, onSuccess, onError }) {
 }
 
 async function uploadExistingCourseCover({ file, onSuccess, onError }) {
+  if (courseIsArchived.value) {
+    const error = new Error('已归档课程需要先撤销归档后才能更新封面。')
+    courseCoverState.value = 'failed'
+    courseCoverError.value = { message: error.message }
+    onError?.(error)
+    return
+  }
+
   const validationMessage = validateCourseCoverFile(file)
   if (validationMessage) {
     courseCoverState.value = 'failed'
@@ -2611,6 +2691,61 @@ onBeforeUnmount(() => {
     </section>
   </div>
 
+  <div v-if="courseActionDialog === 'restore'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog course-archive-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="course-restore-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Course Restore</p>
+          <h2 id="course-restore-dialog-title">撤销归档</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="courseActionRunning"
+          aria-label="取消恢复"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+      <div class="course-archive-warning">
+        <RotateCcw :size="22" aria-hidden="true" />
+        <div>
+          <strong>{{ courseActionCourseName }}</strong>
+          <p>撤销归档会把课程恢复为开课中，并恢复由本次课程归档联动归档的知识库状态。</p>
+        </div>
+      </div>
+      <p v-if="courseActionError" class="inline-error">{{ courseActionError.message }}</p>
+      <div class="creation-form__actions">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="closeCourseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          native-type="button"
+          :disabled="courseActionRunning"
+          @click="submitCourseRestore"
+        >
+          <RotateCcw class="button-icon" :size="16" aria-hidden="true" />
+          {{ courseActionRunning ? '恢复中' : '确认恢复' }}
+        </el-button>
+      </div>
+    </section>
+  </div>
+
   <div v-if="memberActionDialog === 'add'" class="dialog-backdrop" role="presentation">
     <section
       class="creation-dialog course-action-dialog"
@@ -3014,6 +3149,7 @@ onBeforeUnmount(() => {
               {{ Number(courseBlock.item?.knowledgeBaseCount ?? 0) > 0 ? '管理知识库' : '新建知识库' }}
             </el-button>
             <el-button
+              v-if="!courseIsArchived"
               class="ckqa-el-button ckqa-el-button--primary"
               type="primary"
               native-type="button"
@@ -3023,6 +3159,7 @@ onBeforeUnmount(() => {
               编辑信息
             </el-button>
           <el-upload
+            v-if="!courseIsArchived"
             class="course-cover-uploader"
             accept="image/png,image/jpeg,image/webp"
             :show-file-list="false"
@@ -3038,7 +3175,17 @@ onBeforeUnmount(() => {
             </el-button>
           </el-upload>
             <el-button
-              v-if="courseCanDelete"
+              v-if="courseIsArchived"
+              class="ckqa-el-button ckqa-el-button--primary"
+              type="primary"
+              native-type="button"
+              @click="openCourseRestoreDialog()"
+            >
+              <RotateCcw class="button-icon" :size="16" aria-hidden="true" />
+              撤销归档
+            </el-button>
+            <el-button
+              v-else-if="courseCanDelete"
               class="ckqa-el-button ckqa-el-button--danger"
               type="danger"
               native-type="button"

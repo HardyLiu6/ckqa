@@ -120,12 +120,40 @@ class CourseLookupServiceTest {
                     assertThat(teacher.getTitle()).isEqualTo("副教授");
                     assertThat(teacher.getEmployeeNo()).isEqualTo("T008");
                 });
-        assertThat(page.getTotal()).isEqualTo(2L);
-        assertThat(page.getPages()).isEqualTo(2L);
+        assertThat(page.getTotal()).isEqualTo(1L);
+        assertThat(page.getPages()).isEqualTo(1L);
 
         ArgumentCaptor<Collection<String>> courseIdsCaptor = ArgumentCaptor.forClass(Collection.class);
         verify(courseMembershipsService).listActiveTeachersByCourseIds(courseIdsCaptor.capture());
         assertThat(courseIdsCaptor.getValue()).containsExactly("os");
+    }
+
+    @Test
+    void shouldHideArchivedCoursesByDefaultAndReturnThemWhenStatusIsSelected() {
+        Courses os = course(1L, "os", "操作系统", "active", LocalDateTime.of(2026, 4, 28, 9, 30));
+        Courses ds = course(2L, "ds", "数据结构", "archived", LocalDateTime.of(2026, 4, 27, 9, 30));
+        Courses db = course(3L, "db", "数据库", "inactive", LocalDateTime.of(2026, 4, 26, 9, 30));
+        when(coursesService.list()).thenReturn(List.of(ds, os, db));
+        when(courseMaterialsService.listByCourseId(any())).thenReturn(List.of());
+        when(knowledgeBasesService.listByCourseId(any())).thenReturn(List.of());
+        when(courseMembershipsService.listActiveTeachersByCourseIds(anyCollection())).thenReturn(List.of());
+
+        CourseQueryRequest defaultRequest = new CourseQueryRequest();
+        assertThat(service.listCourses(defaultRequest).getItems())
+                .extracting(CourseSummaryResponse::getCourseId)
+                .containsExactly("os");
+
+        CourseQueryRequest archivedRequest = new CourseQueryRequest();
+        archivedRequest.setStatus("archived");
+        assertThat(service.listCourses(archivedRequest).getItems())
+                .extracting(CourseSummaryResponse::getCourseId)
+                .containsExactly("ds");
+
+        CourseQueryRequest allRequest = new CourseQueryRequest();
+        allRequest.setStatus("all");
+        assertThat(service.listCourses(allRequest).getItems())
+                .extracting(CourseSummaryResponse::getCourseId)
+                .containsExactly("os", "ds", "db");
     }
 
     @Test

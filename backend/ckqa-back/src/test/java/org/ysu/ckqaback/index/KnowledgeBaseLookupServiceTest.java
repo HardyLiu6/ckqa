@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.api.ApiPageData;
+import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
@@ -89,6 +90,30 @@ class KnowledgeBaseLookupServiceTest {
     }
 
     @Test
+    void shouldHideArchivedKnowledgeBasesByDefaultAndReturnThemWhenExplicitlyFiltered() {
+        KnowledgeBases active = knowledgeBase(5L, "os", "os-main", "操作系统主知识库", "active");
+        KnowledgeBases archived = knowledgeBase(6L, "os", "os-old", "操作系统旧知识库", "archived");
+        when(knowledgeBasesService.list()).thenReturn(List.of(archived, active));
+        when(indexRunsService.listByKnowledgeBaseId(any())).thenReturn(List.of());
+
+        assertThat(service.listKnowledgeBases(new KnowledgeBaseQueryRequest()).getItems())
+                .extracting(KnowledgeBaseSummaryResponse::getId)
+                .containsExactly(5L);
+
+        KnowledgeBaseQueryRequest archivedRequest = new KnowledgeBaseQueryRequest();
+        archivedRequest.setStatus("archived");
+        assertThat(service.listKnowledgeBases(archivedRequest).getItems())
+                .extracting(KnowledgeBaseSummaryResponse::getId)
+                .containsExactly(6L);
+
+        KnowledgeBaseQueryRequest allRequest = new KnowledgeBaseQueryRequest();
+        allRequest.setStatus("all");
+        assertThat(service.listKnowledgeBases(allRequest).getItems())
+                .extracting(KnowledgeBaseSummaryResponse::getId)
+                .containsExactlyInAnyOrder(5L, 6L);
+    }
+
+    @Test
     void shouldGetKnowledgeBaseDetailWithRunCountsAndLatestMetadata() {
         KnowledgeBases knowledgeBase = knowledgeBase(5L, "os", "os-main", "操作系统主知识库", "active");
         when(knowledgeBasesService.getRequiredById(5L)).thenReturn(knowledgeBase);
@@ -124,7 +149,7 @@ class KnowledgeBaseLookupServiceTest {
         request.setKbCode("os-review");
         request.setName("操作系统复习库");
         request.setDescription("复习资料知识库");
-        when(coursesService.count(any())).thenReturn(1L);
+        when(coursesService.getOne(any())).thenReturn(course("os", "active"));
         when(knowledgeBasesService.count(any())).thenReturn(0L);
         when(knowledgeBasesService.save(any(KnowledgeBases.class))).thenAnswer(invocation -> {
             KnowledgeBases saved = invocation.getArgument(0);
@@ -149,7 +174,7 @@ class KnowledgeBaseLookupServiceTest {
         request.setCourseId("missing");
         request.setKbCode("missing-main");
         request.setName("缺失课程知识库");
-        when(coursesService.count(any())).thenReturn(0L);
+        when(coursesService.getOne(any())).thenReturn(null);
 
         assertThatThrownBy(() -> service.createKnowledgeBase(request))
                 .isInstanceOf(BusinessException.class)
@@ -157,6 +182,29 @@ class KnowledgeBaseLookupServiceTest {
                 .extracting("code")
                 .isEqualTo(ApiResultCode.COURSE_NOT_FOUND.getCode());
         verify(knowledgeBasesService, never()).save(any(KnowledgeBases.class));
+    }
+
+    @Test
+    void shouldRejectKnowledgeBaseCreationWhenCourseIsArchived() {
+        KnowledgeBaseCreateRequest request = new KnowledgeBaseCreateRequest();
+        request.setCourseId("os");
+        request.setKbCode("os-archived");
+        request.setName("归档课程知识库");
+        when(coursesService.getOne(any())).thenReturn(course("os", "archived"));
+
+        assertThatThrownBy(() -> service.createKnowledgeBase(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("已归档课程不可编辑，请先撤销归档")
+                .extracting("status")
+                .isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+        verify(knowledgeBasesService, never()).save(any(KnowledgeBases.class));
+    }
+
+    private Courses course(String courseId, String status) {
+        Courses course = new Courses();
+        course.setCourseId(courseId);
+        course.setStatus(status);
+        return course;
     }
 
     private KnowledgeBases knowledgeBase(Long id, String courseId, String kbCode, String name, String status) {

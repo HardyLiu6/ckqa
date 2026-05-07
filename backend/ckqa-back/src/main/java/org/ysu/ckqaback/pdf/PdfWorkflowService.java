@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.course.CourseCoverObjectStorage;
 import org.ysu.ckqaback.course.StoredCourseCoverObject;
 import org.ysu.ckqaback.entity.CourseMaterials;
@@ -38,6 +39,7 @@ public class PdfWorkflowService {
     private final DatabaseNamedLockService databaseNamedLockService;
     private final CourseCoverObjectStorage objectStorage;
     private final PdfParseTaskDispatcher parseTaskDispatcher;
+    private final CourseAccessService courseAccessService;
 
     public PdfFileResponse getPdfFile(Long id) {
         return PdfFileResponse.fromEntity(courseMaterialsService.getRequiredById(id));
@@ -78,6 +80,7 @@ public class PdfWorkflowService {
 
     public PdfOperationResponse startParse(Long pdfFileId) {
         CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);
+        courseAccessService.assertCourseWritable(material.getCourseId());
         if (!courseMaterialsService.claimParseStart(pdfFileId)) {
             throw new BusinessException(ApiResultCode.PDF_PARSE_STATE_CONFLICT, HttpStatus.CONFLICT);
         }
@@ -105,6 +108,7 @@ public class PdfWorkflowService {
     public PdfOperationResponse exportGraphRag(Long pdfFileId, ExportGraphRagRequest request)
             throws IOException, InterruptedException {
         CourseMaterials material = courseMaterialsService.getRequiredById(pdfFileId);
+        courseAccessService.assertCourseWritable(material.getCourseId());
         if (!"done".equals(material.getParseStatus())) {
             throw new BusinessException(
                     ApiResultCode.PDF_PARSE_STATE_CONFLICT,

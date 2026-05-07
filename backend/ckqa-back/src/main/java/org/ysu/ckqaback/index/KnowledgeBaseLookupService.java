@@ -85,8 +85,18 @@ public class KnowledgeBaseLookupService {
     public KnowledgeBaseDetailResponse createKnowledgeBase(KnowledgeBaseCreateRequest request) {
         String courseId = normalizeText(request.getCourseId());
         String kbCode = normalizeText(request.getKbCode());
-        if (coursesService.count(new LambdaQueryWrapper<Courses>().eq(Courses::getCourseId, courseId)) == 0) {
+        Courses course = coursesService.getOne(new LambdaQueryWrapper<Courses>()
+                .eq(Courses::getCourseId, courseId)
+                .last("LIMIT 1"));
+        if (course == null) {
             throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND);
+        }
+        if ("archived".equalsIgnoreCase(course.getStatus())) {
+            throw new BusinessException(
+                    ApiResultCode.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
+                    "已归档课程不可编辑，请先撤销归档"
+            );
         }
         if (knowledgeBasesService.count(new LambdaQueryWrapper<KnowledgeBases>()
                 .eq(KnowledgeBases::getCourseId, courseId)
@@ -117,8 +127,13 @@ public class KnowledgeBaseLookupService {
     }
 
     private boolean matchesStatus(KnowledgeBases knowledgeBase, String status) {
-        return !StringUtils.hasText(status)
-                || Objects.equals(normalize(knowledgeBase.getStatus()), normalize(status));
+        if (!StringUtils.hasText(status)) {
+            return !"archived".equalsIgnoreCase(knowledgeBase.getStatus());
+        }
+        if ("all".equalsIgnoreCase(status)) {
+            return true;
+        }
+        return Objects.equals(normalize(knowledgeBase.getStatus()), normalize(status));
     }
 
     private boolean matchesKeyword(KnowledgeBases knowledgeBase, String keyword) {

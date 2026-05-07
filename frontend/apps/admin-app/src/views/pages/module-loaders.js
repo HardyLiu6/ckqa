@@ -79,6 +79,7 @@ const COURSE_MATERIAL_PARSE_STATUS_LABELS = {
   done: '已完成',
   failed: '失败',
 }
+const ARCHIVED_COURSE_READONLY_REASON = '已归档课程不可编辑，请先撤销归档'
 const PARSE_RESULT_GROUP_ORDER = ['structured', 'document', 'graphrag', 'image', 'archive', 'other']
 const PARSE_RESULT_GROUPS = {
   structured: { label: '结构化结果', unit: '个结构化文件' },
@@ -201,6 +202,8 @@ export function createCoursesLoaderResult(overrides = {}) {
     facts: [],
     workflowSteps: [],
     blocks: {},
+    actions: {},
+    primaryAction: undefined,
     raw: null,
     ...overrides,
   }
@@ -211,7 +214,7 @@ export function buildCourseListParams(query = {}) {
     page: query.page ?? 1,
     size: query.size ?? 20,
     keyword: query.keyword ?? '',
-    status: query.status ?? '',
+    status: Object.prototype.hasOwnProperty.call(query, 'status') ? query.status : 'active',
   }
 }
 
@@ -264,6 +267,16 @@ function mapCourseRow(course) {
 }
 
 function createCourseRowActions(course, encodedCourseId) {
+  const status = String(course.status ?? '').toLowerCase()
+  if (status === 'archived') {
+    return [
+      { label: '查看', to: `/app/courses/${encodedCourseId}`, icon: 'view' },
+      { label: '成员', to: `/app/courses/${encodedCourseId}/members`, icon: 'users' },
+      { label: '知识库', to: `/app/knowledge-bases?keyword=${encodedCourseId}`, icon: 'knowledge' },
+      { label: '恢复', key: 'restore-course', icon: 'restore', variant: 'primary' },
+    ]
+  }
+
   const destructiveAction = isEmptyCourse(course)
     ? { label: '删除', key: 'delete-course', icon: 'delete', variant: 'danger' }
     : { label: '归档', key: 'archive-course', icon: 'archive', variant: 'warning' }
@@ -278,9 +291,20 @@ function createCourseRowActions(course, encodedCourseId) {
 }
 
 async function loadCourseMembers(route, query, services) {
+  const courseId = String(route.params?.courseId ?? '')
   try {
-    const pageData = normalizePageData(await services.listCourseMembers(buildCourseMemberListParams(route, query)))
-    const rows = pageData.items.map(mapCourseMemberRow)
+    const [membersResult, courseContextResult] = await Promise.allSettled([
+      services.listCourseMembers(buildCourseMemberListParams(route, query)),
+      resolveCourseReadonlyContext(courseId, services),
+    ])
+
+    if (membersResult.status === 'rejected') {
+      throw membersResult.reason
+    }
+
+    const pageData = normalizePageData(membersResult.value)
+    const courseContext = unwrapCourseReadonlyContext(courseContextResult)
+    const rows = pageData.items.map((member) => mapCourseMemberRow(member, { readonly: courseContext.readonly }))
     return createCoursesLoaderResult({
       source: 'live',
       requestState: rows.length > 0 ? 'success' : 'empty',
@@ -288,6 +312,11 @@ async function loadCourseMembers(route, query, services) {
       columns: COURSE_MEMBER_COLUMNS,
       rows,
       pagination: pageData.pagination,
+      actions: createReadonlyActionState(courseContext),
+      primaryAction: courseContext.readonly
+        ? createReadonlyPrimaryAction('添加成员', 'membership:write')
+        : undefined,
+      blocks: createCourseContextBlocks(courseContext),
       raw: pageData.raw,
     })
   } catch (error) {
@@ -303,12 +332,22 @@ async function loadCourseMembers(route, query, services) {
 async function loadCourseMaterials(route, query, services) {
   const courseId = String(route.params?.courseId ?? '')
   try {
-    const response = await services.listCourseMaterialPage(
-      courseId,
-      buildCourseMaterialListParams(route, query),
-    )
+    const [materialsResult, courseContextResult] = await Promise.allSettled([
+      services.listCourseMaterialPage(
+        courseId,
+        buildCourseMaterialListParams(route, query),
+      ),
+      resolveCourseReadonlyContext(courseId, services),
+    ])
+
+    if (materialsResult.status === 'rejected') {
+      throw materialsResult.reason
+    }
+
+    const response = materialsResult.value
     const pageData = response?.pagination ? response : normalizePageData(response)
-    const rows = pageData.items.map((material) => mapCourseMaterialRow(material, courseId))
+    const courseContext = unwrapCourseReadonlyContext(courseContextResult)
+    const rows = pageData.items.map((material) => mapCourseMaterialRow(material, courseId, { readonly: courseContext.readonly }))
     return createCoursesLoaderResult({
       source: 'live',
       requestState: rows.length > 0 ? 'success' : 'empty',
@@ -316,6 +355,11 @@ async function loadCourseMaterials(route, query, services) {
       columns: COURSE_MATERIAL_COLUMNS,
       rows,
       pagination: pageData.pagination,
+      actions: createReadonlyActionState(courseContext),
+      primaryAction: courseContext.readonly
+        ? createReadonlyPrimaryAction('上传资料', 'material:write')
+        : undefined,
+      blocks: createCourseContextBlocks(courseContext),
       raw: pageData.raw,
     })
   } catch (error) {
@@ -329,7 +373,7 @@ async function loadCourseMaterials(route, query, services) {
   }
 }
 
-function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
+function mapCourseMaterialRow(material = {}, fallbackCourseId = '', options = {}) {
   const id = material.id ?? material.materialId ?? material.pdfFileId
   const displayName = material.displayName ?? material.fileName ?? material.originalFileName ?? `资料 ${id ?? '-'}`
   const parseStatus = String(material.parseStatus ?? '').trim() || 'pending'
@@ -348,7 +392,7 @@ function mapCourseMaterialRow(material = {}, fallbackCourseId = '') {
     },
     to: buildMaterialDetailPath(id, courseId),
     subtitle: material.fileName ?? material.originalFileName ?? '',
-    actions: createCourseMaterialRowActions({ ...material, id, courseId, parseStatus }),
+    actions: createCourseMaterialRowActions({ ...material, id, courseId, parseStatus }, options),
     cells: [
       {
         kind: 'text',
@@ -381,13 +425,17 @@ function buildMaterialDetailPath(id, courseId = '') {
   return `/app/materials/${encodedId}${query}`
 }
 
-function createCourseMaterialRowActions(material = {}) {
+function createCourseMaterialRowActions(material = {}, options = {}) {
   const id = material.id ?? material.materialId ?? material.pdfFileId
   if (!id) {
     return []
   }
   const encodedId = encodeURIComponent(id)
   const detailPath = buildMaterialDetailPath(id, material.courseId)
+  if (options.readonly) {
+    return [{ label: '详情', to: detailPath || `/app/materials/${encodedId}`, icon: 'view' }]
+  }
+
   const parseStatus = String(material.parseStatus ?? '').trim()
   const processing = parseStatus === 'processing'
   const canParse = ['pending', 'failed'].includes(parseStatus)
@@ -415,14 +463,14 @@ function createCourseMaterialRowActions(material = {}) {
   ]
 }
 
-function mapCourseMemberRow(member) {
+function mapCourseMemberRow(member, options = {}) {
   const status = String(member.status ?? '').trim() || 'unknown'
   const role = String(member.membershipRole ?? '').trim() || 'student'
   return {
     id: member.id,
     raw: member,
     subtitle: member.userCode ?? member.username ?? '',
-    actions: createCourseMemberRowActions(member),
+    actions: createCourseMemberRowActions(member, options),
     cells: [
       {
         kind: 'text',
@@ -449,10 +497,10 @@ function mapCourseMemberRow(member) {
   }
 }
 
-function createCourseMemberRowActions(member = {}) {
+function createCourseMemberRowActions(member = {}, options = {}) {
   const status = String(member.status ?? '').trim()
   const courseId = member.courseId
-  if (!member.id || !courseId) {
+  if (!member.id || !courseId || options.readonly) {
     return []
   }
   const actions = status === 'active'
@@ -468,6 +516,67 @@ function createCourseMemberRowActions(member = {}) {
     actions.push({ label: '移除', key: 'remove-course-member', icon: 'delete', variant: 'danger' })
   }
   return actions
+}
+
+async function resolveCourseReadonlyContext(courseId, services = {}) {
+  if (!courseId || typeof services.getCourse !== 'function') {
+    return { readonly: false, course: null }
+  }
+
+  try {
+    const course = await services.getCourse(courseId)
+    return {
+      readonly: isArchivedCourse(course),
+      reason: isArchivedCourse(course) ? ARCHIVED_COURSE_READONLY_REASON : '',
+      course,
+    }
+  } catch (error) {
+    return {
+      readonly: false,
+      course: null,
+      error: createApiError(error),
+    }
+  }
+}
+
+function unwrapCourseReadonlyContext(result) {
+  return result.status === 'fulfilled'
+    ? result.value
+    : { readonly: false, course: null, error: createApiError(result.reason) }
+}
+
+function isArchivedCourse(course = {}) {
+  return String(course?.status ?? '').trim().toLowerCase() === 'archived'
+}
+
+function createReadonlyPrimaryAction(label, permission) {
+  return {
+    label,
+    permission,
+    disabled: true,
+    title: ARCHIVED_COURSE_READONLY_REASON,
+  }
+}
+
+function createReadonlyActionState(context = {}) {
+  return context.readonly
+    ? {
+        readonly: true,
+        readonlyReason: context.reason || ARCHIVED_COURSE_READONLY_REASON,
+        courseStatus: 'archived',
+      }
+    : {}
+}
+
+function createCourseContextBlocks(context = {}) {
+  return context.course
+    ? {
+        course: {
+          state: 'success',
+          item: context.course,
+        },
+      }
+    : {}
 }
 
 function createTeacherCell(course = {}) {
@@ -661,15 +770,18 @@ function mapKnowledgeBaseRow(knowledgeBase = {}) {
   const activeIndexRunId = knowledgeBase.activeIndexRunId ?? knowledgeBase.activeIndexId
   const latestIndexRunId = knowledgeBase.latestIndexRunId
   const latestIndexStatus = knowledgeBase.latestIndexRunStatus ?? knowledgeBase.latestStatus ?? ''
+  const archived = isArchivedCourse(knowledgeBase)
 
   return {
     id,
     to: id ? `/app/knowledge-bases/${id}` : '',
-    buildTo: id ? `/app/knowledge-bases/${id}/build` : '',
-    actions: id ? [
-      { label: '详情', to: `/app/knowledge-bases/${id}` },
-      { label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' },
-    ] : [],
+    buildTo: id && !archived ? `/app/knowledge-bases/${id}/build` : '',
+    actions: id
+      ? [
+          { label: '详情', to: `/app/knowledge-bases/${id}` },
+          ...(!archived ? [{ label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' }] : []),
+        ]
+      : [],
     cells: [
       knowledgeBase.name ?? knowledgeBase.kbCode ?? `知识库 ${id ?? '-'}`,
       knowledgeBase.courseId ?? '-',
@@ -704,9 +816,9 @@ async function loadKnowledgeBaseDetail(route, services) {
     refreshedAt: new Date().toISOString(),
     summary: knowledgeBase.name ?? knowledgeBase.kbCode ?? '知识库详情',
     facts: buildKnowledgeBaseFacts(knowledgeBase),
-    actions: {
-      buildTo: `/app/knowledge-bases/${knowledgeBase.id ?? kbId}/build`,
-    },
+    actions: isArchivedCourse(knowledgeBase)
+      ? { readonly: true, readonlyReason: '已归档知识库只读，请先恢复课程' }
+      : { buildTo: `/app/knowledge-bases/${knowledgeBase.id ?? kbId}/build` },
     blocks: {
       knowledgeBase: {
         state: 'success',
@@ -1308,7 +1420,8 @@ async function loadMaterialDetail(route, services) {
 
   const material = await resolveMaterialDetail(materialResult.value, materialId, route, services)
   const parseResultsBlock = createParseResultsBlock(parseResultsResult)
-  const actions = resolveMaterialActions(material, parseResultsBlock.items)
+  const courseContext = await resolveCourseReadonlyContext(material.courseId, services)
+  const actions = resolveMaterialActions(material, parseResultsBlock.items, { readonly: courseContext.readonly })
 
   return createOverviewLoaderResult({
     requestState: 'success',
@@ -1323,10 +1436,12 @@ async function loadMaterialDetail(route, services) {
         facts: buildMaterialFacts(material),
       },
       parseResults: parseResultsBlock,
+      ...createCourseContextBlocks(courseContext),
     },
     raw: {
       material,
       parseResults: parseResultsBlock.raw,
+      course: courseContext.course,
     },
   })
 }
@@ -1795,13 +1910,14 @@ function clampPercent(value) {
 function mapKnowledgeBaseItem(knowledgeBase = {}) {
   const id = knowledgeBase.id ?? knowledgeBase.kbId ?? knowledgeBase.knowledgeBaseId
   const activeIndexRunId = knowledgeBase.activeIndexRunId ?? knowledgeBase.activeIndexId
+  const archived = isArchivedCourse(knowledgeBase)
   return {
     id,
     title: knowledgeBase.name ?? knowledgeBase.kbName ?? `知识库 ${id ?? '-'}`,
     meta: knowledgeBase.status ?? '-',
     detail: activeIndexRunId ? `激活索引 #${activeIndexRunId}` : '',
     to: id ? `/app/knowledge-bases/${id}` : '',
-    buildTo: id ? `/app/knowledge-bases/${id}/build` : '',
+    buildTo: id && !archived ? `/app/knowledge-bases/${id}/build` : '',
   }
 }
 
@@ -1914,10 +2030,24 @@ function mapIndexRunItem(indexRun = {}) {
   }
 }
 
-function resolveMaterialActions(material = {}, parseResults = []) {
+function resolveMaterialActions(material = {}, parseResults = [], options = {}) {
   const parseStatus = normalizeMaterialParseStatus(material.parseStatus ?? 'unknown')
   const exportPayload = { mode: 'section', withPageDocs: true, force: false }
   const hasCompleteExport = hasCompleteGraphRagExport(parseResults, exportPayload)
+  if (options.readonly) {
+    return {
+      canParse: false,
+      parseHint: ARCHIVED_COURSE_READONLY_REASON,
+      parseHintTitle: '归档课程只读',
+      canExport: false,
+      exportHint: ARCHIVED_COURSE_READONLY_REASON,
+      exportPayload,
+      hasCompleteExport,
+      readonly: true,
+      readonlyReason: ARCHIVED_COURSE_READONLY_REASON,
+    }
+  }
+
   const canParse = ['pending', 'failed'].includes(parseStatus)
   const canExport = parseStatus === 'done'
   const parseHintByStatus = {
