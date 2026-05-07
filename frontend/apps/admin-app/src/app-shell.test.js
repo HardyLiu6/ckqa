@@ -68,6 +68,7 @@ import {
 import {
   buildCourseListParams,
   buildKnowledgeBaseWorkflowSteps,
+  buildParseResultGroups,
   createMaterialParseProgressCell,
   createCoursesLoaderResult,
   loadCourseDetailBlock,
@@ -658,6 +659,33 @@ test('资料详情 loader 根据解析状态推导可执行按钮', async () => 
   assert.equal(parseResultsPage.blocks.parseResults.items[0].previewUrl, '/api/v1/pdf-files/9/results/1/preview')
   assert.equal(parseResultsPage.blocks.parseResults.items[0].downloadUrl, '/api/v1/pdf-files/9/results/1/download')
   assert.equal(parseResultsPage.blocks.parseResults.items[0].previewable, true)
+  assert.equal(parseResultsPage.blocks.parseResults.groups[0].key, 'structured')
+})
+
+test('解析产物按类型分组并默认收起图片资源', () => {
+  const imageItems = Array.from({ length: 14 }, (_, index) => ({
+    id: `image-${index + 1}`,
+    title: `images/page-${String(index + 1).padStart(3, '0')}.png`,
+    meta: 'image',
+    contentType: 'image/png',
+    previewUrl: `/preview/${index + 1}`,
+    downloadUrl: `/download/${index + 1}`,
+  }))
+  const groups = buildParseResultGroups([
+    { id: 'content', title: 'content_list.json', meta: 'json', contentType: 'application/json' },
+    { id: 'markdown', title: 'full.md', meta: 'markdown', contentType: 'text/markdown' },
+    ...imageItems,
+  ])
+
+  assert.equal(groups[0].key, 'structured')
+  assert.equal(groups[0].count, 1)
+  assert.equal(groups[1].key, 'document')
+  assert.equal(groups[1].count, 1)
+  assert.equal(groups[2].key, 'image')
+  assert.equal(groups[2].count, 14)
+  assert.equal(groups[2].collapsedByDefault, true)
+  assert.equal(groups[2].summary, '14 个图片文件')
+  assert.equal(groups.reduce((total, group) => total + group.items.length, 0), 16)
 })
 
 test('资料详情 loader 通过课程资料接口补齐资料对象信息并中文化状态', async () => {
@@ -758,7 +786,8 @@ test('课程资料列表的解析按钮直接触发操作且解析状态用真�
   assert.equal(result.rows[1].cells[2].hasPercent, true)
   assert.equal(result.rows[1].cells[2].detail, '37%')
 
-  assert.equal(result.rows[0].actions.find((action) => action.label === '结果').to, '/app/materials/9/parse-results?courseId=os')
+  assert.equal(result.rows[0].actions.some((action) => action.label === '结果'), false)
+  assert.equal(result.rows[0].actions.find((action) => action.label === '详情').to, '/app/materials/9?courseId=os')
 })
 
 test('资料解析进度单元不把阶段状态伪装成百分比', () => {

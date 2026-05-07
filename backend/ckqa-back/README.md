@@ -164,10 +164,13 @@ export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
 export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
 export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
 
-export PDF_INGEST_PYTHON=/path/to/courseKg/bin/python
+# 可留空；后端会自动优先使用 ~/miniconda3/envs/courseKg/bin/python，
+# 如需强制指定解释器，再填写真实绝对路径。
+export PDF_INGEST_PYTHON=
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 
-export GRAPHRAG_PYTHON=/path/to/graphrag-oneapi/bin/python
+# 可留空；后端会自动优先使用 ~/miniconda3/envs/graphrag-oneapi/bin/python。
+export GRAPHRAG_PYTHON=
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
 export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
 export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb

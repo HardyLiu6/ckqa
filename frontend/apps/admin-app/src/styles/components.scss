@@ -2342,6 +2342,88 @@ textarea.text-input {
   padding: 12px;
 }
 
+.parse-result-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.parse-result-summary-strip span {
+  padding: 4px 9px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: 999px;
+  color: var(--ckqa-muted);
+  background: var(--ckqa-surface-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.parse-result-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.parse-result-group {
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface-muted);
+  overflow: hidden;
+}
+
+.parse-result-group__summary {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--ckqa-text);
+  background: color-mix(in srgb, var(--ckqa-surface) 68%, transparent);
+}
+
+.parse-result-group__summary span {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.parse-result-group__summary strong,
+.parse-result-group__summary small {
+  overflow-wrap: anywhere;
+}
+
+.parse-result-group__summary small {
+  color: var(--ckqa-muted);
+  font-weight: 800;
+}
+
+.parse-result-item-list {
+  display: grid;
+  gap: 0;
+  max-height: 380px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border-top: 1px solid var(--ckqa-border);
+}
+
+.parse-result-item-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-border) 78%, transparent);
+}
+
+.parse-result-item-list li:last-child {
+  border-bottom: 0;
+}
+
 .parse-result-copy {
   display: grid;
   gap: 4px;
@@ -2358,6 +2440,16 @@ textarea.text-input {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .parse-result-item-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .parse-result-actions {
+    margin-top: 0;
+  }
 }
 
 .inline-error {

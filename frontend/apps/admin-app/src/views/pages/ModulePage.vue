@@ -382,6 +382,23 @@ const courseCoverUrl = computed(() => courseBlock.value?.item?.coverUrl || DEFAU
 const courseCanDelete = computed(() => isEmptyCourse(courseBlock.value?.item))
 const materialBlock = computed(() => config.value.blocks?.material)
 const parseResultsBlock = computed(() => config.value.blocks?.parseResults)
+const parseResultGroups = computed(() => {
+  const block = parseResultsBlock.value
+  if (Array.isArray(block?.groups) && block.groups.length > 0) {
+    return block.groups
+  }
+  if (Array.isArray(block?.items) && block.items.length > 0) {
+    return [{
+      key: 'all',
+      label: '解析产物',
+      summary: `${block.items.length} 个文件`,
+      count: block.items.length,
+      collapsedByDefault: false,
+      items: block.items,
+    }]
+  }
+  return []
+})
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
 const materialParseProgress = computed(() => (
@@ -3045,37 +3062,61 @@ onBeforeUnmount(() => cancelLongTask())
       </div>
       <p v-if="parseResultsBlock?.state === 'error'" class="inline-error">{{ parseResultsBlock.error.message }}</p>
       <p v-if="parseResultActionError" class="inline-error">{{ parseResultActionError.message }}</p>
-      <ol v-if="parseResultsBlock?.state === 'success'" class="timeline-list">
-        <li v-for="item in parseResultsBlock?.items" :key="item.id">
-          <StatusBadge :status="item.meta" />
-          <div class="parse-result-copy">
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.detail }}</small>
-          </div>
-          <div class="parse-result-actions">
-            <el-button
-              class="ckqa-el-button ckqa-el-button--secondary"
-              native-type="button"
-              :disabled="parseResultActionState === 'running' || !item.previewUrl || item.previewable === false"
-              :title="item.previewable === false ? '该产物暂不支持浏览器预览' : '预览解析产物'"
-              @click="handleParseResultPreview(item)"
-            >
-              <Eye class="button-icon" :size="15" aria-hidden="true" />
-              预览
-            </el-button>
-            <el-button
-              class="ckqa-el-button ckqa-el-button--secondary"
-              native-type="button"
-              :disabled="parseResultActionState === 'running' || !item.downloadUrl"
-              title="下载解析产物"
-              @click="handleParseResultDownload(item)"
-            >
-              <Download class="button-icon" :size="15" aria-hidden="true" />
-              下载
-            </el-button>
-          </div>
-        </li>
-      </ol>
+      <div
+        v-if="parseResultsBlock?.state === 'success'"
+        class="parse-result-summary-strip"
+      >
+        <span>{{ parseResultsBlock.summary?.total ?? parseResultsBlock.items.length }} 个产物</span>
+        <span v-if="parseResultsBlock.summary?.imageCount">{{ parseResultsBlock.summary.imageCount }} 个图片</span>
+        <span>{{ parseResultsBlock.summary?.groupCount ?? parseResultGroups.length }} 类文件</span>
+      </div>
+      <div v-if="parseResultsBlock?.state === 'success'" class="parse-result-groups">
+        <details
+          v-for="group in parseResultGroups"
+          :key="group.key"
+          class="parse-result-group"
+          :data-kind="group.key"
+          :open="!group.collapsedByDefault"
+        >
+          <summary class="parse-result-group__summary">
+            <span>
+              <strong>{{ group.label }}</strong>
+              <small>{{ group.summary }}</small>
+            </span>
+          </summary>
+          <ol class="parse-result-item-list">
+            <li v-for="item in group.items" :key="item.id">
+              <StatusBadge :status="item.meta" />
+              <div class="parse-result-copy">
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.detail || item.contentType || '解析产物' }}</small>
+              </div>
+              <div class="parse-result-actions">
+                <el-button
+                  class="ckqa-el-button ckqa-el-button--secondary"
+                  native-type="button"
+                  :disabled="parseResultActionState === 'running' || !item.previewUrl || item.previewable === false"
+                  :title="item.previewable === false ? '该产物暂不支持浏览器预览' : '预览解析产物'"
+                  @click="handleParseResultPreview(item)"
+                >
+                  <Eye class="button-icon" :size="15" aria-hidden="true" />
+                  预览
+                </el-button>
+                <el-button
+                  class="ckqa-el-button ckqa-el-button--secondary"
+                  native-type="button"
+                  :disabled="parseResultActionState === 'running' || !item.downloadUrl"
+                  title="下载解析产物"
+                  @click="handleParseResultDownload(item)"
+                >
+                  <Download class="button-icon" :size="15" aria-hidden="true" />
+                  下载
+                </el-button>
+              </div>
+            </li>
+          </ol>
+        </details>
+      </div>
       <div v-if="parseResultsBlock?.state === 'empty'" class="empty-action-state material-empty-state">
         <strong>暂无解析产物</strong>
         <p>

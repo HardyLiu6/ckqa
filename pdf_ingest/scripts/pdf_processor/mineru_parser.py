@@ -419,6 +419,26 @@ class PDFParserApp:
             f" 可选资料: {choices}"
         )
 
+    @staticmethod
+    def _resolve_display_file_name(pdf_file: Dict[str, Any]) -> str:
+        return (
+            pdf_file.get("display_name")
+            or pdf_file.get("file_name")
+            or pdf_file.get("original_file_name")
+            or f"material_{pdf_file['id']}"
+        )
+
+    @classmethod
+    def _resolve_mineru_upload_file_name(cls, pdf_file: Dict[str, Any]) -> str:
+        """解析时给 MinerU 使用真实 PDF 文件名，避免展示名无后缀被云端拒绝。"""
+        for key in ("original_file_name", "file_name", "display_name"):
+            file_name = str(pdf_file.get(key) or "").strip()
+            if file_name and Path(file_name).suffix.lower() == ".pdf":
+                return file_name
+
+        display_name = cls._resolve_display_file_name(pdf_file)
+        return f"{display_name}.pdf"
+
     def _delete_material_related_data(self, course_material: Dict[str, Any]) -> None:
         """删除某一份课程资料关系相关的解析产物和 GraphRAG 导出。"""
         course_id = course_material["course_id"]
@@ -570,6 +590,7 @@ class PDFParserApp:
         file_name: Optional[str] = None,
         material_id: Optional[int] = None,
         material_name: Optional[str] = None,
+        allow_claimed_processing: bool = False,
     ) -> Dict[str, Any]:
         """
         解析已上传的PDF文件
@@ -589,7 +610,8 @@ class PDFParserApp:
         )
         
         resolved_file_id: int = int(pdf_file["id"])
-        source_file_name = pdf_file.get("display_name") or pdf_file.get("file_name")
+        source_file_name = self._resolve_display_file_name(pdf_file)
+        mineru_upload_file_name = self._resolve_mineru_upload_file_name(pdf_file)
         
         # 检查状态
         if pdf_file["parse_status"] == "done":
@@ -603,7 +625,7 @@ class PDFParserApp:
                 "message": "文件已解析完成"
             }
         
-        if pdf_file["parse_status"] == "processing":
+        if pdf_file["parse_status"] == "processing" and not allow_claimed_processing:
             raise Exception("文件正在解析中，请稍后重试")
         
         # 更新状态为处理中
@@ -615,7 +637,7 @@ class PDFParserApp:
         
         try:
             # 从MinIO下载文件到临时目录
-            temp_pdf = self.config.get_temp_path(course_id, source_file_name)
+            temp_pdf = self.config.get_temp_path(course_id, mineru_upload_file_name)
             self.logger.info(f"从MinIO下载文件...")
             self.storage.download_pdf_object(
                 pdf_file["minio_bucket"],
@@ -624,7 +646,7 @@ class PDFParserApp:
             )
             
             # 申请上传链接
-            upload_info = self.parser.apply_upload_url([source_file_name])
+            upload_info = self.parser.apply_upload_url([mineru_upload_file_name])
             batch_id = upload_info["batch_id"]
             
             self.db.update_parse_status(resolved_file_id, ParseStatus.PROCESSING, batch_id=batch_id)
@@ -935,6 +957,11 @@ def main():
     parse_parser.add_argument("--material-name", help="指定要解析的课程资料展示名")
     parse_parser.add_argument("--file-id", type=int, help="指定要解析的PDF文件ID")
     parse_parser.add_argument("--file-name", help="指定要解析的PDF文件名")
+    parse_parser.add_argument(
+        "--allow-claimed-processing",
+        action="store_true",
+        help="允许 Java 后端已领取的 processing 资料继续进入 pdf_ingest 解析流程"
+    )
     
     # status 命令
     status_parser = subparsers.add_parser("status", help="查看课程状态")
@@ -1033,6 +1060,7 @@ def main():
                 file_name=args.file_name,
                 material_id=args.material_id,
                 material_name=args.material_name,
+                allow_claimed_processing=args.allow_claimed_processing,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
         

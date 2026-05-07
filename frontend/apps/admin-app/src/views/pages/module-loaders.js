@@ -79,6 +79,16 @@ const COURSE_MATERIAL_PARSE_STATUS_LABELS = {
   done: '已完成',
   failed: '失败',
 }
+const PARSE_RESULT_GROUP_ORDER = ['structured', 'document', 'graphrag', 'image', 'archive', 'other']
+const PARSE_RESULT_GROUPS = {
+  structured: { label: '结构化结果', unit: '个结构化文件' },
+  document: { label: '文本文档', unit: '个文档文件' },
+  graphrag: { label: 'GraphRAG 导出', unit: '个导出文件' },
+  image: { label: '图片资源', unit: '个图片文件' },
+  archive: { label: '压缩包', unit: '个压缩包' },
+  other: { label: '其他产物', unit: '个文件' },
+}
+const IMAGE_PARSE_RESULT_COLLAPSE_THRESHOLD = 8
 const INDEX_STATUS_LABELS = {
   success: '最近索引成功',
   running: '索引构建中',
@@ -378,9 +388,6 @@ function createCourseMaterialRowActions(material = {}) {
   }
   const encodedId = encodeURIComponent(id)
   const detailPath = buildMaterialDetailPath(id, material.courseId)
-  const resultPath = `${detailPath.replace(/\?.*$/, '')}/parse-results${
-    String(material.courseId ?? '').trim() ? `?courseId=${encodeURIComponent(String(material.courseId).trim())}` : ''
-  }`
   const parseStatus = String(material.parseStatus ?? '').trim()
   const processing = parseStatus === 'processing'
   const canParse = ['pending', 'failed'].includes(parseStatus)
@@ -396,7 +403,6 @@ function createCourseMaterialRowActions(material = {}) {
         ? '资料解析中'
         : (canParse ? '直接提交 MinerU 解析任务' : '当前状态不支持触发解析'),
     },
-    { label: '结果', to: resultPath, icon: 'knowledge' },
     { label: '编辑', key: 'edit-course-material', icon: 'edit', variant: 'primary' },
     {
       label: '删除',
@@ -911,7 +917,7 @@ async function resolveBuildSelection({ selectionQuery, knowledgeBase, materials,
       parseResults: parseResultsResult.status === 'fulfilled' && Array.isArray(parseResultsResult.value)
         ? parseResultsResult.value
         : [],
-      parseResultsBlock: createSettledListBlock(parseResultsResult, mapParseResultItem),
+      parseResultsBlock: createParseResultsBlock(parseResultsResult),
     }
   }))
   const pairs = settledPairs
@@ -1301,7 +1307,7 @@ async function loadMaterialDetail(route, services) {
   }
 
   const material = await resolveMaterialDetail(materialResult.value, materialId, route, services)
-  const parseResultsBlock = createSettledListBlock(parseResultsResult, mapParseResultItem)
+  const parseResultsBlock = createParseResultsBlock(parseResultsResult)
   const actions = resolveMaterialActions(material, parseResultsBlock.items)
 
   return createOverviewLoaderResult({
@@ -1377,6 +1383,15 @@ function createSettledListBlock(result, mapper) {
     state: rawItems.length > 0 ? 'success' : 'empty',
     items: rawItems.map(mapper),
     raw: result.value,
+  }
+}
+
+function createParseResultsBlock(result) {
+  const block = createSettledListBlock(result, mapParseResultItem)
+  return {
+    ...block,
+    groups: buildParseResultGroups(block.items),
+    summary: buildParseResultsSummary(block.items),
   }
 }
 
@@ -1759,17 +1774,101 @@ function mapKnowledgeBaseItem(knowledgeBase = {}) {
 }
 
 function mapParseResultItem(result = {}) {
+  const fileSize = result.fileSize ?? null
+  const sizeLabel = formatFileSize(fileSize)
+  const timestamp = result.createdAt ?? result.updatedAt ?? ''
   return {
     id: result.id ?? result.resultId ?? result.fileName,
     title: result.fileName ?? result.objectName ?? '-',
     meta: result.resultType ?? result.type ?? '-',
-    detail: result.createdAt ?? result.updatedAt ?? '',
+    detail: [sizeLabel === '-' ? '' : sizeLabel, timestamp].filter(Boolean).join(' · '),
     contentType: result.contentType ?? '',
-    fileSize: result.fileSize ?? null,
+    fileSize,
+    sizeLabel,
     previewable: result.previewable ?? true,
     previewUrl: result.previewUrl ?? '',
     downloadUrl: result.downloadUrl ?? '',
   }
+}
+
+export function buildParseResultGroups(items = []) {
+  const bucket = new Map()
+  for (const item of items) {
+    const key = classifyParseResult(item)
+    if (!bucket.has(key)) {
+      bucket.set(key, [])
+    }
+    bucket.get(key).push({ ...item, artifactKind: key })
+  }
+
+  return PARSE_RESULT_GROUP_ORDER
+    .filter((key) => bucket.has(key))
+    .map((key) => {
+      const groupItems = bucket.get(key)
+      const groupMeta = PARSE_RESULT_GROUPS[key] ?? PARSE_RESULT_GROUPS.other
+      const count = groupItems.length
+      return {
+        key,
+        label: groupMeta.label,
+        count,
+        summary: `${count} ${groupMeta.unit}`,
+        collapsedByDefault: key === 'image' && count > IMAGE_PARSE_RESULT_COLLAPSE_THRESHOLD,
+        items: groupItems,
+      }
+    })
+}
+
+function buildParseResultsSummary(items = []) {
+  const groups = buildParseResultGroups(items)
+  return {
+    total: items.length,
+    groupCount: groups.length,
+    imageCount: groups.find((group) => group.key === 'image')?.count ?? 0,
+  }
+}
+
+function classifyParseResult(item = {}) {
+  const title = String(item.title ?? item.fileName ?? '').toLowerCase()
+  const meta = String(item.meta ?? item.resultType ?? item.type ?? '').toLowerCase()
+  const contentType = String(item.contentType ?? '').toLowerCase()
+  const extension = title.includes('.') ? title.split('.').pop() : ''
+
+  if (
+    contentType.startsWith('image/')
+    || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(extension)
+    || ['image', 'img'].some((token) => meta.includes(token))
+  ) {
+    return 'image'
+  }
+
+  if (title.includes('graphrag') || meta.includes('graphrag')) {
+    return 'graphrag'
+  }
+
+  if (
+    contentType.includes('json')
+    || ['json', 'jsonl'].includes(extension)
+    || ['json', 'content', 'model', 'metadata'].some((token) => meta.includes(token))
+  ) {
+    return 'structured'
+  }
+
+  if (
+    contentType.startsWith('text/')
+    || ['md', 'markdown', 'txt', 'html', 'htm'].includes(extension)
+    || ['markdown', 'text', 'html'].some((token) => meta.includes(token))
+  ) {
+    return 'document'
+  }
+
+  if (
+    ['zip', 'tar', 'gz', '7z'].includes(extension)
+    || ['zip', 'archive'].some((token) => meta.includes(token))
+  ) {
+    return 'archive'
+  }
+
+  return 'other'
 }
 
 function mapIndexRunItem(indexRun = {}) {

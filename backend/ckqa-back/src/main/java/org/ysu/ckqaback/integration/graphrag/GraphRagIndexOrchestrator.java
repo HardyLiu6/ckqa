@@ -8,9 +8,11 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.process.ProcessContext;
 import org.ysu.ckqaback.integration.process.ProcessExecutionResult;
 import org.ysu.ckqaback.integration.process.ProcessRunner;
+import org.ysu.ckqaback.integration.process.PythonCommandResolver;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -27,13 +29,14 @@ public class GraphRagIndexOrchestrator {
 
     public ProcessExecutionResult fetchInput(IndexRuns run, KnowledgeBases knowledgeBase)
             throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(resolveGraphRagPython());
+        command.addAll(List.of(
+                "utils/fetch_from_minio.py",
+                knowledgeBase.getCourseId(),
+                "--clean"
+        ));
         return processRunner.run(
-                List.of(
-                        properties.getGraphrag().getPython(),
-                        "utils/fetch_from_minio.py",
-                        knowledgeBase.getCourseId(),
-                        "--clean"
-                ),
+                command,
                 Path.of(properties.getGraphrag().getRoot()),
                 Map.of(),
                 Duration.ofSeconds(properties.getTimeout().getFetchSeconds()),
@@ -45,15 +48,16 @@ public class GraphRagIndexOrchestrator {
     }
 
     public ProcessExecutionResult runIndex(IndexRuns run) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(resolveGraphRagPython());
+        command.addAll(List.of(
+                "-m",
+                "graphrag",
+                "index",
+                "--root",
+                "."
+        ));
         return processRunner.run(
-                List.of(
-                        properties.getGraphrag().getPython(),
-                        "-m",
-                        "graphrag",
-                        "index",
-                        "--root",
-                        "."
-                ),
+                command,
                 Path.of(properties.getGraphrag().getRoot()),
                 Map.of(),
                 Duration.ofSeconds(properties.getTimeout().getIndexSeconds()),
@@ -72,20 +76,21 @@ public class GraphRagIndexOrchestrator {
             String jsonFile,
             String outputFile
     ) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(resolveGraphRagPython());
+        command.addAll(List.of(
+                "utils/fetch_from_minio.py",
+                knowledgeBase.getCourseId(),
+                "--material-id",
+                String.valueOf(materialId),
+                "--json-file",
+                jsonFile,
+                "--input-dir",
+                graphInputDir.toString(),
+                "--output-file",
+                outputFile
+        ));
         return processRunner.run(
-                List.of(
-                        properties.getGraphrag().getPython(),
-                        "utils/fetch_from_minio.py",
-                        knowledgeBase.getCourseId(),
-                        "--material-id",
-                        String.valueOf(materialId),
-                        "--json-file",
-                        jsonFile,
-                        "--input-dir",
-                        graphInputDir.toString(),
-                        "--output-file",
-                        outputFile
-                ),
+                command,
                 Path.of(properties.getGraphrag().getRoot()),
                 Map.of(),
                 Duration.ofSeconds(properties.getTimeout().getFetchSeconds()),
@@ -100,15 +105,16 @@ public class GraphRagIndexOrchestrator {
         Path indexRoot = workspaceRoot.resolve("index");
         Path logsDir = indexRoot.resolve("logs");
         java.nio.file.Files.createDirectories(logsDir);
+        List<String> command = new ArrayList<>(resolveGraphRagPython());
+        command.addAll(List.of(
+                "-m",
+                "graphrag",
+                "index",
+                "--root",
+                "."
+        ));
         return processRunner.run(
-                List.of(
-                        properties.getGraphrag().getPython(),
-                        "-m",
-                        "graphrag",
-                        "index",
-                        "--root",
-                        "."
-                ),
+                command,
                 Path.of(properties.getGraphrag().getRoot()),
                 Map.of(
                         "GRAPHRAG_INPUT_DIR", indexRoot.resolve("input").toString(),
@@ -124,5 +130,9 @@ public class GraphRagIndexOrchestrator {
                         .logFile(logsDir.resolve("process.log"))
                         .build()
         );
+    }
+
+    private List<String> resolveGraphRagPython() {
+        return PythonCommandResolver.resolve(properties.getGraphrag().getPython(), "graphrag-oneapi");
     }
 }

@@ -7,6 +7,7 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.process.ProcessContext;
 import org.ysu.ckqaback.integration.process.ProcessExecutionResult;
 import org.ysu.ckqaback.integration.process.ProcessRunner;
+import org.ysu.ckqaback.integration.process.PythonCommandResolver;
 import org.ysu.ckqaback.pdf.dto.ExportGraphRagRequest;
 
 import java.io.IOException;
@@ -27,14 +28,18 @@ public class PdfIngestOrchestrator {
     private final ProcessRunner processRunner;
 
     public ProcessExecutionResult parse(CourseMaterials material) throws IOException, InterruptedException {
-        List<String> command = List.of(
+        List<String> command = new ArrayList<>(PythonCommandResolver.resolve(
                 properties.getPdfIngest().getPython(),
+                "courseKg"
+        ));
+        command.addAll(List.of(
                 "scripts/pdf_processor/mineru_parser.py",
                 "parse",
                 material.getCourseId(),
                 "--material-id",
-                String.valueOf(material.getId())
-        );
+                String.valueOf(material.getId()),
+                "--allow-claimed-processing"
+        ));
         return processRunner.run(
                 command,
                 Path.of(properties.getPdfIngest().getRoot()),
@@ -49,8 +54,11 @@ public class PdfIngestOrchestrator {
 
     public ProcessExecutionResult exportGraphRag(CourseMaterials material, ExportGraphRagRequest request)
             throws IOException, InterruptedException {
-        List<String> command = new ArrayList<>(List.of(
+        List<String> command = new ArrayList<>(PythonCommandResolver.resolve(
                 properties.getPdfIngest().getPython(),
+                "courseKg"
+        ));
+        command.addAll(List.of(
                 "scripts/pdf_processor/mineru_parser.py",
                 "export-graphrag",
                 material.getCourseId(),
