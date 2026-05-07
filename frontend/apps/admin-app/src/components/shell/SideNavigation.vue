@@ -23,6 +23,7 @@ defineProps({
           :to="item.path"
           class="side-nav-item"
           :class="{ 'is-active': activePath === item.path }"
+          :data-test-id="`nav-${item.key}`"
         >
           <span class="side-nav-item-label">{{ item.label }}</span>
           <span v-if="item.count" class="side-nav-item-count">{{ item.count }}</span>

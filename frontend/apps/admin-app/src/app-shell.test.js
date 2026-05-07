@@ -51,6 +51,7 @@ import {
   filterGroups,
   isCommandShortcut,
 } from './components/shell/command-palette-model.js'
+import { COPY } from './copy/admin.js'
 import { primaryNavigation, routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
@@ -3342,6 +3343,18 @@ test('NotificationDropdown model exports are wired', () => {
 test('CkCommandPalette model exports are wired', () => {
   assert.equal(typeof filterGroups, 'function')
   assert.equal(isCommandShortcut({ key: 'k', metaKey: true }), true)
+})
+
+test('COPY.nav.sections 完整且不含工程术语', () => {
+  assert.equal(COPY.nav.sections.production, '生产')
+  const flat = JSON.stringify(COPY.nav.sections)
+  assert.equal(flat.includes('PENDING'), false)
+  assert.equal(flat.includes('embedding'), false)
+})
+
+test('COPY.feedback 用平实表达替换冒烟', () => {
+  assert.equal(COPY.feedback.kbValidationLabel, '知识库验证')
+  assert.equal(JSON.stringify(COPY).includes('冒烟'), false)
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
