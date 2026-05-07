@@ -1,100 +1,97 @@
 <script setup>
-import { computed } from 'vue'
-import {
-  BookOpen,
-  Boxes,
-  CircleHelp,
-  DatabaseZap,
-  Gauge,
-  KeyRound,
-  MessageSquareText,
-  ScrollText,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  UserCog,
-  Wrench,
-} from 'lucide-vue-next'
-
-import { findActiveNavigationPath, NAV_SECTIONS } from './navigation-model.js'
-
-const props = defineProps({
-  sections: { type: Array, default: () => [] },
-  activeGroup: { type: String, default: '' },
+defineProps({
+  sections: { type: Array, required: true },
+  sectionLabels: { type: Object, required: true },
   activePath: { type: String, default: '' },
-  currentPath: { type: String, required: true },
-  compact: { type: Boolean, default: false },
 })
-
-const sectionLabelMap = NAV_SECTIONS.reduce((acc, section) => {
-  acc[section.key] = section.label
-  return acc
-}, {})
-
-const computedActivePath = computed(() => {
-  if (props.activePath) return props.activePath
-  return findActiveNavigationPath(props.sections, props.currentPath)
-})
-
-const itemIconMap = {
-  dashboard: Gauge,
-  courses: BookOpen,
-  materials: Boxes,
-  'knowledge-bases': DatabaseZap,
-  'qa-sessions': MessageSquareText,
-  'retrieval-logs': ScrollText,
-  'kb-validation': Sparkles,
-  users: UserCog,
-  health: Wrench,
-  audit: ScrollText,
-  permissions: KeyRound,
-  roles: ShieldCheck,
-  system: Server,
-}
-
-function resolveItemIcon(item) {
-  return itemIconMap[item.key] || CircleHelp
-}
 </script>
 
 <template>
-  <aside class="side-navigation" :class="{ compact }" aria-label="一级导航">
-    <nav class="side-nav-scroll">
-      <el-menu
-        class="side-menu"
-        :default-active="computedActivePath"
-        :collapse="compact"
-        router
-      >
-        <template v-for="section in sections" :key="section.key">
-          <div
-            v-if="!compact && sectionLabelMap[section.key]"
-            class="side-section-label"
-          >
-            {{ sectionLabelMap[section.key] }}
-          </div>
-          <el-menu-item
-            v-for="item in section.items"
-            :key="item.path"
-            class="side-menu-item"
-            :index="item.path"
-          >
-            <component :is="resolveItemIcon(item)" class="nav-icon" :size="18" aria-hidden="true" />
-            <span class="nav-title">{{ item.label }}</span>
-          </el-menu-item>
-        </template>
-      </el-menu>
-    </nav>
+  <aside class="side-nav side-navigation" aria-label="主导航">
+    <section
+      v-for="section in sections"
+      :key="section.key"
+      class="side-nav-section"
+    >
+      <h3 v-if="sectionLabels[section.key]" class="side-nav-section-title">
+        {{ sectionLabels[section.key] }}
+      </h3>
+      <nav>
+        <RouterLink
+          v-for="item in section.items"
+          :key="item.key"
+          :to="item.path"
+          class="side-nav-item"
+          :class="{ 'is-active': activePath === item.path }"
+        >
+          <span class="side-nav-item-label">{{ item.label }}</span>
+          <span v-if="item.count" class="side-nav-item-count">{{ item.count }}</span>
+        </RouterLink>
+      </nav>
+    </section>
+
+    <footer class="side-nav-footer">
+      <strong>● API 正常</strong>
+      <span>系统服务在线</span>
+    </footer>
   </aside>
 </template>
 
 <style scoped lang="scss">
-.side-section-label {
-  padding: var(--ckqa-space-3) var(--ckqa-space-4) 4px;
+.side-nav {
+  position: sticky; top: 52px; align-self: start;
+  width: 220px; height: calc(100vh - 52px);
+  padding: 14px 10px;
+  background: var(--ckqa-surface);
+  border-right: 1px solid var(--ckqa-border);
+  display: flex; flex-direction: column;
+  overflow-y: auto;
+}
+.side-nav-section { margin-bottom: 14px; }
+.side-nav-section-title {
+  margin: 0 10px 6px;
   font-size: var(--ckqa-text-xs-size);
-  line-height: var(--ckqa-text-xs-line);
   color: var(--ckqa-text-weak);
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+  text-transform: uppercase; letter-spacing: 0.6px;
+  font-weight: var(--ckqa-fw-medium);
+}
+.side-nav-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: var(--ckqa-text-sm-size);
+  color: var(--ckqa-text);
+  text-decoration: none;
+  transition: background var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+.side-nav-item:hover { background: var(--ckqa-bg); }
+.side-nav-item.is-active {
+  background: var(--ckqa-accent-soft);
+  color: var(--ckqa-accent-strong);
+  font-weight: var(--ckqa-fw-medium);
+}
+.side-nav-item-count {
+  background: var(--ckqa-bg);
+  color: var(--ckqa-text-muted);
+  font-size: var(--ckqa-text-xs-size);
+  padding: 1px 6px;
+  border-radius: var(--ckqa-radius-full);
+}
+.side-nav-item.is-active .side-nav-item-count {
+  background: var(--ckqa-surface);
+  color: var(--ckqa-accent-strong);
+}
+.side-nav-footer {
+  margin-top: auto;
+  padding: 10px;
+  background: var(--ckqa-bg);
+  border-radius: var(--ckqa-radius-md);
+  font-size: var(--ckqa-text-xs-size);
+  color: var(--ckqa-text-muted);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.side-nav-footer strong {
+  color: var(--ckqa-text);
+  font-weight: var(--ckqa-fw-medium);
 }
 </style>
