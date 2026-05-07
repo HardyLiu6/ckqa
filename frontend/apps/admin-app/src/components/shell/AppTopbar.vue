@@ -1,93 +1,114 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { LogOut, Search, Server, ShieldCheck } from 'lucide-vue-next'
-import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
 
-import ThemeControl from './ThemeControl.vue'
+import ScopeChip from './ScopeChip.vue'
+import ThemeToggle from './ThemeToggle.vue'
+import NotificationDropdown from './NotificationDropdown.vue'
+import CkCommandPalette from './CkCommandPalette.vue'
 
 const props = defineProps({
-  apiBaseUrl: { type: String, required: true },
-  currentUser: { type: Object, default: null },
+  apiBaseUrl: { type: String, default: '' },
+  currentUser: { type: Object, default: () => null },
   dataScopeLabel: { type: String, default: '未登录' },
+  commandGroups: { type: Array, default: () => [] },
 })
 
 const emit = defineEmits(['logout'])
-const avatarLoadFailed = ref(false)
 
-function formatApiBaseline(apiBaseUrl) {
-  try {
-    const url = new URL(apiBaseUrl)
-    return `API ${url.pathname || '/api/v1'} · 开发态`
-  } catch {
-    return `API ${apiBaseUrl} · 开发态`
-  }
-}
-
-const apiBaseline = computed(() => formatApiBaseline(props.apiBaseUrl))
-const identityLabel = computed(() => props.currentUser?.name || '未登录')
-const avatarUrl = computed(() => props.currentUser?.avatarUrl || '')
-const identityInitial = computed(() => identityLabel.value.trim().charAt(0) || 'U')
-
-watch(avatarUrl, () => {
-  avatarLoadFailed.value = false
+const initial = computed(() => {
+  const name = props.currentUser?.name || props.currentUser?.username || ''
+  return name.charAt(0).toUpperCase() || '·'
 })
+
+function openCommandPalette() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))
+}
 </script>
 
 <template>
   <header class="app-topbar">
-    <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
-      <span class="brand-mark">CK</span>
-      <span>
-        <strong>CKQA 运维台</strong>
-        <small>课程知识库构建与运维平台</small>
-      </span>
-    </RouterLink>
-
-    <el-input
-      class="topbar-search-input"
-      model-value="搜索待接入"
-      type="search"
-      aria-disabled="true"
-      disabled
-      readonly
-      aria-label="全局搜索待接入"
-    >
-      <template #prefix>
-        <Search :size="16" aria-hidden="true" />
-      </template>
-    </el-input>
-
-    <span class="runtime-chip" title="当前请求基线">
-      <Server :size="15" aria-hidden="true" />
-      <strong>{{ apiBaseline }}</strong>
-    </span>
-
-    <ThemeControl />
-
-    <div class="identity-cluster">
-      <span class="identity-chip" title="当前身份和数据范围">
-        <span class="identity-avatar" aria-hidden="true">
-          <img
-            v-if="avatarUrl && !avatarLoadFailed"
-            :src="avatarUrl"
-            :alt="`${identityLabel}头像`"
-            @error="avatarLoadFailed = true"
-          />
-          <span v-else>{{ identityInitial }}</span>
-        </span>
-        <ShieldCheck :size="15" aria-hidden="true" />
-        <strong>{{ identityLabel }}</strong>
-        <span>{{ dataScopeLabel }}</span>
-      </span>
+    <div class="app-topbar-left">
+      <RouterLink class="app-topbar-logo" to="/app/dashboard">
+        <span class="app-topbar-mark" aria-hidden="true" />
+        <span>CKQA Console</span>
+      </RouterLink>
+      <ScopeChip />
     </div>
 
-    <el-button
-      class="ckqa-el-button ckqa-el-button--ghost"
-      native-type="button"
-      @click="emit('logout')"
-    >
-      <LogOut class="button-icon" :size="16" aria-hidden="true" />
-      退出
-    </el-button>
+    <div class="app-topbar-right">
+      <button
+        class="app-topbar-cmd-trigger"
+        type="button"
+        title="命令面板（⌘K / Ctrl+K）"
+        aria-label="打开命令面板"
+        @click="openCommandPalette"
+      >
+        <span aria-hidden="true">⌘K</span>
+      </button>
+      <ThemeToggle />
+      <NotificationDropdown />
+      <button
+        v-if="currentUser"
+        class="app-topbar-avatar identity-avatar"
+        type="button"
+        :title="currentUser.name || currentUser.username || dataScopeLabel"
+        :aria-label="`${currentUser.name || currentUser.username || ''} · 退出登录`"
+        @click="emit('logout')"
+      >
+        {{ initial }}
+      </button>
+    </div>
+
+    <CkCommandPalette :groups="commandGroups" />
   </header>
 </template>
+
+<style scoped lang="scss">
+.app-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px;
+  height: 52px;
+  padding: 0 18px;
+  background: var(--ckqa-surface);
+  border-bottom: 1px solid var(--ckqa-border);
+  position: sticky; top: 0; z-index: 20;
+}
+.app-topbar-left,
+.app-topbar-right { display: flex; align-items: center; gap: 12px; }
+.app-topbar-logo {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: var(--ckqa-text-md-size);
+  font-weight: var(--ckqa-fw-semibold);
+  color: var(--ckqa-text);
+  text-decoration: none;
+}
+.app-topbar-mark {
+  width: 22px; height: 22px;
+  background: linear-gradient(135deg, var(--ckqa-accent), var(--ckqa-accent-strong));
+  border-radius: var(--ckqa-radius-md);
+  box-shadow: 0 2px 6px rgb(217 119 87 / 30%);
+}
+.app-topbar-cmd-trigger {
+  height: 28px; padding: 0 9px;
+  font-size: var(--ckqa-text-xs-size);
+  background: var(--ckqa-surface-muted);
+  border: 1px solid var(--ckqa-border-soft);
+  border-radius: var(--ckqa-radius-md);
+  color: var(--ckqa-text-muted);
+  cursor: pointer;
+  font-family: var(--ckqa-font-mono);
+}
+.app-topbar-cmd-trigger:hover { background: var(--ckqa-surface-strong); color: var(--ckqa-text); }
+.app-topbar-avatar {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #c4ad8b, #8d6e54);
+  color: white;
+  border: none;
+  border-radius: var(--ckqa-radius-full);
+  font-size: var(--ckqa-text-xs-size);
+  font-weight: var(--ckqa-fw-medium);
+  cursor: pointer;
+}
+</style>
