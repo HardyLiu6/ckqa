@@ -3008,7 +3008,6 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
   const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
   const consoleLayout = readFileSync(new URL('./layouts/ConsoleLayout.vue', import.meta.url), 'utf8')
-  const breadcrumbModel = readFileSync(new URL('./layouts/console-breadcrumb-model.js', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
   assert.match(modulePage, /<el-form\s+class="creation-form"/)
@@ -3077,7 +3076,6 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(consoleLayout, /function switchRole/)
   assert.match(consoleLayout, /const breadcrumbItems = computed/)
   assert.match(consoleLayout, /buildConsoleBreadcrumbItems\(route\)/)
-  assert.match(breadcrumbModel, /LIST_ROUTE_BY_GROUP/)
   assert.match(consoleLayout, /class="breadcrumb-list"/)
   assert.match(consoleLayout, /:data-kind="item\.kind"/)
   assert.match(componentsCss, /\.creation-field\s+\.el-input,\s*[\s\S]*\.creation-field\s+\.el-select/)
@@ -3254,107 +3252,47 @@ test('findActiveNavigationPath 详情路径回落到所属模块入口', () => {
   assert.equal(findActiveNavigationPath(sections, '/app/retrieval-logs/9'), '/app/retrieval-logs')
 })
 
-test('课程子页面面包屑保留课程详情父级', () => {
-  const memberItems = buildConsoleBreadcrumbItems({
-    name: 'course-members',
-    params: { courseId: 'os 2026' },
-    meta: {
-      title: '课程成员',
-      navGroup: 'courses',
-    },
+test('面包屑首段映射到 section 标签', () => {
+  const items = buildConsoleBreadcrumbItems({
+    path: '/app/courses',
+    meta: { section: 'production', title: '课程' },
   })
-
-  assert.deepEqual(
-    memberItems.map(({ label, kind, to }) => ({ label, kind, to })),
-    [
-      { label: '课程与资料', kind: 'section', to: undefined },
-      { label: '课程列表', kind: 'link', to: '/app/courses' },
-      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
-      { label: '课程成员', kind: 'current', to: undefined },
-    ],
-  )
-
-  const materialItems = buildConsoleBreadcrumbItems({
-    name: 'course-materials',
-    params: { courseId: 'os 2026' },
-    meta: {
-      title: '课程资料',
-      navGroup: 'courses',
-    },
-  })
-
-  assert.deepEqual(
-    materialItems.map(({ label, kind, to }) => ({ label, kind, to })),
-    [
-      { label: '课程与资料', kind: 'section', to: undefined },
-      { label: '课程列表', kind: 'link', to: '/app/courses' },
-      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
-      { label: '课程资料', kind: 'current', to: undefined },
-    ],
-  )
-
-  const detailItems = buildConsoleBreadcrumbItems({
-    name: 'course-detail',
-    params: { courseId: 'os 2026' },
-    meta: {
-      title: '课程详情',
-      navGroup: 'courses',
-    },
-  })
-
-  assert.deepEqual(
-    detailItems.map(({ label, kind, to }) => ({ label, kind, to })),
-    [
-      { label: '课程与资料', kind: 'section', to: undefined },
-      { label: '课程列表', kind: 'link', to: '/app/courses' },
-      { label: '课程详情', kind: 'current', to: undefined },
-    ],
-  )
+  assert.equal(items[0].label, '生产')
+  assert.equal(items[items.length - 1].label, '课程')
 })
 
-test('资料详情面包屑通过 courseId query 回到课程资料列表', () => {
-  const materialItems = buildConsoleBreadcrumbItems({
-    name: 'material-detail',
-    params: { materialId: '9' },
-    query: { courseId: 'os 2026' },
-    meta: {
-      title: '资料详情',
-      navGroup: 'courses',
-    },
+test('面包屑 dashboard section 显示工作台', () => {
+  const items = buildConsoleBreadcrumbItems({
+    path: '/app/dashboard',
+    meta: { section: 'dashboard', title: '工作台' },
   })
-
-  assert.deepEqual(
-    materialItems.map(({ label, kind, to }) => ({ label, kind, to })),
-    [
-      { label: '课程与资料', kind: 'section', to: undefined },
-      { label: '课程列表', kind: 'link', to: '/app/courses' },
-      { label: '课程详情', kind: 'link', to: '/app/courses/os%202026' },
-      { label: '课程资料', kind: 'link', to: '/app/courses/os%202026/materials' },
-      { label: '资料详情', kind: 'current', to: undefined },
-    ],
-  )
+  assert.equal(items[0].label, '工作台')
 })
 
-test('知识库构建面包屑根据进入来源区分父级', () => {
-  assert.deepEqual(
-    buildConsoleBreadcrumbItems({
-      name: 'knowledge-base-build',
-      query: {},
-      params: { kbId: '7' },
-      meta: { title: '构建向导', navGroup: 'knowledge' },
-    }).map((item) => item.label),
-    ['知识库构建', '知识库列表', '构建向导'],
-  )
+test('面包屑超过 4 层时折叠中间', () => {
+  const items = buildConsoleBreadcrumbItems({
+    path: '/app/materials/m-1/parse-results',
+    meta: { section: 'production', title: '解析结果' },
+    contextChain: [
+      { label: '操作系统课程', to: '/app/courses/os' },
+      { label: '数据结构第3章.pdf', to: '/app/materials/m-1' },
+    ],
+  })
+  assert.equal(items.length, 4)
+  assert.equal(items[0].label, '生产')
+  assert.equal(items[1].label, '…')
+  assert.ok(Array.isArray(items[1].collapsed))
+  assert.equal(items[1].collapsed[0].label, '操作系统课程')
+  assert.equal(items[2].label, '数据结构第3章.pdf')
+  assert.equal(items[3].label, '解析结果')
+})
 
-  assert.deepEqual(
-    buildConsoleBreadcrumbItems({
-      name: 'knowledge-base-build',
-      query: { from: 'detail' },
-      params: { kbId: '7' },
-      meta: { title: '构建向导', navGroup: 'knowledge' },
-    }).map((item) => item.label),
-    ['知识库构建', '知识库列表', '知识库详情', '构建向导'],
-  )
+test('面包屑当前层不可点（无 to）', () => {
+  const items = buildConsoleBreadcrumbItems({
+    path: '/app/dashboard',
+    meta: { section: 'dashboard', title: '工作台' },
+  })
+  assert.equal(items[items.length - 1].to, undefined)
 })
 
 test('知识库详情顶部构建入口可跳转且概览卡片不重复渲染构建入口', () => {
