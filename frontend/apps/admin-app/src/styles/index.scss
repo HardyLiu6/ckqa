@@ -1,6 +1,7 @@
 @use './fonts';
 @use './tokens/colors';
 @use './tokens/typography';
+@use './mixins/typography' as *;
 @use './tokens/radius';
 @use './tokens/shadow';
 @use './tokens/motion';

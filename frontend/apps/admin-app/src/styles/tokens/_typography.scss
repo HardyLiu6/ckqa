@@ -1,4 +1,19 @@
 :root {
-  --ckqa-font-sans: "DM Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-  --ckqa-font-mono: "DM Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  --ckqa-font-sans: "Inter", "DM Sans", "PingFang SC", "Hiragino Sans GB",
+                    "Microsoft YaHei", system-ui, sans-serif;
+  --ckqa-font-mono: "JetBrains Mono", "DM Mono", "Cascadia Code", ui-monospace, monospace;
+
+  /* type scale —— size / line-height 拆成两个变量，方便单独引用 */
+  --ckqa-text-xs-size: 11px;     --ckqa-text-xs-line: 16px;
+  --ckqa-text-sm-size: 12px;     --ckqa-text-sm-line: 18px;
+  --ckqa-text-base-size: 13px;   --ckqa-text-base-line: 20px;
+  --ckqa-text-md-size: 14px;     --ckqa-text-md-line: 22px;
+  --ckqa-text-lg-size: 15px;     --ckqa-text-lg-line: 24px;
+  --ckqa-text-xl-size: 18px;     --ckqa-text-xl-line: 26px;
+  --ckqa-text-2xl-size: 22px;    --ckqa-text-2xl-line: 30px;
+  --ckqa-text-3xl-size: 28px;    --ckqa-text-3xl-line: 36px;
+
+  --ckqa-fw-regular: 400;
+  --ckqa-fw-medium: 500;
+  --ckqa-fw-semibold: 600;
 }

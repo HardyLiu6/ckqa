@@ -1,0 +1,8 @@
+@mixin text-xs    { font-size: var(--ckqa-text-xs-size);    line-height: var(--ckqa-text-xs-line); }
+@mixin text-sm    { font-size: var(--ckqa-text-sm-size);    line-height: var(--ckqa-text-sm-line); }
+@mixin text-base  { font-size: var(--ckqa-text-base-size);  line-height: var(--ckqa-text-base-line); }
+@mixin text-md    { font-size: var(--ckqa-text-md-size);    line-height: var(--ckqa-text-md-line); }
+@mixin text-lg    { font-size: var(--ckqa-text-lg-size);    line-height: var(--ckqa-text-lg-line); }
+@mixin text-xl    { font-size: var(--ckqa-text-xl-size);    line-height: var(--ckqa-text-xl-line); }
+@mixin text-2xl   { font-size: var(--ckqa-text-2xl-size);   line-height: var(--ckqa-text-2xl-line); }
+@mixin text-3xl   { font-size: var(--ckqa-text-3xl-size);   line-height: var(--ckqa-text-3xl-line); }
