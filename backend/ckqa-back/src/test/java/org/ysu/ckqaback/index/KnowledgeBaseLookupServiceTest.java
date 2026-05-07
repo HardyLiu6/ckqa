@@ -2,6 +2,7 @@ package org.ysu.ckqaback.index;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.entity.Courses;
@@ -13,6 +14,7 @@ import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
 import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
+import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 
 import java.time.LocalDateTime;
@@ -31,6 +33,7 @@ class KnowledgeBaseLookupServiceTest {
     private KnowledgeBasesService knowledgeBasesService;
     private IndexRunsService indexRunsService;
     private CoursesService coursesService;
+    private KnowledgeBaseBuildRunsService buildRunsService;
     private KnowledgeBaseLookupService service;
 
     @BeforeEach
@@ -38,7 +41,8 @@ class KnowledgeBaseLookupServiceTest {
         knowledgeBasesService = mock(KnowledgeBasesService.class);
         indexRunsService = mock(IndexRunsService.class);
         coursesService = mock(CoursesService.class);
-        service = new KnowledgeBaseLookupService(knowledgeBasesService, indexRunsService, coursesService);
+        buildRunsService = mock(KnowledgeBaseBuildRunsService.class);
+        service = new KnowledgeBaseLookupService(knowledgeBasesService, indexRunsService, coursesService, buildRunsService);
     }
 
     @Test
@@ -166,6 +170,96 @@ class KnowledgeBaseLookupServiceTest {
         assertThat(detail.getStatus()).isEqualTo("draft");
         assertThat(detail.getIndexRunCount()).isZero();
         verify(knowledgeBasesService).save(any(KnowledgeBases.class));
+    }
+
+    @Test
+    void shouldCreateKnowledgeBaseWithGeneratedCodeWhenCodeIsBlank() {
+        KnowledgeBaseCreateRequest request = new KnowledgeBaseCreateRequest();
+        request.setCourseId("os");
+        request.setName("操作系统复习库");
+        request.setDescription("复习资料知识库");
+        when(coursesService.getOne(any())).thenReturn(course("os", "active"));
+        when(knowledgeBasesService.count(any())).thenReturn(0L);
+        when(knowledgeBasesService.save(any(KnowledgeBases.class))).thenAnswer(invocation -> {
+            KnowledgeBases saved = invocation.getArgument(0);
+            saved.setId(8L);
+            return true;
+        });
+
+        var detail = service.createKnowledgeBase(request);
+
+        ArgumentCaptor<KnowledgeBases> captor = ArgumentCaptor.forClass(KnowledgeBases.class);
+        verify(knowledgeBasesService).save(captor.capture());
+        assertThat(captor.getValue().getKbCode()).matches("kb-os-\\d{14}");
+        assertThat(detail.getKbCode()).isEqualTo(captor.getValue().getKbCode());
+    }
+
+    @Test
+    void shouldAppendSuffixWhenGeneratedKnowledgeBaseCodeExists() {
+        KnowledgeBaseCreateRequest request = new KnowledgeBaseCreateRequest();
+        request.setCourseId("os");
+        request.setName("操作系统复习库");
+        when(coursesService.getOne(any())).thenReturn(course("os", "active"));
+        when(knowledgeBasesService.count(any())).thenReturn(1L, 0L);
+        when(knowledgeBasesService.save(any(KnowledgeBases.class))).thenAnswer(invocation -> {
+            KnowledgeBases saved = invocation.getArgument(0);
+            saved.setId(8L);
+            return true;
+        });
+
+        service.createKnowledgeBase(request);
+
+        ArgumentCaptor<KnowledgeBases> captor = ArgumentCaptor.forClass(KnowledgeBases.class);
+        verify(knowledgeBasesService).save(captor.capture());
+        assertThat(captor.getValue().getKbCode()).matches("kb-os-\\d{14}-2");
+    }
+
+    @Test
+    void shouldUpdateKnowledgeBaseEditableFieldsOnly() {
+        KnowledgeBases knowledgeBase = knowledgeBase(8L, "os", "os-review", "操作系统复习库", "draft");
+        when(knowledgeBasesService.getRequiredById(8L)).thenReturn(knowledgeBase);
+        when(indexRunsService.listByKnowledgeBaseId(8L)).thenReturn(List.of());
+
+        var request = new org.ysu.ckqaback.index.dto.KnowledgeBaseUpdateRequest();
+        request.setName("操作系统主知识库");
+        request.setDescription("用于正式问答");
+        request.setStatus("active");
+
+        var detail = service.updateKnowledgeBase(8L, request);
+
+        assertThat(knowledgeBase.getCourseId()).isEqualTo("os");
+        assertThat(knowledgeBase.getKbCode()).isEqualTo("os-review");
+        assertThat(knowledgeBase.getName()).isEqualTo("操作系统主知识库");
+        assertThat(knowledgeBase.getDescription()).isEqualTo("用于正式问答");
+        assertThat(knowledgeBase.getStatus()).isEqualTo("active");
+        assertThat(knowledgeBase.getUpdatedAt()).isNotNull();
+        assertThat(detail.getName()).isEqualTo("操作系统主知识库");
+        verify(knowledgeBasesService).updateById(knowledgeBase);
+    }
+
+    @Test
+    void shouldDeleteKnowledgeBaseWhenNoBuildRunHistoryExists() {
+        KnowledgeBases knowledgeBase = knowledgeBase(8L, "os", "os-review", "操作系统复习库", "draft");
+        when(knowledgeBasesService.getRequiredById(8L)).thenReturn(knowledgeBase);
+        when(buildRunsService.listByKnowledgeBaseId(8L)).thenReturn(List.of());
+
+        service.deleteKnowledgeBase(8L);
+
+        verify(knowledgeBasesService).removeById(8L);
+    }
+
+    @Test
+    void shouldRejectDeletingKnowledgeBaseWhenBuildRunHistoryExists() {
+        KnowledgeBases knowledgeBase = knowledgeBase(8L, "os", "os-review", "操作系统复习库", "draft");
+        when(knowledgeBasesService.getRequiredById(8L)).thenReturn(knowledgeBase);
+        when(buildRunsService.listByKnowledgeBaseId(8L)).thenReturn(List.of(new org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns()));
+
+        assertThatThrownBy(() -> service.deleteKnowledgeBase(8L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("知识库已有构建历史，请改为归档保留运行记录")
+                .extracting("status")
+                .isEqualTo(org.springframework.http.HttpStatus.CONFLICT);
+        verify(knowledgeBasesService, never()).removeById(8L);
     }
 
     @Test

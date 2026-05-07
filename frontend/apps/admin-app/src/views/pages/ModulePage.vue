@@ -42,8 +42,10 @@ import {
   createBuildRun,
   createBuildRunIndexRun,
   createKnowledgeBase,
+  deleteKnowledgeBase,
   runBuildRunQaSmoke,
   syncBuildRunGraphInput,
+  updateKnowledgeBase,
   updateBuildRunMaterialSelection as submitBuildRunMaterialSelection,
   getBuildRun,
 } from '../../api/knowledge-bases.js'
@@ -167,6 +169,7 @@ const creationDialog = ref('')
 const creationState = ref('idle')
 const creationError = ref(null)
 const creationForm = ref(createCreationForm('course'))
+const creationAdvancedSections = ref([])
 const creationCourseOptions = ref([])
 const creationCourseState = ref('idle')
 const creationCourseError = ref(null)
@@ -182,6 +185,11 @@ const courseActionState = ref('idle')
 const courseActionError = ref(null)
 const courseActionCourse = ref(null)
 const courseEditForm = ref(createCourseEditForm())
+const knowledgeBaseActionDialog = ref('')
+const knowledgeBaseActionState = ref('idle')
+const knowledgeBaseActionError = ref(null)
+const knowledgeBaseActionTarget = ref(null)
+const knowledgeBaseEditForm = ref(createKnowledgeBaseEditForm())
 const memberActionDialog = ref('')
 const memberActionState = ref('idle')
 const memberActionError = ref(null)
@@ -233,6 +241,7 @@ const creationTeacherLoading = computed(() => creationTeacherState.value === 'lo
 const creationCoverUploading = computed(() => creationCoverState.value === 'loading')
 const courseCoverUploading = computed(() => courseCoverState.value === 'loading')
 const courseActionRunning = computed(() => courseActionState.value === 'running')
+const knowledgeBaseActionRunning = computed(() => knowledgeBaseActionState.value === 'running')
 const memberActionRunning = computed(() => memberActionState.value === 'running')
 const memberUserLoading = computed(() => memberUserState.value === 'loading')
 const materialActionRunning = computed(() => materialActionState.value === 'running')
@@ -259,6 +268,17 @@ const courseEditSubmitDisabled = computed(() => (
   || !courseEditForm.value.courseName?.trim()
   || !courseEditForm.value.status
   || !courseEditForm.value.accessPolicy
+))
+const knowledgeBaseActionName = computed(() => (
+  knowledgeBaseActionTarget.value?.name
+  ?? knowledgeBaseActionTarget.value?.kbName
+  ?? knowledgeBaseActionTarget.value?.kbCode
+  ?? ''
+))
+const knowledgeBaseEditSubmitDisabled = computed(() => (
+  knowledgeBaseActionRunning.value
+  || !knowledgeBaseEditForm.value.name?.trim()
+  || !knowledgeBaseEditForm.value.status
 ))
 const memberSubmitDisabled = computed(() => (
   memberActionRunning.value
@@ -300,15 +320,41 @@ const buildStepIndexLabel = computed(() => {
 })
 const buildSummaryChips = computed(() => {
   const materialCount = config.value.blocks?.selection?.materialIds?.length ?? 0
+  const materialTotal = config.value.blocks?.materials?.items?.length ?? 0
   const parseRows = config.value.blocks?.parseTasks?.items ?? []
   const exportSummary = config.value.blocks?.exportArtifacts?.summary
   const indexAvailability = config.value.blocks?.indexAvailability
+  const activeKey = activeBuildStep.value?.key
+
+  if (activeKey === 'material') {
+    return [
+      { label: '已选资料', value: `${materialCount} 个`, tone: materialCount > 0 ? 'ok' : 'warn' },
+      { label: '课程资料', value: `${materialTotal} 个`, tone: 'info' },
+    ]
+  }
+
+  if (activeKey === 'parse') {
+    return [
+      { label: '已选资料', value: `${materialCount} 个`, tone: materialCount > 0 ? 'ok' : 'warn' },
+      { label: '解析完成', value: `${countRowsByStatus(parseRows, 'done')}/${parseRows.length}`, tone: countRowsByStatus(parseRows, 'done') === parseRows.length && parseRows.length > 0 ? 'ok' : 'info' },
+    ]
+  }
+
+  if (activeKey === 'export') {
+    return [
+      { label: '已导出', value: `${exportSummary?.completeCount ?? 0} 个`, tone: 'ok' },
+      { label: '缺失产物', value: `${exportSummary?.missingCount ?? 0} 个`, tone: Number(exportSummary?.missingCount ?? 0) > 0 ? 'warn' : 'ok' },
+    ]
+  }
+
+  if (activeKey === 'index' || activeKey === 'qa_check') {
+    return [
+      { label: '可用索引', value: indexAvailability?.availability === 'available' ? '已就绪' : '暂无', tone: indexAvailability?.availability === 'available' ? 'ok' : 'info' },
+    ]
+  }
 
   return [
     { label: '已选资料', value: `${materialCount} 个`, tone: materialCount > 0 ? 'ok' : 'warn' },
-    { label: '解析完成', value: `${countRowsByStatus(parseRows, 'done')}/${parseRows.length}`, tone: 'info' },
-    { label: '缺失产物', value: `${exportSummary?.missingCount ?? 0} 个`, tone: Number(exportSummary?.missingCount ?? 0) > 0 ? 'warn' : 'ok' },
-    { label: '可用索引', value: indexAvailability?.availability === 'available' ? '已就绪' : '暂无', tone: indexAvailability?.availability === 'available' ? 'ok' : 'info' },
   ]
 })
 const activeBuildOperationFeedback = computed(() => {
@@ -366,6 +412,7 @@ const displayedTableRows = computed(() => {
 const primaryActionIcon = computed(() => {
   if (canOpenCreationDialog.value) return Plus
   if (route.name === 'material-detail') return Play
+  if (route.name === 'knowledge-base-detail') return Hammer
   if (route.name === 'knowledge-base-build') return Hammer
   return WandSparkles
 })
@@ -457,6 +504,14 @@ function createCourseMaterialForm(material = {}) {
     displayName: material.displayName ?? material.fileName ?? '',
     materialType: material.materialType ?? 'textbook',
     file: null,
+  }
+}
+
+function createKnowledgeBaseEditForm(knowledgeBase = {}) {
+  return {
+    name: knowledgeBase.name ?? knowledgeBase.kbName ?? '',
+    description: knowledgeBase.description ?? '',
+    status: knowledgeBase.status ?? 'draft',
   }
 }
 
@@ -742,6 +797,11 @@ async function handlePrimaryAction() {
     return
   }
 
+  if (route.name === 'knowledge-base-detail') {
+    await router.push(`/app/knowledge-bases/${encodeURIComponent(String(route.params.kbId ?? ''))}/build?from=detail`)
+    return
+  }
+
   if (route.name === 'material-detail') {
     await runMaterialParse()
     return
@@ -844,6 +904,11 @@ function handleTableRowAction({ row, action } = {}) {
     return
   }
 
+  if (route.name === 'knowledge-bases') {
+    handleKnowledgeBaseRowAction(row, action)
+    return
+  }
+
   if (route.name !== 'courses') {
     return
   }
@@ -865,6 +930,22 @@ function handleTableRowAction({ row, action } = {}) {
 
   if (action?.key === 'restore-course') {
     openCourseRestoreDialog(row?.raw ?? row)
+  }
+}
+
+function handleKnowledgeBaseRowAction(row, action) {
+  const knowledgeBase = row?.raw ?? row
+  if (!knowledgeBase?.id) {
+    return
+  }
+
+  if (action?.key === 'edit-knowledge-base') {
+    openKnowledgeBaseEditDialog(knowledgeBase)
+    return
+  }
+
+  if (action?.key === 'delete-knowledge-base') {
+    openKnowledgeBaseDeleteDialog(knowledgeBase)
   }
 }
 
@@ -990,6 +1071,40 @@ function closeCourseActionDialog() {
   courseActionCourse.value = null
   courseActionError.value = null
   courseEditForm.value = createCourseEditForm()
+}
+
+function openKnowledgeBaseEditDialog(knowledgeBase = {}) {
+  if (!knowledgeBase?.id) {
+    return
+  }
+
+  knowledgeBaseActionDialog.value = 'edit'
+  knowledgeBaseActionTarget.value = knowledgeBase
+  knowledgeBaseEditForm.value = createKnowledgeBaseEditForm(knowledgeBase)
+  knowledgeBaseActionState.value = 'idle'
+  knowledgeBaseActionError.value = null
+}
+
+function openKnowledgeBaseDeleteDialog(knowledgeBase = {}) {
+  if (!knowledgeBase?.id) {
+    return
+  }
+
+  knowledgeBaseActionDialog.value = 'delete'
+  knowledgeBaseActionTarget.value = knowledgeBase
+  knowledgeBaseActionState.value = 'idle'
+  knowledgeBaseActionError.value = null
+}
+
+function closeKnowledgeBaseActionDialog() {
+  if (knowledgeBaseActionRunning.value) {
+    return
+  }
+
+  knowledgeBaseActionDialog.value = ''
+  knowledgeBaseActionTarget.value = null
+  knowledgeBaseActionError.value = null
+  knowledgeBaseEditForm.value = createKnowledgeBaseEditForm()
 }
 
 function openCourseMemberDialog() {
@@ -1298,6 +1413,54 @@ async function submitCourseRestore() {
   }
 }
 
+async function submitKnowledgeBaseEdit() {
+  const id = knowledgeBaseActionTarget.value?.id
+  if (!id || knowledgeBaseEditSubmitDisabled.value) {
+    return
+  }
+
+  knowledgeBaseActionState.value = 'running'
+  knowledgeBaseActionError.value = null
+
+  try {
+    await updateKnowledgeBase(id, {
+      name: knowledgeBaseEditForm.value.name.trim(),
+      description: knowledgeBaseEditForm.value.description.trim() || undefined,
+      status: knowledgeBaseEditForm.value.status,
+    })
+    knowledgeBaseActionState.value = 'success'
+    closeKnowledgeBaseActionDialog()
+    await loadPage()
+  } catch (error) {
+    knowledgeBaseActionState.value = 'failed'
+    knowledgeBaseActionError.value = createApiError(error)
+  }
+}
+
+async function submitKnowledgeBaseDelete() {
+  const id = knowledgeBaseActionTarget.value?.id
+  if (!id || knowledgeBaseActionRunning.value) {
+    return
+  }
+
+  knowledgeBaseActionState.value = 'running'
+  knowledgeBaseActionError.value = null
+
+  try {
+    await deleteKnowledgeBase(id)
+    knowledgeBaseActionState.value = 'success'
+    closeKnowledgeBaseActionDialog()
+    if (route.name === 'knowledge-base-detail') {
+      await router.push('/app/knowledge-bases')
+    } else {
+      await loadPage()
+    }
+  } catch (error) {
+    knowledgeBaseActionState.value = 'failed'
+    knowledgeBaseActionError.value = createApiError(error)
+  }
+}
+
 function openCreationDialog(typeOverride = '', defaults = {}) {
   const type = typeOverride || (route.name === 'knowledge-bases' ? 'knowledge-base' : 'course')
   creationDialog.value = type
@@ -1307,6 +1470,7 @@ function openCreationDialog(typeOverride = '', defaults = {}) {
   }
   creationState.value = 'idle'
   creationError.value = null
+  creationAdvancedSections.value = []
   creationCourseError.value = null
   creationTeacherError.value = null
   creationCoverState.value = 'idle'
@@ -1326,6 +1490,7 @@ function closeCreationDialog() {
 
   creationDialog.value = ''
   creationError.value = null
+  creationAdvancedSections.value = []
   creationCoverError.value = null
 }
 
@@ -1466,10 +1631,12 @@ async function submitCreation() {
     if (creationDialog.value === 'knowledge-base') {
       const payload = {
         courseId: creationForm.value.courseId.trim(),
-        kbCode: creationForm.value.kbCode.trim(),
         name: creationForm.value.name.trim(),
         description: creationForm.value.description.trim() || undefined,
         status: creationForm.value.status,
+      }
+      if (creationForm.value.kbCode.trim()) {
+        payload.kbCode = creationForm.value.kbCode.trim()
       }
       const knowledgeBase = await createKnowledgeBase(payload)
       creationDialog.value = ''
@@ -2212,6 +2379,14 @@ function resolveCourseStatusLabel(status) {
   }[status] ?? status
 }
 
+function resolveKnowledgeBaseStatusLabel(status) {
+  return {
+    draft: '草稿',
+    active: '已启用',
+    archived: '已归档',
+  }[status] ?? status
+}
+
 watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
 onBeforeUnmount(() => {
   cancelLongTask()
@@ -2392,16 +2567,6 @@ onBeforeUnmount(() => {
               />
             </el-select>
           </el-form-item>
-          <el-form-item class="creation-field" label="知识库编码" required>
-            <el-input
-              v-model.trim="creationForm.kbCode"
-              name="kbCode"
-              pattern="[A-Za-z0-9_-]+"
-              maxlength="128"
-              show-word-limit
-              required
-            />
-          </el-form-item>
           <el-form-item class="creation-field" label="知识库名称" required>
             <el-input
               v-model.trim="creationForm.name"
@@ -2421,6 +2586,29 @@ onBeforeUnmount(() => {
               />
             </el-select>
           </el-form-item>
+          <el-collapse
+            v-if="creationDialog === 'knowledge-base'"
+            v-model="creationAdvancedSections"
+            class="creation-form__advanced"
+          >
+            <el-collapse-item title="高级设置" name="knowledge-base-code">
+              <div class="creation-form__advanced-body">
+                <p class="creation-form__hint">
+                  编码会在创建时自动生成，仅迁移旧数据或对接外部系统时手动填写。
+                </p>
+                <el-form-item class="creation-field" label="知识库编码">
+                  <el-input
+                    v-model.trim="creationForm.kbCode"
+                    name="kbCode"
+                    pattern="[A-Za-z0-9_-]+"
+                    maxlength="128"
+                    placeholder="留空自动生成"
+                    show-word-limit
+                  />
+                </el-form-item>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </template>
 
         <p
@@ -2741,6 +2929,151 @@ onBeforeUnmount(() => {
         >
           <RotateCcw class="button-icon" :size="16" aria-hidden="true" />
           {{ courseActionRunning ? '恢复中' : '确认恢复' }}
+        </el-button>
+      </div>
+    </section>
+  </div>
+
+  <div v-if="knowledgeBaseActionDialog === 'edit'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="knowledge-base-edit-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Knowledge Base Edit</p>
+          <h2 id="knowledge-base-edit-dialog-title">编辑知识库</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="knowledgeBaseActionRunning"
+          aria-label="取消编辑知识库"
+          @click="closeKnowledgeBaseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+
+      <el-form class="creation-form knowledge-base-readonly-grid" label-position="top">
+        <el-form-item class="creation-field" label="所属课程">
+          <el-input :model-value="knowledgeBaseActionTarget?.courseId ?? '-'" disabled />
+        </el-form-item>
+        <el-form-item class="creation-field" label="知识库编码">
+          <el-input :model-value="knowledgeBaseActionTarget?.kbCode ?? '-'" disabled />
+        </el-form-item>
+      </el-form>
+
+      <el-form class="creation-form" label-position="top" @submit.prevent="submitKnowledgeBaseEdit">
+        <el-form-item class="creation-field" label="知识库名称" required>
+          <el-input
+            v-model.trim="knowledgeBaseEditForm.name"
+            name="editKnowledgeBaseName"
+            maxlength="255"
+            show-word-limit
+            required
+          />
+        </el-form-item>
+        <el-form-item class="creation-field" label="知识库状态" required>
+          <el-select v-model="knowledgeBaseEditForm.status" name="editKnowledgeBaseStatus">
+            <el-option
+              v-for="option in KNOWLEDGE_BASE_STATUS_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item class="creation-field creation-form__wide" label="说明">
+          <el-input
+            v-model.trim="knowledgeBaseEditForm.description"
+            type="textarea"
+            name="editKnowledgeBaseDescription"
+            :rows="5"
+            maxlength="2000"
+            show-word-limit
+          />
+        </el-form-item>
+        <p v-if="knowledgeBaseActionError" class="inline-error creation-form__wide">
+          {{ knowledgeBaseActionError.message }}
+        </p>
+        <div class="creation-form__actions">
+          <el-button
+            class="ckqa-el-button ckqa-el-button--secondary"
+            native-type="button"
+            :disabled="knowledgeBaseActionRunning"
+            @click="closeKnowledgeBaseActionDialog"
+          >
+            <X class="button-icon" :size="16" aria-hidden="true" />
+            取消
+          </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            native-type="submit"
+            :disabled="knowledgeBaseEditSubmitDisabled"
+          >
+            <Check class="button-icon" :size="16" aria-hidden="true" />
+            {{ knowledgeBaseActionRunning ? '保存中' : '保存修改' }}
+          </el-button>
+        </div>
+      </el-form>
+    </section>
+  </div>
+
+  <div v-if="knowledgeBaseActionDialog === 'delete'" class="dialog-backdrop" role="presentation">
+    <section
+      class="creation-dialog course-action-dialog course-delete-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="knowledge-base-delete-dialog-title"
+    >
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Knowledge Base Delete</p>
+          <h2 id="knowledge-base-delete-dialog-title">删除知识库</h2>
+        </div>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          native-type="button"
+          :disabled="knowledgeBaseActionRunning"
+          aria-label="取消删除知识库"
+          @click="closeKnowledgeBaseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+      </div>
+      <div class="course-delete-warning">
+        <Trash2 :size="22" aria-hidden="true" />
+        <div>
+          <strong>{{ knowledgeBaseActionName }}</strong>
+          <p>删除会移除没有构建历史的知识库；已有构建流水线的知识库请改为归档以保留运行记录。</p>
+        </div>
+      </div>
+      <p v-if="knowledgeBaseActionError" class="inline-error">{{ knowledgeBaseActionError.message }}</p>
+      <div class="creation-form__actions">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          :disabled="knowledgeBaseActionRunning"
+          @click="closeKnowledgeBaseActionDialog"
+        >
+          <X class="button-icon" :size="16" aria-hidden="true" />
+          取消
+        </el-button>
+        <el-button
+          class="ckqa-el-button ckqa-el-button--danger"
+          type="danger"
+          native-type="button"
+          :disabled="knowledgeBaseActionRunning"
+          @click="submitKnowledgeBaseDelete"
+        >
+          <Trash2 class="button-icon" :size="16" aria-hidden="true" />
+          {{ knowledgeBaseActionRunning ? '删除中' : '确认删除' }}
         </el-button>
       </div>
     </section>
@@ -3445,7 +3778,10 @@ onBeforeUnmount(() => {
     <article class="panel">
       <div class="panel-heading">
         <h2>{{ knowledgeBaseBlock ? '知识库概览' : '索引运行概览' }}</h2>
-        <StatusBadge :status="knowledgeBaseBlock?.item?.status ?? config.blocks?.indexRun?.item?.status" />
+        <StatusBadge
+          :status="knowledgeBaseBlock?.item?.status ?? config.blocks?.indexRun?.item?.status"
+          :label="knowledgeBaseBlock ? resolveKnowledgeBaseStatusLabel(knowledgeBaseBlock.item?.status) : ''"
+        />
       </div>
       <div class="field-grid">
         <div
@@ -3457,16 +3793,6 @@ onBeforeUnmount(() => {
           <strong>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
-      <el-button
-        v-if="config.actions?.buildTo"
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
-        tag="router-link"
-        :to="config.actions.buildTo"
-      >
-        <DatabaseZap class="button-icon" :size="16" aria-hidden="true" />
-        进入构建向导
-      </el-button>
     </article>
 
     <article v-if="indexRunsBlock" class="panel">

@@ -119,6 +119,7 @@ import {
   confirmBuildRunPrompt,
   createBuildRunIndexRun,
   deleteBuildRun,
+  deleteKnowledgeBase,
   deleteIndexArtifact,
   getBuildRun,
   getIndexArtifact,
@@ -130,6 +131,7 @@ import {
   listKnowledgeBaseBuildRuns,
   runBuildRunQaSmoke,
   syncBuildRunGraphInput,
+  updateKnowledgeBase,
   updateBuildRun,
   updateBuildRunMaterialSelection,
 } from './api/knowledge-bases.js'
@@ -1408,7 +1410,9 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
   await deleteCourseMaterial('os', 9, client)
   await createCourseMember({ courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }, client)
   await updateCourseMember(21, { courseId: 'os', status: 'suspended' }, client)
-  await createKnowledgeBase({ courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }, client)
+  await createKnowledgeBase({ courseId: 'os', name: 'OS 知识库' }, client)
+  await updateKnowledgeBase(7, { name: 'OS 主知识库', description: '正式库', status: 'active' }, client)
+  await deleteKnowledgeBase(7, client)
 
   assert.deepEqual(calls, [
     ['post', '/courses', { courseName: '操作系统', teacherUserId: 8, accessPolicy: 'restricted' }],
@@ -1427,7 +1431,9 @@ test('课程和知识库创建 API 走 Java /api/v1 统一边界', async () => {
     ['delete', '/courses/os/materials/9', null],
     ['post', '/course-memberships', { courseId: 'os', userId: 9, membershipRole: 'student', status: 'active' }],
     ['patch', '/course-memberships/21', { courseId: 'os', status: 'suspended' }],
-    ['post', '/knowledge-bases', { courseId: 'os', kbCode: 'os-main', name: 'OS 知识库' }],
+    ['post', '/knowledge-bases', { courseId: 'os', name: 'OS 知识库' }],
+    ['put', '/knowledge-bases/7', { name: 'OS 主知识库', description: '正式库', status: 'active' }],
+    ['delete', '/knowledge-bases/7', null],
   ])
 })
 
@@ -1526,7 +1532,13 @@ test('知识库创建表单使用课程列表生成下拉选项并默认选中�
     { value: 'os', label: '操作系统（os）' },
     { value: 'db', label: '数据库系统（db）' },
   ])
-  assert.equal(createCreationForm('knowledge-base', { courseOptions: options }).courseId, 'os')
+  assert.deepEqual(createCreationForm('knowledge-base', { courseOptions: options }), {
+    courseId: 'os',
+    kbCode: '',
+    name: '',
+    description: '',
+    status: 'draft',
+  })
   assert.equal(createCreationForm('knowledge-base', { courseOptions: [] }).courseId, '')
 })
 
@@ -1585,7 +1597,7 @@ test('创建表单枚举选项显示中文但保留后端英文值', () => {
   ])
   assert.deepEqual(KNOWLEDGE_BASE_STATUS_OPTIONS, [
     { value: 'draft', label: '草稿' },
-    { value: 'active', label: '启用' },
+    { value: 'active', label: '已启用' },
     { value: 'archived', label: '已归档' },
   ])
 })
@@ -1664,11 +1676,14 @@ test('知识库列表和详情 loader 映射实时字段与构建入口', async 
   assert.deepEqual(listResult.rows[0].cells, [
     'OS 知识库',
     'os',
-    'active',
+    { kind: 'status', status: 'active', label: '已启用', filterValue: 'active' },
     '#12 可问答',
-    '#12 success',
+    { kind: 'status', status: 'success', label: '索引成功 #12', filterValue: 'success' },
     '2026-04-28T10:00:00',
   ])
+  assert.deepEqual(listResult.rows[0].actions.map((action) => action.label), ['详情', '编辑', '构建', '删除'])
+  assert.equal(listResult.rows[0].actions.find((action) => action.key === 'edit-knowledge-base').variant, 'primary')
+  assert.equal(listResult.rows[0].actions.find((action) => action.key === 'delete-knowledge-base').variant, 'danger')
 
   const detailResult = await loadModulePage(
     { name: 'knowledge-base-detail', query: {}, params: { kbId: '7' } },
@@ -1689,7 +1704,7 @@ test('知识库列表和详情 loader 映射实时字段与构建入口', async 
   assert.equal(detailResult.requestState, 'success')
   assert.equal(detailResult.blocks.knowledgeBase.item.id, 7)
   assert.equal(detailResult.blocks.indexRuns.items[0].to, '/app/index-runs/12')
-  assert.equal(detailResult.actions.buildTo, '/app/knowledge-bases/7/build')
+  assert.equal(detailResult.actions.buildTo, '/app/knowledge-bases/7/build?from=detail')
 
   const archivedListResult = await loadModulePage(
     { name: 'knowledge-bases', query: { status: 'archived' }, params: {} },
@@ -1708,7 +1723,7 @@ test('知识库列表和详情 loader 映射实时字段与构建入口', async 
   )
 
   assert.equal(archivedListResult.rows[0].buildTo, '')
-  assert.deepEqual(archivedListResult.rows[0].actions.map((action) => action.label), ['详情'])
+  assert.deepEqual(archivedListResult.rows[0].actions.map((action) => action.label), ['详情', '编辑', '删除'])
 
   const archivedDetailResult = await loadModulePage(
     { name: 'knowledge-base-detail', query: {}, params: { kbId: '8' } },
@@ -1737,8 +1752,8 @@ test('知识库构建 loader 以 materialIds query 恢复多资料选择', async
   const result = await loadModulePage(route, route.query, {
     getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
     listCourseMaterials: async () => [
-      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
-      { id: 10, fileName: 'slides.pdf', parseStatus: 'pending' },
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done', updatedAt: '2026-05-07T18:39:18' },
+      { id: 10, fileName: 'slides.pdf', parseStatus: 'pending', updatedAt: '2026-05-07T18:40:00' },
     ],
     listIndexRuns: async () => [],
     getMaterial: async (id) => ({
@@ -1759,6 +1774,7 @@ test('知识库构建 loader 以 materialIds query 恢复多资料选择', async
   assert.deepEqual(result.blocks.selection.materialIds, ['9', '10'])
   assert.equal(result.blocks.selection.selectionSource, 'materialIds')
   assert.equal(result.blocks.selection.shouldCleanSelectionQuery, false)
+  assert.equal(result.blocks.materials.items[0].updatedAt, '2026-05-07T18:39:18')
   assert.equal(result.blocks.parseTasks.items.length, 2)
   assert.equal(result.blocks.exportArtifacts.items.length, 2)
   assert.deepEqual(result.workflowSteps.map((step) => step.key), ['material', 'parse', 'export', 'prompt', 'index', 'qa_check'])
@@ -2347,6 +2363,27 @@ test('知识库构建六步状态使用确认态、长任务状态和激活索�
   assert.equal(failedQaSteps.find((step) => step.key === 'qa_check').status, 'failed')
 })
 
+test('构建向导资料确认后不把第 01 步显示为执行中', () => {
+  const steps = buildKnowledgeBaseWorkflowSteps({
+    query: {
+      materialIds: '9',
+      materialConfirmed: '1',
+    },
+    knowledgeBase: { id: 7, courseId: 'os' },
+    selection: {
+      materialIds: ['9'],
+      materials: [{ id: 9, parseStatus: 'done' }],
+    },
+    parseTaskRows: [{ id: '9', status: 'done' }],
+    buildRun: {
+      currentStage: 'material_selection',
+      status: 'running',
+    },
+  })
+
+  assert.equal(steps.find((step) => step.key === 'material').status, 'done')
+})
+
 function createMemoryStorage(initialState = {}) {
   const state = new Map(Object.entries(initialState))
 
@@ -2562,6 +2599,7 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.deepEqual(courseMembers.columns, ['用户', '课程内角色', '状态', '授权来源', '更新时间'])
   assert.equal(knowledgeBases.dataSource, 'live')
   assert.equal(knowledgeBases.tableTitle, '知识库实例')
+  assert.equal(knowledgeBases.search.placeholder, '搜索知识库名称、编码或课程 ID')
   assert.deepEqual(knowledgeBases.rows, [])
   assert.equal(knowledgeBases.primaryAction.disabled, false)
   assert.equal(knowledgeBases.primaryAction.title, '创建知识库')
@@ -2782,6 +2820,7 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
 test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   const workflowStepper = readFileSync(new URL('./components/common/WorkflowStepper.vue', import.meta.url), 'utf8')
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const materialStep = readFileSync(new URL('./components/build-wizard/BuildStepMaterial.vue', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
   const buildStepFiles = [
     './components/build-wizard/BuildStepMaterial.vue',
@@ -2802,6 +2841,15 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"[\s\S]*:class="primaryHeroButtonClass"/)
   assert.doesNotMatch(modulePage, /v-if="route\.name === 'knowledge-base-build'"\s+class="content-grid two-columns"/)
   assert.doesNotMatch(modulePage, /buildSelectionBlock\?\.selectedMaterialId/)
+  assert.match(materialStep, /<el-checkbox[\s\S]*:data-testid="`build-material-checkbox-\$\{row\.id\}`"/)
+  assert.doesNotMatch(materialStep, /:data-testid="`build-material-select-\$\{row\.id\}`"[\s\S]*?<el-button/)
+  assert.match(materialStep, /const PARSE_STATUS_LABELS = /)
+  assert.match(materialStep, /const EXPORT_STATUS_LABELS = /)
+  assert.match(materialStep, /:label="resolveParseStatusLabel\(row\.meta\)"/)
+  assert.match(materialStep, /:label="resolveExportStatusLabel\(row\.id\)"/)
+  assert.match(materialStep, /row\.updatedAt \|\| '-'/)
+  assert.doesNotMatch(materialStep, /row\.updatedAt \|\| row\.detail/)
+  assert.doesNotMatch(materialStep, /未勾选/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
   assert.match(componentsCss, /\.build-summary-chip\s*\{/)
   for (const file of buildStepFiles) {
@@ -2828,6 +2876,10 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /v-if="creationForm\.coverUrl"/)
   assert.match(modulePage, /<el-select\s+v-model="creationForm\.status"/)
   assert.match(modulePage, /<el-select\s+v-model\.trim="creationForm\.courseId"/)
+  assert.match(modulePage, /<el-collapse\s+v-if="creationDialog === 'knowledge-base'"[\s\S]*v-model="creationAdvancedSections"/)
+  assert.match(modulePage, /title="高级设置"/)
+  assert.match(modulePage, /编码会在创建时自动生成/)
+  assert.match(modulePage, /if \(creationForm\.value\.kbCode\.trim\(\)\) \{[\s\S]*payload\.kbCode = creationForm\.value\.kbCode\.trim\(\)/)
   assert.match(modulePage, /<el-input\s+v-model\.trim="creationForm\.description"[\s\S]*type="textarea"/)
   assert.match(modulePage, /:rows="5"/)
   assert.match(modulePage, /aria-label="取消创建"/)
@@ -3191,6 +3243,36 @@ test('资料详情面包屑通过 courseId query 回到课程资料列表', () =
       { label: '资料详情', kind: 'current', to: undefined },
     ],
   )
+})
+
+test('知识库构建面包屑根据进入来源区分父级', () => {
+  assert.deepEqual(
+    buildConsoleBreadcrumbItems({
+      name: 'knowledge-base-build',
+      query: {},
+      params: { kbId: '7' },
+      meta: { title: '构建向导', navGroup: 'knowledge' },
+    }).map((item) => item.label),
+    ['知识库构建', '知识库列表', '构建向导'],
+  )
+
+  assert.deepEqual(
+    buildConsoleBreadcrumbItems({
+      name: 'knowledge-base-build',
+      query: { from: 'detail' },
+      params: { kbId: '7' },
+      meta: { title: '构建向导', navGroup: 'knowledge' },
+    }).map((item) => item.label),
+    ['知识库构建', '知识库列表', '知识库详情', '构建向导'],
+  )
+})
+
+test('知识库详情顶部构建入口可跳转且概览卡片不重复渲染构建入口', () => {
+  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+
+  assert.match(modulePage, /route\.name === 'knowledge-base-detail'/)
+  assert.match(modulePage, /\/app\/knowledge-bases\/\$\{encodeURIComponent\(String\(route\.params\.kbId \?\? ''\)\)\}\/build\?from=detail/)
+  assert.doesNotMatch(modulePage, /v-if="config\.actions\?\.buildTo"[\s\S]*进入构建向导/)
 })
 
 test('课程详情源码只保留课程域成员管理跳转', () => {

@@ -14,6 +14,30 @@ const parseStatus = ref('全部')
 const exportStatus = ref('全部')
 const selectedIds = ref([])
 
+const PARSE_STATUS_LABELS = {
+  done: '解析完成',
+  pending: '待解析',
+  processing: '解析中',
+  running: '解析中',
+  failed: '解析失败',
+}
+const EXPORT_STATUS_LABELS = {
+  complete: '已导出',
+  missing: '缺失产物',
+}
+const PARSE_STATUS_OPTIONS = [
+  { label: '全部解析状态', value: '全部' },
+  { label: PARSE_STATUS_LABELS.done, value: 'done' },
+  { label: PARSE_STATUS_LABELS.pending, value: 'pending' },
+  { label: PARSE_STATUS_LABELS.processing, value: 'processing' },
+  { label: PARSE_STATUS_LABELS.failed, value: 'failed' },
+]
+const EXPORT_STATUS_OPTIONS = [
+  { label: '全部导出状态', value: '全部' },
+  { label: EXPORT_STATUS_LABELS.complete, value: 'complete' },
+  { label: EXPORT_STATUS_LABELS.missing, value: 'missing' },
+]
+
 const materialIds = computed(() => props.blocks.selection?.materialIds ?? [])
 const materials = computed(() => props.blocks.materials?.items ?? [])
 const exportRows = computed(() => new Map(
@@ -33,6 +57,14 @@ watch(materialIds, (next) => {
 
 function resolveExportStatus(id) {
   return exportRows.value.get(String(id))?.status ?? 'missing'
+}
+
+function resolveParseStatusLabel(status) {
+  return PARSE_STATUS_LABELS[String(status ?? '').toLowerCase()] ?? '状态未知'
+}
+
+function resolveExportStatusLabel(id) {
+  return EXPORT_STATUS_LABELS[resolveExportStatus(id)] ?? '状态未知'
 }
 
 function isSelected(id) {
@@ -67,16 +99,20 @@ function emitSelection(ids) {
     <div class="build-step-toolbar">
       <el-input v-model="keyword" placeholder="搜索资料名" clearable />
       <el-select v-model="parseStatus" aria-label="解析状态">
-        <el-option label="解析状态" value="全部" />
-        <el-option label="done" value="done" />
-        <el-option label="pending" value="pending" />
-        <el-option label="processing" value="processing" />
-        <el-option label="failed" value="failed" />
+        <el-option
+          v-for="option in PARSE_STATUS_OPTIONS"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
       </el-select>
       <el-select v-model="exportStatus" aria-label="导出状态">
-        <el-option label="导出状态" value="全部" />
-        <el-option label="complete" value="complete" />
-        <el-option label="missing" value="missing" />
+        <el-option
+          v-for="option in EXPORT_STATUS_OPTIONS"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
       </el-select>
       <el-button class="ckqa-el-button ckqa-el-button--secondary" native-type="button" @click="selectFiltered">
         全选当前筛选结果
@@ -89,37 +125,39 @@ function emitSelection(ids) {
     <el-table class="ckqa-el-table build-material-table" :data="filteredMaterials" row-key="id">
       <el-table-column label="选择" width="92">
         <template #default="{ row }">
-          <el-button
-            class="ckqa-el-button ckqa-el-button--ghost"
-            native-type="button"
-            :data-testid="`build-material-select-${row.id}`"
-            @click="toggleMaterial(row.id)"
-          >
-            {{ isSelected(row.id) ? '已选' : '选择' }}
-          </el-button>
+          <el-checkbox
+            class="build-material-checkbox"
+            :model-value="isSelected(row.id)"
+            :aria-label="`${isSelected(row.id) ? '取消勾选' : '勾选'} ${row.title}`"
+            :data-testid="`build-material-checkbox-${row.id}`"
+            @change="toggleMaterial(row.id)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="资料名" min-width="220">
         <template #default="{ row }">
-          <div :data-testid="`build-material-row-${row.id}`">
-            <strong>{{ row.title }}</strong>
-            <small>{{ row.detail || '无 MD5 摘要' }}</small>
+          <div class="build-material-name" :data-status="row.meta" :data-testid="`build-material-row-${row.id}`">
+            <span class="build-material-name__marker" aria-hidden="true"></span>
+            <div>
+              <strong>{{ row.title }}</strong>
+              <small v-if="row.detail">{{ row.detail }}</small>
+            </div>
           </div>
         </template>
       </el-table-column>
       <el-table-column label="解析状态" width="130">
         <template #default="{ row }">
-          <StatusBadge :status="row.meta" />
+          <StatusBadge :status="row.meta" :label="resolveParseStatusLabel(row.meta)" />
         </template>
       </el-table-column>
       <el-table-column label="导出状态" width="130">
         <template #default="{ row }">
-          <StatusBadge :status="resolveExportStatus(row.id)" />
+          <StatusBadge :status="resolveExportStatus(row.id)" :label="resolveExportStatusLabel(row.id)" />
         </template>
       </el-table-column>
       <el-table-column label="更新时间" width="180">
         <template #default="{ row }">
-          <span>{{ row.updatedAt || row.detail || '-' }}</span>
+          <span>{{ row.updatedAt || '-' }}</span>
         </template>
       </el-table-column>
     </el-table>

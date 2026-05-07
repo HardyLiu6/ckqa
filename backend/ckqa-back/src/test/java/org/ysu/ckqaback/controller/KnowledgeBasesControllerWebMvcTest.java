@@ -30,8 +30,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -123,7 +125,6 @@ class KnowledgeBasesControllerWebMvcTest {
                         .content("""
                                 {
                                   "courseId": "os",
-                                  "kbCode": "os-review",
                                   "name": "操作系统复习库",
                                   "description": "复习资料知识库"
                                 }
@@ -132,6 +133,43 @@ class KnowledgeBasesControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.id").value(8))
                 .andExpect(jsonPath("$.data.kbCode").value("os-review"))
                 .andExpect(jsonPath("$.data.status").value("draft"));
+    }
+
+    @Test
+    void shouldUpdateKnowledgeBase() throws Exception {
+        given(knowledgeBaseLookupService.updateKnowledgeBase(Mockito.eq(8L), Mockito.any())).willReturn(KnowledgeBaseDetailResponse.builder()
+                .id(8L)
+                .courseId("os")
+                .kbCode("os-review")
+                .name("操作系统复习库")
+                .status("active")
+                .description("已启用复习知识库")
+                .indexRunCount(0L)
+                .successIndexRunCount(0L)
+                .build());
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASES + "/8")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "操作系统复习库",
+                                  "description": "已启用复习知识库",
+                                  "status": "active"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(8))
+                .andExpect(jsonPath("$.data.name").value("操作系统复习库"))
+                .andExpect(jsonPath("$.data.status").value("active"));
+    }
+
+    @Test
+    void shouldDeleteKnowledgeBase() throws Exception {
+        mockMvc.perform(delete(ApiPaths.KNOWLEDGE_BASES + "/8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(ApiResultCode.SUCCESS.getCode()));
+
+        Mockito.verify(knowledgeBaseLookupService).deleteKnowledgeBase(8L);
     }
 
     @Test

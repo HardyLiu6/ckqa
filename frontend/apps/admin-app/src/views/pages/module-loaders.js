@@ -96,6 +96,18 @@ const INDEX_STATUS_LABELS = {
   failed: '最近索引失败',
   pending: '索引等待中',
 }
+const KNOWLEDGE_BASE_STATUS_LABELS = {
+  draft: '草稿',
+  active: '已启用',
+  archived: '已归档',
+}
+const KNOWLEDGE_BASE_INDEX_STATUS_LABELS = {
+  success: '索引成功',
+  running: '索引构建中',
+  failed: '索引失败',
+  pending: '索引等待中',
+  archived: '索引已归档',
+}
 
 function isEmptyCourse(course = {}) {
   return Number(course.materialCount ?? 0) <= 0
@@ -774,22 +786,50 @@ function mapKnowledgeBaseRow(knowledgeBase = {}) {
 
   return {
     id,
+    raw: knowledgeBase,
     to: id ? `/app/knowledge-bases/${id}` : '',
     buildTo: id && !archived ? `/app/knowledge-bases/${id}/build` : '',
     actions: id
       ? [
           { label: '详情', to: `/app/knowledge-bases/${id}` },
+          { label: '编辑', key: 'edit-knowledge-base', icon: 'edit', variant: 'primary' },
           ...(!archived ? [{ label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' }] : []),
+          { label: '删除', key: 'delete-knowledge-base', icon: 'delete', variant: 'danger' },
         ]
       : [],
     cells: [
       knowledgeBase.name ?? knowledgeBase.kbCode ?? `知识库 ${id ?? '-'}`,
       knowledgeBase.courseId ?? '-',
-      knowledgeBase.status ?? '-',
+      createKnowledgeBaseStatusCell(knowledgeBase.status),
       activeIndexRunId ? `#${activeIndexRunId} 可问答` : '需先构建索引',
-      latestIndexRunId ? `#${latestIndexRunId} ${latestIndexStatus}`.trim() : '-',
+      createKnowledgeBaseLatestIndexCell(latestIndexRunId, latestIndexStatus),
       knowledgeBase.updatedAt ?? '-',
     ],
+  }
+}
+
+function createKnowledgeBaseStatusCell(status) {
+  const normalizedStatus = String(status ?? '').trim() || 'unknown'
+  return {
+    kind: 'status',
+    status: normalizedStatus,
+    label: KNOWLEDGE_BASE_STATUS_LABELS[normalizedStatus] ?? normalizedStatus,
+    filterValue: normalizedStatus,
+  }
+}
+
+function createKnowledgeBaseLatestIndexCell(latestIndexRunId, status) {
+  if (!latestIndexRunId) {
+    return '-'
+  }
+
+  const normalizedStatus = String(status ?? '').trim() || 'neutral'
+  const label = KNOWLEDGE_BASE_INDEX_STATUS_LABELS[normalizedStatus] ?? normalizedStatus
+  return {
+    kind: 'status',
+    status: normalizedStatus,
+    label: `${label} #${latestIndexRunId}`,
+    filterValue: normalizedStatus,
   }
 }
 
@@ -818,7 +858,7 @@ async function loadKnowledgeBaseDetail(route, services) {
     facts: buildKnowledgeBaseFacts(knowledgeBase),
     actions: isArchivedCourse(knowledgeBase)
       ? { readonly: true, readonlyReason: '已归档知识库只读，请先恢复课程' }
-      : { buildTo: `/app/knowledge-bases/${knowledgeBase.id ?? kbId}/build` },
+      : { buildTo: `/app/knowledge-bases/${knowledgeBase.id ?? kbId}/build?from=detail` },
     blocks: {
       knowledgeBase: {
         state: 'success',
@@ -1308,7 +1348,15 @@ function applyBuildRunStageStatuses(baseStatuses, buildRun) {
     }
   })
 
-  nextStatuses[stageKey] = runStatus
+  if (stageKey === 'material') {
+    nextStatuses.material = runStatus === 'failed'
+      ? 'failed'
+      : runStatus === 'done'
+        ? 'done'
+        : baseStatuses.material
+  } else {
+    nextStatuses[stageKey] = runStatus
+  }
   nextStatuses.qa_check = mergeQaStatus(nextStatuses.qa_check, buildRun?.qaStatus)
 
   return nextStatuses
@@ -1854,7 +1902,7 @@ function buildKnowledgeBaseFacts(knowledgeBase = {}) {
     { label: '知识库编码', value: knowledgeBase.kbCode ?? '-' },
     { label: '名称', value: knowledgeBase.name ?? '-' },
     { label: '所属课程', value: knowledgeBase.courseId ?? '-' },
-    { label: '状态', value: knowledgeBase.status ?? '-' },
+    { label: '状态', value: KNOWLEDGE_BASE_STATUS_LABELS[knowledgeBase.status] ?? knowledgeBase.status ?? '-' },
     { label: '激活索引', value: knowledgeBase.activeIndexRunId ? `#${knowledgeBase.activeIndexRunId}` : '需先构建索引' },
     { label: '索引运行数', value: formatCount(knowledgeBase.indexRunCount) },
     { label: '更新时间', value: knowledgeBase.updatedAt ?? '-' },
@@ -1876,11 +1924,16 @@ function buildIndexRunFacts(indexRun = {}) {
 
 function mapMaterialItem(material = {}) {
   const id = material.id ?? material.materialId ?? material.pdfFileId
+  const title = material.fileName ?? material.displayName ?? `资料 ${id ?? '-'}`
+  const displayName = material.displayName ?? material.originalFileName ?? ''
+  const detail = displayName && displayName !== title ? displayName : ''
+  const parseStatus = String(material.parseStatus ?? material.parseState ?? material.status ?? 'pending').toLowerCase()
   return {
     id,
-    title: material.fileName ?? material.displayName ?? `资料 ${id ?? '-'}`,
-    meta: material.parseStatus ?? '-',
-    detail: material.fileMd5 ?? material.md5 ?? '',
+    title,
+    meta: parseStatus === 'running' ? 'processing' : parseStatus,
+    detail,
+    updatedAt: material.updatedAt ?? material.uploadTime ?? material.createdAt ?? '',
     to: id ? `/app/materials/${id}` : '',
   }
 }

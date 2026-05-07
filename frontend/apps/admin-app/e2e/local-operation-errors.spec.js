@@ -16,7 +16,7 @@ test('资料解析失败在资料面板内显示局部反馈', async ({ page }) 
   })
 
   await openAuthenticated(page, '/app/materials/9')
-  await page.getByRole('button', { name: '触发解析' }).click()
+  await page.locator('.module-hero').getByRole('button', { name: '触发解析' }).click()
 
   const panel = panelByHeading(page, '资料概览')
   const feedback = panel.locator('.operation-feedback')
@@ -120,6 +120,9 @@ test('构建向导资料选择提供搜索筛选和全选当前筛选结果', as
   await expect(stage.getByPlaceholder('搜索资料名')).toBeVisible()
   await expect(stage.getByRole('button', { name: '全选当前筛选结果' })).toBeVisible()
   await expect(stage.getByRole('button', { name: '清空选择' })).toBeVisible()
+  await expect(stage.getByText('解析完成')).toBeVisible()
+  await expect(stage.getByText('缺失产物')).toHaveCount(2)
+  await expect(stage.getByText('2026-05-07T18:39:18')).toBeVisible()
 
   await stage.getByPlaceholder('搜索资料名').fill('book')
   await expect(stage.getByTestId('build-material-row-9')).toBeVisible()
@@ -137,7 +140,7 @@ test('构建向导资料集合变化时清理 materialConfirmed exportConfirmed 
   await openAuthenticated(page, '/app/knowledge-bases/7/build?materialIds=9&materialConfirmed=1&exportConfirmed=1&promptConfirmed=1&step=material')
 
   const stage = page.locator('.build-step-stage')
-  await stage.getByTestId('build-material-select-10').click()
+  await stage.getByTestId('build-material-checkbox-10').click()
   await expect(page).toHaveURL(/materialIds=9%2C10|materialIds=9,10/)
   await expect(page).not.toHaveURL(/materialConfirmed=1/)
   await expect(page).not.toHaveURL(/exportConfirmed=1/)
@@ -348,8 +351,8 @@ function knowledgeBaseBuildMocks({ activeIndexRunId }) {
       activeIndexRunId,
     }),
     'GET /courses/os/materials': () => [
-      { id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' },
-      { id: 10, courseId: 'os', fileName: 'slides.pdf', parseStatus: 'pending' },
+      { id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done', updatedAt: '2026-05-07T18:39:18' },
+      { id: 10, courseId: 'os', fileName: 'slides.pdf', parseStatus: 'pending', updatedAt: '2026-05-07T18:40:00' },
     ],
     'GET /knowledge-bases/7/index-runs': () => activeIndexRunId
       ? [{ id: activeIndexRunId, status: 'success', createdAt: '2026-04-29T10:00:00' }]

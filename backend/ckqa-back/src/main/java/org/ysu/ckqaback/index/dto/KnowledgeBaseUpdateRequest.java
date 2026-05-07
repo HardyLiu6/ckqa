@@ -7,26 +7,11 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 知识库创建请求体。
+ * 知识库基础信息更新请求体。
  */
 @Getter
 @Setter
-public class KnowledgeBaseCreateRequest {
-
-    /**
-     * 所属课程 ID。
-     */
-    @NotBlank(message = "courseId不能为空")
-    @Size(max = 64, message = "courseId长度不能超过64")
-    @Pattern(regexp = "[A-Za-z0-9_-]+", message = "courseId只能包含字母、数字、下划线或短横线")
-    private String courseId;
-
-    /**
-     * 知识库编码，同一课程内唯一；留空时由后端自动生成。
-     */
-    @Size(max = 128, message = "kbCode长度不能超过128")
-    @Pattern(regexp = "[A-Za-z0-9_-]*", message = "kbCode只能包含字母、数字、下划线或短横线")
-    private String kbCode;
+public class KnowledgeBaseUpdateRequest {
 
     /**
      * 知识库名称。
@@ -44,6 +29,7 @@ public class KnowledgeBaseCreateRequest {
     /**
      * 知识库状态。
      */
+    @NotBlank(message = "status不能为空")
     @Pattern(regexp = "draft|active|archived", message = "status取值不合法")
     private String status;
 }

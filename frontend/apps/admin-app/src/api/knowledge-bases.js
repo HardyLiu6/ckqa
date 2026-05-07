@@ -9,6 +9,14 @@ export async function createKnowledgeBase(payload, client = http) {
   return unwrapApiResponse(await client.post('/knowledge-bases', payload))
 }
 
+export async function updateKnowledgeBase(id, payload, client = http) {
+  return unwrapApiResponse(await client.put(`/knowledge-bases/${encodeURIComponent(id)}`, payload))
+}
+
+export async function deleteKnowledgeBase(id, client = http) {
+  return unwrapApiResponse(await client.delete(`/knowledge-bases/${encodeURIComponent(id)}`))
+}
+
 export async function getKnowledgeBase(id, client = http) {
   return unwrapApiResponse(await client.get(`/knowledge-bases/${encodeURIComponent(id)}`))
 }

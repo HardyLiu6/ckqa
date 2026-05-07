@@ -23,11 +23,14 @@ import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseUpdateRequest;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -74,6 +77,22 @@ public class KnowledgeBasesController {
             @PathVariable @Positive(message = "id必须大于0") Long id
     ) {
         return ApiResponseUtils.success(knowledgeBaseLookupService.getKnowledgeBase(id));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<KnowledgeBaseDetailResponse> updateKnowledgeBase(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody KnowledgeBaseUpdateRequest request
+    ) {
+        return ApiResponseUtils.success(knowledgeBaseLookupService.updateKnowledgeBase(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteKnowledgeBase(
+            @PathVariable @Positive(message = "id必须大于0") Long id
+    ) {
+        knowledgeBaseLookupService.deleteKnowledgeBase(id);
+        return ApiResponseUtils.success();
     }
 
     @PostMapping("/{id}/index-runs")

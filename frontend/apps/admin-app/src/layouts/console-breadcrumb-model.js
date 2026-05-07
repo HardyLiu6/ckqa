@@ -54,6 +54,19 @@ function createMaterialDetailParent(route = {}) {
   }
 }
 
+function createKnowledgeBaseDetailParent(kbId) {
+  if (!kbId) {
+    return null
+  }
+
+  return {
+    label: '知识库详情',
+    name: 'knowledge-base-detail',
+    to: `/app/knowledge-bases/${encodeURIComponent(String(kbId))}`,
+    kind: 'link',
+  }
+}
+
 function resolveCourseParents(route = {}) {
   const courseId = resolveCourseId(route)
   if (!courseId) {
@@ -97,6 +110,13 @@ export function buildConsoleBreadcrumbItems(route = {}) {
   }
 
   items.push(...resolveCourseParents(route))
+
+  if (route.name === 'knowledge-base-build' && route.query?.from === 'detail') {
+    const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
+    if (detailParent) {
+      items.push(detailParent)
+    }
+  }
 
   items.push({ label: route.meta?.title || '当前页面', kind: 'current' })
 

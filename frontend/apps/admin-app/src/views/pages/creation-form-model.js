@@ -11,7 +11,7 @@ export const COURSE_STATUS_OPTIONS = [
 
 export const KNOWLEDGE_BASE_STATUS_OPTIONS = [
   { value: 'draft', label: '草稿' },
-  { value: 'active', label: '启用' },
+  { value: 'active', label: '已启用' },
   { value: 'archived', label: '已归档' },
 ]
 

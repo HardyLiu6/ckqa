@@ -208,6 +208,10 @@ const configs = {
     eyebrow: 'Knowledge Base',
     tableTitle: '知识库实例',
     summary: '管理课程知识库实例，重点看激活索引、最近构建状态和进入构建向导。',
+    search: {
+      placeholder: '搜索知识库名称、编码或课程 ID',
+      ariaLabel: '搜索知识库',
+    },
     primaryAction: {
       label: '新建知识库',
       permission: 'kb:write',

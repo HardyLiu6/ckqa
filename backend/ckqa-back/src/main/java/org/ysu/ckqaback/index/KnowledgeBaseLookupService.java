@@ -15,11 +15,14 @@ import org.ysu.ckqaback.index.dto.KnowledgeBaseCreateRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseDetailResponse;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseQueryRequest;
 import org.ysu.ckqaback.index.dto.KnowledgeBaseSummaryResponse;
+import org.ysu.ckqaback.index.dto.KnowledgeBaseUpdateRequest;
 import org.ysu.ckqaback.service.CoursesService;
 import org.ysu.ckqaback.service.IndexRunsService;
+import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -32,9 +35,13 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class KnowledgeBaseLookupService {
 
+    private static final DateTimeFormatter KB_CODE_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final int KB_CODE_MAX_LENGTH = 128;
+
     private final KnowledgeBasesService knowledgeBasesService;
     private final IndexRunsService indexRunsService;
     private final CoursesService coursesService;
+    private final KnowledgeBaseBuildRunsService buildRunsService;
 
     public ApiPageData<KnowledgeBaseSummaryResponse> listKnowledgeBases(KnowledgeBaseQueryRequest request) {
         long page = request.getPage() == null ? 1L : request.getPage();
@@ -84,7 +91,7 @@ public class KnowledgeBaseLookupService {
 
     public KnowledgeBaseDetailResponse createKnowledgeBase(KnowledgeBaseCreateRequest request) {
         String courseId = normalizeText(request.getCourseId());
-        String kbCode = normalizeText(request.getKbCode());
+        String requestedKbCode = normalizeNullableText(request.getKbCode());
         Courses course = coursesService.getOne(new LambdaQueryWrapper<Courses>()
                 .eq(Courses::getCourseId, courseId)
                 .last("LIMIT 1"));
@@ -98,13 +105,14 @@ public class KnowledgeBaseLookupService {
                     "已归档课程不可编辑，请先撤销归档"
             );
         }
-        if (knowledgeBasesService.count(new LambdaQueryWrapper<KnowledgeBases>()
-                .eq(KnowledgeBases::getCourseId, courseId)
-                .eq(KnowledgeBases::getKbCode, kbCode)) > 0) {
+        LocalDateTime now = LocalDateTime.now();
+        String kbCode = StringUtils.hasText(requestedKbCode)
+                ? requestedKbCode
+                : generateAvailableKnowledgeBaseCode(courseId, now);
+        if (StringUtils.hasText(requestedKbCode) && knowledgeBaseCodeExists(courseId, kbCode)) {
             throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_CODE_EXISTS, HttpStatus.CONFLICT);
         }
 
-        LocalDateTime now = LocalDateTime.now();
         KnowledgeBases knowledgeBase = new KnowledgeBases();
         knowledgeBase.setCourseId(courseId);
         knowledgeBase.setKbCode(kbCode);
@@ -116,6 +124,28 @@ public class KnowledgeBaseLookupService {
         knowledgeBasesService.save(knowledgeBase);
 
         return KnowledgeBaseDetailResponse.fromEntity(knowledgeBase, null, 0L, 0L);
+    }
+
+    public KnowledgeBaseDetailResponse updateKnowledgeBase(Long id, KnowledgeBaseUpdateRequest request) {
+        KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(id);
+        knowledgeBase.setName(normalizeText(request.getName()));
+        knowledgeBase.setDescription(normalizeNullableText(request.getDescription()));
+        knowledgeBase.setStatus(normalizeText(request.getStatus()));
+        knowledgeBase.setUpdatedAt(LocalDateTime.now());
+        knowledgeBasesService.updateById(knowledgeBase);
+        return getKnowledgeBase(id);
+    }
+
+    public void deleteKnowledgeBase(Long id) {
+        knowledgeBasesService.getRequiredById(id);
+        if (!buildRunsService.listByKnowledgeBaseId(id).isEmpty()) {
+            throw new BusinessException(
+                    ApiResultCode.BAD_REQUEST,
+                    HttpStatus.CONFLICT,
+                    "知识库已有构建历史，请改为归档保留运行记录"
+            );
+        }
+        knowledgeBasesService.removeById(id);
     }
 
     private IndexRuns latestIndexRun(List<IndexRuns> indexRuns) {
@@ -134,6 +164,33 @@ public class KnowledgeBaseLookupService {
             return true;
         }
         return Objects.equals(normalize(knowledgeBase.getStatus()), normalize(status));
+    }
+
+    private String generateAvailableKnowledgeBaseCode(String courseId, LocalDateTime now) {
+        String baseCode = limitCodeLength("kb-" + normalize(courseId) + "-" + now.format(KB_CODE_TIMESTAMP_FORMATTER), 0);
+        String candidate = baseCode;
+        int sequence = 2;
+        while (knowledgeBaseCodeExists(courseId, candidate)) {
+            candidate = appendCodeSuffix(baseCode, sequence);
+            sequence++;
+        }
+        return candidate;
+    }
+
+    private boolean knowledgeBaseCodeExists(String courseId, String kbCode) {
+        return knowledgeBasesService.count(new LambdaQueryWrapper<KnowledgeBases>()
+                .eq(KnowledgeBases::getCourseId, courseId)
+                .eq(KnowledgeBases::getKbCode, kbCode)) > 0;
+    }
+
+    private String appendCodeSuffix(String baseCode, int sequence) {
+        String suffix = "-" + sequence;
+        return limitCodeLength(baseCode, suffix.length()) + suffix;
+    }
+
+    private String limitCodeLength(String value, int reservedSuffixLength) {
+        int maxLength = Math.max(1, KB_CODE_MAX_LENGTH - reservedSuffixLength);
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     private boolean matchesKeyword(KnowledgeBases knowledgeBase, String keyword) {
