@@ -6,6 +6,7 @@ import { getAdminPinia } from './pinia.js'
 export const THEME_MODES = ['light', 'dark', 'auto']
 
 export const THEME_ACCENTS = [
+  { key: 'rust', label: '暖橙', color: '#d97757', strong: '#c4633a', contrast: '#ffffff' },
   { key: 'indigo', label: 'Indigo', color: '#6366f1', strong: '#4f46e5', contrast: '#ffffff' },
   { key: 'blue', label: 'Blue', color: '#2563eb', strong: '#1d4ed8', contrast: '#ffffff' },
   { key: 'teal', label: 'Teal', color: '#0d9488', strong: '#0f766e', contrast: '#ffffff' },
@@ -42,8 +43,8 @@ export function resolveTheme(mode, prefersDark) {
 
 export const useThemeStore = defineStore('theme', () => {
   const state = reactive({
-    mode: 'auto',
-    accent: 'indigo',
+    mode: 'light',
+    accent: 'rust',
     resolvedTheme: 'light',
   })
 
@@ -70,8 +71,8 @@ export const useThemeStore = defineStore('theme', () => {
       if (isValidAccent(saved.accent)) state.accent = normalizeAccent(saved.accent)
       if (legacyTheme !== null) save()
     } catch {
-      state.mode = 'auto'
-      state.accent = 'indigo'
+      state.mode = 'light'
+      state.accent = 'rust'
     }
   }
 

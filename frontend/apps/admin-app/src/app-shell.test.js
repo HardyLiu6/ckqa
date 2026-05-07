@@ -2825,8 +2825,8 @@ test('构建向导步骤选择和阻塞动作有稳定模型', () => {
 })
 
 test('主题 store 可在 Node 环境安全导入并解析主题', () => {
-  assert.equal(themeStore.state.mode, 'auto')
-  assert.equal(themeStore.state.accent, 'indigo')
+  assert.equal(themeStore.state.mode, 'light')
+  assert.equal(themeStore.state.accent, 'rust')
   assert.equal(resolveTheme('auto', false), 'light')
   assert.equal(resolveTheme('auto', true), 'dark')
   assert.equal(resolveTheme('light', true), 'light')
@@ -2836,9 +2836,12 @@ test('主题 store 可在 Node 环境安全导入并解析主题', () => {
 test('主题色只允许固定枚举并提供强色阶', () => {
   assert.deepEqual(
     THEME_ACCENTS.map((item) => item.key),
-    ['indigo', 'blue', 'teal', 'violet', 'amber'],
+    ['rust', 'indigo', 'blue', 'teal', 'violet', 'amber'],
   )
+  assert.equal(THEME_ACCENTS[0].color, '#d97757')
+  assert.equal(THEME_ACCENTS[0].strong, '#c4633a')
   assert.equal(normalizeAccent('purple'), 'violet')
+  assert.equal(isValidAccent('rust'), true)
   assert.equal(isValidAccent('teal'), true)
   assert.equal(isValidAccent('custom'), false)
   assert.equal(THEME_ACCENTS.find((item) => item.key === 'teal').strong, '#0f766e')
@@ -3149,14 +3152,14 @@ test('主题 store 迁移到 Pinia 后保留旧兼容 API', () => {
   const pinia = createPinia()
   const theme = useThemeStore(pinia)
 
-  assert.equal(theme.state.mode, 'auto')
-  assert.equal(theme.state.accent, 'indigo')
+  assert.equal(theme.state.mode, 'light')
+  assert.equal(theme.state.accent, 'rust')
   theme.setMode('dark')
   theme.setAccent('violet')
 
   assert.equal(theme.state.mode, 'dark')
   assert.equal(theme.state.accent, 'violet')
-  assert.equal(themeStore.state.mode, 'auto')
+  assert.equal(themeStore.state.mode, 'light')
 })
 
 test('主题 store 从旧 storage key 迁移 purple 到新 violet 配置', async () => {
