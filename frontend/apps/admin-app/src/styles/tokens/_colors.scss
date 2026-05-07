@@ -1,24 +1,47 @@
 :root {
   color-scheme: light;
-  --ckqa-bg: #f8fafc;
-  --ckqa-bg-elevated: #eef2ff;
+
+  /* surface scale — 暖灰 */
+  --ckqa-bg: #faf9f6;
+  --ckqa-bg-elevated: #fffaf4;
   --ckqa-surface: #ffffff;
-  --ckqa-surface-muted: #f1f5f9;
-  --ckqa-surface-strong: #e7ebf1;
-  --ckqa-border: #e2e8f0;
-  --ckqa-border-strong: #cbd5e1;
-  --ckqa-text: #0f172a;
-  --ckqa-text-muted: #64748b;
-  --ckqa-text-weak: #94a3b8;
-  --ckqa-ink: #0f172a;
-  --ckqa-accent: #6366f1;
-  --ckqa-accent-strong: #4f46e5;
+  --ckqa-surface-muted: #f5f3ee;
+  --ckqa-surface-strong: #f0ebe1;
+
+  /* border scale */
+  --ckqa-border: #e8e2d8;
+  --ckqa-border-soft: #f0ebe1;
+  --ckqa-border-strong: #d4cdbe;
+
+  /* text scale */
+  --ckqa-text: #1a1a1a;
+  --ckqa-text-muted: #6b6760;
+  --ckqa-text-weak: #a8a39a;
+  --ckqa-text-inverse: #ffffff;
+  --ckqa-ink: var(--ckqa-text);
+
+  /* accent — default mapped to rust */
+  --ckqa-accent: #d97757;
+  --ckqa-accent-strong: #c4633a;
+  --ckqa-accent-soft: #fdf3ee;
   --ckqa-accent-contrast: #ffffff;
-  --ckqa-success: #10b981;
-  --ckqa-running: #3b82f6;
-  --ckqa-warning: #f59e0b;
-  --ckqa-blocked: #64748b;
-  --ckqa-danger: #ef4444;
+
+  /* semantic — solid + soft 双轨；色相与 accent 错开 */
+  --ckqa-success: #4a7c59;
+  --ckqa-success-soft: #eef5ee;
+  --ckqa-running: #c08a3a;
+  --ckqa-running-soft: #faf1e1;
+  --ckqa-warning: #b8860b;
+  --ckqa-warning-soft: #fef5d7;
+  --ckqa-blocked: #8a847a;
+  --ckqa-blocked-soft: #ece8df;
+  --ckqa-danger: #c4413a;
+  --ckqa-danger-soft: #fceeec;
+
+  /* focus */
+  --ckqa-focus: rgb(217 119 87 / 35%);
+
+  /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
   --surface-muted: var(--ckqa-surface-muted);
@@ -27,9 +50,9 @@
   --text-muted: var(--ckqa-text-muted);
   --border: var(--ckqa-border);
   --blue: var(--ckqa-running);
-  --green: #0f766e;
-  --amber: #b7791f;
-  --red: #c2413d;
+  --green: var(--ckqa-success);
+  --amber: var(--ckqa-warning);
+  --red: var(--ckqa-danger);
   --ink: var(--ckqa-ink);
   --radius: var(--ckqa-radius-md);
   --sans: var(--ckqa-font-sans);
@@ -38,17 +61,40 @@
 
 [data-theme='dark'] {
   color-scheme: dark;
-  --ckqa-bg: #020617;
-  --ckqa-bg-elevated: #0f172a;
-  --ckqa-surface: #0f172a;
-  --ckqa-surface-muted: #1e293b;
-  --ckqa-surface-strong: #243449;
-  --ckqa-border: #334155;
-  --ckqa-border-strong: #475569;
-  --ckqa-text: #f8fafc;
-  --ckqa-text-muted: #cbd5e1;
-  --ckqa-text-weak: #94a3b8;
-  --ckqa-ink: #f8fafc;
+
+  --ckqa-bg: #1c1a17;
+  --ckqa-bg-elevated: #25221d;
+  --ckqa-surface: #25221d;
+  --ckqa-surface-muted: #2e2a24;
+  --ckqa-surface-strong: #38332b;
+
+  --ckqa-border: #38332b;
+  --ckqa-border-soft: #2e2a24;
+  --ckqa-border-strong: #4a443a;
+
+  --ckqa-text: #f0ece4;
+  --ckqa-text-muted: #b0a99c;
+  --ckqa-text-weak: #7a7468;
+  --ckqa-text-inverse: #1a1a1a;
+  --ckqa-ink: var(--ckqa-text);
+
+  --ckqa-accent: #e8916f;
+  --ckqa-accent-strong: #d97757;
+  --ckqa-accent-soft: #38221a;
+  --ckqa-accent-contrast: #1a1a1a;
+
+  --ckqa-success: #6a9b78;
+  --ckqa-success-soft: #1f2d22;
+  --ckqa-running: #d4a04c;
+  --ckqa-running-soft: #38301d;
+  --ckqa-warning: #d4914c;
+  --ckqa-warning-soft: #382a1d;
+  --ckqa-blocked: #6e6a62;
+  --ckqa-blocked-soft: #2a2724;
+  --ckqa-danger: #d96860;
+  --ckqa-danger-soft: #38201e;
+
+  --ckqa-focus: rgb(232 145 111 / 40%);
 }
 
 [data-accent='indigo'] {
@@ -79,5 +125,12 @@
 [data-accent='amber'] {
   --ckqa-accent: #d97706;
   --ckqa-accent-strong: #b45309;
+  --ckqa-accent-contrast: #ffffff;
+}
+
+[data-accent='rust'] {
+  --ckqa-accent: #d97757;
+  --ckqa-accent-strong: #c4633a;
+  --ckqa-accent-soft: #fdf3ee;
   --ckqa-accent-contrast: #ffffff;
 }
