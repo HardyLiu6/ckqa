@@ -4,17 +4,18 @@ import { useRoute, useRouter } from 'vue-router'
 
 import AppTopbar from '../components/shell/AppTopbar.vue'
 import SideNavigation from '../components/shell/SideNavigation.vue'
-import { buildNavigationGroups } from '../components/shell/navigation-model.js'
+import { buildNavigationSections, findActiveNavigationPath } from '../components/shell/navigation-model.js'
 import { API_BASE_URL } from '../axios/index.js'
 import { buildConsoleBreadcrumbItems } from './console-breadcrumb-model.js'
-import { routeRecords } from '../router/routes.js'
+import { primaryNavigation } from '../router/routes.js'
 import { authStore } from '../stores/auth.js'
 
 const route = useRoute()
 const router = useRouter()
 
-const navigationGroups = computed(() => buildNavigationGroups(routeRecords, authStore.canAccess))
+const navigationSections = computed(() => buildNavigationSections(primaryNavigation, authStore.canAccess))
 const activeGroup = computed(() => route.meta.navGroup)
+const activePath = computed(() => findActiveNavigationPath(navigationSections.value, route.path))
 const breadcrumbItems = computed(() => buildConsoleBreadcrumbItems(route))
 const currentUser = computed(() => authStore.state.currentUser)
 const dataScopeLabel = computed(() => currentUser.value?.dataScope || '未登录')
@@ -36,8 +37,9 @@ function logout() {
     />
 
     <SideNavigation
-      :groups="navigationGroups"
+      :sections="navigationSections"
       :active-group="activeGroup || ''"
+      :active-path="activePath"
       :current-path="route.path"
     />
 

@@ -18,7 +18,8 @@ import {
   sendQaMessage,
 } from './api/qa.js'
 import {
-  buildNavigationGroups,
+  NAV_SECTIONS,
+  buildNavigationSections,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
 import { buildConsoleBreadcrumbItems } from './layouts/console-breadcrumb-model.js'
@@ -42,7 +43,7 @@ import {
   PAGE_SIZE_OPTIONS,
   resolveTotalPages,
 } from './components/common/pager-model.js'
-import { routeRecords } from './router/routes.js'
+import { primaryNavigation, routeRecords } from './router/routes.js'
 import {
   THEME_ACCENTS,
   isValidAccent,
@@ -3127,16 +3128,14 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(componentsCss, /\.button-icon/)
 })
 
-test('侧边导航统一迁移到 Element Plus Menu 并为菜单项配置图标', () => {
+test('侧边导航使用 Element Plus Menu 渲染分段并为菜单项配置图标', () => {
   const sideNavigation = readFileSync(new URL('./components/shell/SideNavigation.vue', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
   assert.match(sideNavigation, /<el-menu[\s\S]*class="side-menu"/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-if="group\.presentation === 'single' && group\.primaryItem"/)
-  assert.match(sideNavigation, /<el-sub-menu[\s\S]*v-else/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-for="item in group\.items"/)
-  assert.match(sideNavigation, /resolveGroupIcon\(group\.key\)/)
+  assert.match(sideNavigation, /v-for="section in sections"/)
+  assert.match(sideNavigation, /v-for="item in section\.items"/)
   assert.match(sideNavigation, /resolveItemIcon\(item\)/)
   assert.doesNotMatch(sideNavigation, /<details/)
   assert.doesNotMatch(sideNavigation, /<summary/)
@@ -3208,106 +3207,51 @@ test('主题 store 从旧 storage key 迁移 purple 到新 violet 配置', async
   }
 })
 
-test('控制台导航按权限过滤并保留模块分组', () => {
-  const canAccessWithoutUserWrite = (permissions = []) => {
-    return !permissions.includes('user:write')
-  }
-
-  const groups = buildNavigationGroups(routeRecords, canAccessWithoutUserWrite)
-
-  assert.deepEqual(
-    groups.map((group) => group.key),
-    ['dashboard', 'courses', 'knowledge', 'qa', 'users', 'system'],
-  )
-  assert.equal(groups.find((group) => group.key === 'dashboard').items[0].path, '/app/dashboard')
-  assert.equal(
-    groups.find((group) => group.key === 'users').items.some((item) => item.permissions.includes('user:write')),
-    false,
-  )
+test('buildNavigationSections 按 section 分组并保留排序', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  assert.deepEqual(sections.map((s) => s.key), ['dashboard', 'production', 'operations', 'settings'])
+  assert.equal(sections[1].items[0].label, '课程')
 })
 
-test('控制台侧栏区分单入口菜单和下拉子模块', () => {
-  const groups = buildNavigationGroups(routeRecords, () => true)
-  const dashboard = groups.find((group) => group.key === 'dashboard')
-  const courses = groups.find((group) => group.key === 'courses')
-  const users = groups.find((group) => group.key === 'users')
-
-  assert.equal(dashboard.presentation, 'single')
-  assert.equal(dashboard.primaryItem.path, '/app/dashboard')
-  assert.equal(dashboard.primaryItem.title, '工作台')
-
-  assert.equal(courses.presentation, 'folder')
-  assert.deepEqual(courses.items.map((item) => item.title), ['课程列表'])
-
-  assert.equal(users.presentation, 'folder')
-  assert.deepEqual(
-    users.items.map((item) => item.path),
-    ['/app/users', '/app/roles', '/app/permissions'],
-  )
-  assert.deepEqual(
-    users.items.map((item) => item.title),
-    ['用户列表', '角色列表', '权限列表'],
-  )
-  assert.equal(groups.find((group) => group.key === 'users').hint, '用户、角色、权限')
+test('buildNavigationSections 隐藏 hidden 项', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  const productionItems = sections.find((s) => s.key === 'production').items
+  assert.equal(productionItems.find((item) => item.key === 'materials'), undefined)
 })
 
-test('控制台导航不暴露动态详情路径并保留顶层未开放入口', () => {
-  const groups = buildNavigationGroups(routeRecords, () => true)
-  const items = groups.flatMap((group) => group.items)
-  const paths = items.map((item) => item.path)
-
-  assert.equal(paths.some((path) => path.includes(':')), false)
-  assert.equal(paths.includes('/app/course-memberships'), false)
-  assert.equal(paths.includes('/app/permissions'), true)
-  assert.equal(routeRecords.some((route) => route.path === '/app/courses/:courseId/members'), true)
-  assert.equal(paths.includes('/app/courses/:courseId'), false)
-  assert.equal(paths.includes('/app/courses/:courseId/members'), false)
-  assert.equal(paths.includes('/app/materials/:materialId'), false)
-  assert.equal(paths.includes('/app/qa-sessions/:sessionId'), false)
-
-  const auditItem = items.find((item) => item.path === '/app/authorization-audit-logs')
-  assert.equal(auditItem.displayState, 'coming-soon')
-  assert.equal(auditItem.status, 'upcoming')
-  assert.equal(
-    items.find((item) => item.path === '/app/knowledge-bases/:kbId/index-runs'),
-    undefined,
-  )
+test('buildNavigationSections 按 canAccess 过滤', () => {
+  const onlyKbRead = (perms) => perms?.includes('kb:read') ?? perms?.length === 0
+  const sections = buildNavigationSections(primaryNavigation, onlyKbRead)
+  const productionItems = sections.find((s) => s.key === 'production').items
+  assert.deepEqual(productionItems.map((item) => item.key), ['knowledge-bases'])
 })
 
-test('控制台导航保留直接可访问模块入口', () => {
-  const groups = buildNavigationGroups(routeRecords, () => true)
-  const paths = groups.flatMap((group) => group.items).map((item) => item.path)
-
-  assert.ok(paths.includes('/app/dashboard'))
-  assert.ok(paths.includes('/app/courses'))
-  assert.ok(paths.includes('/app/knowledge-bases'))
-  assert.ok(paths.includes('/app/qa-sessions'))
-  assert.ok(paths.includes('/app/health'))
-  assert.equal(
-    groups.find((group) => group.key === 'system').items.find((item) => item.path === '/app/authorization-audit-logs').displayState,
-    'coming-soon',
-  )
+test('NAV_SECTIONS 暴露 4 个段且 dashboard 段没有可见标题', () => {
+  assert.deepEqual(NAV_SECTIONS.map((s) => s.key), ['dashboard', 'production', 'operations', 'settings'])
+  assert.equal(NAV_SECTIONS[0].label, '')
+  assert.equal(NAV_SECTIONS[1].label, '生产')
 })
 
-test('控制台导航在详情路径回落高亮所属模块入口', () => {
-  const groups = buildNavigationGroups(routeRecords, () => true)
+test('findActiveNavigationPath 命中精确路径', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  assert.equal(findActiveNavigationPath(sections, '/app/courses'), '/app/courses')
+})
 
-  assert.equal(findActiveNavigationPath(groups, 'courses', '/app/materials/42'), '/app/courses')
-  assert.equal(findActiveNavigationPath(groups, 'courses', '/app/courses/os/members'), '/app/courses')
-  assert.equal(
-    findActiveNavigationPath(groups, 'courses', '/app/materials/42/parse-results'),
-    '/app/courses',
-  )
-  assert.equal(
-    findActiveNavigationPath(groups, 'knowledge', '/app/index-runs/7'),
-    '/app/knowledge-bases',
-  )
-  assert.equal(findActiveNavigationPath(groups, 'qa', '/app/retrieval-logs/9'), '/app/qa-sessions')
-  assert.equal(findActiveNavigationPath(groups, 'system', '/app/health'), '/app/health')
-  assert.equal(
-    findActiveNavigationPath(groups, 'system', '/app/authorization-audit-logs'),
-    '/app/authorization-audit-logs',
-  )
+test('findActiveNavigationPath 命中前缀（详情页）', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  assert.equal(findActiveNavigationPath(sections, '/app/courses/123'), '/app/courses')
+})
+
+test('findActiveNavigationPath 没匹配返回空字符串', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  assert.equal(findActiveNavigationPath(sections, '/app/foo'), '')
+})
+
+test('findActiveNavigationPath 详情路径回落到所属模块入口', () => {
+  const sections = buildNavigationSections(primaryNavigation, () => true)
+  assert.equal(findActiveNavigationPath(sections, '/app/courses/os/members'), '/app/courses')
+  assert.equal(findActiveNavigationPath(sections, '/app/qa-sessions/abc'), '/app/qa-sessions')
+  assert.equal(findActiveNavigationPath(sections, '/app/retrieval-logs/9'), '/app/retrieval-logs')
 })
 
 test('课程子页面面包屑保留课程详情父级', () => {

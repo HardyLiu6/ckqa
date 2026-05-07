@@ -1,4 +1,11 @@
-import { NAV_GROUPS } from '../components/shell/navigation-model.js'
+const NAV_GROUP_LABELS = {
+  dashboard: '工作台',
+  courses: '课程与资料',
+  knowledge: '知识库构建',
+  qa: '问答运维',
+  users: '用户与权限',
+  system: '系统与审计',
+}
 
 export const LIST_ROUTE_BY_GROUP = {
   courses: { label: '课程列表', name: 'courses', to: '/app/courses' },
@@ -97,11 +104,11 @@ function resolveCourseParents(route = {}) {
 }
 
 export function buildConsoleBreadcrumbItems(route = {}) {
-  const group = NAV_GROUPS.find((item) => item.key === route.meta?.navGroup)
+  const groupLabel = NAV_GROUP_LABELS[route.meta?.navGroup]
   const items = []
 
-  if (group) {
-    items.push({ label: group.label, kind: 'section' })
+  if (groupLabel) {
+    items.push({ label: groupLabel, kind: 'section' })
   }
 
   const listRoute = LIST_ROUTE_BY_GROUP[route.meta?.navGroup]
