@@ -42,6 +42,34 @@ export const COPY = Object.freeze({
   topbar: {
     commandPalettePlaceholder: '搜索课程 / 资料 / 知识库 / 操作',
   },
+  dashboard: {
+    greeting: {
+      morning: '早上好',
+      afternoon: '下午好',
+      evening: '晚上好',
+    },
+    summarySentence(courseCount, materialCount, kbCount) {
+      const parts = []
+      if (courseCount != null) parts.push(`${courseCount} 门课程`)
+      if (materialCount != null) parts.push(`${materialCount} 份资料`)
+      if (kbCount != null) parts.push(`${kbCount} 个知识库`)
+      if (parts.length === 0) return '欢迎回来，开始今天的工作吧。'
+      return `当前看板覆盖：${parts.join(' · ')}。`
+    },
+    quickActions: [
+      { key: 'new-kb', label: '+ 新建知识库', to: '/app/knowledge-bases?action=create' },
+      { key: 'upload', label: '↑ 上传资料', to: '/app/courses' },
+      { key: 'kb-validation', label: '▷ 知识库验证', to: '/app/qa-smoke' },
+      { key: 'retrieval-logs', label: '≡ 检索日志', to: '/app/retrieval-logs' },
+    ],
+    sectionLabels: {
+      pipeline: '生产流水线',
+      activity: '近期动态',
+      tasks: '进行中任务',
+      quickActions: '快捷入口',
+    },
+    fallbackHint: '正在以分资源接口聚合数据，加载略慢。',
+  },
 })
 
 export default COPY

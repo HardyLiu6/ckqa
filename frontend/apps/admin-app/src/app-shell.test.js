@@ -3384,6 +3384,15 @@ test('COPY.feedback 用平实表达替换冒烟', () => {
   assert.equal(JSON.stringify(COPY).includes('冒烟'), false)
 })
 
+test('COPY.dashboard 字段齐全', () => {
+  assert.equal(typeof COPY.dashboard.summarySentence, 'function')
+  assert.deepEqual(
+    COPY.dashboard.quickActions.map((q) => q.key),
+    ['new-kb', 'upload', 'kb-validation', 'retrieval-logs'],
+  )
+  assert.equal(COPY.dashboard.summarySentence(12, 428, 9), '当前看板覆盖：12 门课程 · 428 份资料 · 9 个知识库。')
+})
+
 test('生产链路节点按失败优先规则归一化', () => {
   assert.equal(PRODUCTION_STEPS.length, 6)
   assert.deepEqual(
