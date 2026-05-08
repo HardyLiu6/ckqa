@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from typing import Any
@@ -26,8 +27,12 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 from extraction_parser import parse_extraction_output
 from llm_client import LlmCompletionResult
-from prompt_loader import load_schema_catalog, resolve_samples_path
-from run_candidate_extraction import _build_parser, run_candidate_extraction
+from prompt_loader import load_samples, load_schema_catalog, resolve_samples_path
+from run_candidate_extraction import (
+    _build_parser,
+    _resolve_timeout_plan,
+    run_candidate_extraction,
+)
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -69,6 +74,40 @@ class FakeLlmClient:
         if isinstance(response, LlmCompletionResult):
             return response
         return str(response)
+
+
+class SlowLlmClient:
+    model_name = "slow-test"
+
+    def create_chat_completion(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        model: str,
+        temperature: float,
+        max_tokens: int | None,
+        metadata: dict[str, Any],
+        timeout_seconds: int | None = None,
+    ) -> Any:
+        time.sleep(0.05)
+        return '{"entities": [], "relationships": []}'
+
+
+class ModerateLlmClient:
+    model_name = "moderate-test"
+
+    def create_chat_completion(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        model: str,
+        temperature: float,
+        max_tokens: int | None,
+        metadata: dict[str, Any],
+        timeout_seconds: int | None = None,
+    ) -> Any:
+        time.sleep(0.03)
+        return '{"entities": [], "relationships": []}'
 
 
 class TestRunCandidateExtraction(unittest.TestCase):
@@ -199,6 +238,29 @@ text: {input_text}
             resolved = resolve_samples_path(None, root=root)
 
             self.assertEqual(resolved, expected.resolve())
+
+    def test_load_samples_accepts_audit_samples_and_preserves_source_sample_id(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            _write_json(
+                audit_path,
+                {
+                    "audit_samples": [
+                        {
+                            "id": "audit-ext-0001",
+                            "source_sample_id": "pts-0054",
+                            "text": "多媒体是多种信息媒体的综合处理。",
+                        }
+                    ]
+                },
+            )
+
+            samples = load_samples(audit_path)
+
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(samples[0]["sample_id"], "pts-0054")
+            self.assertEqual(samples[0]["source_sample_id"], "pts-0054")
 
     def test_parse_extraction_output_recovers_json_from_code_fence(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -434,10 +496,169 @@ text: {input_text}
             self.assertEqual(client.calls[0]["max_tokens"], 1200)
             self.assertEqual(client.calls[1]["max_tokens"], 2400)
             self.assertEqual(client.calls[0]["timeout_seconds"], 120)
-            self.assertEqual(client.calls[1]["timeout_seconds"], 240)
+            self.assertEqual(client.calls[1]["timeout_seconds"], 149)
 
             user_message = next(message["content"] for message in client.calls[0]["messages"] if message["role"] == "user")
             self.assertIn("最多输出 3 个实体、2 条关系", user_message)
+
+    def test_run_candidate_extraction_times_out_single_sample_without_hanging_batch(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=["default"],
+                model="qwen-test",
+                limit=1,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1200,
+                retries=0,
+                overwrite=True,
+                llm_client=SlowLlmClient(),
+                sample_timeout_seconds=0.01,
+            )
+
+            self.assertEqual(summary["llm_error"], 1)
+            eval_default = json.loads((root / "results" / "extraction_eval" / "default.json").read_text(encoding="utf-8"))
+            result = eval_default["results"][0]
+            self.assertEqual(result["status"], "llm_error")
+            self.assertIn("样本执行超时", result["error"])
+
+    def test_sample_timeout_starts_when_sample_is_submitted_not_when_queued(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=["default"],
+                model="qwen-test",
+                limit=2,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1200,
+                retries=0,
+                overwrite=True,
+                llm_client=ModerateLlmClient(),
+                sample_timeout_seconds=0.05,
+            )
+
+            self.assertEqual(summary["success"], 2)
+            self.assertEqual(summary["llm_error"], 0)
+
+    def test_run_id_writes_outputs_to_isolated_run_directories(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+            client = FakeLlmClient(
+                {
+                    (
+                        "default",
+                        "pts-001",
+                    ): '{"entities": [], "relationships": []}',
+                }
+            )
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=["default"],
+                model="qwen-test",
+                limit=1,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1200,
+                retries=0,
+                overwrite=True,
+                llm_client=client,
+                run_id="material_7_smoke",
+            )
+
+            self.assertEqual(
+                summary["candidates"][0]["paths"]["eval"],
+                str(root / "results" / "extraction_eval" / "runs" / "material_7_smoke" / "default.json"),
+            )
+            self.assertTrue(
+                (root / "results" / "extraction_raw" / "runs" / "material_7_smoke" / "default.jsonl").exists()
+            )
+            self.assertTrue(
+                (root / "results" / "errors" / "runs" / "material_7_smoke" / "extraction_parse_errors.jsonl").exists()
+            )
+            self.assertFalse((root / "results" / "extraction_eval" / "default.json").exists())
+
+    def test_sample_timeout_caps_request_timeout_and_retries(self):
+        timeout_seconds, high_risk_timeout, retries = _resolve_timeout_plan(
+            timeout_seconds=120,
+            high_risk_timeout=240,
+            retries=2,
+            sample_timeout_seconds=90,
+        )
+
+        self.assertEqual(timeout_seconds, 28)
+        self.assertEqual(high_risk_timeout, 28)
+        self.assertEqual(retries, 2)
+
+    def test_run_candidate_extraction_skips_fallback_auto_tuned_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+            auto_dir = root / "prompts" / "candidates" / "auto_tuned"
+            auto_dir.mkdir(parents=True, exist_ok=True)
+            (auto_dir / "prompt.txt").write_text("text: {input_text}", encoding="utf-8")
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest_payload["candidates"] = [
+                manifest_payload["candidates"][0],
+                {
+                    "candidate_name": "auto_tuned",
+                    "source_type": "fallback_default_copy",
+                    "files": {"prompt": str((auto_dir / "prompt.txt").resolve())},
+                },
+            ]
+            manifest_path.write_text(json.dumps(manifest_payload, ensure_ascii=False), encoding="utf-8")
+
+            client = FakeLlmClient(
+                {
+                    (
+                        "default",
+                        "pts-001",
+                    ): '{"entities": [], "relationships": []}',
+                }
+            )
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=None,
+                model="qwen-test",
+                limit=1,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1200,
+                retries=0,
+                overwrite=True,
+                llm_client=client,
+            )
+
+            self.assertEqual(summary["total_candidates"], 1)
+            self.assertEqual(summary["skipped_candidates"], ["auto_tuned"])
+            self.assertTrue((root / "results" / "extraction_eval" / "default.json").exists())
+            self.assertFalse((root / "results" / "extraction_eval" / "auto_tuned.json").exists())
 
 
 if __name__ == "__main__":

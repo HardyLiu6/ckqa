@@ -8,9 +8,11 @@ LLM 客户端测试
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -19,6 +21,8 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from llm_client import (
+    LlmClientError,
+    build_llm_client,
     _parse_non_stream_response,
     _parse_stream_events,
     _session_for_endpoint,
@@ -27,6 +31,25 @@ from llm_client import (
 
 
 class TestLlmClient(unittest.TestCase):
+    def test_build_llm_client_prefers_extraction_model_for_candidate_extraction(self):
+        with patch.dict(
+            os.environ,
+            {
+                "GRAPHRAG_API_BASE": "http://127.0.0.1:3301/v1",
+                "GRAPHRAG_CHAT_MODEL": "deepseek-v4-pro",
+                "GRAPHRAG_EXTRACTION_MODEL": "deepseek-v4-flash",
+            },
+            clear=True,
+        ):
+            client = build_llm_client(
+                root=_PROJECT_ROOT,
+                model=None,
+                timeout_seconds=30,
+                retries=0,
+            )
+
+        self.assertEqual(client.model_name, "deepseek-v4-flash")
+
     def test_parse_non_stream_response_returns_finish_reason_and_usage(self):
         payload = {
             "choices": [
@@ -65,6 +88,14 @@ class TestLlmClient(unittest.TestCase):
         self.assertEqual(result.request_mode, "stream")
         self.assertTrue(result.reasoning_seen)
         self.assertEqual(result.raw_chunks, 5)
+
+    def test_parse_stream_events_stops_when_total_timeout_is_exceeded(self):
+        def endless_reasoning_chunks():
+            while True:
+                yield b'data: {"choices":[{"delta":{"reasoning_content":"thinking"},"finish_reason":null}]}'
+
+        with self.assertRaisesRegex(LlmClientError, "流式响应超过总超时"):
+            _parse_stream_events(endless_reasoning_chunks(), max_total_seconds=0)
 
     def test_should_bypass_env_proxy_for_local_openai_compatible_gateway(self):
         self.assertTrue(_should_bypass_env_proxy("http://127.0.0.1:3000/v1/chat/completions"))

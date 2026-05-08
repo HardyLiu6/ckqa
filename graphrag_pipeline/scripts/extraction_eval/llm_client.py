@@ -152,10 +152,19 @@ class OpenAICompatibleLlmClient:
 
                 try:
                     if current_payload.get("stream"):
-                        result = _parse_stream_events(response.iter_lines(decode_unicode=False))
+                        result = _parse_stream_events(
+                            response.iter_lines(decode_unicode=False),
+                            max_total_seconds=timeout_seconds or self._config.timeout_seconds,
+                        )
                     else:
                         response_payload = response.json()
                         result = _parse_non_stream_response(response_payload, request_mode="sync")
+                except LlmClientError as exc:
+                    last_error = str(exc)
+                    if attempt >= attempts:
+                        break
+                    time.sleep(min(2 * attempt, 5))
+                    continue
                 except (ValueError, json.JSONDecodeError) as exc:
                     last_error = f"响应不是合法 JSON：{exc}"
                     if attempt >= attempts:
@@ -191,7 +200,13 @@ def build_llm_client(
         or os.environ.get("ONEAPI_API_KEY")
         or ""
     ).strip()
-    resolved_model = (model or os.environ.get("GRAPHRAG_CHAT_MODEL") or os.environ.get("OPENAI_MODEL") or "").strip()
+    resolved_model = (
+        model
+        or os.environ.get("GRAPHRAG_EXTRACTION_MODEL")
+        or os.environ.get("GRAPHRAG_CHAT_MODEL")
+        or os.environ.get("OPENAI_MODEL")
+        or ""
+    ).strip()
 
     if not api_base:
         raise LlmClientError("未配置 GRAPHRAG_API_BASE / OPENAI_API_BASE")
@@ -287,14 +302,18 @@ def _parse_non_stream_response(payload: dict[str, Any], *, request_mode: str) ->
     )
 
 
-def _parse_stream_events(lines: Iterable[str]) -> LlmCompletionResult:
+def _parse_stream_events(lines: Iterable[str], *, max_total_seconds: float | None = None) -> LlmCompletionResult:
     content_parts: list[str] = []
     finish_reason = None
     usage = None
     reasoning_seen = False
     raw_chunks = 0
+    started_at = time.monotonic()
 
     for raw_line in lines:
+        if max_total_seconds is not None and time.monotonic() - started_at >= max_total_seconds:
+            raise LlmClientError(f"流式响应超过总超时 {max_total_seconds:g} 秒")
+
         line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else str(raw_line)
         stripped = line.strip()
         if not stripped or not stripped.startswith("data:"):

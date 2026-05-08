@@ -17,6 +17,18 @@ from .extraction_schema import StructuredExtractionResult
 
 
 _PUNCT_RE = re.compile(r"[\s\.,;:!?，。；：！？'\"\(\)\[\]\{\}（）【】《》]+")
+_ALIAS_CUE_RE = re.compile(
+    r"(又称|简称|全称|英文|英文名|缩写|别名|alias|abbreviation|full\s*name)",
+    re.IGNORECASE,
+)
+_SYMBOL_CUE_RE = re.compile(
+    r"(变量|参数|符号|记为|表示为|公式|函数|窗口尺寸|计算|取值|满足|定义为)",
+    re.IGNORECASE,
+)
+_SYMBOL_LIKE_RE = re.compile(r"^[A-Za-zΑ-Ωα-ωΔδΩωλμσΣ_][A-Za-z0-9Α-Ωα-ωΔδΩωλμσΣ_{}\\()（）,\s-]{0,12}$")
+
+STRUCTURAL_CONTAINER_TYPES = {"Course", "Chapter", "Section"}
+KNOWLEDGE_CONTAINS_SOURCE_TYPES = {"KnowledgePoint", "Concept", "AlgorithmOrMethod"}
 
 
 def _normalize_title(value: str) -> str:
@@ -91,8 +103,101 @@ def compute_endpoint_valid_rate(
     results: Sequence[StructuredExtractionResult],
     relation_schema: dict,
 ) -> float:
+    return float(analyze_endpoint_validity(results, relation_schema)["valid_rate"])
+
+
+def can_derive_inverse_relation(
+    relation_type: str,
+    source_type: str,
+    relation_schema: dict,
+) -> bool:
+    """判断某关系是否允许派生反向边。
+
+    当前主要用于 `contains -> belongs_to`：知识对象之间的 contains 可以表达
+    分类/组成，但不能派生破坏容器边界的 belongs_to。
+    """
+
+    constraints = relation_schema.get(relation_type)
+    if not isinstance(constraints, dict):
+        return False
+    inverse = constraints.get("inverse_of")
+    if not inverse:
+        return False
+    derivation_constraints = constraints.get("derivation_constraints")
+    if isinstance(derivation_constraints, dict):
+        allowed_sources = derivation_constraints.get("derive_inverse_only_when_source_types")
+        if isinstance(allowed_sources, list) and allowed_sources:
+            return source_type in {str(item) for item in allowed_sources}
+    return bool(constraints.get("can_be_derived"))
+
+
+def _relation_semantic_error(
+    rel,
+    *,
+    source_type: str,
+    target_type: str,
+) -> tuple[str, str] | None:
+    if rel.type != "defined_by" or target_type != "Term":
+        return None
+
+    text = " ".join(
+        part for part in (rel.source, rel.target, rel.description, rel.evidence) if part
+    )
+    if _ALIAS_CUE_RE.search(text):
+        return ("semantic_defined_by_term_alias", "alias_not_relation")
+    if _SYMBOL_CUE_RE.search(text) and _SYMBOL_LIKE_RE.match(rel.target.strip()):
+        return None
+    return ("semantic_defined_by_term_needs_symbol_cue", "tighten_prompt")
+
+
+def _suggest_endpoint_action(
+    *,
+    relation_type: str,
+    reason: str,
+    source_type: str | None,
+    target_type: str | None,
+) -> str:
+    if reason == "semantic_defined_by_term_alias":
+        return "alias_not_relation"
+    if relation_type == "contains" and source_type in KNOWLEDGE_CONTAINS_SOURCE_TYPES:
+        return "schema_candidate"
+    if relation_type in {"belongs_to", "appears_in"}:
+        return "tighten_prompt"
+    if reason in {"missing_source", "missing_target", "missing_endpoint"}:
+        return "tighten_prompt"
+    if reason.startswith("semantic_"):
+        return "tighten_prompt"
+    return "keep_invalid"
+
+
+def _endpoint_example(item: StructuredExtractionResult, rel, source_type: str | None, target_type: str | None) -> dict:
+    return {
+        "sample_id": item.sample_id,
+        "source": rel.source,
+        "source_type": source_type,
+        "target": rel.target,
+        "target_type": target_type,
+        "relation_type": rel.type,
+        "description": rel.description,
+        "evidence": rel.evidence,
+    }
+
+
+def analyze_endpoint_validity(
+    results: Sequence[StructuredExtractionResult],
+    relation_schema: dict,
+    *,
+    max_examples_per_combination: int = 3,
+) -> dict:
+    """返回 endpoint 有效率与失败组合诊断。
+
+    分母沿用历史规则：只统计 schema 中存在的关系类型；未知关系类型交给
+    relation_type_valid_rate 负责。
+    """
+
     total = 0
     valid = 0
+    invalid_groups: dict[tuple[str, str | None, str | None, str], dict] = {}
     for item in _iter_success(results):
         title_to_type: dict[str, str] = {
             _normalize_title(ent.title): ent.type for ent in item.entities
@@ -105,12 +210,81 @@ def compute_endpoint_valid_rate(
             src_type = title_to_type.get(_normalize_title(rel.source))
             tgt_type = title_to_type.get(_normalize_title(rel.target))
             if src_type is None or tgt_type is None:
+                if src_type is None and tgt_type is None:
+                    reason = "missing_endpoint"
+                elif src_type is None:
+                    reason = "missing_source"
+                else:
+                    reason = "missing_target"
+                key = (rel.type, src_type, tgt_type, reason)
+                group = invalid_groups.setdefault(
+                    key,
+                    {
+                        "relation_type": rel.type,
+                        "source_type": src_type,
+                        "target_type": tgt_type,
+                        "reason": reason,
+                        "count": 0,
+                        "suggested_action": _suggest_endpoint_action(
+                            relation_type=rel.type,
+                            reason=reason,
+                            source_type=src_type,
+                            target_type=tgt_type,
+                        ),
+                        "examples": [],
+                    },
+                )
+                group["count"] += 1
+                if len(group["examples"]) < max_examples_per_combination:
+                    group["examples"].append(_endpoint_example(item, rel, src_type, tgt_type))
                 continue
             source_types = set(constraints.get("source_types") or [])
             target_types = set(constraints.get("target_types") or [])
-            if src_type in source_types and tgt_type in target_types:
+            type_valid = src_type in source_types and tgt_type in target_types
+            semantic_error = (
+                _relation_semantic_error(rel, source_type=src_type, target_type=tgt_type)
+                if type_valid
+                else None
+            )
+            if type_valid and semantic_error is None:
                 valid += 1
-    return valid / total if total else 0.0
+                continue
+
+            reason, action = semantic_error if semantic_error else ("endpoint_type_mismatch", "")
+            key = (rel.type, src_type, tgt_type, reason)
+            group = invalid_groups.setdefault(
+                key,
+                {
+                    "relation_type": rel.type,
+                    "source_type": src_type,
+                    "target_type": tgt_type,
+                    "reason": reason,
+                    "count": 0,
+                    "suggested_action": action
+                    or _suggest_endpoint_action(
+                        relation_type=rel.type,
+                        reason=reason,
+                        source_type=src_type,
+                        target_type=tgt_type,
+                    ),
+                    "examples": [],
+                },
+            )
+            group["count"] += 1
+            if len(group["examples"]) < max_examples_per_combination:
+                group["examples"].append(_endpoint_example(item, rel, src_type, tgt_type))
+
+    invalid_combinations = sorted(
+        invalid_groups.values(),
+        key=lambda item: (-int(item["count"]), item["relation_type"], str(item["source_type"]), str(item["target_type"]), item["reason"]),
+    )
+    return {
+        "total": total,
+        "valid": valid,
+        "invalid_count": total - valid,
+        "valid_rate": valid / total if total else 0.0,
+        "invalid_combinations": invalid_combinations,
+    }
 
 
 NOISE_STOPWORDS = {"无", "本章", "本节", "如下", "图", "表", "见下图", "见图"}
@@ -306,6 +480,10 @@ def aggregate_candidate_metrics(
         "audit_entity_precision": audit_entity_precision,
         "audit_relation_recall": audit_relation_recall,
     }
+    endpoint_analysis = analyze_endpoint_validity(results, relation_schema)
+    base["endpoint_total_count"] = endpoint_analysis["total"]
+    base["endpoint_invalid_count"] = endpoint_analysis["invalid_count"]
+    base["invalid_endpoint_combinations"] = endpoint_analysis["invalid_combinations"]
     base["composite_hard"] = compute_composite_hard(base, effective_weights)
     base["composite_soft"] = compute_composite_soft(base, effective_weights)
     base["gate_passed"] = compute_gate_passed(base)

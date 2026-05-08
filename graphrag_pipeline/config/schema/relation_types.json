@@ -26,11 +26,14 @@
       "symmetric": false,
       "inverse_of": "belongs_to",
       "can_be_derived": false,
-      "description": "表示上级教学单元或结构化容器包含下级单元、知识对象或学习活动。",
+      "description": "表示结构化容器包含下级单元，或知识对象在原文明确表达分类、组成、步骤分解时包含子对象。",
       "source_types": [
         "Course",
         "Chapter",
-        "Section"
+        "Section",
+        "KnowledgePoint",
+        "Concept",
+        "AlgorithmOrMethod"
       ],
       "target_types": [
         "Chapter",
@@ -44,12 +47,32 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明确的容器关系。",
+      "derivation_constraints": {
+        "derive_inverse_only_when_source_types": [
+          "Course",
+          "Chapter",
+          "Section"
+        ],
+        "do_not_derive_inverse_when_source_types": [
+          "KnowledgePoint",
+          "Concept",
+          "Term",
+          "FormulaOrDefinition",
+          "AlgorithmOrMethod",
+          "Experiment",
+          "Assignment",
+          "ToolOrPlatform"
+        ],
+        "notes": "知识对象之间的 contains 只表达分类、组成或步骤分解，不自动反推 belongs_to。"
+      },
+      "extraction_hint": "用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明确的容器关系；知识对象之间仅在明确分类、组成或步骤分解时使用，不能因为同段出现或主题相关就建立 contains。",
       "examples": [
         "Course -> Chapter",
         "Chapter -> Section",
         "Section -> KnowledgePoint",
-        "Section -> Section"
+        "Section -> Section",
+        "Concept -> Concept",
+        "AlgorithmOrMethod -> Concept"
       ]
     },
     "belongs_to": {
@@ -205,12 +228,15 @@
         "Term"
       ],
       "target_types": [
-        "FormulaOrDefinition"
+        "FormulaOrDefinition",
+        "Term"
       ],
-      "extraction_hint": "用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系。",
+      "extraction_hint": "用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系；当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释不得用 defined_by，应进入实体 alias 或归一化字段。",
       "examples": [
         "进程 defined_by 进程定义",
-        "周转时间 defined_by 周转时间公式"
+        "周转时间 defined_by 周转时间公式",
+        "工作集 defined_by Δ",
+        "响应比 defined_by HRN"
       ]
     },
     "applied_in": {

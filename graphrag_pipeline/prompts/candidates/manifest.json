@@ -1,0 +1,100 @@
+{
+  "task": "candidate_prompt_generation",
+  "schema_version": "v1",
+  "generated_at": "2026-05-08T14:40:52+08:00",
+  "language": "zh",
+  "output_dir": "prompts/candidates",
+  "inputs": {
+    "schema_dir": "config/schema",
+    "entity_schema_path": "config/schema/entity_types.json",
+    "relation_schema_path": "config/schema/relation_types.json",
+    "extraction_rules_path": "config/schema/extraction_rules.md",
+    "samples_file": "data/prompt_tuning_samples/material_7_samples.json",
+    "audit_file": "data/eval/material_7_audit_extraction_set.json",
+    "default_prompt_dir": "prompts",
+    "default_prompt_source": "prompts/extract_graph.txt",
+    "auto_tuned_prompt_dir": "prompts/candidates/auto_tuned",
+    "auto_tuned_prompt_source": null
+  },
+  "candidates": [
+    {
+      "candidate_name": "default",
+      "source_type": "default_adapted",
+      "base_prompt_source": "prompts/extract_graph.txt",
+      "schema_used": false,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-08T14:40:52+08:00",
+      "files": {
+        "prompt": "prompts/candidates/default/prompt.txt",
+        "readme": "prompts/candidates/default/README.md"
+      },
+      "notes": [
+        "默认 Prompt 来源：prompts/extract_graph.txt",
+        "default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。",
+        "检测到 prompt tuning 样本 80 条，可供后续 few-shot/评测使用。"
+      ]
+    },
+    {
+      "candidate_name": "auto_tuned",
+      "source_type": "fallback_default_copy",
+      "base_prompt_source": null,
+      "schema_used": false,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-08T14:40:52+08:00",
+      "files": {
+        "prompt": "prompts/candidates/auto_tuned/prompt.txt",
+        "readme": "prompts/candidates/auto_tuned/README.md"
+      },
+      "notes": [
+        "官方 auto_tuned 占位候选尚未被真实 GraphRAG prompt-tune 结果覆盖，将继续回退到 default。",
+        "由于未发现实际 auto-tuned Prompt，当前候选内容回退为 default 候选 Prompt，以保证目录结构和后续切换流程可运行。"
+      ]
+    },
+    {
+      "candidate_name": "schema_aware",
+      "source_type": "schema_augmented",
+      "base_prompt_source": "prompts/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-08T14:40:52+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_aware/prompt.txt",
+        "readme": "prompts/candidates/schema_aware/README.md"
+      },
+      "notes": [
+        "schema_aware 优先基于默认 GraphRAG Prompt自动增强；若 auto_tuned 缺失则回退到 default。",
+        "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
+        "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。"
+      ]
+    },
+    {
+      "candidate_name": "schema_fewshot",
+      "source_type": "schema_fewshot",
+      "base_prompt_source": "prompts/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": true,
+      "fewshot_used": true,
+      "fewshot_example_count": 2,
+      "fewshot_strategy": "minimal_manual_examples",
+      "generation_time": "2026-05-08T14:40:52+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_fewshot/prompt.txt",
+        "readme": "prompts/candidates/schema_fewshot/README.md"
+      },
+      "notes": [
+        "schema_fewshot 继承 schema_aware，并继续沿用 默认 GraphRAG Prompt 作为底稿。",
+        "未发现可直接复用的 audit gold 标注，将退回手写最小 few-shot 示例。",
+        "当前 few-shot 使用手写最小示例，仅作为 audit gold 缺失时的降级方案。"
+      ]
+    }
+  ]
+}

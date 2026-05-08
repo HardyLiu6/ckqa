@@ -344,9 +344,9 @@ def load_schema_catalog(schema_dir: Path) -> SchemaCatalog:
         schema_version=_clean_string(entity_payload.get("schema_version") or relation_payload.get("schema_version")) or "unknown",
         entity_types=entity_items,
         relation_types=relation_items,
-        entity_schema_path=str(entity_path.resolve()),
-        relation_schema_path=str(relation_path.resolve()),
-        extraction_rules_path=str(rules_path.resolve()),
+        entity_schema_path=_safe_relpath(entity_path),
+        relation_schema_path=_safe_relpath(relation_path),
+        extraction_rules_path=_safe_relpath(rules_path),
         extraction_rules_text=rules_text,
     )
 
@@ -364,7 +364,7 @@ def load_default_prompt_source(default_prompt_dir: Path) -> PromptSource:
         path=prompt_path,
         text=prompt_path.read_text(encoding="utf-8"),
         source_type="default_file",
-        notes=[f"默认 Prompt 来源：{prompt_path.resolve()}"],
+        notes=[f"默认 Prompt 来源：{_safe_relpath(prompt_path)}"],
     )
 
 
@@ -412,7 +412,7 @@ def load_auto_tuned_prompt_source(
         notes=[
             "auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。",
             f"主要 Prompt 文件：{prompt_path.name}",
-            f"auto-tuned Prompt 来源：{prompt_path.resolve()}",
+            f"auto-tuned Prompt 来源：{_safe_relpath(prompt_path)}",
         ],
     )
 
@@ -838,8 +838,8 @@ def _candidate_manifest_entry(
         "fewshot_strategy": fewshot_strategy,
         "generation_time": generated_at,
         "files": {
-            "prompt": str((output_dir / candidate_name / "prompt.txt").resolve()),
-            "readme": str((output_dir / candidate_name / "README.md").resolve()),
+            "prompt": _safe_relpath(output_dir / candidate_name / "prompt.txt"),
+            "readme": _safe_relpath(output_dir / candidate_name / "README.md"),
         },
         "notes": list(notes),
     }
@@ -969,7 +969,7 @@ def generate_candidate_prompts(
             "name": "default",
             "prompt_text": default_prompt_text,
             "source_type": default_source_type,
-            "base_prompt_source": str(default_prompt_source.path.resolve()) if default_prompt_source.path else None,
+            "base_prompt_source": _safe_relpath(default_prompt_source.path),
             "schema_used": False,
             "audit_used": False,
             "fewshot_used": False,
@@ -981,7 +981,7 @@ def generate_candidate_prompts(
             "name": "auto_tuned",
             "prompt_text": auto_tuned_prompt_text,
             "source_type": auto_tuned_source_type,
-            "base_prompt_source": str(auto_tuned_prompt_source.path.resolve()) if auto_tuned_prompt_source.path else None,
+            "base_prompt_source": _safe_relpath(auto_tuned_prompt_source.path),
             "schema_used": False,
             "audit_used": False,
             "fewshot_used": False,
@@ -993,7 +993,7 @@ def generate_candidate_prompts(
             "name": "schema_aware",
             "prompt_text": schema_aware_prompt_text,
             "source_type": "schema_augmented",
-            "base_prompt_source": str(schema_aware_base_source.resolve()) if schema_aware_base_source else None,
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
             "schema_used": True,
             "audit_used": False,
             "fewshot_used": False,
@@ -1005,7 +1005,7 @@ def generate_candidate_prompts(
             "name": "schema_fewshot",
             "prompt_text": schema_fewshot_prompt_text,
             "source_type": "schema_fewshot",
-            "base_prompt_source": str(schema_aware_base_source.resolve()) if schema_aware_base_source else None,
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
             "schema_used": True,
             "audit_used": bool(audit_records),
             "fewshot_used": bool(fewshot_examples),
@@ -1063,18 +1063,18 @@ def generate_candidate_prompts(
         "schema_version": schema_catalog.schema_version,
         "generated_at": generated_at,
         "language": language,
-        "output_dir": str(output_dir.resolve()),
+        "output_dir": _safe_relpath(output_dir),
         "inputs": {
-            "schema_dir": str(schema_dir.resolve()),
+            "schema_dir": _safe_relpath(schema_dir),
             "entity_schema_path": schema_catalog.entity_schema_path,
             "relation_schema_path": schema_catalog.relation_schema_path,
             "extraction_rules_path": schema_catalog.extraction_rules_path,
-            "samples_file": str(resolved_samples_file.resolve()) if resolved_samples_file else None,
-            "audit_file": str(resolved_audit_file.resolve()) if resolved_audit_file else None,
-            "default_prompt_dir": str(default_prompt_dir.resolve()),
-            "default_prompt_source": str(default_prompt_source.path.resolve()) if default_prompt_source.path else None,
-            "auto_tuned_prompt_dir": str(auto_tuned_prompt_dir.resolve()),
-            "auto_tuned_prompt_source": str(auto_tuned_prompt_source.path.resolve()) if auto_tuned_prompt_source.path else None,
+            "samples_file": _safe_relpath(resolved_samples_file),
+            "audit_file": _safe_relpath(resolved_audit_file),
+            "default_prompt_dir": _safe_relpath(default_prompt_dir),
+            "default_prompt_source": _safe_relpath(default_prompt_source.path),
+            "auto_tuned_prompt_dir": _safe_relpath(auto_tuned_prompt_dir),
+            "auto_tuned_prompt_source": _safe_relpath(auto_tuned_prompt_source.path),
         },
         "candidates": manifest_candidates,
     }
@@ -1103,7 +1103,7 @@ def generate_candidate_prompts(
             "example_ids": [example.example_id for example in fewshot_examples],
         },
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
-        "manifest_path": str(manifest_path.resolve()),
+        "manifest_path": _safe_relpath(manifest_path),
         "notes": [
             "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
             "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",

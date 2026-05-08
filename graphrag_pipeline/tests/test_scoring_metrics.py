@@ -20,6 +20,8 @@ from scoring_metrics import (
     HARD_METRIC_KEYS,
     SOFT_METRIC_KEYS,
     aggregate_candidate_metrics,
+    analyze_endpoint_validity,
+    can_derive_inverse_relation,
     compute_composite_hard,
     compute_composite_score,
     compute_composite_soft,
@@ -151,6 +153,7 @@ class TestTypeValidity(unittest.TestCase):
 RELATION_SCHEMA = {
     "contains": {"source_types": ["Course", "Chapter"], "target_types": ["Chapter", "Concept"]},
     "related_to": {"source_types": ["Concept"], "target_types": ["Concept"]},
+    "defined_by": {"source_types": ["Concept"], "target_types": ["FormulaOrDefinition", "Term"]},
 }
 
 
@@ -208,6 +211,88 @@ class TestEndpointValidRate(unittest.TestCase):
             )
         ]
         self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+    def test_defined_by_term_symbol_endpoint_is_valid(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "工作集", "type": "Concept"},
+                    {"id": "e2", "title": "Δ", "type": "Term"},
+                ],
+                [
+                    {
+                        "source": "工作集",
+                        "target": "Δ",
+                        "type": "defined_by",
+                        "description": "工作集由窗口尺寸符号 Δ 参数化定义。",
+                        "evidence": "变量 Δ 称为工作集的窗口尺寸。",
+                    }
+                ],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+    def test_defined_by_term_alias_endpoint_is_invalid(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "TLB", "type": "Concept"},
+                    {"id": "e2", "title": "Translation Lookaside Buffer", "type": "Term"},
+                ],
+                [
+                    {
+                        "source": "TLB",
+                        "target": "Translation Lookaside Buffer",
+                        "type": "defined_by",
+                        "description": "TLB 是 Translation Lookaside Buffer 的缩写。",
+                        "evidence": "Translation Lookaside Buffer，TLB",
+                    }
+                ],
+            )
+        ]
+        analysis = analyze_endpoint_validity(results, RELATION_SCHEMA)
+        self.assertEqual(analysis["valid_rate"], 0.0)
+        self.assertEqual(analysis["invalid_count"], 1)
+        self.assertEqual(
+            analysis["invalid_combinations"][0]["suggested_action"],
+            "alias_not_relation",
+        )
+
+    def test_endpoint_analysis_groups_invalid_combinations_with_suggested_action(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "关键字", "type": "Concept"},
+                    {"id": "e2", "title": "记录", "type": "Concept"},
+                ],
+                [
+                    {
+                        "source": "关键字",
+                        "target": "记录",
+                        "type": "contains",
+                        "description": "关键字和记录在同一段出现。",
+                        "evidence": "关键字是唯一能标识一个记录的数据项。",
+                    }
+                ],
+            )
+        ]
+        analysis = analyze_endpoint_validity(results, RELATION_SCHEMA)
+        self.assertEqual(analysis["total"], 1)
+        self.assertEqual(analysis["valid"], 0)
+        self.assertEqual(analysis["invalid_combinations"][0]["relation_type"], "contains")
+        self.assertIn("suggested_action", analysis["invalid_combinations"][0])
+
+    def test_contains_inverse_derivation_is_limited_to_structural_sources(self):
+        schema = {
+            "contains": {
+                "inverse_of": "belongs_to",
+                "derivation_constraints": {
+                    "derive_inverse_only_when_source_types": ["Course", "Chapter", "Section"]
+                },
+            }
+        }
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
 
 
 class TestDuplicateAndNoise(unittest.TestCase):

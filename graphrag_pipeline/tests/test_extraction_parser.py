@@ -51,6 +51,30 @@ class TestExtractionParser(unittest.TestCase):
         self.assertEqual(result.parser_error_code, "truncated_json")
         self.assertIn("截断", result.error or "")
 
+    def test_parse_json_repairs_latex_style_invalid_backslash_escape(self):
+        result = parse_extraction_output(
+            r"""
+{
+  "entities": [
+    {
+      "id": "e1",
+      "title": "工作集",
+      "type": "Concept",
+      "description": "工作集定义使用窗口尺寸变量",
+      "evidence": "某段时间间隔 \Delta 里访问页面的集合"
+    }
+  ],
+  "relationships": []
+}
+""",
+            sample_id="pts-002",
+            candidate="schema_aware",
+            schema_catalog=_build_schema_catalog(),
+        )
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.entities[0].evidence, r"某段时间间隔 \Delta 里访问页面的集合")
+
 
 if __name__ == "__main__":
     unittest.main()

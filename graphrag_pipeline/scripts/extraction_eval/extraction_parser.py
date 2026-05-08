@@ -203,7 +203,37 @@ def _repair_json_text(text: str) -> str:
 
     repaired = repaired.replace("“", '"').replace("”", '"').replace("’", "'")
     repaired = re.sub(r",(\s*[}\]])", r"\1", repaired)
+    repaired = _escape_invalid_json_backslashes(repaired)
     return repaired.strip()
+
+
+def _escape_invalid_json_backslashes(text: str) -> str:
+    r"""修复模型证据中的 LaTeX 风格单反斜杠，例如 ``\Delta``。
+
+    JSON 只允许有限转义字符；教材内容常带 LaTeX 命令，模型偶尔会输出
+    未双写的 ``\Delta`` / ``\mathbf``。这里只补非法单反斜杠，不改动
+    ``\n``、``\uXXXX``、``\\`` 等合法 JSON 转义。
+    """
+
+    valid_escape_next = {'"', "\\", "/", "b", "f", "n", "r", "t", "u"}
+    output: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char != "\\":
+            output.append(char)
+            index += 1
+            continue
+
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if next_char in valid_escape_next:
+            output.append(char)
+            output.append(next_char)
+            index += 2
+        else:
+            output.append("\\\\")
+            index += 1
+    return "".join(output)
 
 
 def _extract_payload_root(payload: Any) -> dict[str, Any] | None:

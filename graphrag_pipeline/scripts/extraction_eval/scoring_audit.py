@@ -68,6 +68,16 @@ def canonicalize_gold_aliases(aliases: Sequence[str]) -> tuple[str, ...]:
 class AuditEntry:
     gold_entities: list[dict]
     gold_relations: list[dict]
+    gold_seed: bool = False
+    gold_seed_version: str = ""
+
+
+REQUIRED_MANUAL_GOLD_SEED_RELATION_TYPES: tuple[str, ...] = (
+    "defined_by",
+    "applied_in",
+    "depends_on",
+)
+MANUAL_GOLD_SEED_VERSION = "manual_gold_seed_v1"
 
 
 def load_audit_index(path: Path) -> dict[str, AuditEntry]:
@@ -81,8 +91,42 @@ def load_audit_index(path: Path) -> dict[str, AuditEntry]:
         index[sample_id] = AuditEntry(
             gold_entities=list(sample.get("gold_entities") or []),
             gold_relations=list(sample.get("gold_relations") or []),
+            gold_seed=bool(sample.get("gold_seed")),
+            gold_seed_version=str(sample.get("gold_seed_version") or ""),
         )
     return index
+
+
+def summarize_manual_gold_seed_coverage(
+    audit_index: dict[str, AuditEntry],
+    *,
+    required_relation_types: Sequence[str] = REQUIRED_MANUAL_GOLD_SEED_RELATION_TYPES,
+    required_version: str = MANUAL_GOLD_SEED_VERSION,
+) -> dict:
+    seed_entries = {
+        sample_id: entry
+        for sample_id, entry in audit_index.items()
+        if entry.gold_seed and entry.gold_seed_version == required_version
+    }
+    covered_relation_types = sorted(
+        {
+            str(relation.get("type") or "")
+            for entry in seed_entries.values()
+            for relation in entry.gold_relations
+            if str(relation.get("type") or "")
+        }
+    )
+    required = tuple(required_relation_types)
+    missing = [relation_type for relation_type in required if relation_type not in covered_relation_types]
+    return {
+        "gold_seed_version": required_version,
+        "gold_seed_count": len(seed_entries),
+        "gold_seed_sample_ids": sorted(seed_entries),
+        "gold_seed_relation_types": covered_relation_types,
+        "gold_seed_required_relation_types": list(required),
+        "gold_seed_missing_relation_types": missing,
+        "gold_seed_coverage_passed": bool(seed_entries) and not missing,
+    }
 
 
 def _align_one(

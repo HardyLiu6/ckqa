@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -102,17 +103,49 @@ def write_top_candidates_json(
     k: int,
     weights: dict[str, float],
     inputs: dict[str, Any],
+    artifact_binding: dict[str, Any] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    binding = dict(artifact_binding or {})
+    binding.pop("scoring_result_sha256", None)
     payload = {
         "task": "extraction_score_top_candidates",
         "k": k,
         "weights": weights,
         "inputs": inputs,
-        "top_candidates": list(ranked[:k]),
-        "all_candidates_ranked": list(ranked),
+        "artifact_binding": binding,
+        "top_candidates": _with_candidate_bindings(list(ranked[:k]), binding),
+        "all_candidates_ranked": _with_candidate_bindings(list(ranked), binding),
     }
+    scoring_hash = _payload_sha256(payload)
+    payload["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+    for row in payload["top_candidates"]:
+        row["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+    for row in payload["all_candidates_ranked"]:
+        row["artifact_binding"]["scoring_result_sha256"] = scoring_hash
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _payload_sha256(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _with_candidate_bindings(rows: list[dict], binding: dict[str, Any]) -> list[dict]:
+    result: list[dict] = []
+    for row in rows:
+        copied = dict(row)
+        copied["artifact_binding"] = {
+            **binding,
+            "candidate_id": str(row.get("candidate") or ""),
+        }
+        result.append(copied)
+    return result
 
 
 def write_run_meta(
@@ -126,6 +159,7 @@ def write_run_meta(
     top_k: int,
     top_candidates: list[str],
     total_candidates: int,
+    artifact_binding: dict[str, Any] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -138,6 +172,7 @@ def write_run_meta(
         "top_candidates": list(top_candidates),
         "weights": weights,
         "inputs": inputs,
+        "artifact_binding": artifact_binding or {},
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

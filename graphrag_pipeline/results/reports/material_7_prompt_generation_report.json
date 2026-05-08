@@ -1,0 +1,37 @@
+{
+  "task": "candidate_prompt_generation_report",
+  "generated_at": "2026-05-08T14:40:52+08:00",
+  "schema_version": "v1",
+  "counts": {
+    "entity_type_count": 11,
+    "relation_type_count": 10,
+    "sample_count": 80,
+    "audit_sample_count": 20,
+    "fewshot_example_count": 2
+  },
+  "fallbacks": {
+    "default_prompt_missing": false,
+    "auto_tuned_missing": true,
+    "audit_gold_missing": true
+  },
+  "fewshot": {
+    "strategy": "minimal_manual_examples",
+    "source_sample_ids": [],
+    "example_ids": [
+      "manual-definition",
+      "manual-method"
+    ]
+  },
+  "candidate_names": [
+    "default",
+    "auto_tuned",
+    "schema_aware",
+    "schema_fewshot"
+  ],
+  "manifest_path": "prompts/candidates/manifest.json",
+  "notes": [
+    "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
+    "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
+    "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。"
+  ]
+}

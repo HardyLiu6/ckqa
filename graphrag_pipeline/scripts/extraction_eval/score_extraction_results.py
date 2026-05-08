@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -33,11 +34,13 @@ from .extraction_schema import (
     ExtractionRelationship,
     StructuredExtractionResult,
 )
+from .prompt_loader import is_fallback_auto_tuned_entry
 from .scoring_audit import (
     compute_audit_entity_precision,
     compute_audit_entity_recall,
     compute_audit_relation_recall,
     load_audit_index,
+    summarize_manual_gold_seed_coverage,
 )
 from .scoring_metrics import (
     DEFAULT_WEIGHTS,
@@ -98,6 +101,46 @@ def _load_eval_file(path: Path) -> tuple[str, list[StructuredExtractionResult]]:
     return candidate, results
 
 
+def _candidate_should_be_skipped(eval_file: Path, *, root: Path, include_fallback_auto_tuned: bool) -> str | None:
+    if include_fallback_auto_tuned:
+        return None
+    payload = json.loads(eval_file.read_text(encoding="utf-8"))
+    candidate = str(payload.get("candidate") or eval_file.stem).strip()
+    if candidate != "auto_tuned":
+        return None
+    manifest_file = _resolve_manifest_from_eval_payload(payload, root=root)
+    if manifest_file is None or not manifest_file.exists():
+        return None
+    manifest_payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+    raw_candidates = manifest_payload.get("candidates") or []
+    for entry in raw_candidates:
+        if isinstance(entry, dict) and is_fallback_auto_tuned_entry(entry):
+            return candidate
+    return None
+
+
+def _resolve_manifest_from_eval_payload(payload: dict[str, Any], *, root: Path) -> Path | None:
+    raw_manifest = str(payload.get("manifest_file") or "").strip()
+    if not raw_manifest:
+        return None
+    manifest_path = Path(raw_manifest)
+    if manifest_path.is_absolute():
+        return manifest_path.resolve()
+    return (root / manifest_path).resolve()
+
+
+def _audit_gold_available(audit_index: dict[str, Any]) -> bool:
+    return any(entry.gold_entities or entry.gold_relations for entry in audit_index.values())
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _generate_run_id(now: dt.datetime | None = None) -> str:
     """生成 ISO 紧凑时间戳作为 run_id（便于排序、人读）。"""
 
@@ -125,6 +168,36 @@ def _detect_git_sha(root: Path) -> str | None:
     return sha or None
 
 
+def _build_artifact_binding(*, root: Path, run_id: str, eval_files: Sequence[Path]) -> dict[str, Any]:
+    manifest_path: Path | None = None
+    for eval_file in eval_files:
+        try:
+            payload = json.loads(eval_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        resolved = _resolve_manifest_from_eval_payload(payload, root=root)
+        if resolved and resolved.exists():
+            manifest_path = resolved
+            break
+
+    default_manifest = (root / "prompts" / "candidates" / "manifest.json").resolve()
+    if manifest_path is None and default_manifest.exists():
+        manifest_path = default_manifest
+
+    return {
+        "run_id": run_id,
+        "manifest_path": str(manifest_path) if manifest_path else None,
+        "manifest_sha256": _sha256_file(manifest_path) if manifest_path else None,
+        "eval_file_sha256s": [
+            {
+                "path": str(path),
+                "sha256": _sha256_file(path),
+            }
+            for path in eval_files
+        ],
+    }
+
+
 def score_extraction_results(
     *,
     root: Path,
@@ -136,6 +209,7 @@ def score_extraction_results(
     top_k: int,
     overwrite: bool,
     run_id: str | None = None,
+    include_fallback_auto_tuned: bool = False,
 ) -> dict[str, Any]:
     root = Path(root).resolve()
     eval_root = _resolve(eval_dir, root=root, default=DEFAULT_EVAL_DIR)
@@ -167,20 +241,42 @@ def score_extraction_results(
     audit_index = {}
     if audit_file and audit_file.exists():
         audit_index = load_audit_index(audit_file)
+    audit_gold_available = _audit_gold_available(audit_index) if audit_index else None
+    gold_seed_summary = (
+        summarize_manual_gold_seed_coverage(audit_index) if audit_index else {
+            "gold_seed_version": "manual_gold_seed_v1",
+            "gold_seed_count": 0,
+            "gold_seed_sample_ids": [],
+            "gold_seed_relation_types": [],
+            "gold_seed_required_relation_types": ["defined_by", "applied_in", "depends_on"],
+            "gold_seed_missing_relation_types": ["defined_by", "applied_in", "depends_on"],
+            "gold_seed_coverage_passed": False,
+        }
+    )
+    audit_metrics_enabled = bool(audit_gold_available and gold_seed_summary["gold_seed_coverage_passed"])
 
     effective_weights = dict(weights or DEFAULT_WEIGHTS)
 
     metrics_by_candidate: dict[str, dict[str, Any]] = {}
+    skipped_candidates: list[str] = []
     for eval_file in eval_files:
+        skipped_candidate = _candidate_should_be_skipped(
+            eval_file,
+            root=root,
+            include_fallback_auto_tuned=include_fallback_auto_tuned,
+        )
+        if skipped_candidate:
+            skipped_candidates.append(skipped_candidate)
+            continue
         candidate, results = _load_eval_file(eval_file)
         audit_ent = (
-            compute_audit_entity_recall(results, audit_index) if audit_index else None
+            compute_audit_entity_recall(results, audit_index) if audit_metrics_enabled else None
         )
         audit_ent_prec = (
-            compute_audit_entity_precision(results, audit_index) if audit_index else None
+            compute_audit_entity_precision(results, audit_index) if audit_metrics_enabled else None
         )
         audit_rel = (
-            compute_audit_relation_recall(results, audit_index) if audit_index else None
+            compute_audit_relation_recall(results, audit_index) if audit_metrics_enabled else None
         )
         metrics = aggregate_candidate_metrics(
             results,
@@ -193,6 +289,9 @@ def score_extraction_results(
         )
         metrics["composite_score"] = compute_composite_score(metrics, effective_weights)
         metrics_by_candidate[candidate] = metrics
+
+    if not metrics_by_candidate:
+        raise ValueError("没有可评分的候选 Prompt；auto_tuned 当前可能只是 fallback 占位")
 
     ranked = rank_candidates(metrics_by_candidate)
     top = select_top_k(ranked, k=top_k)
@@ -216,8 +315,17 @@ def score_extraction_results(
         "entity_schema_path": str(entity_schema_file),
         "relation_schema_path": str(relation_schema_file),
         "audit_path": str(audit_file) if audit_file and audit_file.exists() else None,
+        "audit_gold_available": audit_gold_available,
         "eval_files": [str(p) for p in eval_files],
+        "skipped_candidates": skipped_candidates,
+        "audit_metrics_enabled": audit_metrics_enabled,
+        **gold_seed_summary,
     }
+    artifact_binding = _build_artifact_binding(
+        root=root,
+        run_id=effective_run_id,
+        eval_files=eval_files,
+    )
 
     write_extraction_compare_csv(run_csv, ranked)
     write_extraction_compare_markdown(
@@ -226,7 +334,10 @@ def score_extraction_results(
     write_top_candidates_json(
         run_top, ranked=ranked, k=top_k,
         weights=effective_weights, inputs=inputs,
+        artifact_binding=artifact_binding,
     )
+    top_payload = json.loads(run_top.read_text(encoding="utf-8"))
+    artifact_binding = top_payload.get("artifact_binding") or artifact_binding
     write_run_meta(
         run_meta_path,
         run_id=effective_run_id,
@@ -237,6 +348,7 @@ def score_extraction_results(
         top_k=top_k,
         top_candidates=[item["candidate"] for item in top],
         total_candidates=len(ranked),
+        artifact_binding=artifact_binding,
     )
 
     history_path = scoring_root / "history.csv"
@@ -256,6 +368,7 @@ def score_extraction_results(
         "run_id": effective_run_id,
         "eval_files": [str(p) for p in eval_files],
         "total_candidates": len(ranked),
+        "skipped_candidates": skipped_candidates,
         "top_k": top_k,
         "top_candidates": [item["candidate"] for item in top],
         "reports": {
@@ -267,6 +380,7 @@ def score_extraction_results(
             "markdown": str(run_md),
             "top_candidates_json": str(run_top),
         },
+        "artifact_binding": artifact_binding,
     }
 
 
@@ -281,6 +395,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weights", help="权重覆盖文件（JSON）")
     parser.add_argument("--top-k", type=int, default=2, help="保留前 K 名候选")
     parser.add_argument("--run-id", help="自定义 run_id，默认按本地时间生成 ISO 紧凑时间戳")
+    parser.add_argument(
+        "--include-fallback-auto-tuned",
+        action="store_true",
+        help="默认跳过 fallback_default_copy 的 auto_tuned；传入后才参与评分",
+    )
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有报告产物")
     return parser
 
@@ -300,6 +419,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         top_k=args.top_k,
         overwrite=args.overwrite,
         run_id=args.run_id,
+        include_fallback_auto_tuned=args.include_fallback_auto_tuned,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

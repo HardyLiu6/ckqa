@@ -147,6 +147,11 @@ graphrag_pipeline/output/
 graphrag_pipeline/input/
 graphrag_pipeline/inputs/artifacts/
 graphrag_pipeline/runtime/kb-build-runs/
+graphrag_pipeline/results/extraction_eval/*.json
+graphrag_pipeline/results/extraction_eval/runs/
+graphrag_pipeline/results/extraction_raw/
+graphrag_pipeline/results/errors/
+graphrag_pipeline/results/reports/extraction_scoring/
 
 # LanceDB
 graphrag_pipeline/**/lancedb/

@@ -1,0 +1,52 @@
+{
+  "schema_version": "v1",
+  "task": "material_qa_smoke",
+  "course_id": "crs-20260506-r4slkr",
+  "material_id": 7,
+  "source_file": "计算机操作系统教材",
+  "description": "material_7 Prompt 调优完成后的最小问答 smoke 集。先用关键词和证据章节做低成本校验，完整 BenchmarkQED 留到下一阶段。",
+  "questions": [
+    {
+      "id": "material-7-qa-001",
+      "question": "进程的基本特征有哪些？",
+      "expected_keywords": ["动态性", "并发性", "独立性", "异步性"],
+      "evidence_heading": "第二章 进程的描述与控制 > 2.2 进程的描述 > 2.2.1 进程的定义和特征"
+    },
+    {
+      "id": "material-7-qa-002",
+      "question": "分页存储管理中页表的作用是什么？",
+      "expected_keywords": ["页号", "物理块号", "地址映射", "页表"],
+      "evidence_heading": "第四章 存储器管理 > 4.5 分页存储管理方式 > 4.5.1 分页存储管理的基本方法"
+    },
+    {
+      "id": "material-7-qa-003",
+      "question": "虚拟存储器通常具有哪些特征？",
+      "expected_keywords": ["离散性", "多次性", "对换性", "虚拟性"],
+      "evidence_heading": "第五章 虚拟存储器"
+    },
+    {
+      "id": "material-7-qa-004",
+      "question": "I/O 软件通常分为哪些层次？",
+      "expected_keywords": ["中断处理程序", "设备驱动程序", "设备独立性软件", "用户层软件"],
+      "evidence_heading": "第六章 输入输出系统"
+    },
+    {
+      "id": "material-7-qa-005",
+      "question": "文件分配常见的组织方式有哪些？",
+      "expected_keywords": ["连续分配", "链接分配", "索引分配"],
+      "evidence_heading": "第七章 文件管理"
+    },
+    {
+      "id": "material-7-qa-006",
+      "question": "磁盘访问时间由哪几部分组成？",
+      "expected_keywords": ["寻道时间", "旋转延迟", "传输时间"],
+      "evidence_heading": "第八章 磁盘存储器的管理"
+    },
+    {
+      "id": "material-7-qa-007",
+      "question": "计算机病毒和蠕虫的主要区别是什么？",
+      "expected_keywords": ["病毒", "蠕虫", "寄生", "独立的进程", "自我复制"],
+      "evidence_heading": "第十二章 保护和安全 > 12.5 来自系统外部的攻击 > 12.5.1 病毒、蠕虫和移动代码"
+    }
+  ]
+}

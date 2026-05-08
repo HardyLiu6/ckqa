@@ -26,12 +26,24 @@ ENTITY_SCHEMA = {
 
 RELATION_SCHEMA = {
     "schema_version": "v1",
-    "relation_type_order": ["contains"],
+    "relation_type_order": ["contains", "defined_by", "applied_in", "depends_on"],
     "relation_types": {
         "contains": {
             "label_zh": "包含", "description": "包含",
             "source_types": ["Course"], "target_types": ["Chapter"],
-        }
+        },
+        "defined_by": {
+            "label_zh": "由…定义", "description": "定义",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
+        "applied_in": {
+            "label_zh": "应用于", "description": "应用",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
+        "depends_on": {
+            "label_zh": "依赖于", "description": "依赖",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
     },
 }
 
@@ -216,6 +228,245 @@ class TestEndToEnd(unittest.TestCase):
             # 非 git 根，git_sha 应为 None
             self.assertIn("git_sha", meta)
             self.assertIsNone(meta["git_sha"])
+
+    def test_fallback_auto_tuned_eval_is_skipped_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_dir = root / "prompts" / "candidates"
+            manifest_dir.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path = manifest_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {"candidate_name": "default", "source_type": "default_adapted"},
+                            {"candidate_name": "auto_tuned", "source_type": "fallback_default_copy"},
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            default_eval = _make_eval("default", 1)
+            default_eval["manifest_file"] = str(manifest_path)
+            auto_eval = _make_eval("auto_tuned", 3)
+            auto_eval["manifest_file"] = str(manifest_path)
+            (eval_dir / "default.json").write_text(json.dumps(default_eval, ensure_ascii=False), encoding="utf-8")
+            (eval_dir / "auto_tuned.json").write_text(json.dumps(auto_eval, ensure_ascii=False), encoding="utf-8")
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=None,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=2,
+                overwrite=True,
+                run_id="skip-fallback",
+            )
+
+            self.assertEqual(summary["total_candidates"], 1)
+            self.assertEqual(summary["top_candidates"], ["default"])
+            self.assertEqual(summary["skipped_candidates"], ["auto_tuned"])
+            meta = json.loads(Path(summary["reports"]["run_meta"]).read_text(encoding="utf-8"))
+            self.assertEqual(meta["inputs"]["skipped_candidates"], ["auto_tuned"])
+
+    def test_empty_audit_gold_is_reported_as_unavailable_not_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "empty-gold"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(_make_eval("default", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "s1",
+                                "gold_entities": [],
+                                "gold_relations": [],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="empty-gold",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            best = top["top_candidates"][0]
+            self.assertFalse(top["inputs"]["audit_gold_available"])
+            self.assertIsNone(best["audit_entity_recall"])
+            self.assertIsNone(best["audit_entity_precision"])
+            self.assertIsNone(best["audit_relation_recall"])
+
+    def test_manual_gold_seed_coverage_required_before_audit_metrics_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "seed-coverage"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(_make_eval("default", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "s1",
+                                "gold_seed": True,
+                                "gold_seed_version": "manual_gold_seed_v1",
+                                "gold_entities": [
+                                    {
+                                        "entity_id": "g1",
+                                        "name": "操作系统",
+                                        "type": "Course",
+                                        "alias": [],
+                                    },
+                                    {
+                                        "entity_id": "g2",
+                                        "name": "第一章",
+                                        "type": "Chapter",
+                                        "alias": [],
+                                    },
+                                ],
+                                "gold_relations": [
+                                    {
+                                        "relation_id": "r1",
+                                        "source_entity_id": "g1",
+                                        "target_entity_id": "g2",
+                                        "type": "defined_by",
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="seed-coverage",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            best = top["top_candidates"][0]
+            self.assertTrue(top["inputs"]["audit_gold_available"])
+            self.assertFalse(top["inputs"]["gold_seed_coverage_passed"])
+            self.assertEqual(
+                sorted(top["inputs"]["gold_seed_missing_relation_types"]),
+                ["applied_in", "depends_on"],
+            )
+            self.assertIsNone(best["audit_entity_recall"])
+            self.assertIsNone(best["audit_entity_precision"])
+            self.assertIsNone(best["audit_relation_recall"])
+
+    def test_scoring_report_contains_artifact_binding_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "binding"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path.write_text(
+                json.dumps({"candidates": [{"candidate_name": "default"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            eval_payload = _make_eval("default", 1)
+            eval_payload["manifest_file"] = str(manifest_path)
+            (eval_dir / "default.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="binding",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            binding = top["artifact_binding"]
+            self.assertEqual(binding["run_id"], "binding")
+            self.assertEqual(binding["manifest_path"], str(manifest_path.resolve()))
+            self.assertRegex(binding["manifest_sha256"], r"^[0-9a-f]{64}$")
+            self.assertRegex(binding["scoring_result_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(top["top_candidates"][0]["artifact_binding"]["candidate_id"], "default")
+            self.assertEqual(
+                top["top_candidates"][0]["artifact_binding"]["scoring_result_sha256"],
+                binding["scoring_result_sha256"],
+            )
+            self.assertEqual(len(binding["eval_file_sha256s"]), 1)
 
 
 if __name__ == "__main__":

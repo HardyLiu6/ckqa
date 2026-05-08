@@ -314,6 +314,39 @@
 1. 如果文本表达为“X 包含 Y”“本章介绍 Y”，优先抽 `contains`。
 2. 如果文本表达为“Y 属于 X”“Y 位于第 3 章”，可抽 `belongs_to`。
 3. 后续脚本可以根据需要自动补齐反向边，但原始抽取不要求强制双向输出。
+4. `belongs_to` 的目标只能是 `Course`、`Chapter`、`Section` 这类结构容器。
+5. 只有当 `contains.source_type` 是 `Course`、`Chapter`、`Section` 时，才允许自动派生反向 `belongs_to`。
+6. 知识对象之间的 `contains` 只在原文明示分类、组成或步骤分解时使用，不派生反向 `belongs_to`。
+7. 共现、同段出现、主题相关不构成 `contains`。
+
+正确示例：
+
+1. `媒体 contains 感觉媒体`，因为原文明确列出“媒体可分为以下六类”。
+2. `分页存储管理 contains 页面`，因为原文在方法内明确分解页面和物理块。
+
+错误示例：
+
+1. `关键字 contains 记录`，仅因“关键字标识记录”同句出现，不是组成关系。
+2. `概念A belongs_to 概念B`，`belongs_to` 不能指向知识对象。
+
+### 7.3.1 defined_by 与 alias 的边界
+
+规则：
+
+1. `defined_by` 指向 `FormulaOrDefinition` 时，用于正式定义、公式、定律或判定条件。
+2. `defined_by` 指向 `Term` 时，`Term` 必须承担符号、变量、参数或公式记号角色。
+3. 英文全称、简称、缩写、别名解释不使用 `defined_by`，应进入实体 alias 或归一化字段。
+
+正确示例：
+
+1. `工作集 defined_by Δ`
+2. `响应比 defined_by HRN`
+
+错误示例：
+
+1. `PCB defined_by Process Control Block`
+2. `TLB defined_by Translation Lookaside Buffer`
+3. `进程 defined_by process`
 
 ### 7.4 depends_on 与 prerequisite_of
 
@@ -330,6 +363,7 @@
 1. 当实体只是出现在某章、某节、某实验或某题组中，但没有更强关系时，用 `appears_in`。
 2. 如果能判断“知识点用于实验”，应使用 `applied_in` 而不是 `appears_in`。
 3. 如果能判断“知识点被作业考核”，应使用 `evaluated_by` 而不是 `appears_in`。
+4. `appears_in` 的目标只能是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment`，不能指向另一个知识对象。
 
 ## 8. 对课程通知、无意义短语、图表残片的处理
 

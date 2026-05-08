@@ -222,7 +222,6 @@ def _python_module_invocation_choices(root: Path) -> List[InvocationChoice]:
 def _default_runner(command: List[str], cwd: Path, env: Dict[str, str]) -> CommandExecutionResult:
     started = _now_iso()
     started_at = time.perf_counter()
-    ended = _now_iso()
     try:
         completed = subprocess.run(
             command,
@@ -235,6 +234,7 @@ def _default_runner(command: List[str], cwd: Path, env: Dict[str, str]) -> Comma
             check=False,
         )
         duration = time.perf_counter() - started_at
+        ended = _now_iso()
         return CommandExecutionResult(
             command=command,
             cwd=str(cwd),
@@ -247,6 +247,7 @@ def _default_runner(command: List[str], cwd: Path, env: Dict[str, str]) -> Comma
         )
     except OSError as exc:
         duration = time.perf_counter() - started_at
+        ended = _now_iso()
         return CommandExecutionResult(
             command=command,
             cwd=str(cwd),
@@ -958,6 +959,7 @@ def run_prompt_tune(
                     "duration_seconds": execution.duration_seconds,
                     "exit_code": execution.exit_code,
                     "primary_prompt_file": collected["primary_prompt_file"],
+                    "primary_prompt_path": collected["primary_prompt_path"],
                     "collected_files": collected["collected_files"],
                     "manifest_candidate_count": len(manifest_payload.get("candidates", [])),
                 }

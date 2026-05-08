@@ -29,10 +29,17 @@ def render_extraction_messages(
     schema_catalog: SchemaCatalog,
     max_entities: int | None = None,
     max_relationships: int | None = None,
+    candidate_view_mode: str = "compact",
+    max_prompt_chars: int = 1800,
 ) -> list[dict[str, str]]:
     """构造 OpenAI 兼容 chat.completions 所需消息。"""
 
-    rendered_candidate_prompt = _render_candidate_prompt(candidate.prompt_text, sample)
+    rendered_candidate_prompt = _render_candidate_prompt(
+        candidate.prompt_text,
+        sample,
+        candidate_view_mode=candidate_view_mode,
+        max_prompt_chars=max_prompt_chars,
+    )
     json_schema_example = _build_json_schema_example(schema_catalog)
 
     system_message = (
@@ -44,6 +51,10 @@ def render_extraction_messages(
     output_budget_hint = _build_output_budget_hint(
         max_entities=max_entities,
         max_relationships=max_relationships,
+    )
+    scope_hint = (
+        "不要把课程名、资料名、章标题、节标题当作实体批量输出；"
+        "只有当原文正在解释这些结构本身时才保留。"
     )
 
     user_message = f"""你将收到一份候选 Prompt、课程抽取 schema 和一个课程样本文本。
@@ -58,7 +69,8 @@ def render_extraction_messages(
 7. 如果没有足够证据，可以返回空数组，但不要编造。
 8. 若候选 Prompt 中仍出现 tuple/record delimiter 说明，仅把它视为候选策略参考，不要真的输出 tuple。
 9. 只输出合法 JSON，不要输出 ```json code fence。
-10. {output_budget_hint}
+10. {scope_hint}
+11. {output_budget_hint}
 
 输出 JSON 结构示例：
 ```json
@@ -71,10 +83,15 @@ def render_extraction_messages(
 关系类型摘要：
 {schema_catalog.render_relation_type_summary()}
 
-候选 Prompt（已注入当前样本文本）：
+候选 Prompt 策略摘要：
 ----- CANDIDATE PROMPT START -----
 {rendered_candidate_prompt}
 ----- CANDIDATE PROMPT END -----
+
+样本文本上下文：
+----- SAMPLE START -----
+{_format_sample_context(sample)}
+----- SAMPLE END -----
 """
 
     return [
@@ -83,12 +100,59 @@ def render_extraction_messages(
     ]
 
 
-def _render_candidate_prompt(template: str, sample: dict[str, Any]) -> str:
+def _render_candidate_prompt(
+    template: str,
+    sample: dict[str, Any],
+    *,
+    candidate_view_mode: str,
+    max_prompt_chars: int,
+) -> str:
     rendered = template
     for source, target in PLACEHOLDER_REPLACEMENTS.items():
         rendered = rendered.replace(source, target)
-    rendered = rendered.replace("{input_text}", _format_sample_context(sample))
-    return rendered
+    if candidate_view_mode == "full":
+        return rendered.replace("{input_text}", _format_sample_context(sample))
+    compact = _compact_candidate_prompt(rendered)
+    return _truncate_text(compact, max_prompt_chars)
+
+
+def _compact_candidate_prompt(text: str) -> str:
+    """压缩候选 Prompt，只保留策略，不携带长示例和样本文本。"""
+
+    compact = text.replace("{input_text}", "[样本文本见 SAMPLE 区块]")
+    real_data_index = compact.lower().find("-real data-")
+    if real_data_index >= 0:
+        compact = compact[:real_data_index]
+
+    example_match = re_search_example_start(compact)
+    if example_match >= 0:
+        compact = compact[:example_match]
+
+    lines: list[str] = []
+    for raw_line in compact.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            if lines and lines[-1]:
+                lines.append("")
+            continue
+        if stripped.startswith("################"):
+            continue
+        lines.append(raw_line.rstrip())
+    return "\n".join(lines).strip()
+
+
+def re_search_example_start(text: str) -> int:
+    for marker in ("\nExample 1", "\nExample One", "\n示例 1", "\n示例一"):
+        index = text.find(marker)
+        if index >= 0:
+            return index
+    return -1
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    return f"{text[: max_chars - 1].rstrip()}…"
 
 
 def _format_sample_context(sample: dict[str, Any]) -> str:
@@ -142,6 +206,6 @@ def _build_output_budget_hint(*, max_entities: int | None, max_relationships: in
     if max_entities and max_relationships:
         return (
             f"请只保留最核心的实体与关系，最多输出 {max_entities} 个实体、{max_relationships} 条关系。"
-            "优先课程主题、章节、知识点等稳定对象，忽略穷举型条目。"
+            "优先原文直接解释的知识点、机制、方法和约束，忽略目录层级和穷举型条目。"
         )
-    return "请只保留最核心的实体与关系，避免为枚举型条目生成过多结果。"
+    return "请只保留最核心的实体与关系，避免为目录层级或枚举型条目生成过多结果。"

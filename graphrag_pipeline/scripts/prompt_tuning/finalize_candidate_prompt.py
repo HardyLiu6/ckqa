@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 from datetime import datetime, timezone
@@ -66,6 +67,39 @@ def _resolve_path(value: str | Path | None, *, root: Path) -> Path:
     return (root / path).resolve()
 
 
+def compute_file_sha256(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _remove_scoring_hashes(value: Any) -> Any:
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in value.items():
+            if key == "scoring_result_sha256":
+                continue
+            result[key] = _remove_scoring_hashes(item)
+        return result
+    if isinstance(value, list):
+        return [_remove_scoring_hashes(item) for item in value]
+    return value
+
+
+def compute_scoring_report_sha256(path: str | Path) -> str:
+    payload = _read_json(Path(path))
+    stripped = _remove_scoring_hashes(payload)
+    canonical = json.dumps(
+        stripped,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def _as_repo_relative(path: Path, *, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
@@ -81,6 +115,109 @@ def _load_manifest_candidate(*, manifest_path: Path, candidate_name: str) -> dic
             return item
 
     raise PromptFinalizationError(f"manifest 中未找到候选 Prompt：{candidate_name}")
+
+
+def _validate_scoring_binding(
+    *,
+    root: Path,
+    candidate_name: str,
+    manifest_path: Path,
+    scoring_run_id: str | None,
+    scoring_report: str | Path | None,
+    expected_manifest_sha256: str | None,
+    expected_scoring_result_sha256: str | None,
+    min_parse_success_rate: float,
+) -> dict[str, Any] | None:
+    provided = [
+        scoring_run_id,
+        str(scoring_report) if scoring_report else None,
+        expected_manifest_sha256,
+        expected_scoring_result_sha256,
+    ]
+    if not any(provided):
+        return None
+    if not all(provided):
+        raise PromptFinalizationError(
+            "启用 run artifact 校验时必须同时提供 "
+            "--scoring-run-id / --scoring-report / --expected-manifest-sha256 / "
+            "--expected-scoring-result-sha256"
+        )
+
+    assert scoring_run_id is not None
+    assert scoring_report is not None
+    assert expected_manifest_sha256 is not None
+    assert expected_scoring_result_sha256 is not None
+
+    scoring_path = _resolve_path(scoring_report, root=root)
+    if not scoring_path.exists():
+        raise PromptFinalizationError(f"scoring report 不存在：{scoring_path}")
+    payload = _read_json(scoring_path)
+    top_candidates = payload.get("top_candidates")
+    if not isinstance(top_candidates, list) or not top_candidates:
+        raise PromptFinalizationError(f"scoring report 缺少 top_candidates：{scoring_path}")
+
+    best = top_candidates[0]
+    if not isinstance(best, dict):
+        raise PromptFinalizationError(f"scoring report top_candidates[0] 结构异常：{scoring_path}")
+    if str(best.get("candidate") or "").strip() != candidate_name:
+        raise PromptFinalizationError(
+            "scoring report 的 top candidate 与待固化候选不一致："
+            f"expected={candidate_name}, actual={best.get('candidate')}"
+        )
+
+    parse_success_rate = float(best.get("parse_success_rate") or 0.0)
+    gate_passed = bool(best.get("gate_passed"))
+    if parse_success_rate < min_parse_success_rate or not gate_passed:
+        raise PromptFinalizationError(
+            "候选未通过 scoring gate，拒绝固化："
+            f"candidate={candidate_name}, parse_success_rate={parse_success_rate:.3f}, "
+            f"gate_passed={gate_passed}"
+        )
+
+    binding = best.get("artifact_binding") or payload.get("artifact_binding") or {}
+    if not isinstance(binding, dict):
+        raise PromptFinalizationError("scoring report artifact_binding 结构异常")
+    if str(binding.get("run_id") or "").strip() != scoring_run_id:
+        raise PromptFinalizationError(
+            f"scoring run_id 不一致：expected={scoring_run_id}, actual={binding.get('run_id')}"
+        )
+    if str(binding.get("candidate_id") or candidate_name) != candidate_name:
+        raise PromptFinalizationError(
+            f"candidate_id 不一致：expected={candidate_name}, actual={binding.get('candidate_id')}"
+        )
+
+    recorded_manifest_hash = str(binding.get("manifest_sha256") or "")
+    if recorded_manifest_hash != expected_manifest_sha256:
+        raise PromptFinalizationError(
+            "manifest hash 期望值与 scoring report 不一致："
+            f"expected={expected_manifest_sha256}, actual={recorded_manifest_hash}"
+        )
+    current_manifest_hash = compute_file_sha256(manifest_path)
+    if current_manifest_hash != expected_manifest_sha256:
+        raise PromptFinalizationError(
+            "manifest hash 已变化，拒绝固化："
+            f"expected={expected_manifest_sha256}, actual={current_manifest_hash}"
+        )
+
+    recorded_scoring_hash = str(binding.get("scoring_result_sha256") or "")
+    if recorded_scoring_hash != expected_scoring_result_sha256:
+        raise PromptFinalizationError(
+            "scoring result hash 期望值与 scoring report 不一致："
+            f"expected={expected_scoring_result_sha256}, actual={recorded_scoring_hash}"
+        )
+    current_scoring_hash = compute_scoring_report_sha256(scoring_path)
+    if current_scoring_hash != expected_scoring_result_sha256:
+        raise PromptFinalizationError(
+            "scoring result hash 已变化，拒绝固化："
+            f"expected={expected_scoring_result_sha256}, actual={current_scoring_hash}"
+        )
+
+    return {
+        **binding,
+        "scoring_report": str(scoring_path),
+        "parse_success_rate": parse_success_rate,
+        "gate_passed": gate_passed,
+    }
 
 
 def _resolve_candidate_dir(*, root: Path, candidate_name: str, manifest_entry: dict[str, Any]) -> Path:
@@ -181,6 +318,11 @@ def finalize_candidate_prompt(
     manifest_path: str | Path | None = None,
     final_dir: str | Path | None = None,
     env_file: str | Path | None = None,
+    scoring_run_id: str | None = None,
+    scoring_report: str | Path | None = None,
+    expected_manifest_sha256: str | None = None,
+    expected_scoring_result_sha256: str | None = None,
+    min_parse_success_rate: float = 0.8,
 ) -> dict[str, Any]:
     """把候选 Prompt 固化为当前活动 Prompt。"""
 
@@ -190,6 +332,16 @@ def finalize_candidate_prompt(
     env_path = _resolve_path(env_file or DEFAULT_ENV_SUBPATH, root=project_root)
 
     manifest_entry = _load_manifest_candidate(manifest_path=manifest, candidate_name=candidate_name)
+    scoring_binding = _validate_scoring_binding(
+        root=project_root,
+        candidate_name=candidate_name,
+        manifest_path=manifest,
+        scoring_run_id=scoring_run_id,
+        scoring_report=scoring_report,
+        expected_manifest_sha256=expected_manifest_sha256,
+        expected_scoring_result_sha256=expected_scoring_result_sha256,
+        min_parse_success_rate=min_parse_success_rate,
+    )
     candidate_dir = _resolve_candidate_dir(
         root=project_root,
         candidate_name=candidate_name,
@@ -222,6 +374,7 @@ def finalize_candidate_prompt(
         "env_file": str(env_path),
         "copied_files": copied_files,
         "active_prompt_paths": active_prompt_paths,
+        "scoring_binding": scoring_binding,
     }
     _write_json(final_root / ACTIVE_PROMPT_RECORD, report)
     return report
@@ -254,6 +407,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(DEFAULT_ENV_SUBPATH),
         help=".env 路径，默认 .env。",
     )
+    parser.add_argument("--scoring-run-id", help="允许固化的 scoring run_id")
+    parser.add_argument("--scoring-report", help="top_candidates.json 路径")
+    parser.add_argument("--expected-manifest-sha256", help="评分时记录的 manifest sha256")
+    parser.add_argument("--expected-scoring-result-sha256", help="评分结果 sha256")
+    parser.add_argument(
+        "--min-parse-success-rate",
+        type=float,
+        default=0.8,
+        help="固化所需 parse_success_rate 门槛，默认 0.8",
+    )
     return parser
 
 
@@ -267,6 +430,11 @@ def main(argv: list[str] | None = None) -> int:
         manifest_path=args.manifest,
         final_dir=args.final_dir,
         env_file=args.env_file,
+        scoring_run_id=args.scoring_run_id,
+        scoring_report=args.scoring_report,
+        expected_manifest_sha256=args.expected_manifest_sha256,
+        expected_scoring_result_sha256=args.expected_scoring_result_sha256,
+        min_parse_success_rate=args.min_parse_success_rate,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
