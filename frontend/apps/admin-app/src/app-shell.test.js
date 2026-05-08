@@ -44,6 +44,10 @@ import {
   resolveTotalPages,
 } from './components/common/pager-model.js'
 import {
+  PIPELINE_STAGES,
+  resolveStageMetric,
+} from './components/common/pipeline-hero-model.js'
+import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
@@ -3333,6 +3337,11 @@ test('CkStatusPill model exports are wired', () => {
 test('CkPager model exports are wired', () => {
   assert.deepEqual(PAGE_SIZE_OPTIONS, [20, 50, 100])
   assert.equal(resolveTotalPages({ total: 50, pageSize: 20 }), 3)
+})
+
+test('CkPipelineHero model exports are wired', () => {
+  assert.equal(PIPELINE_STAGES.length, 5)
+  assert.equal(typeof resolveStageMetric, 'function')
 })
 
 test('NotificationDropdown model exports are wired', () => {
