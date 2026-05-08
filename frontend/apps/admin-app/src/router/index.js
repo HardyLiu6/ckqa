@@ -6,7 +6,7 @@ import ConsoleLayout from '../layouts/ConsoleLayout.vue'
 import DetailLayout from '../layouts/DetailLayout.vue'
 import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
-import DashboardView from '../views/dashboard/DashboardView.vue'
+import DashboardPage from '../views/dashboard/DashboardPage.vue'
 import HealthView from '../views/system/HealthView.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
 import RouteState from '../views/status/RouteState.vue'
@@ -17,7 +17,7 @@ import { routeRecords } from './routes.js'
 
 const componentMap = {
   LoginView,
-  DashboardView,
+  DashboardPage,
   HealthView,
   ModulePage,
   RouteState,

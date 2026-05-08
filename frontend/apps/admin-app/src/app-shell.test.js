@@ -232,6 +232,11 @@ test('路由骨架包含首版关键入口和后续页面状态', () => {
   assert.equal(auditRoute.meta.routeState, 'coming-soon')
 })
 
+test('routes 指向 DashboardPage', () => {
+  const dashboardRoute = routeRecords.find((r) => r.name === 'dashboard')
+  assert.equal(dashboardRoute.componentKey, 'DashboardPage')
+})
+
 test('认证状态支持开发态管理员和教师身份切换', () => {
   const auth = createAuthStore()
 
@@ -3123,11 +3128,10 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   const routeState = readFileSync(new URL('./views/status/RouteState.vue', import.meta.url), 'utf8')
   const unifiedErrorView = readFileSync(new URL('./views/status/UnifiedErrorView.vue', import.meta.url), 'utf8')
   const healthView = readFileSync(new URL('./views/system/HealthView.vue', import.meta.url), 'utf8')
-  const dashboardView = readFileSync(new URL('./views/dashboard/DashboardView.vue', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  for (const source of [modulePage, tableShell, workflowStepper, topbar, loginView, routeState, unifiedErrorView, healthView, dashboardView]) {
+  for (const source of [modulePage, tableShell, workflowStepper, topbar, loginView, routeState, unifiedErrorView, healthView]) {
     assert.doesNotMatch(source, /<button[\s\S]*(primary-button|secondary-button|plain-button|text-button)/)
     assert.doesNotMatch(source, /<RouterLink[\s\S]*(primary-button|secondary-button)/)
   }
@@ -3140,7 +3144,6 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(loginView, /<el-button[\s\S]*native-type="submit"/)
   assert.match(unifiedErrorView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
   assert.match(healthView, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
-  assert.match(dashboardView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/knowledge-bases"/)
   assert.match(elementPlusCss, /\.ckqa-el-button[\s\S]*backdrop-filter:\s*blur\(16px\)/)
   assert.match(elementPlusCss, /\.ckqa-el-button--primary[\s\S]*box-shadow:[\s\S]*var\(--ckqa-accent\)/)
   assert.match(componentsCss, /\.button-icon/)

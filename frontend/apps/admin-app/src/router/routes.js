@@ -60,7 +60,7 @@ export const APP_ROUTES = [
   {
     path: '/app/dashboard',
     name: 'dashboard',
-    componentKey: 'DashboardView',
+    componentKey: 'DashboardPage',
     meta: {
       title: '工作台',
       layout: 'console',
