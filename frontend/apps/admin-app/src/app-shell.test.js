@@ -52,6 +52,10 @@ import {
   resolveEventTone,
 } from './components/common/activity-feed-model.js'
 import {
+  sortTasks,
+  resolveTaskAccent,
+} from './components/common/task-list-model.js'
+import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
@@ -3351,6 +3355,11 @@ test('CkPipelineHero model exports are wired', () => {
 test('CkActivityFeed model exports are wired', () => {
   assert.equal(typeof groupEventsByPeriod, 'function')
   assert.equal(resolveEventTone('build.failed'), 'danger')
+})
+
+test('CkTaskList model exports are wired', () => {
+  assert.equal(typeof sortTasks, 'function')
+  assert.equal(resolveTaskAccent('failed'), 'danger')
 })
 
 test('NotificationDropdown model exports are wired', () => {
