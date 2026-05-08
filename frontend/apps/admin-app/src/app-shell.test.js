@@ -48,6 +48,10 @@ import {
   resolveStageMetric,
 } from './components/common/pipeline-hero-model.js'
 import {
+  groupEventsByPeriod,
+  resolveEventTone,
+} from './components/common/activity-feed-model.js'
+import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
@@ -3342,6 +3346,11 @@ test('CkPager model exports are wired', () => {
 test('CkPipelineHero model exports are wired', () => {
   assert.equal(PIPELINE_STAGES.length, 5)
   assert.equal(typeof resolveStageMetric, 'function')
+})
+
+test('CkActivityFeed model exports are wired', () => {
+  assert.equal(typeof groupEventsByPeriod, 'function')
+  assert.equal(resolveEventTone('build.failed'), 'danger')
 })
 
 test('NotificationDropdown model exports are wired', () => {
