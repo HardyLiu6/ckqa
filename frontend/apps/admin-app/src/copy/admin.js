@@ -56,11 +56,31 @@ export const COPY = Object.freeze({
       if (parts.length === 0) return '欢迎回来，开始今天的工作吧。'
       return `当前看板覆盖：${parts.join(' · ')}。`
     },
+    // 视觉打磨迭代（2026-05-09）新增：hero subtitle 数字化文案
+    heroSubtitle: {
+      withTasks(runningTaskCount, weeklyQaCount) {
+        return `欢迎回来，今天有 ${runningTaskCount} 个进行中任务 和 ${weeklyQaCount} 次本周问答。`
+      },
+      withOnlyTasks(runningTaskCount) {
+        return `欢迎回来，今天有 ${runningTaskCount} 个进行中任务；本周还没有问答。`
+      },
+      withOnlyQa(weeklyQaCount) {
+        return `欢迎回来，暂无进行中任务；本周已有 ${weeklyQaCount} 次问答。`
+      },
+      empty: '欢迎回来，暂无进行中任务；本周还没有问答。',
+    },
     quickActions: [
       { key: 'new-kb', label: '+ 新建知识库', to: '/app/knowledge-bases?action=create' },
       { key: 'upload', label: '↑ 上传资料', to: '/app/courses' },
       { key: 'kb-validation', label: '▷ 知识库验证', to: '/app/qa-smoke' },
       { key: 'retrieval-logs', label: '≡ 检索日志', to: '/app/retrieval-logs' },
+    ],
+    // 视觉打磨迭代：Style A 卡片化快捷入口（带图标 + hint），独立于旧 quickActions 以避免打断现状
+    quickActionCards: [
+      { id: 'create-course', label: '新建课程', hint: '从课程目录开始', icon: 'book', to: '/app/courses' },
+      { id: 'upload-pdf', label: '上传资料', hint: 'PDF 解析入口', icon: 'file', to: '/app/courses' },
+      { id: 'build-kb', label: '构建知识库', hint: '4 步引导式向导', icon: 'database', to: '/app/knowledge-bases?action=create' },
+      { id: 'verify-kb', label: '验证知识库', hint: '抽样问答验证', icon: 'shield', to: '/app/qa-smoke' },
     ],
     sectionLabels: {
       pipeline: '生产流水线',

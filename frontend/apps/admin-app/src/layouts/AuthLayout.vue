@@ -1,3 +1,7 @@
+<script setup>
+import { BRAND } from '../copy/brand.js'
+</script>
+
 <template>
   <div class="auth-layout">
     <div class="auth-layout-glow auth-layout-glow--top" aria-hidden="true" />
@@ -6,7 +10,7 @@
       <slot />
     </main>
     <footer class="auth-layout-footer">
-      <span>CKQA Console</span>
+      <span>{{ BRAND.name }}</span>
     </footer>
   </div>
 </template>

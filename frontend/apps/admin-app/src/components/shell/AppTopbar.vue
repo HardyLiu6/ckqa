@@ -5,6 +5,7 @@ import ScopeChip from './ScopeChip.vue'
 import ThemeToggle from './ThemeToggle.vue'
 import NotificationDropdown from './NotificationDropdown.vue'
 import CkCommandPalette from './CkCommandPalette.vue'
+import { BRAND } from '../../copy/brand.js'
 
 const props = defineProps({
   apiBaseUrl: { type: String, default: '' },
@@ -31,7 +32,7 @@ function openCommandPalette() {
     <div class="app-topbar-left">
       <RouterLink class="app-topbar-logo" to="/app/dashboard">
         <span class="app-topbar-mark" aria-hidden="true" />
-        <span>CKQA Console</span>
+        <span>{{ BRAND.name }}</span>
       </RouterLink>
       <ScopeChip />
     </div>
