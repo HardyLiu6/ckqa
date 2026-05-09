@@ -56,6 +56,11 @@ import {
   resolveTaskAccent,
 } from './components/common/task-list-model.js'
 import {
+  resolveCardStatus,
+  formatMetaEntries,
+  truncate,
+} from './components/common/resource-card-model.js'
+import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
@@ -3363,6 +3368,12 @@ test('CkActivityFeed model exports are wired', () => {
 test('CkTaskList model exports are wired', () => {
   assert.equal(typeof sortTasks, 'function')
   assert.equal(resolveTaskAccent('failed'), 'danger')
+})
+
+test('CkResourceCard model exports are wired', () => {
+  assert.equal(resolveCardStatus('active').tone, 'success')
+  assert.deepEqual(formatMetaEntries([]), [])
+  assert.equal(truncate('1234567890', 5), '12345…')
 })
 
 test('NotificationDropdown model exports are wired', () => {
