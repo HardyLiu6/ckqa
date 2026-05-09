@@ -41,6 +41,29 @@
   /* focus */
   --ckqa-focus: rgb(217 119 87 / 35%);
 
+  /* glass surface — 视觉打磨迭代新增：半透明 + backdrop-blur 表达"frost glass" */
+  --ckqa-surface-glass: rgb(255 252 246 / 65%);
+  --ckqa-surface-glass-strong: rgb(255 252 246 / 82%);
+  --ckqa-surface-glass-elev: rgb(255 255 255 / 88%);
+
+  /* glass border — 顶部 highlight 用 */
+  --ckqa-border-glass: rgb(255 255 255 / 70%);
+
+  /* ambient — 用于全局背景光斑 */
+  --ckqa-ambient-warm: #f4c89e;
+  --ckqa-ambient-rust: #e9b3a3;
+
+  /* 顶部内 highlight（白色 → 透明，模拟玻璃反光） */
+  --ckqa-highlight-top: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 85%) 0%,
+    rgb(255 255 255 / 0%) 30%
+  );
+
+  /* 玻璃模糊参数（统一引用，方便整体调） */
+  --ckqa-glass-blur: 12px;
+  --ckqa-glass-saturate: 160%;
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -95,6 +118,19 @@
   --ckqa-danger-soft: #38201e;
 
   --ckqa-focus: rgb(232 145 111 / 40%);
+
+  /* glass surface — 暗色对应 */
+  --ckqa-surface-glass: rgb(37 34 29 / 65%);
+  --ckqa-surface-glass-strong: rgb(37 34 29 / 82%);
+  --ckqa-surface-glass-elev: rgb(46 42 36 / 88%);
+  --ckqa-border-glass: rgb(255 255 255 / 6%);
+  --ckqa-ambient-warm: #3a2a1c;
+  --ckqa-ambient-rust: #3a2622;
+  --ckqa-highlight-top: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 6%) 0%,
+    rgb(255 255 255 / 0%) 30%
+  );
 }
 
 [data-accent='indigo'] {

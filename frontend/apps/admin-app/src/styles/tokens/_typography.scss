@@ -3,15 +3,22 @@
                     "Microsoft YaHei", system-ui, sans-serif;
   --ckqa-font-mono: "JetBrains Mono", "DM Mono", "Cascadia Code", ui-monospace, monospace;
 
-  /* type scale —— size / line-height 拆成两个变量，方便单独引用 */
-  --ckqa-text-xs-size: 11px;     --ckqa-text-xs-line: 16px;
-  --ckqa-text-sm-size: 12px;     --ckqa-text-sm-line: 18px;
-  --ckqa-text-base-size: 13px;   --ckqa-text-base-line: 20px;
-  --ckqa-text-md-size: 14px;     --ckqa-text-md-line: 22px;
-  --ckqa-text-lg-size: 15px;     --ckqa-text-lg-line: 24px;
-  --ckqa-text-xl-size: 18px;     --ckqa-text-xl-line: 26px;
-  --ckqa-text-2xl-size: 22px;    --ckqa-text-2xl-line: 30px;
-  --ckqa-text-3xl-size: 28px;    --ckqa-text-3xl-line: 36px;
+  /* type scale —— size / line-height 拆成两个变量，方便单独引用
+   * 视觉打磨迭代：整档上调一档（base 13→14），小字阶 1px 等差，避免 0.5px 半像素 */
+  --ckqa-text-xs-size: 12px;     --ckqa-text-xs-line: 16px;
+  --ckqa-text-sm-size: 13px;     --ckqa-text-sm-line: 18px;
+  --ckqa-text-base-size: 14px;   --ckqa-text-base-line: 22px;
+  --ckqa-text-md-size: 15px;     --ckqa-text-md-line: 24px;
+  --ckqa-text-lg-size: 16px;     --ckqa-text-lg-line: 26px;
+  --ckqa-text-xl-size: 20px;     --ckqa-text-xl-line: 28px;
+  --ckqa-text-2xl-size: 24px;    --ckqa-text-2xl-line: 32px;
+  --ckqa-text-3xl-size: 30px;    --ckqa-text-3xl-line: 38px;
+  --ckqa-text-display-size: 36px; --ckqa-text-display-line: 44px; /* 预留，视觉打磨本期不使用 */
+
+  /* 字符间距 token（新增） */
+  --ckqa-tracking-tight: -0.4px;
+  --ckqa-tracking-normal: 0;
+  --ckqa-tracking-wide: 1px;
 
   --ckqa-fw-regular: 400;
   --ckqa-fw-medium: 500;
