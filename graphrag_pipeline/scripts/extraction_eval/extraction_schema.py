@@ -29,6 +29,9 @@ class SchemaTypeInfo(BaseModel):
     name: str
     label_zh: str = ""
     description: str = ""
+    source_types: list[str] = Field(default_factory=list)
+    target_types: list[str] = Field(default_factory=list)
+    extraction_hint: str = ""
 
 
 class SchemaCatalog(BaseModel):
@@ -57,10 +60,17 @@ class SchemaCatalog(BaseModel):
         )
 
     def render_relation_type_summary(self) -> str:
-        return "\n".join(
-            f'- `{item.name}`（{item.label_zh or item.name}）：{item.description or "未提供描述"}'
-            for item in self.relation_types
-        )
+        lines: list[str] = []
+        for item in self.relation_types:
+            parts = [item.description or "未提供描述"]
+            if item.source_types:
+                parts.append(f"source_types: {', '.join(item.source_types)}")
+            if item.target_types:
+                parts.append(f"target_types: {', '.join(item.target_types)}")
+            if item.extraction_hint and item.extraction_hint not in parts[0]:
+                parts.append(f"抽取提示: {item.extraction_hint}")
+            lines.append(f'- `{item.name}`（{item.label_zh or item.name}）：{"；".join(parts)}')
+        return "\n".join(lines)
 
 
 class ExtractionEntity(BaseModel):

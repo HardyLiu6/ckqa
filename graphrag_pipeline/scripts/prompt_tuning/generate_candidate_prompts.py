@@ -46,6 +46,20 @@ DEFAULT_AUDIT_CANDIDATES: tuple[Path, ...] = (
 )
 DEFAULT_FEWSHOT_K = 3
 DEFAULT_LANGUAGE = "zh"
+DEFAULT_FEWSHOT_INPUT_MAX_CHARS = 450
+DEFAULT_FEWSHOT_MAX_ENTITIES = 3
+DEFAULT_FEWSHOT_MAX_RELATIONS = 1
+MAX_RELATION_EXAMPLE_COUNT = 2
+MAX_RELATION_EXAMPLE_CHARS = 36
+RELATED_TO_GENERIC_NEGATIVE_EXAMPLE = "不能用 related_to 代替缺失端点或更具体关系"
+TUPLE_DELIMITER = "<|>"
+RECORD_DELIMITER = "##"
+COMPLETION_DELIMITER = "<|COMPLETE|>"
+DELIMITER_PLACEHOLDER_REPLACEMENTS = {
+    "{tuple_delimiter}": TUPLE_DELIMITER,
+    "{record_delimiter}": RECORD_DELIMITER,
+    "{completion_delimiter}": COMPLETION_DELIMITER,
+}
 AUTO_TUNED_MANIFEST_PASSTHROUGH_FIELDS = (
     "generation_method",
     "graphrag_invocation",
@@ -76,6 +90,7 @@ FEWSHOT_ACTIVITY_TYPES = {
     "experiment_instruction",
     "assignment_requirement",
 }
+FEWSHOT_COVERAGE_SELECTION_STRATEGY = "greedy_relation_entity_coverage"
 FEWSHOT_TYPE_PRIORITY = {
     "definition_or_formula": 0,
     "chapter_concept_explanation": 1,
@@ -83,6 +98,32 @@ FEWSHOT_TYPE_PRIORITY = {
     "experiment_instruction": 3,
     "assignment_requirement": 4,
 }
+FEWSHOT_ENTITY_TYPE_PRIORITY = {
+    "KnowledgePoint": 0,
+    "Concept": 1,
+    "FormulaOrDefinition": 2,
+    "AlgorithmOrMethod": 3,
+    "Experiment": 4,
+    "Assignment": 5,
+    "Term": 6,
+    "ToolOrPlatform": 7,
+    "Section": 8,
+    "Chapter": 9,
+    "Course": 10,
+}
+FEWSHOT_RELATION_TYPE_PRIORITY = {
+    "defined_by": 0,
+    "implemented_by": 1,
+    "applied_in": 2,
+    "evaluated_by": 3,
+    "depends_on": 4,
+    "prerequisite_of": 5,
+    "contains": 6,
+    "belongs_to": 7,
+    "appears_in": 8,
+    "related_to": 99,
+}
+NOISE_ENTITY_NAMES = {"无", "本章", "本节", "如下", "图", "表", "见图", "见下图"}
 ENTITY_TYPE_DESCRIPTION_OVERRIDES = {
     "Course": "课程顶层对象",
     "Chapter": "课程结构章节",
@@ -107,8 +148,10 @@ class SchemaItem:
     extraction_hint: str = ""
     positive_signals: List[str] = field(default_factory=list)
     negative_signals: List[str] = field(default_factory=list)
+    examples: List[str] = field(default_factory=list)
     source_types: List[str] = field(default_factory=list)
     target_types: List[str] = field(default_factory=list)
+    negative_examples: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -228,13 +271,46 @@ def _dedupe_preserve_order(values: Sequence[str]) -> List[str]:
     return ordered
 
 
-def _replace_last_entity_types(text: str, entity_names: str) -> str:
-    pattern = re.compile(r"entity_types:\s*\[[^\]]*\]")
-    matches = list(pattern.finditer(text))
-    if not matches:
+def _render_delimiter_placeholders(text: str) -> str:
+    rendered = text
+    for placeholder, delimiter in DELIMITER_PLACEHOLDER_REPLACEMENTS.items():
+        rendered = rendered.replace(placeholder, delimiter)
+    return rendered
+
+
+def _strip_legacy_examples(text: str) -> str:
+    """移除默认 GraphRAG Prompt 中与当前课程 schema 无关的旧示例块。"""
+
+    if not text.strip():
         return text
-    match = matches[-1]
-    return f"{text[:match.start()]}entity_types: [{entity_names}]{text[match.end():]}"
+
+    real_data_match = re.search(r"\n\s*-Real Data-", text, flags=re.IGNORECASE)
+    example_starts = [
+        index
+        for index in (
+            text.find("\n-Examples-"),
+            text.find("\nExamples:"),
+            text.find("\nExample 1:"),
+            text.find("\nExample One:"),
+        )
+        if index >= 0
+    ]
+    if not example_starts:
+        return text
+
+    start = min(example_starts)
+    if real_data_match and start < real_data_match.start():
+        return f"{text[:start].rstrip()}\n\n{text[real_data_match.start():].lstrip()}"
+    return text
+
+
+def _replace_entity_types(text: str, entity_names: str) -> str:
+    text = re.sub(r"entity_types:\s*\[[^\]]*\]", f"entity_types: [{entity_names}]", text)
+    return re.sub(
+        r"entity_type:\s*One of the following types:\s*\[[^\]]*\]",
+        f"entity_type: One of the following types: [{entity_names}]",
+        text,
+    )
 
 
 def _insert_before_real_data(text: str, block: str) -> str:
@@ -329,8 +405,18 @@ def load_schema_catalog(schema_dir: Path) -> SchemaCatalog:
             label_zh=_clean_string(item.get("label_zh")),
             description=_clean_string(item.get("description")),
             extraction_hint=_clean_string(item.get("extraction_hint")),
+            examples=[
+                _clean_string(value)
+                for value in item.get("examples", [])
+                if _clean_string(value)
+            ],
             source_types=[_clean_string(value) for value in item.get("source_types", []) if _clean_string(value)],
             target_types=[_clean_string(value) for value in item.get("target_types", []) if _clean_string(value)],
+            negative_examples=[
+                _clean_string(value)
+                for value in item.get("negative_examples", [])
+                if _clean_string(value)
+            ],
         )
         for name in relation_order
         for item in [relation_catalog.get(name, {})]
@@ -426,13 +512,39 @@ def _summarize_entity_items(entity_items: Sequence[SchemaItem]) -> str:
     return "\n".join(lines)
 
 
+def _compact_examples(values: Sequence[str]) -> str:
+    return "、".join(
+        _shorten_text(value, MAX_RELATION_EXAMPLE_CHARS)
+        for value in values[:MAX_RELATION_EXAMPLE_COUNT]
+    )
+
+
+def _relation_negative_examples(item: SchemaItem) -> List[str]:
+    examples = list(item.negative_examples)
+    if item.name == "related_to" and RELATED_TO_GENERIC_NEGATIVE_EXAMPLE not in examples:
+        examples.append(RELATED_TO_GENERIC_NEGATIVE_EXAMPLE)
+    return examples
+
+
 def _summarize_relation_items(relation_items: Sequence[SchemaItem]) -> str:
     lines = []
     for item in relation_items:
         summary = _shorten_text(item.description, 42)
         hint = _shorten_text(item.extraction_hint, 38) if item.extraction_hint else "按最具体语义关系判断"
-        lines.append(f"- `{item.name}`（{item.label_zh}）：{summary}；抽取提示：{hint}")
+        positive_examples = f"；正例：{_compact_examples(item.examples)}" if item.examples else ""
+        negative_values = _relation_negative_examples(item)
+        negative_examples = f"；禁例：{_compact_examples(negative_values)}" if negative_values else ""
+        lines.append(f"- `{item.name}`（{item.label_zh}）：{summary}；抽取提示：{hint}{positive_examples}{negative_examples}")
     return "\n".join(lines)
+
+
+def _extract_endpoint_integrity_summary(rules_text: str) -> str:
+    if not (
+        "关系端点完整性" in rules_text
+        or ("source" in rules_text and "target" in rules_text and "entities" in rules_text)
+    ):
+        return ""
+    return "关系端点完整性：所有关系的 source 和 target 必须能在 entities 中找到；如果无法补齐端点实体，应跳过该关系。"
 
 
 def _summarize_rules(rules_text: str) -> str:
@@ -455,6 +567,11 @@ def _summarize_rules(rules_text: str) -> str:
     ]
     if priority_summary:
         bullets.insert(1, f"关系优先级参考：{priority_summary}")
+    endpoint_summary = _extract_endpoint_integrity_summary(rules_text)
+    if endpoint_summary:
+        bullets.append(endpoint_summary)
+    if "related_to" in rules_text:
+        bullets.append(f"related_to 是保底关系；{RELATED_TO_GENERIC_NEGATIVE_EXAMPLE}。")
 
     return "\n".join(f"- {bullet}" for bullet in bullets)
 
@@ -481,7 +598,7 @@ extract stable entities and relationships for course knowledge graph constructio
 - entity_name: 实体名称，优先使用课程内稳定名称并保留章节编号
 - entity_type: 必须是以下类型之一：[{_entity_names(schema_catalog)}]
 - entity_description: 中文简要说明，聚焦课程语义，不要输出无关废话
-Format each entity as ("entity"{{tuple_delimiter}}<entity_name>{{tuple_delimiter}}<entity_type>{{tuple_delimiter}}<entity_description>)
+Format each entity as ("entity"{TUPLE_DELIMITER}<entity_name>{TUPLE_DELIMITER}<entity_type>{TUPLE_DELIMITER}<entity_description>)
 
 2. 在已识别实体之间识别明确且稳定的关系。对每条关系输出：
 - source_entity: 源实体名称
@@ -489,9 +606,9 @@ Format each entity as ("entity"{{tuple_delimiter}}<entity_name>{{tuple_delimiter
 - relationship_description: 必须以 [type=<relation_type>] 开头，其中 <relation_type> 必须来自 [{_relation_names(schema_catalog)}]；
   其后用中文解释关系证据与语义，避免空泛描述
 - relationship_strength: 1 到 10 的整数分值，表示关系强度
-Format each relationship as ("relationship"{{tuple_delimiter}}<source_entity>{{tuple_delimiter}}<target_entity>{{tuple_delimiter}}<relationship_description>{{tuple_delimiter}}<relationship_strength>)
+Format each relationship as ("relationship"{TUPLE_DELIMITER}<source_entity>{TUPLE_DELIMITER}<target_entity>{TUPLE_DELIMITER}<relationship_description>{TUPLE_DELIMITER}<relationship_strength>)
 
-3. 返回单一列表，实体和关系统一使用 {{record_delimiter}} 分隔，并在结束时输出 {{completion_delimiter}}。
+3. 返回单一列表，实体和关系统一使用 {RECORD_DELIMITER} 分隔，并在结束时输出 {COMPLETION_DELIMITER}。
 
 4. 输出必须是中文说明；不要添加题外解释、推理过程、免责声明或额外 Markdown。
 
@@ -530,7 +647,7 @@ def build_default_candidate_prompt(
     if not base_prompt_text.strip():
         return build_minimal_default_prompt(schema_catalog, language)
 
-    prompt = _replace_last_entity_types(base_prompt_text.strip(), _entity_names(schema_catalog))
+    prompt = _replace_entity_types(base_prompt_text.strip(), _entity_names(schema_catalog))
     prompt = _insert_before_real_data(prompt, _build_course_baseline_block(schema_catalog))
     return prompt.rstrip() + "\n"
 
@@ -560,6 +677,7 @@ def build_schema_aware_prompt(
 - 关系说明必须以 [type=<relation_type>] 开头，并且 <relation_type> 必须来自课程 Schema。
 - 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
 - 只有在无法判断更具体关系时才使用 `related_to`。
+- 不能用 `related_to` 代替缺失端点或更具体关系；如果端点无法补齐，应跳过关系。
 - 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
 - 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
 {_base_prompt_note(base_label)}
@@ -568,7 +686,44 @@ def build_schema_aware_prompt(
     return prompt.rstrip() + "\n"
 
 
-def _format_input_block(record: Dict[str, Any], text_key: str = "text") -> str:
+def _compact_assignment_text(text: str, *, max_items: int = 6) -> str:
+    lines: List[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if stripped in {"习题", "练习题", "思考题", "复习题"}:
+            lines.append(stripped)
+            continue
+        if re.match(r"^[-*•]?\s*\d+[\.\)）、]", stripped):
+            lines.append(stripped)
+        if len(lines) >= max_items + 1:
+            break
+    return "\n".join(lines)
+
+
+def _compress_fewshot_input_text(record: Dict[str, Any], text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return text.strip()
+
+    sample_type = _clean_string(record.get("guessed_sample_type"))
+    compact = ""
+    if sample_type == "assignment_requirement":
+        compact = _compact_assignment_text(text)
+    if not compact:
+        compact = re.sub(r"\n{3,}", "\n\n", text.strip())
+
+    if len(compact) <= max_chars:
+        return compact
+    return f"{compact[: max_chars - 1].rstrip()}…"
+
+
+def _format_input_block(
+    record: Dict[str, Any],
+    text_key: str = "text",
+    *,
+    max_text_chars: int | None = None,
+) -> str:
     lines: List[str] = []
     for key in ("course_id", "document_type", "source_file", "chapter", "section", "page_start", "page_end"):
         value = record.get(key)
@@ -576,7 +731,10 @@ def _format_input_block(record: Dict[str, Any], text_key: str = "text") -> str:
             continue
         lines.append(f"{key}: {value}.")
     lines.append("text:")
-    lines.append(_clean_string(record.get(text_key)))
+    text = _clean_string(record.get(text_key))
+    if max_text_chars is not None:
+        text = _compress_fewshot_input_text(record, text, max_text_chars)
+    lines.append(text)
     return "\n".join(lines).strip()
 
 
@@ -590,9 +748,87 @@ def _build_entity_description(entity: Dict[str, Any], record: Dict[str, Any]) ->
     return f"{base}“{name}”，出现在 {anchor} 中。"
 
 
-def _format_fewshot_output(record: Dict[str, Any]) -> str:
+def _is_noise_entity_name(name: str) -> bool:
+    stripped = name.strip()
+    if not stripped or stripped in NOISE_ENTITY_NAMES:
+        return True
+    normalized = re.sub(r"[\s\W_]+", "", stripped, flags=re.UNICODE)
+    return not normalized or normalized.isdigit()
+
+
+def _entity_sort_key(entity: Dict[str, Any], index: int) -> tuple[int, int, int]:
+    entity_type = _clean_string(entity.get("type"))
+    name = _clean_string(entity.get("name")) or _clean_string(entity.get("normalized_name"))
+    noise_penalty = 1 if _is_noise_entity_name(name) else 0
+    type_rank = FEWSHOT_ENTITY_TYPE_PRIORITY.get(entity_type, 50)
+    return (noise_penalty, type_rank, index)
+
+
+def _relation_sort_key(relation: Dict[str, Any], index: int) -> tuple[int, int, int]:
+    relation_type = _clean_string(relation.get("type")) or "related_to"
+    related_penalty = 1 if relation_type == "related_to" else 0
+    type_rank = FEWSHOT_RELATION_TYPE_PRIORITY.get(relation_type, 50)
+    return (related_penalty, type_rank, index)
+
+
+def _select_fewshot_gold_items(
+    entities: Sequence[Dict[str, Any]],
+    relations: Sequence[Dict[str, Any]],
+    *,
+    max_entities: int,
+    max_relations: int,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    indexed_entities = [
+        (index, item)
+        for index, item in enumerate(entities)
+        if _clean_string(item.get("entity_id"))
+    ]
+    entity_by_id = {_clean_string(item.get("entity_id")): item for _, item in indexed_entities}
+    selected_entity_ids: set[str] = set()
+    selected_relations: List[Dict[str, Any]] = []
+
+    for _, relation in sorted(
+        enumerate(relations),
+        key=lambda pair: _relation_sort_key(pair[1], pair[0]),
+    ):
+        if len(selected_relations) >= max_relations:
+            break
+        source_id = _clean_string(relation.get("source_entity_id"))
+        target_id = _clean_string(relation.get("target_entity_id"))
+        if source_id not in entity_by_id or target_id not in entity_by_id:
+            continue
+        needed = {source_id, target_id} - selected_entity_ids
+        if len(selected_entity_ids) + len(needed) > max_entities:
+            continue
+        selected_relations.append(relation)
+        selected_entity_ids.update(needed)
+
+    for index, entity in sorted(indexed_entities, key=lambda pair: _entity_sort_key(pair[1], pair[0])):
+        if len(selected_entity_ids) >= max_entities:
+            break
+        entity_id = _clean_string(entity.get("entity_id"))
+        if entity_id in selected_entity_ids:
+            continue
+        selected_entity_ids.add(entity_id)
+
+    selected_entities = [item for _, item in indexed_entities if _clean_string(item.get("entity_id")) in selected_entity_ids]
+    return selected_entities, selected_relations
+
+
+def _format_fewshot_output(
+    record: Dict[str, Any],
+    *,
+    max_entities: int = DEFAULT_FEWSHOT_MAX_ENTITIES,
+    max_relations: int = DEFAULT_FEWSHOT_MAX_RELATIONS,
+) -> str:
     entities = [item for item in record.get("gold_entities", []) if isinstance(item, dict)]
     relations = [item for item in record.get("gold_relations", []) if isinstance(item, dict)]
+    entities, relations = _select_fewshot_gold_items(
+        entities,
+        relations,
+        max_entities=max(0, max_entities),
+        max_relations=max(0, max_relations),
+    )
     entity_name_map = {
         _clean_string(item.get("entity_id")): _clean_string(item.get("name")) or _clean_string(item.get("normalized_name"))
         for item in entities
@@ -604,7 +840,7 @@ def _format_fewshot_output(record: Dict[str, Any]) -> str:
         entity_type = _clean_string(entity.get("type"))
         description = _build_entity_description(entity, record)
         rendered.append(
-            f"(\"entity\"{{tuple_delimiter}}{name}{{tuple_delimiter}}{entity_type}{{tuple_delimiter}}{description})"
+            f"(\"entity\"{TUPLE_DELIMITER}{name}{TUPLE_DELIMITER}{entity_type}{TUPLE_DELIMITER}{description})"
         )
 
     for relation in relations:
@@ -614,11 +850,11 @@ def _format_fewshot_output(record: Dict[str, Any]) -> str:
         evidence = _shorten_text(_clean_string(relation.get("evidence_text")), 110)
         description = f"[type={relation_type}] {evidence or '同一结构单元内存在稳定语义关联'}"
         rendered.append(
-            f"(\"relationship\"{{tuple_delimiter}}{source_name}{{tuple_delimiter}}{target_name}{{tuple_delimiter}}{description}{{tuple_delimiter}}8)"
+            f"(\"relationship\"{TUPLE_DELIMITER}{source_name}{TUPLE_DELIMITER}{target_name}{TUPLE_DELIMITER}{description}{TUPLE_DELIMITER}8)"
         )
 
-    rendered.append("{completion_delimiter}")
-    return "\n{record_delimiter}\n".join(rendered)
+    rendered.append(COMPLETION_DELIMITER)
+    return f"\n{RECORD_DELIMITER}\n".join(rendered)
 
 
 def _audit_record_sort_key(record: Dict[str, Any]) -> tuple[int, int, int, str]:
@@ -630,14 +866,118 @@ def _audit_record_sort_key(record: Dict[str, Any]) -> tuple[int, int, int, str]:
     return (priority_rank, type_rank, abs(text_length - 260), _clean_string(record.get("id")))
 
 
-def _build_fewshot_example_from_audit(record: Dict[str, Any]) -> FewShotExample:
+def _schema_ordered_names(items: Sequence[SchemaItem]) -> List[str]:
+    return [item.name for item in items]
+
+
+def _ordered_schema_subset(schema_names: Sequence[str], covered_names: set[str]) -> List[str]:
+    return [name for name in schema_names if name in covered_names]
+
+
+def _record_rendered_gold_types(
+    record: Dict[str, Any],
+    *,
+    schema_entity_names: set[str],
+    schema_relation_names: set[str],
+    max_entities: int,
+    max_relations: int,
+) -> tuple[set[str], set[str]]:
+    entities = [item for item in record.get("gold_entities", []) if isinstance(item, dict)]
+    relations = [item for item in record.get("gold_relations", []) if isinstance(item, dict)]
+    selected_entities, selected_relations = _select_fewshot_gold_items(
+        entities,
+        relations,
+        max_entities=max(0, max_entities),
+        max_relations=max(0, max_relations),
+    )
+    entity_types = {
+        entity_type
+        for entity in selected_entities
+        for entity_type in [_clean_string(entity.get("type"))]
+        if entity_type in schema_entity_names
+    }
+    relation_types = {
+        relation_type
+        for relation in selected_relations
+        for relation_type in [_clean_string(relation.get("type")) or "related_to"]
+        if relation_type in schema_relation_names
+    }
+    return entity_types, relation_types
+
+
+def _build_fewshot_coverage_report(
+    *,
+    schema_catalog: SchemaCatalog,
+    selected_records: Sequence[Dict[str, Any]],
+    selected_example_ids: Sequence[str],
+    selection_strategy: str,
+    max_entities: int,
+    max_relations: int,
+) -> Dict[str, Any]:
+    entity_schema_names = _schema_ordered_names(schema_catalog.entity_types)
+    relation_schema_names = _schema_ordered_names(schema_catalog.relation_types)
+    entity_name_set = set(entity_schema_names)
+    relation_name_set = set(relation_schema_names)
+
+    covered_entity_types: set[str] = set()
+    covered_relation_types: set[str] = set()
+    for record in selected_records:
+        entity_types, relation_types = _record_rendered_gold_types(
+            record,
+            schema_entity_names=entity_name_set,
+            schema_relation_names=relation_name_set,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+        covered_entity_types.update(entity_types)
+        covered_relation_types.update(relation_types)
+
+    covered_relations = _ordered_schema_subset(relation_schema_names, covered_relation_types)
+    covered_entities = _ordered_schema_subset(entity_schema_names, covered_entity_types)
+    return {
+        "selected_example_ids": list(selected_example_ids),
+        "covered_relation_types": covered_relations,
+        "missing_relation_types": [name for name in relation_schema_names if name not in covered_relation_types],
+        "covered_entity_types": covered_entities,
+        "missing_entity_types": [name for name in entity_schema_names if name not in covered_entity_types],
+        "selection_strategy": selection_strategy,
+    }
+
+
+def _format_fewshot_coverage_summary(coverage: Dict[str, Any]) -> str:
+    covered_relations = coverage.get("covered_relation_types", [])
+    missing_relations = coverage.get("missing_relation_types", [])
+    covered_entities = coverage.get("covered_entity_types", [])
+    missing_entities = coverage.get("missing_entity_types", [])
+    relation_total = len(covered_relations) + len(missing_relations)
+    entity_total = len(covered_entities) + len(missing_entities)
+    missing_relation_text = ", ".join(missing_relations[:5]) if missing_relations else "无"
+    if len(missing_relations) > 5:
+        missing_relation_text += " ..."
+    return (
+        f"few-shot 覆盖摘要：关系 {len(covered_relations)}/{relation_total}，"
+        f"实体 {len(covered_entities)}/{entity_total}；缺失关系：{missing_relation_text}。"
+    )
+
+
+def _build_fewshot_example_from_audit(
+    record: Dict[str, Any],
+    *,
+    input_max_chars: int,
+    max_entities: int,
+    max_relations: int,
+) -> FewShotExample:
     return FewShotExample(
         example_id=_clean_string(record.get("id")) or _clean_string(record.get("source_sample_id")) or "audit-example",
         source_kind="audit_gold",
         guessed_sample_type=_clean_string(record.get("guessed_sample_type")) or "unknown",
         source_sample_id=_clean_string(record.get("source_sample_id")) or "",
-        input_text=_format_input_block(record),
-        output_text=_format_fewshot_output(record),
+        input_text=_format_input_block(record, max_text_chars=input_max_chars),
+        output_text=_format_fewshot_output(
+            record,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        ),
         note="基于 audit gold_entities / gold_relations 直接转换得到。",
     )
 
@@ -664,14 +1004,14 @@ def _manual_fewshot_examples(schema_catalog: SchemaCatalog, limit: int) -> List[
                 "进程是程序的一次执行过程，是系统进行资源分配和调度的基本单位。"
             ),
             output_text=(
-                "(\"entity\"{tuple_delimiter}第二章 进程管理{tuple_delimiter}Chapter{tuple_delimiter}课程结构章节“第二章 进程管理”，出现在 2.1 进程的定义 中。)\n"
-                "{record_delimiter}\n"
-                "(\"entity\"{tuple_delimiter}进程{tuple_delimiter}Concept{tuple_delimiter}课程概念“进程”，出现在 2.1 进程的定义 中。)\n"
-                "{record_delimiter}\n"
-                f"(\"relationship\"{{tuple_delimiter}}第二章 进程管理{{tuple_delimiter}}进程{{tuple_delimiter}}[type={contains_name}] 本章介绍进程概念{{tuple_delimiter}}8)\n"
-                "{record_delimiter}\n"
-                f"(\"relationship\"{{tuple_delimiter}}进程{{tuple_delimiter}}进程定义{{tuple_delimiter}}[type={defined_by_name}] 文本给出了进程的正式定义{{tuple_delimiter}}9)\n"
-                "{completion_delimiter}"
+                f"(\"entity\"{TUPLE_DELIMITER}第二章 进程管理{TUPLE_DELIMITER}Chapter{TUPLE_DELIMITER}课程结构章节“第二章 进程管理”，出现在 2.1 进程的定义 中。)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"entity\"{TUPLE_DELIMITER}进程{TUPLE_DELIMITER}Concept{TUPLE_DELIMITER}课程概念“进程”，出现在 2.1 进程的定义 中。)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"relationship\"{TUPLE_DELIMITER}第二章 进程管理{TUPLE_DELIMITER}进程{TUPLE_DELIMITER}[type={contains_name}] 本章介绍进程概念{TUPLE_DELIMITER}8)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"relationship\"{TUPLE_DELIMITER}进程{TUPLE_DELIMITER}进程定义{TUPLE_DELIMITER}[type={defined_by_name}] 文本给出了进程的正式定义{TUPLE_DELIMITER}9)\n"
+                f"{COMPLETION_DELIMITER}"
             ),
             note="手写最小 few-shot 示例：概念/定义型样本。",
         ),
@@ -689,16 +1029,16 @@ def _manual_fewshot_examples(schema_catalog: SchemaCatalog, limit: int) -> List[
                 "实验要求：实现时间片轮转调度算法，并提交实验报告分析不同时间片长度的影响。"
             ),
             output_text=(
-                "(\"entity\"{tuple_delimiter}实验一 进程调度{tuple_delimiter}Experiment{tuple_delimiter}课程实验任务“实验一 进程调度”，出现在 实验一 进程调度 中。)\n"
-                "{record_delimiter}\n"
-                "(\"entity\"{tuple_delimiter}时间片轮转调度算法{tuple_delimiter}AlgorithmOrMethod{tuple_delimiter}课程中的方法或算法“时间片轮转调度算法”，出现在 实验一 进程调度 中。)\n"
-                "{record_delimiter}\n"
-                "(\"entity\"{tuple_delimiter}实验报告{tuple_delimiter}Assignment{tuple_delimiter}课程作业或题组“实验报告”，出现在 实验一 进程调度 中。)\n"
-                "{record_delimiter}\n"
-                f"(\"relationship\"{{tuple_delimiter}}实验一 进程调度{{tuple_delimiter}}时间片轮转调度算法{{tuple_delimiter}}[type={implemented_by_name}] 实验要求实现该算法{{tuple_delimiter}}9)\n"
-                "{record_delimiter}\n"
-                f"(\"relationship\"{{tuple_delimiter}}时间片轮转调度算法{{tuple_delimiter}}实验报告{{tuple_delimiter}}[type={evaluated_by_name}] 实验报告用于评估算法实现效果{{tuple_delimiter}}8)\n"
-                "{completion_delimiter}"
+                f"(\"entity\"{TUPLE_DELIMITER}实验一 进程调度{TUPLE_DELIMITER}Experiment{TUPLE_DELIMITER}课程实验任务“实验一 进程调度”，出现在 实验一 进程调度 中。)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"entity\"{TUPLE_DELIMITER}时间片轮转调度算法{TUPLE_DELIMITER}AlgorithmOrMethod{TUPLE_DELIMITER}课程中的方法或算法“时间片轮转调度算法”，出现在 实验一 进程调度 中。)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"entity\"{TUPLE_DELIMITER}实验报告{TUPLE_DELIMITER}Assignment{TUPLE_DELIMITER}课程作业或题组“实验报告”，出现在 实验一 进程调度 中。)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"relationship\"{TUPLE_DELIMITER}实验一 进程调度{TUPLE_DELIMITER}时间片轮转调度算法{TUPLE_DELIMITER}[type={implemented_by_name}] 实验要求实现该算法{TUPLE_DELIMITER}9)\n"
+                f"{RECORD_DELIMITER}\n"
+                f"(\"relationship\"{TUPLE_DELIMITER}时间片轮转调度算法{TUPLE_DELIMITER}实验报告{TUPLE_DELIMITER}[type={evaluated_by_name}] 实验报告用于评估算法实现效果{TUPLE_DELIMITER}8)\n"
+                f"{COMPLETION_DELIMITER}"
             ),
             note="手写最小 few-shot 示例：方法/实验/作业型样本。",
         ),
@@ -710,9 +1050,14 @@ def _manual_fewshot_examples(schema_catalog: SchemaCatalog, limit: int) -> List[
 def _select_fewshot_examples(
     audit_records: Sequence[Dict[str, Any]],
     fewshot_k: int,
-) -> tuple[List[FewShotExample], str, List[str], List[str]]:
+    *,
+    schema_catalog: SchemaCatalog,
+    input_max_chars: int,
+    max_entities: int,
+    max_relations: int,
+) -> tuple[List[FewShotExample], str, List[str], List[str], List[Dict[str, Any]]]:
     if fewshot_k <= 0:
-        return [], "disabled", [], ["fewshot_k <= 0，未生成 few-shot 示例。"]
+        return [], "disabled", [], ["fewshot_k <= 0，未生成 few-shot 示例。"], []
 
     usable = [
         record
@@ -722,38 +1067,59 @@ def _select_fewshot_examples(
         and _clean_string(record.get("text"))
     ]
     if not usable:
-        return [], "missing_audit_gold", [], ["未发现可直接复用的 audit gold 标注，将退回手写最小 few-shot 示例。"]
+        return [], "missing_audit_gold", [], ["未发现可直接复用的 audit gold 标注，将退回手写最小 few-shot 示例。"], []
 
-    ordered = sorted(usable, key=_audit_record_sort_key)
-    selected: List[Dict[str, Any]] = []
-    selected_ids: set[str] = set()
+    entity_schema_names = {item.name for item in schema_catalog.entity_types}
+    relation_schema_names = {item.name for item in schema_catalog.relation_types}
+    ordered = sorted(enumerate(usable), key=lambda pair: _audit_record_sort_key(pair[1]))
+    remaining = list(ordered)
+    selected_pairs: List[tuple[int, Dict[str, Any]]] = []
+    covered_entity_types: set[str] = set()
+    covered_relation_types: set[str] = set()
 
-    def pick_by_types(type_names: set[str]) -> None:
-        for record in ordered:
-            record_id = _clean_string(record.get("id"))
-            sample_type = _clean_string(record.get("guessed_sample_type"))
-            if record_id in selected_ids:
-                continue
-            if sample_type in type_names:
-                selected.append(record)
-                selected_ids.add(record_id)
-                return
+    while remaining and len(selected_pairs) < fewshot_k:
+        def coverage_sort_key(pair: tuple[int, Dict[str, Any]]) -> tuple[int, int, tuple[int, int, int, str], int]:
+            index, record = pair
+            entity_types, relation_types = _record_rendered_gold_types(
+                record,
+                schema_entity_names=entity_schema_names,
+                schema_relation_names=relation_schema_names,
+                max_entities=max_entities,
+                max_relations=max_relations,
+            )
+            new_relation_count = len(relation_types - covered_relation_types)
+            new_entity_count = len(entity_types - covered_entity_types)
+            return (-new_relation_count, -new_entity_count, _audit_record_sort_key(record), index)
 
-    pick_by_types(FEWSHOT_CONCEPT_TYPES)
-    pick_by_types(FEWSHOT_ACTIVITY_TYPES)
+        best_pair = min(remaining, key=coverage_sort_key)
+        remaining.remove(best_pair)
+        selected_pairs.append(best_pair)
+        entity_types, relation_types = _record_rendered_gold_types(
+            best_pair[1],
+            schema_entity_names=entity_schema_names,
+            schema_relation_names=relation_schema_names,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+        covered_entity_types.update(entity_types)
+        covered_relation_types.update(relation_types)
 
-    for record in ordered:
-        if len(selected) >= fewshot_k:
-            break
-        record_id = _clean_string(record.get("id"))
-        if record_id in selected_ids:
-            continue
-        selected.append(record)
-        selected_ids.add(record_id)
+    selected = [record for _, record in selected_pairs]
 
-    examples = [_build_fewshot_example_from_audit(record) for record in selected[:fewshot_k]]
+    examples = [
+        _build_fewshot_example_from_audit(
+            record,
+            input_max_chars=input_max_chars,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+        for record in selected[:fewshot_k]
+    ]
     source_ids = [example.source_sample_id for example in examples if example.source_sample_id]
-    return examples, "audit_gold", source_ids, ["few-shot 示例优先复用了 audit_extraction_set.json 中带 gold 标注的样本。"]
+    notes = [
+        "few-shot 示例按关系类型覆盖优先贪心选择；同等覆盖下再比较实体类型覆盖和原有样本优先级。"
+    ]
+    return examples, "audit_gold", source_ids, notes, selected[:fewshot_k]
 
 
 def build_schema_fewshot_prompt(
@@ -826,8 +1192,10 @@ def _candidate_manifest_entry(
     notes: Sequence[str],
     output_dir: Path,
     generated_at: str,
+    fewshot_compression: Optional[Dict[str, int]] = None,
+    fewshot_coverage: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    return {
+    entry = {
         "candidate_name": candidate_name,
         "source_type": source_type,
         "base_prompt_source": base_prompt_source,
@@ -843,6 +1211,11 @@ def _candidate_manifest_entry(
         },
         "notes": list(notes),
     }
+    if fewshot_compression is not None:
+        entry["fewshot_compression"] = dict(fewshot_compression)
+    if fewshot_coverage is not None:
+        entry["fewshot_coverage"] = dict(fewshot_coverage)
+    return entry
 
 
 def _merge_manifest_entry(existing: Dict[str, Any], generated: Dict[str, Any]) -> Dict[str, Any]:
@@ -866,6 +1239,9 @@ def generate_candidate_prompts(
     auto_tuned_prompt_dir: Path,
     output_dir: Path,
     fewshot_k: int = DEFAULT_FEWSHOT_K,
+    fewshot_input_max_chars: int = DEFAULT_FEWSHOT_INPUT_MAX_CHARS,
+    fewshot_max_entities: int = DEFAULT_FEWSHOT_MAX_ENTITIES,
+    fewshot_max_relations: int = DEFAULT_FEWSHOT_MAX_RELATIONS,
     language: str = DEFAULT_LANGUAGE,
     overwrite: bool = False,
     report_file: Optional[Path] = None,
@@ -911,7 +1287,7 @@ def generate_candidate_prompts(
         default_notes.append("default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。")
 
     schema_aware_base_source = auto_tuned_prompt_source.path or default_prompt_source.path
-    schema_aware_base_text = auto_tuned_prompt_source.text or default_prompt_source.text
+    schema_aware_base_text = _strip_legacy_examples(auto_tuned_prompt_source.text or default_prompt_source.text)
     schema_aware_base_label = "官方 auto_tuned Prompt" if auto_tuned_prompt_source.text else "默认 GraphRAG Prompt"
     schema_aware_prompt_text = build_schema_aware_prompt(
         schema_catalog=schema_catalog,
@@ -920,13 +1296,18 @@ def generate_candidate_prompts(
         base_label=schema_aware_base_label,
     )
 
-    fewshot_examples, fewshot_strategy, fewshot_source_ids, fewshot_notes = _select_fewshot_examples(
+    fewshot_examples, fewshot_strategy, fewshot_source_ids, fewshot_notes, fewshot_selected_records = _select_fewshot_examples(
         audit_records=audit_records,
         fewshot_k=fewshot_k,
+        schema_catalog=schema_catalog,
+        input_max_chars=fewshot_input_max_chars,
+        max_entities=fewshot_max_entities,
+        max_relations=fewshot_max_relations,
     )
     if fewshot_strategy != "audit_gold":
         manual_examples = _manual_fewshot_examples(schema_catalog, fewshot_k)
         fewshot_examples = manual_examples[:fewshot_k]
+        fewshot_selected_records = []
     schema_fewshot_prompt_text = build_schema_fewshot_prompt(
         schema_catalog=schema_catalog,
         language=language,
@@ -942,7 +1323,26 @@ def generate_candidate_prompts(
         auto_tuned_source_type = "fallback_default_copy"
         auto_tuned_notes.append("由于未发现实际 auto-tuned Prompt，当前候选内容回退为 default 候选 Prompt，以保证目录结构和后续切换流程可运行。")
 
+    default_prompt_text = _render_delimiter_placeholders(default_prompt_text)
+    auto_tuned_prompt_text = _render_delimiter_placeholders(auto_tuned_prompt_text)
+    schema_aware_prompt_text = _render_delimiter_placeholders(schema_aware_prompt_text)
+    schema_fewshot_prompt_text = _render_delimiter_placeholders(schema_fewshot_prompt_text)
+
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    fewshot_coverage = _build_fewshot_coverage_report(
+        schema_catalog=schema_catalog,
+        selected_records=fewshot_selected_records,
+        selected_example_ids=[example.example_id for example in fewshot_examples],
+        selection_strategy=(
+            FEWSHOT_COVERAGE_SELECTION_STRATEGY
+            if fewshot_strategy == "audit_gold"
+            else ("minimal_manual_examples" if fewshot_examples else fewshot_strategy)
+        ),
+        max_entities=fewshot_max_entities,
+        max_relations=fewshot_max_relations,
+    )
+    fewshot_coverage_summary = _format_fewshot_coverage_summary(fewshot_coverage)
 
     default_candidate_notes = list(default_notes)
     if sample_records:
@@ -961,8 +1361,18 @@ def generate_candidate_prompts(
         schema_fewshot_notes.append(f"few-shot 来源样本：{', '.join(fewshot_source_ids)}")
     if fewshot_examples and fewshot_examples[0].source_kind == "manual_minimal":
         schema_fewshot_notes.append("当前 few-shot 使用手写最小示例，仅作为 audit gold 缺失时的降级方案。")
+    schema_fewshot_notes.append(fewshot_coverage_summary)
+    schema_fewshot_notes.append(
+        "few-shot 示例已压缩：限制输入长度、实体数量和关系数量，避免候选 Prompt 过长。"
+    )
     schema_fewshot_notes = _dedupe_preserve_order(schema_fewshot_notes)
     auto_tuned_notes = _dedupe_preserve_order(auto_tuned_notes)
+
+    fewshot_compression = {
+        "input_max_chars": fewshot_input_max_chars,
+        "max_entities": fewshot_max_entities,
+        "max_relations": fewshot_max_relations,
+    }
 
     candidates = [
         {
@@ -1011,6 +1421,8 @@ def generate_candidate_prompts(
             "fewshot_used": bool(fewshot_examples),
             "fewshot_example_count": len(fewshot_examples),
             "fewshot_strategy": "audit_gold" if fewshot_strategy == "audit_gold" else "minimal_manual_examples",
+            "fewshot_compression": fewshot_compression,
+            "fewshot_coverage": fewshot_coverage,
             "notes": schema_fewshot_notes,
         },
     ]
@@ -1050,6 +1462,8 @@ def generate_candidate_prompts(
             fewshot_used=bool(candidate["fewshot_used"]),
             fewshot_example_count=int(candidate["fewshot_example_count"]),
             fewshot_strategy=candidate["fewshot_strategy"],
+            fewshot_compression=candidate.get("fewshot_compression"),
+            fewshot_coverage=candidate.get("fewshot_coverage"),
             notes=candidate["notes"],
             output_dir=output_dir,
             generated_at=generated_at,
@@ -1101,7 +1515,9 @@ def generate_candidate_prompts(
             "strategy": "audit_gold" if fewshot_strategy == "audit_gold" else "minimal_manual_examples",
             "source_sample_ids": fewshot_source_ids,
             "example_ids": [example.example_id for example in fewshot_examples],
+            "compression": fewshot_compression,
         },
+        "fewshot_coverage": fewshot_coverage,
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
         "manifest_path": _safe_relpath(manifest_path),
         "notes": [
@@ -1161,6 +1577,24 @@ def _build_parser() -> argparse.ArgumentParser:
         help="few-shot 示例数量，默认 3",
     )
     parser.add_argument(
+        "--fewshot-input-max-chars",
+        type=int,
+        default=DEFAULT_FEWSHOT_INPUT_MAX_CHARS,
+        help="每条 few-shot 输入文本最大字符数，默认 450",
+    )
+    parser.add_argument(
+        "--fewshot-max-entities",
+        type=int,
+        default=DEFAULT_FEWSHOT_MAX_ENTITIES,
+        help="每条 few-shot 输出最多实体数，默认 3",
+    )
+    parser.add_argument(
+        "--fewshot-max-relations",
+        type=int,
+        default=DEFAULT_FEWSHOT_MAX_RELATIONS,
+        help="每条 few-shot 输出最多关系数，默认 1",
+    )
+    parser.add_argument(
         "--language",
         default=DEFAULT_LANGUAGE,
         help="Prompt 语言标记，默认 zh",
@@ -1190,6 +1624,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         auto_tuned_prompt_dir=Path(args.auto_tuned_prompt_dir).resolve(),
         output_dir=Path(args.output_dir).resolve(),
         fewshot_k=args.fewshot_k,
+        fewshot_input_max_chars=args.fewshot_input_max_chars,
+        fewshot_max_entities=args.fewshot_max_entities,
+        fewshot_max_relations=args.fewshot_max_relations,
         language=args.language,
         overwrite=args.overwrite,
         report_file=Path(args.report_file).resolve() if args.report_file else None,

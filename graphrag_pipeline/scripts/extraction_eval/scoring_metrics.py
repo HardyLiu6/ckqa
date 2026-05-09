@@ -159,11 +159,11 @@ def _suggest_endpoint_action(
 ) -> str:
     if reason == "semantic_defined_by_term_alias":
         return "alias_not_relation"
+    if reason in {"missing_source", "missing_target", "missing_endpoint"}:
+        return "complete_entity_or_skip_relation"
     if relation_type == "contains" and source_type in KNOWLEDGE_CONTAINS_SOURCE_TYPES:
         return "schema_candidate"
     if relation_type in {"belongs_to", "appears_in"}:
-        return "tighten_prompt"
-    if reason in {"missing_source", "missing_target", "missing_endpoint"}:
         return "tighten_prompt"
     if reason.startswith("semantic_"):
         return "tighten_prompt"

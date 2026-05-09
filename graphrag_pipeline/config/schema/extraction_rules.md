@@ -305,7 +305,23 @@
 说明：
 
 1. `appears_in` 只在缺乏更强语义时使用。
-2. `related_to` 是保底关系，不应成为默认关系。
+2. `related_to` 是保底关系，不应成为默认关系，也不能用 `related_to` 代替缺失端点。
+
+### 7.2.1 关系端点完整性
+
+规则：
+
+1. 所有关系的 `source` 和 `target` 必须能在 `entities` 中找到。
+2. 如果关系端点在原文中证据充足但尚未输出实体，应先补齐该实体，再输出关系。
+3. 如果无法补齐端点实体，应跳过该关系。
+4. 不能输出 `<missing>`、`unknown`、`N/A`、空字符串或临时占位关系。
+5. 关系端点应使用实体标题，不要用章节字段、页码、行号或说明性短语临时占位。
+
+错误示例：
+
+1. `进程 related_to <missing>`
+2. `<missing> defined_by 响应比公式`
+3. `银行家算法 appears_in unknown`
 
 ### 7.3 contains 与 belongs_to
 
@@ -318,6 +334,7 @@
 5. 只有当 `contains.source_type` 是 `Course`、`Chapter`、`Section` 时，才允许自动派生反向 `belongs_to`。
 6. 知识对象之间的 `contains` 只在原文明示分类、组成或步骤分解时使用，不派生反向 `belongs_to`。
 7. 共现、同段出现、主题相关不构成 `contains`。
+8. 知识对象之间不要用 `belongs_to` 表达上下位、组成或相关；应按证据改用 `contains`、`depends_on`、`applied_in`、`related_to`，证据不足则跳过。
 
 正确示例：
 
@@ -328,6 +345,7 @@
 
 1. `关键字 contains 记录`，仅因“关键字标识记录”同句出现，不是组成关系。
 2. `概念A belongs_to 概念B`，`belongs_to` 不能指向知识对象。
+3. `死锁 belongs_to 资源分配图`，这是 `Concept->Concept` 的知识对象关系，不能用 `belongs_to`。
 
 ### 7.3.1 defined_by 与 alias 的边界
 
@@ -336,6 +354,8 @@
 1. `defined_by` 指向 `FormulaOrDefinition` 时，用于正式定义、公式、定律或判定条件。
 2. `defined_by` 指向 `Term` 时，`Term` 必须承担符号、变量、参数或公式记号角色。
 3. 英文全称、简称、缩写、别名解释不使用 `defined_by`，应进入实体 alias 或归一化字段。
+4. 禁止 `Concept->Concept` 和 `Term->Concept` 使用 `defined_by`。
+5. 存在标志、背景解释、普通说明、命名别名和简称展开不能用 `defined_by`。
 
 正确示例：
 
@@ -347,6 +367,9 @@
 1. `PCB defined_by Process Control Block`
 2. `TLB defined_by Translation Lookaside Buffer`
 3. `进程 defined_by process`
+4. `进程 defined_by 线程`，这是 `Concept->Concept`。
+5. `PCB defined_by 进程控制块`，这是 `Term->Concept` 或别名展开。
+6. `存在标志 defined_by present`，存在标志不是正式定义、公式、符号、变量或参数。
 
 ### 7.4 depends_on 与 prerequisite_of
 
@@ -364,6 +387,29 @@
 2. 如果能判断“知识点用于实验”，应使用 `applied_in` 而不是 `appears_in`。
 3. 如果能判断“知识点被作业考核”，应使用 `evaluated_by` 而不是 `appears_in`。
 4. `appears_in` 的目标只能是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment`，不能指向另一个知识对象。
+5. 禁止反向 `Section appears_in Concept`；如果结构单元讲授或包含知识对象，优先使用 `contains`。
+
+错误示例：
+
+1. `第三章 存储器管理 appears_in TLB`，这是反向 `Section appears_in Concept`。
+2. `实验一 appears_in 银行家算法`，这是反向或端点类型错误。
+3. `虚拟内存 appears_in 页面置换算法`，目标不是课程结构或学习活动容器。
+
+### 7.6 related_to 与 implemented_by 的端点边界
+
+规则：
+
+1. `related_to` 只能连接两个已经抽取出来的实体。
+2. 不能用 `related_to` 代替缺失端点；如果 target 证据充足，应先补齐 target 实体。
+3. 如果无法补齐 source 或 target，跳过该关系。
+4. `implemented_by` 的目标必须是可执行方法或工具平台，即 `AlgorithmOrMethod` 或 `ToolOrPlatform`。
+5. 如果目标只是概念、属性、原则或效果，不要用 `implemented_by`，应改用 `depends_on`、`applied_in`、`related_to` 或跳过。
+
+错误示例：
+
+1. `磁盘高速缓存 related_to 文件访问速度`，但 `文件访问速度` 没有输出实体。
+2. `RAID related_to 系统容错`，但 `系统容错` 没有输出实体。
+3. `高响应比优先调度算法 implemented_by 动态优先级`，`动态优先级` 是概念，不是实现方法或工具平台。
 
 ## 8. 对课程通知、无意义短语、图表残片的处理
 

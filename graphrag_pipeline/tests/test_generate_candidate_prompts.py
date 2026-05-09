@@ -31,6 +31,11 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _assert_no_delimiter_placeholders(testcase: unittest.TestCase, text: str) -> None:
+    for placeholder in ("{tuple_delimiter}", "{record_delimiter}", "{completion_delimiter}"):
+        testcase.assertNotIn(placeholder, text)
+
+
 class TestGenerateCandidatePrompts(unittest.TestCase):
     def _write_schema_files(self, schema_dir: Path) -> None:
         entity_payload = {
@@ -100,6 +105,16 @@ class TestGenerateCandidatePrompts(unittest.TestCase):
                     "label_zh": "由…定义",
                     "description": "表示概念由定义或公式界定",
                     "extraction_hint": "用于定义关系",
+                    "examples": [
+                        "进程 defined_by 进程定义",
+                        "周转时间 defined_by 周转时间公式",
+                        "第三个正例不应进入摘要",
+                    ],
+                    "negative_examples": [
+                        "Concept->Concept 的背景解释不是 defined_by",
+                        "Term->Concept 的简称解释不是 defined_by",
+                        "第三个禁例不应进入摘要",
+                    ],
                     "source_types": ["Concept"],
                     "target_types": ["Concept"],
                 },
@@ -121,6 +136,9 @@ class TestGenerateCandidatePrompts(unittest.TestCase):
                     "label_zh": "相关",
                     "description": "弱语义保底关系",
                     "extraction_hint": "无法确定更具体关系时使用",
+                    "examples": [
+                        "死锁处理 related_to 资源分配图",
+                    ],
                     "source_types": ["Concept", "AlgorithmOrMethod"],
                     "target_types": ["Concept", "AlgorithmOrMethod"],
                 },
@@ -133,6 +151,11 @@ class TestGenerateCandidatePrompts(unittest.TestCase):
 2. 优先使用最具体的关系类型，不要因为共现就建立关系。
 3. 课程通知、图表残片、空泛短语默认不抽。
 4. 同一课程内注意去重，不做跨课程自动合并。
+
+## 7.2.1 关系端点完整性
+1. 所有关系的 source 和 target 必须能在 entities 中找到。
+2. 如果无法补齐端点实体，应跳过该关系。
+3. 不能输出 <missing>、unknown、N/A、空字符串或临时占位关系。
 """
 
         _write_json(schema_dir / "entity_types.json", entity_payload)
@@ -147,8 +170,16 @@ Given a text document, identify entities and relationships.
 
 -Steps-
 1. Identify all entities.
+- entity_type: One of the following types: [file format, operating system component]
 2. Identify all relationships.
 3. Return output as tuples.
+
+-Examples-
+Example 1:
+text:
+MPEG、GIF 和 AVI 是多媒体文件格式。
+output:
+("entity"<|>MPEG<|>file format<|>旧通用示例)
 
 -Real Data-
 entity_types: [legacy_entity]
@@ -346,6 +377,81 @@ output:
             ],
         }
 
+    def _build_coverage_audit_payload(self) -> dict:
+        payload = self._build_audit_payload(with_gold=True)
+        payload["audit_samples"].append(
+            {
+                "id": "audit-003",
+                "source_sample_id": "pts-003",
+                "source_doc_id": "doc-003",
+                "source_file": "assignment.pdf",
+                "document_type": "assignment",
+                "course_id": "os",
+                "chapter": "第四章 内存管理",
+                "section": "作业一 概念辨析",
+                "heading_path": ["第四章 内存管理", "作业一 概念辨析"],
+                "heading_level": 2,
+                "text": "虚拟内存由页面置换机制定义，并通过作业一考核概念理解。",
+                "text_length": 31,
+                "page_start": 31,
+                "page_end": 31,
+                "guessed_sample_type": "assignment_requirement",
+                "audit_priority": "medium",
+                "audit_reason": "覆盖更多关系类型的作业样本",
+                "gold_entities": [
+                    {
+                        "entity_id": "ent-201",
+                        "name": "虚拟内存",
+                        "type": "Concept",
+                        "alias": [],
+                        "span_text": "虚拟内存",
+                        "normalized_name": "虚拟内存",
+                        "notes": "",
+                    },
+                    {
+                        "entity_id": "ent-202",
+                        "name": "页面置换机制",
+                        "type": "Concept",
+                        "alias": [],
+                        "span_text": "页面置换机制",
+                        "normalized_name": "页面置换机制",
+                        "notes": "",
+                    },
+                    {
+                        "entity_id": "ent-203",
+                        "name": "作业一 概念辨析",
+                        "type": "Assignment",
+                        "alias": [],
+                        "span_text": "作业一 概念辨析",
+                        "normalized_name": "作业一 概念辨析",
+                        "notes": "",
+                    },
+                ],
+                "gold_relations": [
+                    {
+                        "relation_id": "rel-201",
+                        "source_entity_id": "ent-201",
+                        "target_entity_id": "ent-202",
+                        "type": "defined_by",
+                        "evidence_text": "虚拟内存由页面置换机制定义",
+                        "notes": "",
+                    },
+                    {
+                        "relation_id": "rel-202",
+                        "source_entity_id": "ent-201",
+                        "target_entity_id": "ent-203",
+                        "type": "evaluated_by",
+                        "evidence_text": "作业一考核虚拟内存概念理解",
+                        "notes": "",
+                    },
+                ],
+                "annotation_notes": "",
+                "reviewer_decision": "",
+                "reviewer_confidence": "",
+            }
+        )
+        return payload
+
     def test_generate_candidate_prompts_writes_four_candidates_and_manifest(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -369,6 +475,9 @@ output:
                 auto_tuned_prompt_dir=root / "missing-auto-tuned",
                 output_dir=output_dir,
                 fewshot_k=2,
+                fewshot_input_max_chars=80,
+                fewshot_max_entities=2,
+                fewshot_max_relations=1,
                 language="zh",
                 overwrite=True,
                 report_file=report_file,
@@ -408,11 +517,104 @@ output:
             self.assertIn("关系说明必须以 [type=<relation_type>]", schema_aware_text)
             self.assertIn("contains", schema_aware_text)
             self.assertIn("implemented_by", schema_aware_text)
+            self.assertIn("进程 defined_by 进程定义", schema_aware_text)
+            self.assertIn("周转时间 defined_by 周转时间公式", schema_aware_text)
+            self.assertNotIn("第三个正例不应进入摘要", schema_aware_text)
+            self.assertIn("Concept->Concept", schema_aware_text)
+            self.assertIn("简称解释不是 defined_by", schema_aware_text)
+            self.assertNotIn("第三个禁例不应进入摘要", schema_aware_text)
+            self.assertIn("死锁处理 related_to 资源分配图", schema_aware_text)
+            self.assertIn("不能用 related_to 代替缺失端点或更具体关系", schema_aware_text)
+            self.assertIn("所有关系的 source 和 target 必须能在 entities 中找到", schema_aware_text)
+            self.assertIn("无法补齐端点实体，应跳过该关系", schema_aware_text)
+            self.assertNotIn("MPEG", schema_aware_text)
+            self.assertNotIn("file format", schema_aware_text)
 
             fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
             self.assertIn("Few-shot 示例", fewshot_text)
             self.assertIn("进程是程序的一次执行过程", fewshot_text)
             self.assertIn("实验步骤：实现时间片轮转调度算法", fewshot_text)
+            self.assertLess(len(fewshot_text), 8000)
+            self.assertEqual(fewshot_text.count('("entity"'), 4)
+            self.assertEqual(fewshot_text.count('("relationship"'), 2)
+            self.assertNotIn("MPEG", fewshot_text)
+            self.assertIn("进程 defined_by 进程定义", fewshot_text)
+            self.assertIn("Concept->Concept", fewshot_text)
+            self.assertIn("不能用 related_to 代替缺失端点或更具体关系", fewshot_text)
+            self.assertIn("所有关系的 source 和 target 必须能在 entities 中找到", fewshot_text)
+            self.assertIn("<|>", fewshot_text)
+            self.assertIn("<|COMPLETE|>", fewshot_text)
+            _assert_no_delimiter_placeholders(self, fewshot_text)
+            self.assertEqual(
+                candidates["schema_fewshot"]["fewshot_compression"],
+                {
+                    "input_max_chars": 80,
+                    "max_entities": 2,
+                    "max_relations": 1,
+                },
+            )
+            report_payload = json.loads(report_file.read_text(encoding="utf-8"))
+            self.assertEqual(report_payload["fewshot"]["compression"]["input_max_chars"], 80)
+
+    def test_schema_fewshot_prefers_relation_coverage_before_priority(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            schema_dir = root / "config" / "schema"
+            default_prompt_dir = root / "prompts"
+            output_dir = root / "prompts" / "candidates"
+            samples_file = root / "data" / "prompt_tuning_samples" / "prompt_tuning_samples.json"
+            audit_file = root / "data" / "eval" / "audit_extraction_set.json"
+            report_file = root / "results" / "reports" / "prompt_generation_report.json"
+
+            self._write_schema_files(schema_dir)
+            self._write_default_prompt(default_prompt_dir)
+            _write_json(samples_file, self._build_samples_payload())
+            _write_json(audit_file, self._build_coverage_audit_payload())
+
+            result = generate_candidate_prompts(
+                schema_dir=schema_dir,
+                samples_file=samples_file,
+                audit_file=audit_file,
+                default_prompt_dir=default_prompt_dir,
+                auto_tuned_prompt_dir=root / "missing-auto-tuned",
+                output_dir=output_dir,
+                fewshot_k=2,
+                fewshot_input_max_chars=120,
+                fewshot_max_entities=3,
+                fewshot_max_relations=2,
+                language="zh",
+                overwrite=True,
+                report_file=report_file,
+            )
+
+            report_payload = json.loads(report_file.read_text(encoding="utf-8"))
+            coverage = report_payload["fewshot_coverage"]
+            self.assertEqual(coverage["selection_strategy"], "greedy_relation_entity_coverage")
+            self.assertEqual(coverage["selected_example_ids"], ["audit-003", "audit-002"])
+            self.assertEqual(
+                coverage["covered_relation_types"],
+                ["defined_by", "implemented_by", "evaluated_by"],
+            )
+            self.assertEqual(coverage["missing_relation_types"], ["contains", "related_to"])
+            self.assertEqual(
+                coverage["covered_entity_types"],
+                ["Concept", "AlgorithmOrMethod", "Experiment", "Assignment"],
+            )
+            self.assertEqual(coverage["missing_entity_types"], ["Course", "Chapter"])
+
+            candidates = {item["candidate_name"]: item for item in result["manifest"]["candidates"]}
+            self.assertEqual(candidates["schema_fewshot"]["fewshot_coverage"], coverage)
+            self.assertIn(
+                "few-shot 覆盖摘要：关系 3/5，实体 4/6",
+                "\n".join(candidates["schema_fewshot"]["notes"]),
+            )
+
+            readme_text = (output_dir / "schema_fewshot" / "README.md").read_text(encoding="utf-8")
+            self.assertIn("few-shot 覆盖摘要：关系 3/5，实体 4/6", readme_text)
+            fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
+            self.assertLess(fewshot_text.index("Example 1 (assignment_requirement)"), fewshot_text.index("Example 2"))
+            self.assertIn("[type=defined_by]", fewshot_text)
+            self.assertIn("[type=evaluated_by]", fewshot_text)
 
     def test_generate_candidate_prompts_falls_back_when_default_prompt_and_audit_gold_are_missing(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -471,6 +673,8 @@ output:
             self.assertIn("AUTO_TUNED_BASE", fewshot_text)
             self.assertIn("手写最小 few-shot 示例", fewshot_text)
             self.assertIn("Official README marker", auto_tuned_readme)
+            for prompt_text in (default_text, auto_tuned_text, schema_aware_text, fewshot_text):
+                _assert_no_delimiter_placeholders(self, prompt_text)
             self.assertTrue(report_file.exists())
 
             manifest = result["manifest"]

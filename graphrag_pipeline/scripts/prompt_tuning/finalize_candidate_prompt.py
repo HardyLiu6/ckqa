@@ -127,6 +127,7 @@ def _validate_scoring_binding(
     expected_manifest_sha256: str | None,
     expected_scoring_result_sha256: str | None,
     min_parse_success_rate: float,
+    allow_failed_scoring_gate: bool = False,
 ) -> dict[str, Any] | None:
     provided = [
         scoring_run_id,
@@ -167,7 +168,13 @@ def _validate_scoring_binding(
 
     parse_success_rate = float(best.get("parse_success_rate") or 0.0)
     gate_passed = bool(best.get("gate_passed"))
-    if parse_success_rate < min_parse_success_rate or not gate_passed:
+    if parse_success_rate < min_parse_success_rate:
+        raise PromptFinalizationError(
+            "候选未通过 scoring gate，拒绝固化："
+            f"candidate={candidate_name}, parse_success_rate={parse_success_rate:.3f}, "
+            f"gate_passed={gate_passed}"
+        )
+    if not gate_passed and not allow_failed_scoring_gate:
         raise PromptFinalizationError(
             "候选未通过 scoring gate，拒绝固化："
             f"candidate={candidate_name}, parse_success_rate={parse_success_rate:.3f}, "
@@ -217,6 +224,7 @@ def _validate_scoring_binding(
         "scoring_report": str(scoring_path),
         "parse_success_rate": parse_success_rate,
         "gate_passed": gate_passed,
+        "allow_failed_scoring_gate": allow_failed_scoring_gate,
     }
 
 
@@ -311,6 +319,57 @@ def _update_env_file(*, env_file: Path, assignments: dict[str, str]) -> None:
     env_file.write_text("\n".join(updated_lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _build_activation_metadata(
+    *,
+    scoring_binding: dict[str, Any] | None,
+    allow_failed_scoring_gate: bool,
+) -> dict[str, Any]:
+    if scoring_binding is None:
+        return {
+            "activation_policy": "experimental_unbound",
+            "formal_activation_ready": False,
+            "experimental": True,
+            "experimental_reason": "未绑定 scoring binding，不能作为正式激活证据。",
+            "gate_passed": None,
+            "scoring_run_id": None,
+            "manifest_sha256": None,
+            "scoring_result_sha256": None,
+        }
+
+    gate_passed = bool(scoring_binding.get("gate_passed"))
+    base_metadata: dict[str, Any] = {
+        "gate_passed": gate_passed,
+        "scoring_run_id": scoring_binding.get("run_id"),
+        "manifest_sha256": scoring_binding.get("manifest_sha256"),
+        "scoring_result_sha256": scoring_binding.get("scoring_result_sha256"),
+    }
+    if gate_passed and not allow_failed_scoring_gate:
+        return {
+            **base_metadata,
+            "activation_policy": "formal_scoring_bound",
+            "formal_activation_ready": True,
+            "experimental": False,
+            "experimental_reason": None,
+        }
+
+    if not gate_passed:
+        return {
+            **base_metadata,
+            "activation_policy": "experimental_scoring_gate_failed",
+            "formal_activation_ready": False,
+            "experimental": True,
+            "experimental_reason": "scoring gate 未通过，已通过 --allow-failed-scoring-gate 实验性放行。",
+        }
+
+    return {
+        **base_metadata,
+        "activation_policy": "experimental_allow_failed_scoring_gate",
+        "formal_activation_ready": False,
+        "experimental": True,
+        "experimental_reason": "本次显式使用 --allow-failed-scoring-gate，按实验性激活记录。",
+    }
+
+
 def finalize_candidate_prompt(
     *,
     root: Path,
@@ -323,6 +382,8 @@ def finalize_candidate_prompt(
     expected_manifest_sha256: str | None = None,
     expected_scoring_result_sha256: str | None = None,
     min_parse_success_rate: float = 0.8,
+    allow_failed_scoring_gate: bool = False,
+    require_scoring_binding: bool = False,
 ) -> dict[str, Any]:
     """把候选 Prompt 固化为当前活动 Prompt。"""
 
@@ -341,7 +402,14 @@ def finalize_candidate_prompt(
         expected_manifest_sha256=expected_manifest_sha256,
         expected_scoring_result_sha256=expected_scoring_result_sha256,
         min_parse_success_rate=min_parse_success_rate,
+        allow_failed_scoring_gate=allow_failed_scoring_gate,
     )
+    if require_scoring_binding and scoring_binding is None:
+        raise PromptFinalizationError(
+            "正式固化必须提供并通过 scoring binding 校验："
+            "--scoring-run-id / --scoring-report / --expected-manifest-sha256 / "
+            "--expected-scoring-result-sha256"
+        )
     candidate_dir = _resolve_candidate_dir(
         root=project_root,
         candidate_name=candidate_name,
@@ -363,6 +431,10 @@ def finalize_candidate_prompt(
 
     _update_env_file(env_file=env_path, assignments=env_assignments)
 
+    activation_metadata = _build_activation_metadata(
+        scoring_binding=scoring_binding,
+        allow_failed_scoring_gate=allow_failed_scoring_gate,
+    )
     report = {
         "task": "prompt_candidate_finalization",
         "status": "success",
@@ -374,6 +446,7 @@ def finalize_candidate_prompt(
         "env_file": str(env_path),
         "copied_files": copied_files,
         "active_prompt_paths": active_prompt_paths,
+        **activation_metadata,
         "scoring_binding": scoring_binding,
     }
     _write_json(final_root / ACTIVE_PROMPT_RECORD, report)
@@ -417,6 +490,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.8,
         help="固化所需 parse_success_rate 门槛，默认 0.8",
     )
+    parser.add_argument(
+        "--allow-failed-scoring-gate",
+        action="store_true",
+        help="实验性放行 gate_passed=false 的候选；仍校验候选、run_id、hash 与 parse_success_rate",
+    )
+    parser.add_argument(
+        "--require-scoring-binding",
+        action="store_true",
+        help="要求本次固化必须绑定并校验 scoring report；适用于正式激活。",
+    )
     return parser
 
 
@@ -435,6 +518,8 @@ def main(argv: list[str] | None = None) -> int:
         expected_manifest_sha256=args.expected_manifest_sha256,
         expected_scoring_result_sha256=args.expected_scoring_result_sha256,
         min_parse_success_rate=args.min_parse_success_rate,
+        allow_failed_scoring_gate=args.allow_failed_scoring_gate,
+        require_scoring_binding=args.require_scoring_binding,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0

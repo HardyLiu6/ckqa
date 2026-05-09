@@ -99,11 +99,16 @@
         "Chapter",
         "Section"
       ],
-      "extraction_hint": "当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；后续脚本也可以由 contains 自动反推。",
+      "extraction_hint": "当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；目标只能是 Course/Chapter/Section。知识对象之间不要用 belongs_to 表达上下位、组成或相关，改用 contains、depends_on、applied_in、related_to 或跳过。",
       "examples": [
         "Section -> Chapter",
         "KnowledgePoint -> Section",
         "Assignment -> Course"
+      ],
+      "negative_examples": [
+        "Concept->Concept: 死锁 belongs_to 资源分配图",
+        "Concept->KnowledgePoint: 进程 belongs_to 进程管理",
+        "AlgorithmOrMethod->Concept: 银行家算法 belongs_to 死锁"
       ]
     },
     "depends_on": {
@@ -209,10 +214,15 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "只有在 contains、defined_by、depends_on、applied_in、implemented_by、evaluated_by 等都不合适时才使用。",
+      "extraction_hint": "只有在 contains、defined_by、depends_on、applied_in、implemented_by、evaluated_by 等都不合适时才使用。source 和 target 必须都是已抽取实体；如果 target 在原文中证据充足，必须先补齐 target 实体，再输出 related_to；如果无法补齐 target，则跳过关系，不能用作缺失关系占位。",
       "examples": [
         "死锁处理 related_to 资源分配图",
         "虚拟内存 related_to 页面置换算法"
+      ],
+      "negative_examples": [
+        "Concept->missing: 磁盘高速缓存 related_to 文件访问速度",
+        "Term->missing: RAID related_to 系统容错",
+        "missing->missing: 调度算法 related_to NP完全性问题"
       ]
     },
     "defined_by": {
@@ -221,22 +231,31 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": false,
-      "description": "表示概念、术语或知识点由某一定义、公式、定律或判定条件来界定。",
+      "description": "表示概念、术语、知识点或算法方法由某一定义、公式、定律或判定条件来界定。",
       "source_types": [
         "KnowledgePoint",
         "Concept",
-        "Term"
+        "Term",
+        "AlgorithmOrMethod"
       ],
       "target_types": [
         "FormulaOrDefinition",
         "Term"
       ],
-      "extraction_hint": "用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系；当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释不得用 defined_by，应进入实体 alias 或归一化字段。",
+      "extraction_hint": "用于正式定义、公式、定律或判定条件。禁止 Concept->Concept，禁止 Term->Concept；别名、简称、存在标志、背景解释不能用 defined_by。当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释应进入实体 alias 或归一化字段。",
       "examples": [
         "进程 defined_by 进程定义",
         "周转时间 defined_by 周转时间公式",
+        "高响应比优先调度算法 defined_by 响应比公式",
         "工作集 defined_by Δ",
         "响应比 defined_by HRN"
+      ],
+      "negative_examples": [
+        "Concept->Concept: 进程 defined_by 线程",
+        "Term->Concept: PCB defined_by 进程控制块",
+        "Term->Term: TLB defined_by Translation Lookaside Buffer",
+        "Concept->Term: 进程 defined_by process",
+        "Concept->Term: 存在标志 defined_by present"
       ]
     },
     "applied_in": {
@@ -245,7 +264,7 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": false,
-      "description": "表示知识、方法、公式或算法被用于某实验、作业、章节讲解或平台操作场景。",
+      "description": "表示知识、方法、公式或算法被应用到某知识主题、实验、作业、章节讲解或平台操作场景。",
       "source_types": [
         "KnowledgePoint",
         "Concept",
@@ -254,13 +273,17 @@
         "AlgorithmOrMethod"
       ],
       "target_types": [
+        "KnowledgePoint",
+        "Concept",
         "Section",
         "Experiment",
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类场景化关系。",
+      "extraction_hint": "用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类关系；表达算法、方法或知识被用于解释、处理、解决某个知识主题或教学场景。不要放宽为任意共现或泛泛相关，弱相关仍使用 related_to。",
       "examples": [
+        "银行家算法 applied_in 死锁",
+        "地址映射 applied_in 分页存储管理",
         "PV 同步方法 applied_in 生产者-消费者实验",
         "周转时间公式 applied_in 调度算法作业"
       ]
@@ -283,10 +306,15 @@
         "AlgorithmOrMethod",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”这类实现关系。",
+      "extraction_hint": "用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”这类实现关系。目标只能是 AlgorithmOrMethod 或 ToolOrPlatform；如果目标只是概念、属性、原则或效果，应改用 depends_on、applied_in、related_to 或跳过。",
       "examples": [
         "进程同步 implemented_by PV 同步方法",
         "页面置换实验 implemented_by Python 模拟器"
+      ],
+      "negative_examples": [
+        "AlgorithmOrMethod->Concept: 高响应比优先调度算法 implemented_by 动态优先级",
+        "Concept->Term: 进程同步 implemented_by PV",
+        "Section->ToolOrPlatform: 习题 implemented_by SPOOLing系统"
       ]
     },
     "evaluated_by": {
@@ -339,10 +367,15 @@
         "Experiment",
         "Assignment"
       ],
-      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；若能判断 contains、applied_in、evaluated_by 等关系，则优先使用更强关系。",
+      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；目标必须是 Course/Chapter/Section/Experiment/Assignment。禁止反向 Section appears_in Concept，结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
       "examples": [
         "TLB appears_in 第三章 存储器管理",
         "银行家算法 appears_in 作业 2"
+      ],
+      "negative_examples": [
+        "Section->Concept: 第三章 存储器管理 appears_in TLB",
+        "Experiment->Concept: 实验一 appears_in 银行家算法",
+        "Concept->Concept: 虚拟内存 appears_in 页面置换算法"
       ]
     }
   }

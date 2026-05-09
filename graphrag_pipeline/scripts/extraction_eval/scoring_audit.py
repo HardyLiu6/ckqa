@@ -77,7 +77,13 @@ REQUIRED_MANUAL_GOLD_SEED_RELATION_TYPES: tuple[str, ...] = (
     "applied_in",
     "depends_on",
 )
-MANUAL_GOLD_SEED_VERSION = "manual_gold_seed_v1"
+MANUAL_GOLD_SEED_VERSION = "manual_gold_seed_*"
+
+
+def _gold_seed_version_matches(actual: str, expected: str) -> bool:
+    if expected.endswith("*"):
+        return actual.startswith(expected[:-1])
+    return actual == expected
 
 
 def load_audit_index(path: Path) -> dict[str, AuditEntry]:
@@ -106,7 +112,7 @@ def summarize_manual_gold_seed_coverage(
     seed_entries = {
         sample_id: entry
         for sample_id, entry in audit_index.items()
-        if entry.gold_seed and entry.gold_seed_version == required_version
+        if entry.gold_seed and _gold_seed_version_matches(entry.gold_seed_version, required_version)
     }
     covered_relation_types = sorted(
         {

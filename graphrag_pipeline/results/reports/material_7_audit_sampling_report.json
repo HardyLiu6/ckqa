@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "generated_at": "2026-05-08T14:01:16",
+  "generated_at": "2026-05-09T12:32:38",
   "input_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/material_7_samples.json",
   "selection_strategy": "balanced_stratified",
   "fallback_to_random": false,
@@ -109,6 +109,10 @@
           "xlong": 2
         }
       }
+    },
+    "preserved_existing_gold_count": 5,
+    "preserved_existing_gold_match_counts": {
+      "stable_source_hash": 5
     }
   },
   "selected_examples": [

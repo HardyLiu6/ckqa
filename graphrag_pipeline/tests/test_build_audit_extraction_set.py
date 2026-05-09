@@ -21,7 +21,11 @@ _SCRIPT_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from build_audit_extraction_set import build_audit_dataset, load_schema_catalog
+from build_audit_extraction_set import (
+    build_audit_dataset,
+    load_schema_catalog,
+    preserve_existing_gold_annotations,
+)
 
 
 class TestBuildAuditExtractionSet(unittest.TestCase):
@@ -137,6 +141,8 @@ class TestBuildAuditExtractionSet(unittest.TestCase):
             "heading_path",
             "heading_level",
             "text",
+            "text_hash",
+            "gold_stable_key",
             "text_length",
             "page_start",
             "page_end",
@@ -151,11 +157,141 @@ class TestBuildAuditExtractionSet(unittest.TestCase):
             self.assertIn(key, sample)
 
         self.assertIsInstance(sample["heading_path"], list)
+        self.assertRegex(sample["text_hash"], r"^[0-9a-f]{16}$")
+        self.assertIn(sample["text_hash"], sample["gold_stable_key"])
         self.assertEqual(sample["gold_entities"], [])
         self.assertEqual(sample["gold_relations"], [])
         self.assertEqual(sample["annotation_notes"], "")
         self.assertEqual(sample["reviewer_decision"], "")
         self.assertEqual(sample["reviewer_confidence"], "")
+
+    def test_preserve_existing_gold_annotations_by_source_sample_id(self):
+        dataset = {
+            "stats": {},
+            "audit_samples": [
+                {
+                    "source_sample_id": "pts-001",
+                    "gold_entities": [],
+                    "gold_relations": [],
+                    "annotation_notes": "",
+                    "reviewer_decision": "",
+                    "reviewer_confidence": "",
+                }
+            ],
+        }
+        report = {"stats": dataset["stats"]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_file = Path(tmp_dir) / "audit.json"
+            output_file.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "pts-001",
+                                "gold_seed": True,
+                                "gold_seed_version": "manual_gold_seed_v1",
+                                "gold_entities": [
+                                    {"entity_id": "g1", "name": "进程", "type": "Concept"}
+                                ],
+                                "gold_relations": [
+                                    {
+                                        "relation_id": "r1",
+                                        "source_entity_id": "g1",
+                                        "target_entity_id": "g1",
+                                        "type": "related_to",
+                                    }
+                                ],
+                                "annotation_notes": "人工种子",
+                                "reviewer_decision": "accepted_with_notes",
+                                "reviewer_confidence": "high",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            preserved = preserve_existing_gold_annotations(
+                dataset=dataset,
+                report=report,
+                existing_output_file=output_file,
+            )
+
+        self.assertEqual(preserved, 1)
+        sample = dataset["audit_samples"][0]
+        self.assertTrue(sample["gold_seed"])
+        self.assertEqual(sample["gold_seed_version"], "manual_gold_seed_v1")
+        self.assertEqual(sample["gold_entities"][0]["name"], "进程")
+        self.assertEqual(sample["annotation_notes"], "人工种子")
+        self.assertEqual(dataset["stats"]["preserved_existing_gold_count"], 1)
+        self.assertEqual(
+            dataset["stats"]["preserved_existing_gold_match_counts"],
+            {"source_sample_id": 1},
+        )
+
+    def test_preserve_existing_gold_annotations_by_stable_source_hash(self):
+        text = "定义：进程是程序的一次执行过程。"
+        dataset = {
+            "stats": {},
+            "audit_samples": [
+                {
+                    "source_sample_id": "pts-renumbered-009",
+                    "source_doc_id": "doc-001",
+                    "page_start": 12,
+                    "page_end": 12,
+                    "text": text,
+                    "gold_entities": [],
+                    "gold_relations": [],
+                    "annotation_notes": "",
+                    "reviewer_decision": "",
+                    "reviewer_confidence": "",
+                }
+            ],
+        }
+        report = {"stats": dataset["stats"]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_file = Path(tmp_dir) / "audit.json"
+            output_file.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "pts-old-001",
+                                "source_doc_id": "doc-001",
+                                "page_start": 12,
+                                "page_end": 12,
+                                "text": text,
+                                "gold_entities": [
+                                    {"entity_id": "g1", "name": "进程", "type": "Concept"}
+                                ],
+                                "annotation_notes": "稳定来源键命中",
+                                "reviewer_decision": "accepted",
+                                "reviewer_confidence": "high",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            preserved = preserve_existing_gold_annotations(
+                dataset=dataset,
+                report=report,
+                existing_output_file=output_file,
+            )
+
+        self.assertEqual(preserved, 1)
+        sample = dataset["audit_samples"][0]
+        self.assertEqual(sample["gold_entities"][0]["name"], "进程")
+        self.assertEqual(sample["annotation_notes"], "稳定来源键命中")
+        self.assertEqual(
+            dataset["stats"]["preserved_existing_gold_match_counts"],
+            {"stable_source_hash": 1},
+        )
 
 
 if __name__ == "__main__":

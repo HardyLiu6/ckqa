@@ -28,12 +28,23 @@
       "id": "material-7-qa-004",
       "question": "I/O 软件通常分为哪些层次？",
       "expected_keywords": ["中断处理程序", "设备驱动程序", "设备独立性软件", "用户层软件"],
+      "expected_keyword_groups": [
+        {"label": "中断处理程序", "keywords": ["中断处理程序"]},
+        {"label": "设备驱动程序", "keywords": ["设备驱动程序"]},
+        {"label": "设备独立性软件", "keywords": ["设备独立性软件"]},
+        {"label": "用户层软件", "keywords": ["用户层软件", "用户层 I/O 软件", "用户层I/O软件"]}
+      ],
       "evidence_heading": "第六章 输入输出系统"
     },
     {
       "id": "material-7-qa-005",
       "question": "文件分配常见的组织方式有哪些？",
       "expected_keywords": ["连续分配", "链接分配", "索引分配"],
+      "expected_keyword_groups": [
+        {"label": "连续分配", "keywords": ["连续分配", "连续组织方式"]},
+        {"label": "链接分配", "keywords": ["链接分配", "链接组织方式"]},
+        {"label": "索引分配", "keywords": ["索引分配", "索引组织方式"]}
+      ],
       "evidence_heading": "第七章 文件管理"
     },
     {

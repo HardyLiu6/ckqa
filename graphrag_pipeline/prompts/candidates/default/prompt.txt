@@ -4,7 +4,7 @@ Given a text document that is potentially relevant to this activity and a list o
 -Steps-
 1. Identify all entities. For each identified entity, extract the following information:
 - entity_name: Name of the entity, capitalized
-- entity_type: One of the following types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+- entity_type: One of the following types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
 - entity_description: Comprehensive description of the entity's attributes and activities
 Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
 
@@ -27,7 +27,7 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 
 Example 1:
 
-entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
 text:
 page_start: 362.
 page_end: 363.
@@ -58,7 +58,7 @@ output:
 
 Example 2:
 
-entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
 text:
 page_start: 94.
 page_end: 94.

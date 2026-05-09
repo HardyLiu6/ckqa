@@ -152,6 +152,9 @@ def _build_schema_types(order: Sequence[str], items: dict[str, Any]) -> list[Sch
                 name=name,
                 label_zh=str(payload.get("label_zh") or name),
                 description=str(payload.get("description") or payload.get("extraction_hint") or "").strip(),
+                source_types=[str(item) for item in payload.get("source_types") or []],
+                target_types=[str(item) for item in payload.get("target_types") or []],
+                extraction_hint=str(payload.get("extraction_hint") or "").strip(),
             )
         )
     return result

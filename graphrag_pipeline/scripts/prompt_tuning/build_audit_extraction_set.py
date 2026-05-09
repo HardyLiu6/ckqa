@@ -739,7 +739,37 @@ def _make_audit_id(candidate: AuditCandidate, index: int) -> str:
     return f"audit-ext-{index:04d}-{digest}"
 
 
+def _normalize_text_for_hash(text: Any) -> str:
+    if not isinstance(text, str):
+        return ""
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _compute_text_hash(text: Any) -> str:
+    normalized = _normalize_text_for_hash(text)
+    if not normalized:
+        return ""
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:16]
+
+
+def _make_gold_stable_key(
+    *,
+    source_doc_id: Any,
+    page_start: Any,
+    page_end: Any,
+    text: Any,
+) -> str:
+    doc_id = _clean_string(source_doc_id)
+    start = _safe_int(page_start)
+    end = _safe_int(page_end)
+    text_hash = _compute_text_hash(text)
+    if not doc_id or start <= 0 or end <= 0 or not text_hash:
+        return ""
+    return f"{doc_id}|{start}|{end}|{text_hash}"
+
+
 def _sample_to_output(candidate: AuditCandidate, index: int) -> Dict[str, Any]:
+    text_hash = _compute_text_hash(candidate.text)
     return {
         "id": _make_audit_id(candidate, index),
         "source_sample_id": candidate.source_sample_id,
@@ -753,6 +783,13 @@ def _sample_to_output(candidate: AuditCandidate, index: int) -> Dict[str, Any]:
         "heading_level": candidate.heading_level,
         "guessed_sample_type": candidate.guessed_sample_type,
         "text": candidate.text,
+        "text_hash": text_hash,
+        "gold_stable_key": _make_gold_stable_key(
+            source_doc_id=candidate.source_doc_id,
+            page_start=candidate.page_start,
+            page_end=candidate.page_end,
+            text=candidate.text,
+        ),
         "text_length": candidate.text_length,
         "page_start": candidate.page_start,
         "page_end": candidate.page_end,
@@ -764,6 +801,103 @@ def _sample_to_output(candidate: AuditCandidate, index: int) -> Dict[str, Any]:
         "reviewer_decision": "",
         "reviewer_confidence": "",
     }
+
+
+_PRESERVED_ANNOTATION_FIELDS = (
+    "gold_seed",
+    "gold_seed_version",
+    "gold_entities",
+    "gold_relations",
+    "annotation_notes",
+    "reviewer_decision",
+    "reviewer_confidence",
+)
+
+
+def _has_existing_gold_annotation(sample: dict[str, Any]) -> bool:
+    if sample.get("gold_seed") or sample.get("gold_seed_version"):
+        return True
+    return bool(
+        sample.get("gold_entities")
+        or sample.get("gold_relations")
+        or sample.get("annotation_notes")
+        or sample.get("reviewer_decision")
+        or sample.get("reviewer_confidence")
+    )
+
+
+def _sample_gold_stable_key(sample: dict[str, Any]) -> str:
+    explicit_key = _clean_string(sample.get("gold_stable_key"))
+    if explicit_key:
+        return explicit_key
+    return _make_gold_stable_key(
+        source_doc_id=sample.get("source_doc_id"),
+        page_start=sample.get("page_start"),
+        page_end=sample.get("page_end"),
+        text=sample.get("text"),
+    )
+
+
+def preserve_existing_gold_annotations(
+    *,
+    dataset: dict[str, Any],
+    report: dict[str, Any],
+    existing_output_file: Path,
+) -> int:
+    """优先按稳定来源键保留已有 audit 人工标注。
+
+    material 级流水线会重复生成 audit 采样模板；如果目标文件中已经有人类
+    gold seed，重新采样时不能把这些字段清空。稳定键使用
+    source_doc_id + page_start + page_end + text_hash；旧文件仍可按
+    source_sample_id 兼容保留。
+    """
+
+    if not existing_output_file.exists():
+        return 0
+    try:
+        existing_payload = json.loads(existing_output_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return 0
+
+    existing_by_sample_id: dict[str, dict[str, Any]] = {}
+    existing_by_stable_key: dict[str, dict[str, Any]] = {}
+    for sample in existing_payload.get("audit_samples") or []:
+        if not isinstance(sample, dict) or not _has_existing_gold_annotation(sample):
+            continue
+        sample_id = str(sample.get("source_sample_id") or "").strip()
+        if sample_id:
+            existing_by_sample_id[sample_id] = sample
+        stable_key = _sample_gold_stable_key(sample)
+        if stable_key:
+            existing_by_stable_key[stable_key] = sample
+
+    preserved = 0
+    match_counts: Counter[str] = Counter()
+    for sample in dataset.get("audit_samples") or []:
+        if not isinstance(sample, dict):
+            continue
+        stable_key = _sample_gold_stable_key(sample)
+        sample_id = str(sample.get("source_sample_id") or "").strip()
+        existing = existing_by_stable_key.get(stable_key) if stable_key else None
+        match_method = "stable_source_hash" if existing else ""
+        if not existing:
+            existing = existing_by_sample_id.get(sample_id)
+            match_method = "source_sample_id" if existing else ""
+        if not existing:
+            continue
+        for field in _PRESERVED_ANNOTATION_FIELDS:
+            if field in existing:
+                sample[field] = existing[field]
+        preserved += 1
+        match_counts[match_method] += 1
+
+    stats = dataset.setdefault("stats", {})
+    stats["preserved_existing_gold_count"] = preserved
+    stats["preserved_existing_gold_match_counts"] = dict(match_counts)
+    report.setdefault("stats", stats)
+    report["stats"]["preserved_existing_gold_count"] = preserved
+    report["stats"]["preserved_existing_gold_match_counts"] = dict(match_counts)
+    return preserved
 
 
 def _resolve_schema_items(payload: Any, collection_key: str, order_key: str) -> List[SchemaType]:
@@ -1113,6 +1247,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=list(DEFAULT_PRIORITY_FIELDS),
         help="优先用于分层覆盖的字段，支持空格分隔或逗号分隔",
     )
+    parser.add_argument(
+        "--preserve_existing_gold",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="输出文件已存在时优先按稳定来源键保留人工 gold 标注，并兼容 source_sample_id，默认开启",
+    )
     return parser.parse_args(argv)
 
 
@@ -1162,6 +1302,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_file = _resolve_output_path(args.output_file)
     guideline_file = _resolve_output_path(args.guideline_file)
     report_file = _resolve_output_path(args.report_file)
+
+    if args.preserve_existing_gold:
+        preserve_existing_gold_annotations(
+            dataset=dataset,
+            report=report,
+            existing_output_file=output_file,
+        )
 
     output_file.write_text(json.dumps(dataset, ensure_ascii=False, indent=2), encoding="utf-8")
     guideline_file.write_text(guidelines, encoding="utf-8")

@@ -1,10 +1,11 @@
 -Goal-
-Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
+Given a text document that is potentially relevant to this activity, first identify all entities needed from the text in order to capture the information and ideas in the text.
+Next, report all relationships among the identified entities.
 
 -Steps-
 1. Identify all entities. For each identified entity, extract the following information:
 - entity_name: Name of the entity, capitalized
-- entity_type: One of the following types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
+- entity_type: Suggest several labels or categories for the entity. The categories should not be specific, but should be as general as possible.
 - entity_description: Comprehensive description of the entity's attributes and activities
 Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
 
@@ -13,7 +14,7 @@ For each pair of related entities, extract the following information:
 - source_entity: name of the source entity, as identified in step 1
 - target_entity: name of the target entity, as identified in step 1
 - relationship_description: explanation as to why you think the source entity and the target entity are related to each other
-- relationship_strength: an integer score between 1 to 10, indicating strength of the relationship between the source entity and target entity
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
 Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_strength>)
 
 3. Return output in Chinese as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
@@ -21,72 +22,6 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 4. If you have to translate into Chinese, just translate the descriptions, nothing else!
 
 5. When finished, output <|COMPLETE|>.
-
--Examples-
-######################
-
-Example 1:
-
-entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
-text:
-page_start: 362.
-page_end: 363.
-section_level: 3.
-source_file: book.pdf.
-course_id: os.
-与第一帧不同的部分。MPEG的平均压缩比为  $50:1$  ，最高压缩比可达  $200:1$  。
-
-2) GIF文件格式
-
-GIF(Graphics Interchange Format)是采用无损压缩方法所产生的一种高压缩比的彩色图
-
-像文件。为了减少对网络频带的要求，采用了隔行扫描方式。该格式被广泛应用于Internet上的大量彩色动画。
-
-3) AVI 文件格式
-
-这种文件格式又称为音频视频交错(audio video interleaved)格式，该格式允许音频和视频交错在一起同步播放，支持256色和压缩，但并未限定压缩标准，因此，也造成AVI的格式不具有兼容性，即用某种压缩标准产生AVI的文件，必须使用相应的解压缩算法，才能将它进行解压。该算法具有调用方便、图像质量好等优点，但文件体积过于庞大，主要用于在光盘上保存数字电影、电视等影像。
-------------------------
-output:
-("entity"<|>MPEG<|>file format<|>MPEG是一种运动图像压缩标准，采用有损压缩技术，平均压缩比为50:1，最高可达200:1，广泛用于数字视频存储与传输)
-##
-("entity"<|>GIF<|>file format<|>GIF（Graphics Interchange Format）是一种采用无损LZW压缩算法的彩色图像文件格式，支持隔行扫描以降低网络带宽需求，常用于互联网上的静态图像和简单动画)
-##
-("entity"<|>AVI<|>file format<|>AVI（Audio Video Interleaved）是一种由微软定义的容器格式，支持音频与视频数据交错存储并同步播放；支持256色及多种可选压缩编码，但因未统一压缩标准而导致兼容性差；文件体积大，常用于光盘存储高质量影音内容)
-<|COMPLETE|>
-#############################
-
-
-Example 2:
-
-entity_types: [file format, operating system component, memory management technique, scheduling algorithm, security threat, data structure, system call, process, thread, synchronization mechanism, storage organization, deadlock handling method, virtual memory technique]
-text:
-page_start: 94.
-page_end: 94.
-section_level: 2.
-source_file: book.pdf.
-course_id: os.
-3.2 作业与作业调度
-
-在多道批处理系统中，作业是用户提交给系统的一项相对独立的工作。操作员把用户提交的作业通过相应的输入设备输入到磁盘存储器，并保存在一个后备作业队列中。再由作业调度程序将其从外存调入内存。
-------------------------
-output:
-("entity"<|>作业<|>process<|>在多道批处理系统中，作业是用户提交给操作系统的一项相对独立的工作单元，通常包含程序、数据和作业说明书，由操作员输入并暂存于磁盘后备队列中，等待作业调度程序调入内存执行)
-##
-("entity"<|>作业调度程序<|>scheduling algorithm<|>作业调度程序是操作系统中负责从外存（如磁盘）的后备作业队列中选择若干作业，将其调入内存并为其创建进程的调度机制；它属于高级调度（长程调度），决定哪些作业获得进入内存和竞争CPU的资格)
-##
-("entity"<|>后备作业队列<|>storage organization<|>后备作业队列是存储在外存（通常是磁盘）上的有序作业集合，用于暂存用户提交但尚未被调入内存的作业，是作业调度程序选取作业的来源，体现外存级的作业组织方式)
-##
-("entity"<|>磁盘存储器<|>storage organization<|>磁盘存储器是作业在被调度前的主要存放介质，作为外存设备提供大容量、非易失性存储，支撑后备作业队列的物理实现)
-##
-("relationship"<|>作业<|>作业调度程序<|>作业调度程序负责从后备队列中选取作业并将其调入内存，作业是该调度算法的操作对象，二者构成典型的“被调度实体–调度策略”关系<|>10)
-##
-("relationship"<|>作业<|>后备作业队列<|>作业在被调度前被存放在后备作业队列中，该队列是作业的逻辑组织形式和暂存容器<|>9)
-##
-("relationship"<|>后备作业队列<|>磁盘存储器<|>后备作业队列在物理上驻留在磁盘存储器中，磁盘为其提供持久化、大容量的存储支持<|>9)
-##
-("relationship"<|>作业调度程序<|>磁盘存储器<|>作业调度程序需从磁盘存储器中读取后备作业队列中的作业信息，二者存在I/O访问与数据依赖关系<|>7)
-<|COMPLETE|>
-#############################
 
 -Course Baseline Constraints-
 当前任务聚焦“课程知识图谱抽取”，不是通用信息抽取。
@@ -111,16 +46,16 @@ output:
 - `ToolOrPlatform`（工具或平台）：用于教学、实验、实现或演示的软件、平台、开发环境、框架、硬件平台或数据处理工具。；命名规则：保留课程中稳定使用的工具/平台名称；版本号仅在确有区分意义时并入名…
 
 关系类型必须来自以下课程 Schema：
-- `contains`（包含）：表示上级教学单元或结构化容器包含下级单元、知识对象或学习活动。；抽取提示：用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明…
-- `belongs_to`（属于）：表示实体从属于某个课程结构单元或教学容器，是 contains 的反向表达。；抽取提示：当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；后续脚本也…
-- `depends_on`（依赖于）：表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。；抽取提示：用于“X 的理解/实现/推导依赖 Y”“完成该实验需要先掌握 Y”这类依赖…
-- `prerequisite_of`（先修于）：表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。；抽取提示：用于课程安排、教学目标、实验说明中的先修关系；若文本只给出 depends…
-- `related_to`（相关）：表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。；抽取提示：只有在 contains、defined_by、depends_on、ap…
-- `defined_by`（由…定义）：表示概念、术语或知识点由某一定义、公式、定律或判定条件来界定。；抽取提示：用于“X 的定义是…/X 可表示为…/X 满足公式…”这类正式界定关系。
-- `applied_in`（应用于）：表示知识、方法、公式或算法被用于某实验、作业、章节讲解或平台操作场景。；抽取提示：用于“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类场景化…
-- `implemented_by`（由…实现）：表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。；抽取提示：用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”…
-- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。；抽取提示：用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学…
-- `appears_in`（出现于）：表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。；抽取提示：当只有位置或讲授场景信息，而缺少更强语义时使用；若能判断 contains…
+- `contains`（包含）：表示结构化容器包含下级单元，或知识对象在原文明确表达分类、组成、步骤分解时包含子对…；抽取提示：用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明…；正例：Course -> Chapter、Chapter -> Section
+- `belongs_to`（属于）：表示实体从属于某个课程结构单元或教学容器，是 contains 的反向表达。；抽取提示：当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；目标只能是…；正例：Section -> Chapter、KnowledgePoint -> Section；禁例：Concept->Concept: 死锁 belongs_to 资源分…、Concept->KnowledgePoint: 进程 belongs…
+- `depends_on`（依赖于）：表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。；抽取提示：用于“X 的理解/实现/推导依赖 Y”“完成该实验需要先掌握 Y”这类依赖…；正例：页面置换算法 depends_on 页面访问局部性、进程同步 depends_on 临界区概念
+- `prerequisite_of`（先修于）：表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。；抽取提示：用于课程安排、教学目标、实验说明中的先修关系；若文本只给出 depends…；正例：进程概念 prerequisite_of 进程同步、环境配置 prerequisite_of 进程调度实验
+- `related_to`（相关）：表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。；抽取提示：只有在 contains、defined_by、depends_on、ap…；正例：死锁处理 related_to 资源分配图、虚拟内存 related_to 页面置换算法；禁例：Concept->missing: 磁盘高速缓存 related_to…、Term->missing: RAID related_to 系统容错
+- `defined_by`（由…定义）：表示概念、术语、知识点或算法方法由某一定义、公式、定律或判定条件来界定。；抽取提示：用于正式定义、公式、定律或判定条件。禁止 Concept->Concept…；正例：进程 defined_by 进程定义、周转时间 defined_by 周转时间公式；禁例：Concept->Concept: 进程 defined_by 线程、Term->Concept: PCB defined_by 进程控制块
+- `applied_in`（应用于）：表示知识、方法、公式或算法被应用到某知识主题、实验、作业、章节讲解或平台操作场景。；抽取提示：用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应…；正例：银行家算法 applied_in 死锁、地址映射 applied_in 分页存储管理
+- `implemented_by`（由…实现）：表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。；抽取提示：用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”…；正例：进程同步 implemented_by PV 同步方法、页面置换实验 implemented_by Python 模拟器；禁例：AlgorithmOrMethod->Concept: 高响应比优先调…、Concept->Term: 进程同步 implemented_by…
+- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。；抽取提示：用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学…；正例：死锁处理 evaluated_by 作业 3、文件系统概念 evaluated_by 文件系统设计实验
+- `appears_in`（出现于）：表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。；抽取提示：当只有位置或讲授场景信息，而缺少更强语义时使用；目标必须是 Course/…；正例：TLB appears_in 第三章 存储器管理、银行家算法 appears_in 作业 2；禁例：Section->Concept: 第三章 存储器管理 appears…、Experiment->Concept: 实验一 appears_in…
 
 关键抽取规则摘要：
 - 只抽取对课程问答、知识建图和教学评测有稳定价值的实体与关系。
@@ -128,19 +63,21 @@ output:
 - 仅在文本显式陈述或同一结构单元内可稳定推断时建立关系，不因简单共现连边。
 - 课程通知、无意义短语、图表残片、页眉页脚和无关行政信息默认不抽。
 - 结构实体要保留有效章节编号；实体默认按课程内边界去重，不做跨课程自动合并。
+- 关系端点完整性：所有关系的 source 和 target 必须能在 entities 中找到；如果无法补齐端点实体，应跳过该关系。
+- related_to 是保底关系；不能用 related_to 代替缺失端点或更具体关系。
 
 必要输出约束：
 - 关系说明必须以 [type=<relation_type>] 开头，并且 <relation_type> 必须来自课程 Schema。
 - 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
 - 只有在无法判断更具体关系时才使用 `related_to`。
+- 不能用 `related_to` 代替缺失端点或更具体关系；如果端点无法补齐，应跳过关系。
 - 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
 - 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
 -Base Prompt Note-
-- 当前候选版本以 默认 GraphRAG Prompt 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
+- 当前候选版本以 官方 auto_tuned Prompt 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
 
 -Real Data-
 ######################
-entity_types: [Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
 text: {input_text}
 ######################
 output:
@@ -149,40 +86,376 @@ output:
 
 Example 1 (definition_or_formula)
 input:
-course_id: os.
+course_id: crs-20260506-r4slkr.
 document_type: textbook.
-chapter: 第二章 进程管理.
-section: 2.1 进程的定义.
+source_file: 计算机操作系统教材.
+chapter: 第二章 进程的描述与控制.
+section: 2.2 进程的描述.
+page_start: 43.
+page_end: 44.
 text:
-进程是程序的一次执行过程，是系统进行资源分配和调度的基本单位。
-output:
-("entity"{tuple_delimiter}第二章 进程管理{tuple_delimiter}Chapter{tuple_delimiter}课程结构章节“第二章 进程管理”，出现在 2.1 进程的定义 中。)
-{record_delimiter}
-("entity"{tuple_delimiter}进程{tuple_delimiter}Concept{tuple_delimiter}课程概念“进程”，出现在 2.1 进程的定义 中。)
-{record_delimiter}
-("relationship"{tuple_delimiter}第二章 进程管理{tuple_delimiter}进程{tuple_delimiter}[type=contains] 本章介绍进程概念{tuple_delimiter}8)
-{record_delimiter}
-("relationship"{tuple_delimiter}进程{tuple_delimiter}进程定义{tuple_delimiter}[type=defined_by] 文本给出了进程的正式定义{tuple_delimiter}9)
-{completion_delimiter}
-# note: 手写最小 few-shot 示例：概念/定义型样本。
+2.2.1 进程的定义和特征
 
-Example 2 (experiment_instruction)
-input:
-course_id: os.
-document_type: lab.
-chapter: 第三章 调度.
-section: 实验一 进程调度.
-text:
-实验要求：实现时间片轮转调度算法，并提交实验报告分析不同时间片长度的影响。
+1. 进程的定义
+
+在多道程序环境下，程序的执行属于并发执行，此时它们将失去其封闭性，并具有间断性，以及其运行结果不可再现性的特征。由此，决定了通常的程序是不能参与并发执行的，否则，程序的运行也就失去了意义。为了能使程序并发执行，并且可以对并发执行的程序加以描述和控制，人们引入了“进程”的概念。
+
+为了使参与并发执行的每个程序(含数据)都能独立地运行，在操作系统中必须为之配置一个专门的数据结构，称为进程控制块(Process Control Block，PCB)。系统利用PCB来描述进程的基本情况和活动过程，进而控制和管理进程。这样，由程序段、相关的数据段和P…
 output:
-("entity"{tuple_delimiter}实验一 进程调度{tuple_delimiter}Experiment{tuple_delimiter}课程实验任务“实验一 进程调度”，出现在 实验一 进程调度 中。)
-{record_delimiter}
-("entity"{tuple_delimiter}时间片轮转调度算法{tuple_delimiter}AlgorithmOrMethod{tuple_delimiter}课程中的方法或算法“时间片轮转调度算法”，出现在 实验一 进程调度 中。)
-{record_delimiter}
-("entity"{tuple_delimiter}实验报告{tuple_delimiter}Assignment{tuple_delimiter}课程作业或题组“实验报告”，出现在 实验一 进程调度 中。)
-{record_delimiter}
-("relationship"{tuple_delimiter}实验一 进程调度{tuple_delimiter}时间片轮转调度算法{tuple_delimiter}[type=implemented_by] 实验要求实现该算法{tuple_delimiter}9)
-{record_delimiter}
-("relationship"{tuple_delimiter}时间片轮转调度算法{tuple_delimiter}实验报告{tuple_delimiter}[type=evaluated_by] 实验报告用于评估算法实现效果{tuple_delimiter}8)
-{completion_delimiter}
-# note: 手写最小 few-shot 示例：方法/实验/作业型样本。
+("entity"<|>第二章 进程的描述与控制<|>Chapter<|>课程结构章节“第二章 进程的描述与控制”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>2.2.1 进程的定义和特征<|>Section<|>课程结构单元“2.2.1 进程的定义和特征”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>进程<|>Concept<|>课程概念“进程”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>进程控制块<|>Term<|>课程术语“进程控制块”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>进程定义<|>FormulaOrDefinition<|>课程中的定义或公式“进程定义”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>程序<|>Concept<|>课程概念“程序”，出现在 2.2 进程的描述 中。)
+##
+("entity"<|>进程同步机制<|>AlgorithmOrMethod<|>课程中的方法或算法“进程同步机制”，出现在 2.2 进程的描述 中。)
+##
+("relationship"<|>进程<|>进程定义<|>[type=defined_by] 文本给出传统 OS 中进程的定义。<|>8)
+##
+("relationship"<|>进程同步机制<|>进程<|>[type=applied_in] 为保证进程并发执行结果可再现，OS 中配置相应的进程同步机制。<|>8)
+##
+("relationship"<|>第二章 进程的描述与控制<|>2.2.1 进程的定义和特征<|>[type=contains] 第二章下的 2.2.1 小节介绍进程的定义和特征。<|>8)
+##
+("relationship"<|>2.2.1 进程的定义和特征<|>进程<|>[type=contains] 2.2.1 小节集中说明进程概念。<|>8)
+##
+("relationship"<|>进程<|>2.2.1 进程的定义和特征<|>[type=belongs_to] 进程概念位于 2.2.1 进程的定义和特征小节。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 2 (assignment_requirement)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第三章 处理机调度与死锁.
+section: 习题.
+page_start: 126.
+page_end: 127.
+text:
+习题
+- 1. 高级调度与低级调度的主要任务是什么？为什么要引入中级调度？
+- 2. 处理机调度算法的共同目标是什么？批处理系统的调度目标又是什么？
+- 3. 何谓作业、作业步和作业流？
+- 4. 在什么情况下需要使用作业控制块 JCB，其中包含了哪些内容？
+- 5. 在作业调度中应如何确定接纳多少个作业和接纳哪些作业？
+- 6. 为什么要引入高响应比优先调度算法？它有何优点？
+output:
+("entity"<|>第三章 处理机调度与死锁<|>Chapter<|>课程结构章节“第三章 处理机调度与死锁”，出现在 习题 中。)
+##
+("entity"<|>第三章习题<|>Assignment<|>课程作业或题组“第三章习题”，出现在 习题 中。)
+##
+("entity"<|>高级调度<|>AlgorithmOrMethod<|>课程中的方法或算法“高级调度”，出现在 习题 中。)
+##
+("entity"<|>低级调度<|>AlgorithmOrMethod<|>课程中的方法或算法“低级调度”，出现在 习题 中。)
+##
+("entity"<|>中级调度<|>AlgorithmOrMethod<|>课程中的方法或算法“中级调度”，出现在 习题 中。)
+##
+("entity"<|>处理机调度算法<|>KnowledgePoint<|>课程知识点“处理机调度算法”，出现在 习题 中。)
+##
+("entity"<|>高响应比优先调度算法<|>AlgorithmOrMethod<|>课程中的方法或算法“高响应比优先调度算法”，出现在 习题 中。)
+##
+("relationship"<|>第三章 处理机调度与死锁<|>第三章习题<|>[type=evaluated_by] 第三章习题考核处理机调度与死锁内容。<|>8)
+##
+("relationship"<|>处理机调度算法<|>第三章习题<|>[type=evaluated_by] 习题询问处理机调度算法的共同目标和批处理系统调度目标。<|>8)
+##
+("relationship"<|>高级调度<|>中级调度<|>[type=prerequisite_of] 题目在说明高级调度与低级调度后追问为什么引入中级调度，体现学习顺序。<|>8)
+##
+("relationship"<|>高响应比优先调度算法<|>第三章习题<|>[type=appears_in] 高响应比优先调度算法出现在第三章习题第 6 题。<|>8)
+##
+("relationship"<|>高级调度<|>低级调度<|>[type=related_to] 习题并列询问高级调度与低级调度的主要任务。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 3 (definition_or_formula)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第九章 操作系统接口.
+section: 9.6 系统调用的实现.
+page_start: 312.
+page_end: 313.
+text:
+9.6.5 Linux系统调用
+
+与 UNIX 相似，Linux 采用类似技术实现系统调用。Linux 系统在 CPU 的保护模式下提供了四个特权级别，目前内核都只用到了其中的两个特权级别，分别为“特权级 0”（即内核态)和“特权级 3”（即用户态）。用户对系统调用不能任意拦截和修改，以保证内核的安全性。Linux 最多可以有 190 个系统调用。应用程序和 Shell 需要通过系统调用机制访问 Linux 内核(功能)。每个系统调用由两部分组成：
+
+- (1) 内核函数：是实现系统调用功能的(内核)代码，作为操作系统的核心驻留在内存中，是一种共享代码，用C语言书写。它运行在内核态，数据也存…
+output:
+("entity"<|>Linux<|>ToolOrPlatform<|>课程使用的工具或平台“Linux”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>系统调用<|>Concept<|>课程概念“系统调用”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>内核函数<|>AlgorithmOrMethod<|>课程中的方法或算法“内核函数”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>接口函数<|>AlgorithmOrMethod<|>课程中的方法或算法“接口函数”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>系统调用控制程序<|>AlgorithmOrMethod<|>课程中的方法或算法“系统调用控制程序”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>系统调用号<|>Term<|>课程术语“系统调用号”，出现在 9.6 系统调用的实现 中。)
+##
+("entity"<|>int80h 中断<|>Term<|>课程术语“int80h 中断”，出现在 9.6 系统调用的实现 中。)
+##
+("relationship"<|>系统调用<|>内核函数<|>[type=implemented_by] 内核函数是实现系统调用功能的内核代码。<|>8)
+##
+("relationship"<|>系统调用<|>接口函数<|>[type=implemented_by] 接口函数提供给应用程序的 API，用于传送系统调用号和入口参数。<|>8)
+##
+("relationship"<|>系统调用控制程序<|>系统调用号<|>[type=depends_on] 系统调用控制程序先取系统调用号并检验合法性。<|>8)
+##
+("relationship"<|>系统调用控制程序<|>int80h 中断<|>[type=depends_on] Linux 内核的陷入由 0x80(int80h)中断实现。<|>8)
+##
+("relationship"<|>系统调用<|>Linux<|>[type=appears_in] 该小节介绍 Linux 系统调用。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 4 (algorithm_or_method)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 前言.
+page_start: 1.
+page_end: 4.
+text:
+前言
+
+计算机操作系统
+
+（第四版）
+
+汤小丹 梁红兵 哲凤屏 汤子瀛 编著
+
+计算机操作系统
+
+(第四版)
+
+汤小丹 梁红兵
+
+哲凤屏 汤子瀛
+
+前言
+
+自1981年本教材第一版出版至今，我们已对它做过多次修改。本次是对2007年出版的《计算机操作系统》(第三版)教材进行的修改。在本次修订出版时，首先，根据广大师生的要求，结合国内研究生招生考试大纲的要求，对相关内容进行了调整，使之基本覆盖了考试大纲的内容；其次，结合操作系统发展的现状和前沿，增加了多处理机、多媒体、系统安全等方面的内容，并对章节进行了调整，使本教材能更好地为读者学习操作系统提供帮助。
+
+本版教材共分为12章。第一章为操作系…
+output:
+("entity"<|>计算机操作系统<|>Course<|>课程顶层对象“计算机操作系统”，出现在 前言 中。)
+##
+("entity"<|>第一章 操作系统引论<|>Chapter<|>课程结构章节“第一章 操作系统引论”，出现在 前言 中。)
+##
+("entity"<|>第二章 进程的描述与控制<|>Chapter<|>课程结构章节“第二章 进程的描述与控制”，出现在 前言 中。)
+##
+("entity"<|>第三章 处理机调度与死锁<|>Chapter<|>课程结构章节“第三章 处理机调度与死锁”，出现在 前言 中。)
+##
+("entity"<|>多处理机OS<|>KnowledgePoint<|>课程知识点“多处理机OS”，出现在 前言 中。)
+##
+("entity"<|>多媒体OS<|>KnowledgePoint<|>课程知识点“多媒体OS”，出现在 前言 中。)
+##
+("relationship"<|>计算机操作系统<|>第一章 操作系统引论<|>[type=contains] 本版教材共分为12章，第一章为操作系统引论。<|>8)
+##
+("relationship"<|>计算机操作系统<|>第二章 进程的描述与控制<|>[type=contains] 前言说明第二章深入阐述进程和线程的基本概念。<|>8)
+##
+("relationship"<|>计算机操作系统<|>第三章 处理机调度与死锁<|>[type=contains] 前言说明第三章涉及同步与通信、调度和死锁。<|>8)
+##
+("relationship"<|>多处理机OS<|>计算机操作系统<|>[type=belongs_to] 前言说明教材介绍多处理机 OS 内容。<|>8)
+##
+("relationship"<|>多媒体OS<|>计算机操作系统<|>[type=belongs_to] 前言说明教材介绍多媒体 OS 内容。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 5 (definition_or_formula)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第五章 虚拟存储器.
+section: 5.4 “抖动”与工作集.
+page_start: 178.
+page_end: 179.
+text:
+5.4.2 工作集
+
+1. 工作集的基本概念
+
+进程发生缺页率的时间间隔与进程所获得的物理块数有关。图5-10示出了缺页率与物理块数之间的关系。从图中可以看出，缺页率随着所分配物理块数的增加明显地减少，当物理块数超过某个数目时，再为进程增加一物理块，对缺页率的改善已不明显。可见，此时已无必要再为它分配更多的物理块。反之，当为某进程所分配的物理块数低于某个数目时，每减少一块，对缺页率的影响都变得十分明显，此时又应为该进程分配更多的物理块。为了能清楚地说明形成图5-10所示曲线的原因，还须先介绍关于“工作集”的概念。
+
+关于工作集的理论是1968年由Denning提出并推广的。Denning认为…
+output:
+("entity"<|>5.4 “抖动”与工作集<|>Section<|>课程结构单元“5.4 “抖动”与工作集”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>工作集<|>Concept<|>课程概念“工作集”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>缺页率<|>Concept<|>课程概念“缺页率”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>物理块数<|>Concept<|>课程概念“物理块数”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>局部性原理<|>Concept<|>课程概念“局部性原理”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>Δ<|>Term<|>课程术语“Δ”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>工作集单调性公式<|>FormulaOrDefinition<|>课程中的定义或公式“工作集单调性公式”，出现在 5.4 “抖动”与工作集 中。)
+##
+("entity"<|>w(t, Δ)<|>Term<|>课程术语“w(t, Δ)”，出现在 5.4 “抖动”与工作集 中。)
+##
+("relationship"<|>工作集<|>Δ<|>[type=defined_by] 变量 Δ 称为工作集的窗口尺寸。<|>8)
+##
+("relationship"<|>w(t, Δ)<|>工作集单调性公式<|>[type=defined_by] 工作集 w(t, Δ) 满足非降函数关系。<|>8)
+##
+("relationship"<|>工作集<|>局部性原理<|>[type=depends_on] 工作集理论基于程序运行时的局部性原理。<|>8)
+##
+("relationship"<|>缺页率<|>物理块数<|>[type=depends_on] 缺页率与进程获得的物理块数有关。<|>8)
+##
+("relationship"<|>5.4 “抖动”与工作集<|>工作集<|>[type=contains] 5.4.2 工作集介绍工作集。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 6 (definition_or_formula)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第四章 存储器管理.
+section: 4.5 分页存储管理方式.
+page_start: 146.
+page_end: 148.
+text:
+4.5.1 分页存储管理的基本方法
+
+1.页面和物理块
+
+- (1) 页面。分页存储管理将进程的逻辑地址空间分成若干个页，并为各页加以编号，从0开始，如第0页、第1页等。相应地，也把内存的物理地址空间分成若干个块，同样也为它们加以编号，如0#块、1#块等等。在为进程分配内存时，以块为单位，将进程中的若干个页分别装入到多个可以不相邻接的物理块中。由于进程的最后一页经常装不满一块，而形成了不可利用的碎片，称之为“页内碎片”。
+- (2) 页面大小。在分页系统中，若选择过小的页面大小，虽然一方面可以减小内存碎片，起到减少内存碎片总空间的作用，有利于内存利用率的提高，但另一方面却会造成每个进程占用较…
+output:
+("entity"<|>分页存储管理<|>AlgorithmOrMethod<|>课程中的方法或算法“分页存储管理”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>页面大小<|>Term<|>课程术语“页面大小”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>页号P<|>Term<|>课程术语“页号P”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>位移量W<|>Term<|>课程术语“位移量W”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>页表<|>Concept<|>课程概念“页表”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>地址映射<|>Concept<|>课程概念“地址映射”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>页号和页内地址计算公式<|>FormulaOrDefinition<|>课程中的定义或公式“页号和页内地址计算公式”，出现在 4.5 分页存储管理方式 中。)
+##
+("entity"<|>内存利用率<|>Concept<|>课程概念“内存利用率”，出现在 4.5 分页存储管理方式 中。)
+##
+("relationship"<|>页号P<|>页号和页内地址计算公式<|>[type=defined_by] 页号P和页内地址d可按公式求得。<|>8)
+##
+("relationship"<|>位移量W<|>页号和页内地址计算公式<|>[type=defined_by] 页号P和页内地址d可按公式求得。<|>8)
+##
+("relationship"<|>页面大小<|>内存利用率<|>[type=depends_on] 页面大小选择影响内存碎片和内存利用率。<|>8)
+##
+("relationship"<|>地址映射<|>页表<|>[type=depends_on] 页表用于实现从页号到物理块号的地址映射。<|>8)
+##
+("relationship"<|>分页存储管理<|>页表<|>[type=contains] 分页系统为每个进程建立页表。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 7 (definition_or_formula)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第十章 多处理机操作系统.
+section: 10.5 多处理机系统的进程调度.
+page_start: 335.
+page_end: 336.
+text:
+10.5.1 评价调度性能的若干因素
+
+评价多处理机调度性能的因素有如下几个：
+
+1. 任务流时间
+
+把完成任务所需要的时间定义为任务流时间，例如，如图10-6所示，图中有三台处理机P1～P3和五个任务T1～T5，调度从时间0开始，共运行了7个时间单位，在处理机P1上运行任务T1和T2，分别需要5个和1.5个时间单位；在处理机P2上运行任务T2和T1，分别用了5个和2个时间单位；在处理机P3上运行任务T3、T4和T5，每一个都需要2个时间单位。因此，完成任务T1共需要  5 + 2 = 7 个时间单位，而完成任务T2共需要  5 + 1.5 = 6.5 个时间单位。
+
+图10-6 任务流和调…
+output:
+("entity"<|>第十章 多处理机操作系统<|>Chapter<|>课程结构章节“第十章 多处理机操作系统”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>10.5.1 评价调度性能的若干因素<|>Section<|>课程结构单元“10.5.1 评价调度性能的若干因素”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>调度流时间<|>Concept<|>课程概念“调度流时间”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>平均流<|>Concept<|>课程概念“平均流”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>处理机利用率<|>Concept<|>课程概念“处理机利用率”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>处理机利用率公式<|>FormulaOrDefinition<|>课程中的定义或公式“处理机利用率公式”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>吞吐率<|>Concept<|>课程概念“吞吐率”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("entity"<|>调度算法<|>AlgorithmOrMethod<|>课程中的方法或算法“调度算法”，出现在 10.5 多处理机系统的进程调度 中。)
+##
+("relationship"<|>处理机利用率<|>处理机利用率公式<|>[type=defined_by] 文本给出处理机利用率的计算定义。<|>8)
+##
+("relationship"<|>平均流<|>调度流时间<|>[type=depends_on] 平均流等于调度流时间除以任务数。<|>8)
+##
+("relationship"<|>第十章 多处理机操作系统<|>10.5.1 评价调度性能的若干因素<|>[type=contains] 第十章中 10.5.1 小节讨论评价调度性能的因素。<|>8)
+##
+("relationship"<|>吞吐率<|>调度算法<|>[type=related_to] 吞吐率的高低与调度算法有着十分密切的关系。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。
+
+Example 8 (assignment_requirement)
+input:
+course_id: crs-20260506-r4slkr.
+document_type: textbook.
+source_file: 计算机操作系统教材.
+chapter: 第二章 进程的描述与控制.
+section: 习题.
+page_start: 92.
+page_end: 92.
+text:
+习题
+- 1. 什么是前趋图？为什么要引入前趋图？
+- 2. 试画出下面四条语句的前趋图：
+- 3. 为什么程序并发执行会产生间断性特征？
+- 4. 程序并发执行时为什么会失去封闭性和可再现性？
+- 5. 在操作系统中为什么要引入进程的概念？它会产生什么样的影响？
+- 6. 试从动态性、并发性和独立性上比较进程和程序。
+output:
+("entity"<|>第二章 进程的描述与控制<|>Chapter<|>课程结构章节“第二章 进程的描述与控制”，出现在 习题 中。)
+##
+("entity"<|>第二章习题<|>Assignment<|>课程作业或题组“第二章习题”，出现在 习题 中。)
+##
+("entity"<|>前趋图<|>Concept<|>课程概念“前趋图”，出现在 习题 中。)
+##
+("entity"<|>进程<|>Concept<|>课程概念“进程”，出现在 习题 中。)
+##
+("entity"<|>线程<|>Concept<|>课程概念“线程”，出现在 习题 中。)
+##
+("entity"<|>进程控制块<|>Term<|>课程术语“进程控制块”，出现在 习题 中。)
+##
+("entity"<|>用户级线程<|>AlgorithmOrMethod<|>课程中的方法或算法“用户级线程”，出现在 习题 中。)
+##
+("entity"<|>内核支持线程<|>AlgorithmOrMethod<|>课程中的方法或算法“内核支持线程”，出现在 习题 中。)
+##
+("relationship"<|>第二章 进程的描述与控制<|>第二章习题<|>[type=evaluated_by] 第二章习题考核进程描述与控制内容。<|>8)
+##
+("relationship"<|>进程<|>第二章习题<|>[type=evaluated_by] 习题询问为什么引入进程、进程特征和进程状态转换。<|>8)
+##
+("relationship"<|>进程控制块<|>第二章习题<|>[type=evaluated_by] 习题询问 PCB 的作用和组织方式。<|>8)
+##
+("relationship"<|>进程<|>线程<|>[type=prerequisite_of] 习题先考察进程概念，再考察为什么引入线程及进程和线程比较。<|>8)
+##
+("relationship"<|>前趋图<|>第二章习题<|>[type=appears_in] 前趋图出现在第二章习题第 1、2 题。<|>8)
+##
+<|COMPLETE|>
+# note: 基于 audit gold_entities / gold_relations 直接转换得到。

@@ -1,0 +1,608 @@
+{
+  "task": "material_qa_smoke",
+  "status": "success",
+  "generated_at": "2026-05-09T12:09:17+08:00",
+  "root": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+  "qa_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/eval/material_7_qa_smoke.json",
+  "method": "local",
+  "query_timeout_seconds": 180.0,
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "active_prompt_snapshot": {
+    "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/final/active_prompt.json",
+    "exists": true,
+    "payload": {
+      "task": "prompt_candidate_finalization",
+      "status": "success",
+      "finalized_at": "2026-05-09T11:06:45+08:00",
+      "candidate_name": "schema_aware",
+      "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+      "candidate_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_aware",
+      "final_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/final/schema_aware",
+      "env_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/.env",
+      "copied_files": [
+        "README.md",
+        "extract_graph.txt",
+        "prompt.txt"
+      ],
+      "active_prompt_paths": {
+        "extract_graph.txt": "prompts/final/schema_aware/extract_graph.txt",
+        "summarize_descriptions.txt": "prompts/summarize_descriptions.txt",
+        "extract_claims.txt": "prompts/extract_claims.txt",
+        "community_report_graph.txt": "prompts/community_report_graph.txt",
+        "community_report_text.txt": "prompts/community_report_text.txt"
+      },
+      "gate_passed": false,
+      "scoring_run_id": "material_7_real_20260508_rescore_schema_fix",
+      "manifest_sha256": "ed53740fa366a5b0a9090419dee946a1fd1e3a47520fb0e12e772b70a7b11174",
+      "scoring_result_sha256": "7bc3b2553dcefd9aef16b0adafc110ba9e7919a847fdc506a64cfc5b369ac82a",
+      "activation_policy": "experimental_scoring_gate_failed",
+      "formal_activation_ready": false,
+      "experimental": true,
+      "experimental_reason": "scoring gate 未通过，已通过 --allow-failed-scoring-gate 实验性放行。",
+      "scoring_binding": {
+        "run_id": "material_7_real_20260508_rescore_schema_fix",
+        "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+        "manifest_sha256": "ed53740fa366a5b0a9090419dee946a1fd1e3a47520fb0e12e772b70a7b11174",
+        "eval_file_sha256s": [
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/auto_tuned.json",
+            "sha256": "d9bd831a2c6855b43faacdde2b260e164b5ba3d5409f35f40a3c63812dc5ec97"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/default.json",
+            "sha256": "2e5cafd2f0af6f155d08042dbbbfb77fe1d692d10962a656a8f68a7c69ad3f8f"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/schema_aware.json",
+            "sha256": "7c6f9000555f1fb7a9c756d958ef018a7f543e3dd806bfea7ad07e7763c42549"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/schema_fewshot.json",
+            "sha256": "ad66d7eeb42f3c530008a58e2573b570c934c5429fe8534dcaa1f71830ae7bbc"
+          }
+        ],
+        "candidate_id": "schema_aware",
+        "scoring_result_sha256": "7bc3b2553dcefd9aef16b0adafc110ba9e7919a847fdc506a64cfc5b369ac82a",
+        "scoring_report": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/extraction_scoring/runs/material_7_real_20260508_rescore_schema_fix/top_candidates.json",
+        "parse_success_rate": 1.0,
+        "gate_passed": false,
+        "allow_failed_scoring_gate": true
+      }
+    }
+  },
+  "index_stats": {
+    "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/stats.json",
+    "exists": true,
+    "summary": {
+      "num_documents": 393,
+      "update_documents": 0,
+      "total_runtime": 7718.892306804657,
+      "input_load_time": 0,
+      "workflow_count": 10,
+      "workflow_names": [
+        "create_base_text_units",
+        "create_communities",
+        "create_community_reports",
+        "create_final_documents",
+        "create_final_text_units",
+        "extract_covariates",
+        "extract_graph",
+        "finalize_graph",
+        "generate_text_embeddings",
+        "load_input_documents"
+      ],
+      "workflow_runtime_seconds": {
+        "load_input_documents": 0.3478820323944092,
+        "create_base_text_units": 2.0188426971435547,
+        "create_final_documents": 0.14996910095214844,
+        "extract_graph": 1248.776511669159,
+        "finalize_graph": 2.041511297225952,
+        "extract_covariates": 0.00015664100646972656,
+        "create_communities": 0.8113775253295898,
+        "create_final_text_units": 0.882068395614624,
+        "create_community_reports": 6322.617804050446,
+        "generate_text_embeddings": 141.08573150634766
+      }
+    }
+  },
+  "output_artifacts": {
+    "stats.json": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/stats.json",
+      "exists": true,
+      "type": "file"
+    },
+    "documents.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/documents.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "text_units.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/text_units.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "entities.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/entities.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "relationships.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/relationships.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "communities.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/communities.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "community_reports.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/community_reports.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "lancedb": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb",
+      "exists": true,
+      "type": "directory"
+    }
+  },
+  "results": [
+    {
+      "id": "material-7-qa-001",
+      "question": "进程的基本特征有哪些？",
+      "method": "local",
+      "expected_keywords": [
+        "动态性",
+        "并发性",
+        "独立性",
+        "异步性"
+      ],
+      "matched_keywords": [
+        "动态性",
+        "并发性",
+        "独立性",
+        "异步性"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "动态性",
+          "keywords": [
+            "动态性"
+          ]
+        },
+        {
+          "label": "并发性",
+          "keywords": [
+            "并发性"
+          ]
+        },
+        {
+          "label": "独立性",
+          "keywords": [
+            "独立性"
+          ]
+        },
+        {
+          "label": "异步性",
+          "keywords": [
+            "异步性"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "动态性",
+        "并发性",
+        "独立性",
+        "异步性"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第二章 进程的描述与控制 > 2.2 进程的描述 > 2.2.1 进程的定义和特征",
+      "passed": true,
+      "returncode": 0,
+      "answer": "根据提供的资料，进程的基本特征可以从其基本属性、动态特性以及异步性等多个维度进行归纳。\n\n### 进程的两个基本属性\n\n进程的并发执行建立在其两个核心基本属性之上。首先，进程是**拥有资源的独立单位**，一个进程要能独立运行，必须拥有存放程序、数据的内存空间、所需的I/O设备等资源。其次，进程是**可独立调度和分派的基本单位**，系统通过其唯一的进程控制块（PCB）来感知、调度进程，并保存和恢复其运行现场 [Data: Entities (808); Sources (96)].\n\n正是这两个属性，使得每个进程既能作为资源分配的主体，又能作为处理机调度的对象，从而构成了系统并发执行的基础 [Data: Sources (96)].\n\n### 动态性与并发性\n\n进程本身是一个程序的一次**动态**执行实例，具有完整的生命周期，体现为被创建、执行、并在就绪、运行、阻塞等状态间转换，直至最终被撤销 [Data: Entities (6, 215); Relationships (215, 1646, 768)].\n\n与此同时，进程的引入是为了实现程序的**并发**执行。在多道程序环境中，多个进程可以在宏观上同时运行，共享系统资源。引入线程技术后，一个进程内部的多个线程也能并发执行，进一步提升了系统的并发性 [Data: Entities (6); Relationships (16, 1321); Sources (97)].\n\n### 异步性\n\n进程的执行具有**异步性**。在多道程序环境下，由于资源共享和进程间的相互制约，每个进程获得处理机的时间、执行推进的速度以及暂停的时机，并非由其自身完全控制，而是“走走停停”，以不可预知的速度向前推进 [Data: Entities (205, 657); Relationships (979, 1069, 452); Sources (23, 69)].\n\n这种异步性是操作系统的一个重要特征。但只要配置了完善的进程同步机制，并在相同的运行环境下，即便进程以异步方式运行，最终也能获得完全相同的、可再现的结果 [Data: Sources (23, 69)].\n\n### 独立性\n\n每个进程在运行期间都拥有**独立的地址空间**和资源集合，彼此之间不会直接干扰。这种独立性保证了进程运行的封闭性，是进程顺序执行时的重要特征 [Data: Entities (6, 480, 478); Sources (97)]. 不过，需要注意的是，属于同一进程的多个线程之间的独立性远低于不同进程之间，因为它们共享进程的内存地址空间和资源 [Data: Sources (97)].",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "进程的基本特征有哪些？"
+      ]
+    },
+    {
+      "id": "material-7-qa-002",
+      "question": "分页存储管理中页表的作用是什么？",
+      "method": "local",
+      "expected_keywords": [
+        "页号",
+        "物理块号",
+        "地址映射",
+        "页表"
+      ],
+      "matched_keywords": [
+        "页号",
+        "物理块号",
+        "地址映射",
+        "页表"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "页号",
+          "keywords": [
+            "页号"
+          ]
+        },
+        {
+          "label": "物理块号",
+          "keywords": [
+            "物理块号"
+          ]
+        },
+        {
+          "label": "地址映射",
+          "keywords": [
+            "地址映射"
+          ]
+        },
+        {
+          "label": "页表",
+          "keywords": [
+            "页表"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "页号",
+        "物理块号",
+        "地址映射",
+        "页表"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第四章 存储器管理 > 4.5 分页存储管理方式 > 4.5.1 分页存储管理的基本方法",
+      "passed": true,
+      "returncode": 0,
+      "answer": "## 页表的核心作用：地址映射\n\n在分页存储管理方式中，页表是操作系统为每个进程建立的一张页面映像表，它最根本的作用是实现从逻辑地址到物理地址的地址映射。进程的逻辑地址空间被划分为固定大小的页，而物理内存则被划分为同样大小的块（页框）。由于进程的各个页面可以离散地装入内存中任意空闲的物理块中，为了在运行时能够找到每一页在内存中的实际位置，系统必须通过页表来记录页号与物理块号的对应关系。当进程执行时，通过查找页表，即可将逻辑地址中的页号转换为内存中的物理块号，再与页内偏移组合，形成最终的物理地址。【Data: Sources (187); Entities (1293); Relationships (2357, 2407, 2408)】\n\n## 页表项的组成与保护机制\n\n页表由若干页表项组成，每个页表项对应进程的一个页。页表项最基本的字段是**物理块号**，用于指明该页所在的物理内存块。【Data: Entities (1289); Relationships (2415); Sources (187)】此外，即使在简单分页系统中，页表项也常设有**存取控制字段**，用于对该存储块的内容进行保护。例如，该字段可以规定块内的内容是允许读/写、只读还是只执行。当进程试图进行非法访问（如写只读块）时，将触发操作系统中断，从而实现对内存访问的权限控制。【Data: Sources (187); Relationships (2358)】\n\n## 页表在地址变换机构中的地位\n\n地址变换机构是完成逻辑地址到物理地址转换的硬件支持，而页表正是该机构运行的基础。系统中会设置一个或多个**页表寄存器**，用于存放当前进程页表的起始地址和长度。在进程切换时，页表寄存器的内容会从进程控制块中重新加载。地址变换过程会利用页表寄存器中的页表始址，结合逻辑地址中的页号找到对应的页表项，从而读取物理块号。当引入快表（TLB）后，未命中时仍需访问内存中的页表来完成映射。【Data: Entities (1306); Sources (187, 191); Relationships (2417, 2402, 2418, 2728)】\n\n## 虚拟存储环境下的页表扩展\n\n在请求分页系统中，页表的作用进一步扩展，以支撑虚拟存储器的实现。此时页表机制在纯分页的基础上增加了**状态位**（标识该页是否已装入内存）、**访问位**（用于页面置换算法参考）、**修改位**（标识该页是否被修改过）以及**外存地址**等字段。这些额外信息使得系统可以在页面缺失时触发缺页中断，换入所需页面，并根据访问位、修改位等实施页面置换策略。因此，请求分页系统中的页表不仅是地址映射的工具，更是实现请求调页和页面置换的核心数据结构。【Data: Entities (1436, 1453); Sources (206); Relationships (2734, 2741, 2735, 2736)】\n\n## 应对大地址空间的页表组织\n\n随着逻辑地址空间的扩大（如32位系统），单级页表可能因占用过大连续内存而难以实现。两级页表（乃至多级页表）的引入，本质是为了解决大页表的存储问题，但其最终目标依然是为地址映射服务。两级页表将页表本身分页，并增设外层页表（页目录）来索引这些页表页面。地址变换时，硬件通过外层页表寄存器找到外层页表，依次索引内层页表，最终获得物理块号。这种离散分配的方式使得页表不必占用连续大内存，但映射逻辑地址到物理地址的核心作用始终不变。【Data: Entities (1313, 1314, 1319); Sources (191); Relationships (2424, 2426, 2439)】",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "分页存储管理中页表的作用是什么？"
+      ]
+    },
+    {
+      "id": "material-7-qa-003",
+      "question": "虚拟存储器通常具有哪些特征？",
+      "method": "local",
+      "expected_keywords": [
+        "离散性",
+        "多次性",
+        "对换性",
+        "虚拟性"
+      ],
+      "matched_keywords": [
+        "离散性",
+        "多次性",
+        "对换性",
+        "虚拟性"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "离散性",
+          "keywords": [
+            "离散性"
+          ]
+        },
+        {
+          "label": "多次性",
+          "keywords": [
+            "多次性"
+          ]
+        },
+        {
+          "label": "对换性",
+          "keywords": [
+            "对换性"
+          ]
+        },
+        {
+          "label": "虚拟性",
+          "keywords": [
+            "虚拟性"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "离散性",
+        "多次性",
+        "对换性",
+        "虚拟性"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第五章 虚拟存储器",
+      "passed": true,
+      "returncode": 0,
+      "answer": "虚拟存储器作为现代操作系统中存储器管理的一项重要技术，其设计蕴含着几个核心特征，这些特征共同实现了从逻辑上扩充内存容量的目标 [Data: Sources (201); Entities (14, 1406); Relationships (2593)]。它打破了传统存储管理方式中“一次性”与“驻留性”的桎梏 [Data: Sources (203)]，通过将程序仅部分装入内存并支持运行时换入换出，显著提升了系统的并发度与资源利用率。具体而言，虚拟存储器通常具备以下四个典型特征。\n\n### 虚拟性\n虚拟性是虚拟存储最本质的特征，指系统通过逻辑方式扩充内存容量，而非物理上增加内存条。该特性使用户程序所能使用的地址空间远超实际物理内存大小，从而满足了运行更大程序或让更多用户程序并发执行的需求 [Data: Sources (201); Entities (14, 1406)]。操作系统利用请求调入和置换功能，在有限的物理内存上营造出一个看似无限大的虚拟内存空间，这正是“虚拟”一词的核心体现 [Data: Sources (204); Entities (14)]。\n\n### 离散性\n虚拟存储器的实现毫无例外地建立在离散分配存储管理方式的基础上 [Data: Sources (206); Relationships (2669)]。这意味着进程在内存中不必占用一块连续的物理区域，而是可以被分散存储在多个不连续的物理块（如页面或段）中。离散分配不仅打破了连续分配方式对内存空间的严苛要求，也为后续的多次调入和置换操作提供了必要的物理基础与灵活性 [Data: Sources (206); Entities (14)]。\n\n### 多次性\n多次性是指一个作业不需要一次性全部装入内存即可开始运行，而是可以分成多次逐步调入 [Data: Sources (206)]。基于程序执行的局部性原理，系统只需将当前活跃的少数页面或段放入内存，其余部分留在外存（磁盘）上 [Data: Sources (203, 204); Entities (14)]。当程序需要访问尚未调入的页面或段时，再通过请求调页或请求调段机制动态加载，这直接解决了大作业在小内存中无法运行的难题 [Data: Sources (204); Entities (14)]。\n\n### 对换性\n对换性指的是在程序运行期间，允许在内存和外存之间进行页面或段的换入换出操作 [Data: Sources (204); Entities (14)]。当内存空间紧张而又有新的页面或段需要调入时，操作系统会利用置换功能，将内存中暂时不用的部分换出到外存，从而腾出空间供急需的程序部分使用 [Data: Sources (204); Relationships (2627, 2639)]。这一特性确保进程即使面对远小于自身总容量的物理内存，也能流畅地执行下去，并使得内存中能同时驻留更多的并发进程 [Data: Sources (204); Entities (14)]。",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "虚拟存储器通常具有哪些特征？"
+      ]
+    },
+    {
+      "id": "material-7-qa-004",
+      "question": "I/O 软件通常分为哪些层次？",
+      "method": "local",
+      "expected_keywords": [
+        "中断处理程序",
+        "设备驱动程序",
+        "设备独立性软件",
+        "用户层软件"
+      ],
+      "matched_keywords": [
+        "中断处理程序",
+        "设备驱动程序",
+        "设备独立性软件"
+      ],
+      "missing_keywords": [
+        "用户层软件"
+      ],
+      "expected_keyword_groups": [
+        {
+          "label": "中断处理程序",
+          "keywords": [
+            "中断处理程序"
+          ]
+        },
+        {
+          "label": "设备驱动程序",
+          "keywords": [
+            "设备驱动程序"
+          ]
+        },
+        {
+          "label": "设备独立性软件",
+          "keywords": [
+            "设备独立性软件"
+          ]
+        },
+        {
+          "label": "用户层软件",
+          "keywords": [
+            "用户层软件",
+            "用户层 I/O 软件",
+            "用户层I/O软件"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "中断处理程序",
+        "设备驱动程序",
+        "设备独立性软件",
+        "用户层软件"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第六章 输入输出系统",
+      "passed": true,
+      "returncode": 0,
+      "answer": "I/O 软件通常采用层次式结构，以管理复杂的 I/O 操作并向上层提供统一接口。根据经典的划分方式，I/O 软件可组织为四个层次，从高到低（或从用户层到硬件层）依次为：\n\n- **用户层 I/O 软件**：实现与用户交互的接口，提供可供用户进程直接调用的库函数，以对设备进行操作。\n- **设备独立性软件**（也称与设备无关的软件）：负责实现用户程序与设备驱动程序之间的统一接口，完成设备命名、保护、分配与释放，并提供缓冲管理等公共 I/O 服务。\n- **设备驱动程序**：与硬件直接相关，接收上层发来的抽象 I/O 请求并将其转换为具体命令和参数，驱动设备控制器完成实际操作。\n- **中断处理程序**：处于最底层，直接与硬件交互；当 I/O 设备发出中断信号时，负责保存被中断进程的 CPU 环境，转入相应处理，并在处理完成后恢复现场。\n\n这一分层结构在教材中被明确表述为“通常把 I/O 软件组织成四个层次” [Data: Entities (1985, 1655, 1656, 1657, 1660); Sources (238)]。其中，用户层 I/O 软件是最高层，它依赖于设备独立性软件提供的服务 [Data: Relationships (3116, 3120)]；设备独立性软件则通过设备驱动程序与硬件通信，并进一步依赖于中断处理程序对底层事件的处理 [Data: Relationships (3118, 3119, 3121, 3134)]。\n\n需要指出的是，若从 I/O 系统内部视角观察，I/O 系统本身可被描述为三个层次（中断处理程序、设备驱动程序、设备独立性软件），这是因为用户层 I/O 软件通常被视为 I/O 系统上层的调用者 [Data: Entities (1663), Sources (238)]。但从 I/O 软件的整体视角来看，四层结构仍然是标准的描述，其层次关系和功能已在操作系统教材中得到了系统阐述 [Data: Sources (0, 286)]。图中的控制流箭头表示上层对下层的调用，每一层都利用其下层提供的服务，并向上层屏蔽实现细节，从而实现了清晰的模块化和良好的可移植性 [Data: Sources (238)]。",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "I/O 软件通常分为哪些层次？"
+      ]
+    },
+    {
+      "id": "material-7-qa-005",
+      "question": "文件分配常见的组织方式有哪些？",
+      "method": "local",
+      "expected_keywords": [
+        "连续分配",
+        "链接分配",
+        "索引分配"
+      ],
+      "matched_keywords": [
+        "连续分配",
+        "链接分配",
+        "索引分配"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "连续分配",
+          "keywords": [
+            "连续分配",
+            "连续组织方式"
+          ]
+        },
+        {
+          "label": "链接分配",
+          "keywords": [
+            "链接分配",
+            "链接组织方式"
+          ]
+        },
+        {
+          "label": "索引分配",
+          "keywords": [
+            "索引分配",
+            "索引组织方式"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "连续分配",
+        "链接分配",
+        "索引分配"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第七章 文件管理",
+      "passed": true,
+      "returncode": 0,
+      "answer": "文件分配的组织方式，也就是外存的组织方式，直接决定了文件的物理结构。根据教材内容，常见的文件分配组织方式主要有以下三种：\n\n- **连续组织方式（连续分配）**  \n  这种方式要求为每个文件分配一组相邻的磁盘盘块，从而在物理上形成连续的顺序式文件结构。它支持顺序访问且存取速度较快，但存在外部碎片、需要事先知道文件长度、不利于动态增长等缺点 [Data: Entities (2272, 2275); Relationships (4251, 4264); Sources (322, 323)].\n\n- **链接组织方式（链接分配）**  \n  这种方式为文件分配不连续的盘块，并通过每个盘块中的链接指针将这些盘块串联起来，形成链接式文件结构。它克服了连续分配的外部碎片和文件动态增长问题，但不支持高效的随机直接存取。文件分配表（FAT）技术就是这种组织方式的典型实现，通过集中管理链接指针来连接文件的所有盘块 [Data: Entities (2273, 2276, 2314); Relationships (4252, 4407); Sources (322, 325)].\n\n- **索引组织方式（索引分配）**  \n  索引分配为每个文件设立一个索引块（索引表），集中记录分配给该文件的所有盘块号，由此形成索引式文件结构。它支持直接访问，并解决了链接方式下随机存取效率低的问题。对于大型文件，还可以扩展为两级索引或多级索引分配 [Data: Entities (2333, 2355, 2356); Relationships (4250, 4411); Sources (322)].\n\n这三种基本的外存组织方式分别对应形成顺序文件、链接文件和索引文件。在实际系统中，有时也会混合使用多种方式以适应不同的文件类型和需求 [Data: Sources (322)].",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "文件分配常见的组织方式有哪些？"
+      ]
+    },
+    {
+      "id": "material-7-qa-006",
+      "question": "磁盘访问时间由哪几部分组成？",
+      "method": "local",
+      "expected_keywords": [
+        "寻道时间",
+        "旋转延迟",
+        "传输时间"
+      ],
+      "matched_keywords": [
+        "寻道时间",
+        "旋转延迟",
+        "传输时间"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "寻道时间",
+          "keywords": [
+            "寻道时间"
+          ]
+        },
+        {
+          "label": "旋转延迟",
+          "keywords": [
+            "旋转延迟"
+          ]
+        },
+        {
+          "label": "传输时间",
+          "keywords": [
+            "传输时间"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "寻道时间",
+        "旋转延迟",
+        "传输时间"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第八章 磁盘存储器的管理",
+      "passed": true,
+      "returncode": 0,
+      "answer": "## 磁盘访问时间的组成\n\n磁盘访问时间是指从发出磁盘读写请求到完成数据传送所经历的总时间。根据操作系统教材的描述，它由三个部分构成：**寻道时间**、**旋转延迟**和**传输时间** [Data: Entities (1967); Sources (281)]。这一时间结构直接决定了磁盘 I/O 的性能，其完整计算公式可表示为：\n\\[\n\\text{总时间} = \\text{寻道时间} + \\text{旋转延迟时间} + \\text{传输时间}\n\\]\n各部分的具体含义和计算方式需要在磁盘参数的基础上逐一定义 [Data: Entities (1998); Relationships (3781)]。\n\n### 1. 寻道时间（Seek Time, \\(T_s\\)）\n\n寻道时间是磁头从当前位置移动到目标数据所在磁道所经历的时间 [Data: Entities (1968); Relationships (3697)]。它是磁盘访问时间中最主要的组成部分，也是磁盘调度算法优化的核心对象 [Data: Relationships (3723)]。寻道时间的计算公式为：\n\\[\nT_s = m \\times n + s\n\\]\n其中 \\(m\\) 为与磁盘驱动器速度有关的常数（对一般磁盘 \\(m=0.2\\)，对高速磁盘 \\(m\\leq 0.1\\)），\\(n\\) 是需移动的磁道数，\\(s\\) 为磁臂启动时间（约 \\(2\\,\\text{ms}\\)）。由此得到的温盘寻道时间通常在 \\(5\\sim 30\\,\\text{ms}\\) 范围 [Data: Entities (1969); Sources (281)]。在磁盘调度中，算法（如 SCAN、CSCAN）会根据寻道长度来评估性能，旨在使平均寻道时间最小 [Data: Relationships (3736, 3737)]。\n\n### 2. 旋转延迟（Rotational Delay）\n\n旋转延迟指磁头到达目标磁道后，等待扇区旋转至磁头下方所需的时间。它取决于磁盘转速，通常取磁盘旋转半周的平均时间。该部分在教材中被明确列为磁盘访问时间的第二要素，但当前知识库中未建立独立的实体记录，其存在直接依据于源文本 [Data: Sources (281)]。\n\n### 3. 传输时间（Transfer Time）\n\n传输时间对应实际读写数据的时间开销，其大小依赖于需传输的数据量和磁盘的传输速率。在给定数据量的场景下，传输时间通常是三者中相对固定的部分。同样，与旋转延迟相同，教材已将其列为磁盘访问时间的第三部分 [Data: Sources (281)]。\n\n综上，磁盘访问时间由**寻道时间**、**旋转延迟**和**传输时间**三部分组成。由于寻道时间涉及机械运动，其延迟远高于电子传输部分，因此成为影响系统 I/O 性能的瓶颈，操作系统主要通过改进磁盘调度算法来降低寻道开销 [Data: Entities (1967, 1968); Relationships (3697, 3781); Sources (281)]。",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "磁盘访问时间由哪几部分组成？"
+      ]
+    },
+    {
+      "id": "material-7-qa-007",
+      "question": "计算机病毒和蠕虫的主要区别是什么？",
+      "method": "local",
+      "expected_keywords": [
+        "病毒",
+        "蠕虫",
+        "寄生",
+        "独立的进程",
+        "自我复制"
+      ],
+      "matched_keywords": [
+        "病毒",
+        "蠕虫",
+        "寄生",
+        "独立的进程",
+        "自我复制"
+      ],
+      "missing_keywords": [],
+      "expected_keyword_groups": [
+        {
+          "label": "病毒",
+          "keywords": [
+            "病毒"
+          ]
+        },
+        {
+          "label": "蠕虫",
+          "keywords": [
+            "蠕虫"
+          ]
+        },
+        {
+          "label": "寄生",
+          "keywords": [
+            "寄生"
+          ]
+        },
+        {
+          "label": "独立的进程",
+          "keywords": [
+            "独立的进程"
+          ]
+        },
+        {
+          "label": "自我复制",
+          "keywords": [
+            "自我复制"
+          ]
+        }
+      ],
+      "matched_keyword_groups": [
+        "病毒",
+        "蠕虫",
+        "寄生",
+        "独立的进程",
+        "自我复制"
+      ],
+      "missing_keyword_groups": [],
+      "evidence_heading": "第十二章 保护和安全 > 12.5 来自系统外部的攻击 > 12.5.1 病毒、蠕虫和移动代码",
+      "passed": true,
+      "returncode": 0,
+      "answer": "## 计算机病毒与蠕虫的主要区别\n\n计算机病毒和蠕虫都是恶意软件的重要类型，但它们在运行方式、传播机制和寄生依赖上存在根本性差异。以下基于操作系统教材中的定义与描述，梳理两者的主要区别。\n\n### 1. 寄生性 vs. 独立性\n\n**病毒**是一种寄生类恶意软件，自身不能独立运行，必须将自己的代码附加（寄生）在其他合法程序之上。当被感染的程序执行时，病毒代码才随之获得运行机会，并继续感染其他程序 [Data: Sources (520); Entities (3706); Relationships (6829)]。\n\n**蠕虫**则属于独立运行类恶意软件，它是一个完整的程序，能够被操作系统直接调度执行，作为一个独立的进程运行，无需依附于任何宿主程序 [Data: Sources (520); Entities (3703, 3699); Relationships (6825)]。\n\n这一区别体现在两者的分类上：病毒归类于“寄生类恶意软件”，蠕虫归类于“独立运行类恶意软件”，教材据此将蠕虫与僵尸等并列为可独立运行的恶意程序 [Data: Sources (515); Entities (3699, 3703)]。\n\n### 2. 传播机制与传播强度\n\n病毒通过感染宿主程序，并随这些程序的移动或共享进行传播，其传染性较强，能够在系统中制造大量副本并扩散到各个系统 [Data: Sources (520)]。\n\n蠕虫虽然也能自我复制和传染给其他程序，但它的传播过程通常更依赖网络和系统漏洞。蠕虫必须先找到操作系统或其他软件的缺陷，将其作为“易于攻破的薄弱环节”，然后才能借助这些缺陷进行传播；一旦缺陷被修复，蠕虫便难以继续扩散。因此，教材明确指出蠕虫的传播性没有病毒强 [Data: Sources (520); Relationships (6880)]。\n\n此外，网络蠕虫通常由“引导程序”和“蠕虫本身”两部分组成。蠕虫利用远程登录、电子邮件等网络工具，先将引导程序副本传送到目标机器，再通过引导程序建立连接、上载蠕虫主体，从而完成感染过程。这种分阶段、依赖网络载体的传播方式也与病毒直接嵌入侵体的方式显著不同 [Data: Sources (520)]。\n\n### 3. 总结对比\n\n| 特性           | 病毒                               | 蠕虫                               |\n| -------------- | ---------------------------------- | ---------------------------------- |\n| 是否依赖宿主   | 必须寄生在其他程序上               | 完整独立程序，无需寄生             |\n| 能否独立运行   | 否（随宿主程序运行）               | 是（可作为独立进程运行）           |\n| 传播性         | 强，通过感染文件迅速扩散           | 相对较弱，依赖系统漏洞和网络工具   |\n| 典型传播方式   | 文件感染、存储介质共享等           | 网络传播，利用远程登录、邮件等     |\n\n总体上，病毒与蠕虫虽然同属可自我复制的恶意软件，但“是否需要宿主程序”和“传播强度”构成了它们最核心的区别。这种差异也决定了在安全防护中需要采取不同的检测与预防手段 [Data: Sources (520); Relationships (6880); Entities (3706, 3703, 3816, 3815)]。",
+      "stderr_tail": "",
+      "command": [
+        "graphrag",
+        "query",
+        "--root",
+        ".",
+        "--method",
+        "local",
+        "计算机病毒和蠕虫的主要区别是什么？"
+      ]
+    }
+  ],
+  "index_run_id": "index_20260508T2115_concurrent10",
+  "index_report_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/index_runs/index_20260508T2115_concurrent10_snapshot.json"
+}

@@ -198,6 +198,138 @@ def _build_artifact_binding(*, root: Path, run_id: str, eval_files: Sequence[Pat
     }
 
 
+def _normalize_endpoint_cell(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _build_endpoint_error_rows(ranked: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for candidate_metrics in ranked:
+        candidate = str(candidate_metrics.get("candidate") or "").strip()
+        for raw_combo in candidate_metrics.get("invalid_endpoint_combinations") or []:
+            if not isinstance(raw_combo, dict):
+                continue
+            count = int(raw_combo.get("count") or 0)
+            if count <= 0:
+                continue
+            rows.append(
+                {
+                    "candidate": candidate,
+                    "relation_type": str(raw_combo.get("relation_type") or "").strip(),
+                    "source_type": _normalize_endpoint_cell(raw_combo.get("source_type")),
+                    "target_type": _normalize_endpoint_cell(raw_combo.get("target_type")),
+                    "count": count,
+                    "suggested_action": str(raw_combo.get("suggested_action") or "").strip(),
+                    "reason": str(raw_combo.get("reason") or "").strip(),
+                    "endpoint_total_count": int(candidate_metrics.get("endpoint_total_count") or 0),
+                    "endpoint_invalid_count": int(candidate_metrics.get("endpoint_invalid_count") or 0),
+                    "endpoint_valid_rate": candidate_metrics.get("endpoint_valid_rate"),
+                    "examples": list(raw_combo.get("examples") or []),
+                }
+            )
+    return sorted(
+        rows,
+        key=lambda row: (
+            -int(row["count"]),
+            row["candidate"],
+            row["relation_type"],
+            str(row["source_type"]),
+            str(row["target_type"]),
+            row["reason"],
+        ),
+    )
+
+
+def _build_endpoint_candidate_totals(ranked: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "candidate": str(row.get("candidate") or "").strip(),
+            "endpoint_total_count": int(row.get("endpoint_total_count") or 0),
+            "endpoint_invalid_count": int(row.get("endpoint_invalid_count") or 0),
+            "endpoint_valid_rate": row.get("endpoint_valid_rate"),
+        }
+        for row in ranked
+    ]
+
+
+def _write_endpoint_error_summary_json(
+    path: Path,
+    *,
+    run_id: str,
+    ranked: Sequence[dict[str, Any]],
+    rows: Sequence[dict[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "task": "endpoint_error_summary",
+        "run_id": run_id,
+        "row_count": len(rows),
+        "total_error_count": sum(int(row["count"]) for row in rows),
+        "candidate_endpoint_totals": _build_endpoint_candidate_totals(ranked),
+        "rows": list(rows),
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _format_endpoint_markdown_cell(value: Any) -> str:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return "-"
+    return text.replace("|", "\\|")
+
+
+def _write_endpoint_error_summary_markdown(
+    path: Path,
+    *,
+    run_id: str,
+    rows: Sequence[dict[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# 关系端点错误摘要",
+        "",
+        f"- `run_id`：{run_id}",
+        f"- `total_error_count`：{sum(int(row['count']) for row in rows)}",
+        "",
+    ]
+    if not rows:
+        lines.append("本轮未发现关系端点错误。")
+    else:
+        columns = (
+            "candidate",
+            "relation_type",
+            "source_type",
+            "target_type",
+            "count",
+            "suggested_action",
+            "reason",
+        )
+        lines.append("| " + " | ".join(columns) + " |")
+        lines.append("|" + "|".join(["---"] * len(columns)) + "|")
+        for row in rows:
+            lines.append(
+                "| "
+                + " | ".join(_format_endpoint_markdown_cell(row.get(col)) for col in columns)
+                + " |"
+            )
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _append_endpoint_summary_links_to_compare(
+    path: Path,
+    *,
+    endpoint_summary_paths: dict[str, str],
+) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n## 端点诊断产物\n\n")
+        handle.write(f"- JSON：`{endpoint_summary_paths['json']}`\n")
+        handle.write(f"- Markdown：`{endpoint_summary_paths['markdown']}`\n")
+
+
 def score_extraction_results(
     *,
     root: Path,
@@ -309,6 +441,12 @@ def score_extraction_results(
     run_md = run_dir / "extraction_compare.md"
     run_top = run_dir / "top_candidates.json"
     run_meta_path = run_dir / "run_meta.json"
+    run_endpoint_json = run_dir / "endpoint_error_summary.json"
+    run_endpoint_md = run_dir / "endpoint_error_summary.md"
+    endpoint_summary_paths = {
+        "json": str(run_endpoint_json),
+        "markdown": str(run_endpoint_md),
+    }
 
     inputs = {
         "eval_dir": str(eval_root),
@@ -319,6 +457,7 @@ def score_extraction_results(
         "eval_files": [str(p) for p in eval_files],
         "skipped_candidates": skipped_candidates,
         "audit_metrics_enabled": audit_metrics_enabled,
+        "endpoint_error_summary_paths": endpoint_summary_paths,
         **gold_seed_summary,
     }
     artifact_binding = _build_artifact_binding(
@@ -326,10 +465,26 @@ def score_extraction_results(
         run_id=effective_run_id,
         eval_files=eval_files,
     )
+    endpoint_error_rows = _build_endpoint_error_rows(ranked)
 
     write_extraction_compare_csv(run_csv, ranked)
     write_extraction_compare_markdown(
         run_md, ranked, weights=effective_weights, top_k=top_k
+    )
+    _append_endpoint_summary_links_to_compare(
+        run_md,
+        endpoint_summary_paths=endpoint_summary_paths,
+    )
+    _write_endpoint_error_summary_json(
+        run_endpoint_json,
+        run_id=effective_run_id,
+        ranked=ranked,
+        rows=endpoint_error_rows,
+    )
+    _write_endpoint_error_summary_markdown(
+        run_endpoint_md,
+        run_id=effective_run_id,
+        rows=endpoint_error_rows,
     )
     write_top_candidates_json(
         run_top, ranked=ranked, k=top_k,
@@ -379,6 +534,8 @@ def score_extraction_results(
             "csv": str(run_csv),
             "markdown": str(run_md),
             "top_candidates_json": str(run_top),
+            "endpoint_error_summary_json": str(run_endpoint_json),
+            "endpoint_error_summary_md": str(run_endpoint_md),
         },
         "artifact_binding": artifact_binding,
     }

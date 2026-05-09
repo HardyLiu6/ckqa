@@ -28,6 +28,9 @@ DEFAULT_SAMPLES_DIR = Path("data") / "prompt_tuning_samples"
 DEFAULT_EVAL_DIR = Path("data") / "eval"
 DEFAULT_CANDIDATE_MANIFEST = Path("prompts") / "candidates" / "manifest.json"
 DEFAULT_QA_SMOKE_DIR = Path("data") / "eval"
+DEFAULT_PROMPT_TUNE_DOMAIN = "计算机操作系统课程教材知识图谱抽取"
+DEFAULT_PROMPT_TUNE_LANGUAGE = "中文"
+EXPECTED_PYTHON_ENV_NAME = "graphrag-oneapi"
 
 Runner = Callable[[Sequence[str], Path], subprocess.CompletedProcess[str]]
 
@@ -49,6 +52,15 @@ def _material_slug(material_id: int) -> str:
 
 def _smoke_run_id(run_id: str) -> str:
     return run_id if run_id.endswith("_smoke") else f"{run_id}_smoke"
+
+
+def _python_env_warning(python_executable: str) -> str | None:
+    if EXPECTED_PYTHON_ENV_NAME in python_executable:
+        return None
+    return (
+        f"当前 Python 可执行文件路径不包含 {EXPECTED_PYTHON_ENV_NAME}，"
+        "请确认是否使用 GraphRAG 调优推荐环境。"
+    )
 
 
 def _default_runner(command: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -82,6 +94,10 @@ def build_material_prompt_pipeline_steps(
     concurrency: int = 1,
     sample_timeout_seconds: float = 300,
     stream_mode: str = "on",
+    candidate_view: str = "compact",
+    prompt_tune_no_entity_types: bool = False,
+    prompt_tune_domain: str = DEFAULT_PROMPT_TUNE_DOMAIN,
+    prompt_tune_language: str = DEFAULT_PROMPT_TUNE_LANGUAGE,
     overwrite: bool = True,
 ) -> list[PipelineStep]:
     """构建 material 级 prompt tuning 流水线步骤。"""
@@ -92,7 +108,6 @@ def build_material_prompt_pipeline_steps(
     samples_file = DEFAULT_SAMPLES_DIR / f"{material_slug}_samples.json"
     audit_file = DEFAULT_EVAL_DIR / f"{material_slug}_audit_extraction_set.json"
     prompt_tune_report = Path("results") / "reports" / f"{material_slug}_prompt_tune_report.json"
-    prompt_tune_log = Path("results") / "reports" / f"{material_slug}_prompt_tune_run.log"
     prompt_generation_report = Path("results") / "reports" / f"{material_slug}_prompt_generation_report.json"
     audit_report = Path("results") / "reports" / f"{material_slug}_audit_sampling_report.json"
 
@@ -107,6 +122,8 @@ def build_material_prompt_pipeline_steps(
         f"{sample_timeout_seconds:g}",
         "--stream-mode",
         stream_mode,
+        "--candidate-view",
+        candidate_view,
     ]
     if overwrite:
         extract_base.append("--overwrite")
@@ -160,39 +177,53 @@ def build_material_prompt_pipeline_steps(
 
     prompt_tune_steps: list[PipelineStep] = []
     if prompt_tune_mode == "dry-run":
+        prompt_tune_command = [
+            python,
+            "scripts/run_graphrag_prompt_tune.py",
+            "--root",
+            ".",
+            "--report_file",
+            _as_posix(prompt_tune_report),
+            "--run-id",
+            run_id,
+            "--domain",
+            prompt_tune_domain,
+            "--language",
+            prompt_tune_language,
+            "--dry_run",
+            "--overwrite",
+        ]
+        if prompt_tune_no_entity_types:
+            prompt_tune_command.append("--no_entity_types")
         prompt_tune_steps.append(
             _step(
                 "prompt_tune_dry_run",
-                [
-                    python,
-                    "scripts/run_graphrag_prompt_tune.py",
-                    "--root",
-                    ".",
-                    "--report_file",
-                    _as_posix(prompt_tune_report),
-                    "--log_file",
-                    _as_posix(prompt_tune_log),
-                    "--dry_run",
-                    "--overwrite",
-                ],
+                prompt_tune_command,
                 project_root,
             )
         )
     elif prompt_tune_mode == "real":
+        prompt_tune_command = [
+            python,
+            "scripts/run_graphrag_prompt_tune.py",
+            "--root",
+            ".",
+            "--report_file",
+            _as_posix(prompt_tune_report),
+            "--run-id",
+            run_id,
+            "--domain",
+            prompt_tune_domain,
+            "--language",
+            prompt_tune_language,
+            "--overwrite",
+        ]
+        if prompt_tune_no_entity_types:
+            prompt_tune_command.append("--no_entity_types")
         prompt_tune_steps.append(
             _step(
                 "prompt_tune_real_run",
-                [
-                    python,
-                    "scripts/run_graphrag_prompt_tune.py",
-                    "--root",
-                    ".",
-                    "--report_file",
-                    _as_posix(prompt_tune_report),
-                    "--log_file",
-                    _as_posix(prompt_tune_log),
-                    "--overwrite",
-                ],
+                prompt_tune_command,
                 project_root,
             )
         )
@@ -291,6 +322,7 @@ def _load_top_candidate_for_finalization(
     top_candidates_path: Path,
     min_parse_success_rate: float,
     require_gate_passed: bool = True,
+    require_artifact_binding: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     payload = json.loads(top_candidates_path.read_text(encoding="utf-8"))
     inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
@@ -320,7 +352,7 @@ def _load_top_candidate_for_finalization(
             f"candidate={candidate}, parse_success_rate={parse_success_rate:.3f}, "
             f"gate_passed={gate_passed}"
         )
-    if require_gate_passed:
+    if require_gate_passed or require_artifact_binding:
         binding = best.get("artifact_binding")
         if not isinstance(binding, dict):
             raise RuntimeError(f"top-k 报告缺少候选 artifact_binding：{top_candidates_path}")
@@ -401,36 +433,36 @@ def _build_finalize_steps(
     scoring_report_path: Path,
     artifact_binding: dict[str, Any],
     min_parse_success_rate: float,
+    allow_failed_scoring_gate: bool,
     run_index_after_finalize: bool,
     qa_smoke_file: Path,
 ) -> list[PipelineStep]:
-    steps = [
-        _step(
-            "finalize_best_candidate",
-            [
-                python,
-                "scripts/finalize_candidate_prompt.py",
-                "--candidate",
-                candidate,
-                "--scoring-run-id",
-                scoring_run_id,
-                "--scoring-report",
-                _as_posix(scoring_report_path),
-                "--expected-manifest-sha256",
-                str(artifact_binding.get("manifest_sha256") or ""),
-                "--expected-scoring-result-sha256",
-                str(artifact_binding.get("scoring_result_sha256") or ""),
-                "--min-parse-success-rate",
-                f"{min_parse_success_rate:g}",
-            ],
-            root,
-        )
+    finalize_command = [
+        python,
+        "scripts/finalize_candidate_prompt.py",
+        "--candidate",
+        candidate,
+        "--scoring-run-id",
+        scoring_run_id,
+        "--scoring-report",
+        _as_posix(scoring_report_path),
+        "--expected-manifest-sha256",
+        str(artifact_binding.get("manifest_sha256") or ""),
+        "--expected-scoring-result-sha256",
+        str(artifact_binding.get("scoring_result_sha256") or ""),
+        "--min-parse-success-rate",
+        f"{min_parse_success_rate:g}",
+        "--require-scoring-binding",
     ]
+    if allow_failed_scoring_gate:
+        finalize_command.append("--allow-failed-scoring-gate")
+
+    steps = [_step("finalize_best_candidate", finalize_command, root)]
     if run_index_after_finalize:
         steps.append(
             _step(
                 "index_after_finalize",
-                ["graphrag", "index", "--root", "."],
+                [python, "scripts/run_graphrag_index.py", "--root", "."],
                 root,
             )
         )
@@ -476,17 +508,35 @@ def run_material_prompt_pipeline(
     concurrency: int = 1,
     sample_timeout_seconds: float = 300,
     stream_mode: str = "on",
+    candidate_view: str = "compact",
+    prompt_tune_no_entity_types: bool = False,
+    prompt_tune_domain: str = DEFAULT_PROMPT_TUNE_DOMAIN,
+    prompt_tune_language: str = DEFAULT_PROMPT_TUNE_LANGUAGE,
     overwrite: bool = True,
     dry_run: bool = False,
     finalize_best: bool = False,
     min_parse_success_rate: float = 0.8,
     index_after_finalize: bool = False,
+    allow_experimental_finalize: bool = False,
     runner: Runner | None = None,
 ) -> dict[str, Any]:
     """执行或预览 material 级 prompt tuning 流水线。"""
 
     project_root = root.resolve()
     python = python_executable or sys.executable
+    summary_context = {
+        "root": str(project_root),
+        "mode": mode,
+        "prompt_tune_mode": prompt_tune_mode,
+        "candidate_view": candidate_view,
+        "prompt_tune_no_entity_types": prompt_tune_no_entity_types,
+        "prompt_tune_domain": prompt_tune_domain,
+        "prompt_tune_language": prompt_tune_language,
+        "python_executable": python,
+        "python_env_warning": _python_env_warning(python),
+        "run_id": run_id,
+        "allow_experimental_finalize": allow_experimental_finalize,
+    }
     steps = build_material_prompt_pipeline_steps(
         root=project_root,
         course_id=course_id,
@@ -503,6 +553,10 @@ def run_material_prompt_pipeline(
         concurrency=concurrency,
         sample_timeout_seconds=sample_timeout_seconds,
         stream_mode=stream_mode,
+        candidate_view=candidate_view,
+        prompt_tune_no_entity_types=prompt_tune_no_entity_types,
+        prompt_tune_domain=prompt_tune_domain,
+        prompt_tune_language=prompt_tune_language,
         overwrite=overwrite,
     )
     qa_smoke_file = DEFAULT_QA_SMOKE_DIR / f"{_material_slug(material_id)}_qa_smoke.json"
@@ -510,10 +564,7 @@ def run_material_prompt_pipeline(
     if dry_run:
         return {
             "status": "dry_run",
-            "root": str(project_root),
-            "mode": mode,
-            "prompt_tune_mode": prompt_tune_mode,
-            "run_id": run_id,
+            **summary_context,
             "step_count": len(steps),
             "steps": [asdict(step) for step in steps],
             "qa_smoke_file": str(qa_smoke_file),
@@ -537,10 +588,7 @@ def run_material_prompt_pipeline(
         if completed.returncode != 0:
             return {
                 "status": "failed",
-                "root": str(project_root),
-                "mode": mode,
-                "prompt_tune_mode": prompt_tune_mode,
-                "run_id": run_id,
+                **summary_context,
                 "failed_step": step.name,
                 "executed_steps": executed,
             }
@@ -559,10 +607,7 @@ def run_material_prompt_pipeline(
             except RuntimeError as exc:
                 return {
                     "status": "failed",
-                    "root": str(project_root),
-                    "mode": mode,
-                    "prompt_tune_mode": prompt_tune_mode,
-                    "run_id": run_id,
+                    **summary_context,
                     "failed_step": "prompt_tune_real_validation",
                     "error": str(exc),
                     "executed_steps": executed,
@@ -586,10 +631,7 @@ def run_material_prompt_pipeline(
             except RuntimeError as exc:
                 return {
                     "status": "failed",
-                    "root": str(project_root),
-                    "mode": mode,
-                    "prompt_tune_mode": prompt_tune_mode,
-                    "run_id": run_id,
+                    **summary_context,
                     "failed_step": "smoke_gate",
                     "error": str(exc),
                     "executed_steps": executed,
@@ -600,10 +642,7 @@ def run_material_prompt_pipeline(
         if mode != "full":
             return {
                 "status": "failed",
-                "root": str(project_root),
-                "mode": mode,
-                "prompt_tune_mode": prompt_tune_mode,
-                "run_id": run_id,
+                **summary_context,
                 "failed_step": "finalize_requires_full_mode",
                 "error": "--finalize-best 只允许在 --mode full 后读取 full top-k 报告",
                 "executed_steps": executed,
@@ -622,14 +661,13 @@ def run_material_prompt_pipeline(
             candidate, best_metrics = _load_top_candidate_for_finalization(
                 top_candidates_path=top_candidates_path,
                 min_parse_success_rate=min_parse_success_rate,
+                require_gate_passed=not allow_experimental_finalize,
+                require_artifact_binding=True,
             )
         except RuntimeError as exc:
             return {
                 "status": "failed",
-                "root": str(project_root),
-                "mode": mode,
-                "prompt_tune_mode": prompt_tune_mode,
-                "run_id": run_id,
+                **summary_context,
                 "failed_step": "select_best_candidate_for_finalization",
                 "error": str(exc),
                 "executed_steps": executed,
@@ -642,6 +680,7 @@ def run_material_prompt_pipeline(
             scoring_report_path=top_candidates_path,
             artifact_binding=best_metrics.get("artifact_binding") or {},
             min_parse_success_rate=min_parse_success_rate,
+            allow_failed_scoring_gate=allow_experimental_finalize,
             run_index_after_finalize=index_after_finalize,
             qa_smoke_file=qa_smoke_file,
         )
@@ -661,10 +700,7 @@ def run_material_prompt_pipeline(
             if completed.returncode != 0:
                 return {
                     "status": "failed",
-                    "root": str(project_root),
-                    "mode": mode,
-                    "prompt_tune_mode": prompt_tune_mode,
-                    "run_id": run_id,
+                    **summary_context,
                     "failed_step": step.name,
                     "executed_steps": executed,
                 }
@@ -672,10 +708,7 @@ def run_material_prompt_pipeline(
 
     return {
         "status": "success",
-        "root": str(project_root),
-        "mode": mode,
-        "prompt_tune_mode": prompt_tune_mode,
-        "run_id": run_id,
+        **summary_context,
         "step_count": len(executed),
         "executed_steps": executed,
         "qa_smoke_file": str(qa_smoke_file),
@@ -704,6 +737,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--concurrency", type=int, default=1, help="候选内并发数")
     parser.add_argument("--sample-timeout", type=float, default=300, help="单样本超时秒数")
     parser.add_argument("--stream-mode", choices=["on", "off"], default="on", help="LLM 流式模式")
+    parser.add_argument(
+        "--candidate-view",
+        choices=["compact", "full"],
+        default="compact",
+        help="候选 Prompt 注入方式，默认 compact；固化前可用 full 复核完整候选",
+    )
+    parser.add_argument(
+        "--prompt-tune-no-entity-types",
+        action="store_true",
+        help="真实 prompt-tune 时透传 --no-discover-entity-types，适配不支持 response_format 的模型通道",
+    )
+    parser.add_argument(
+        "--prompt-tune-domain",
+        default=DEFAULT_PROMPT_TUNE_DOMAIN,
+        help="透传给 GraphRAG prompt-tune 的 domain 参数",
+    )
+    parser.add_argument(
+        "--prompt-tune-language",
+        default=DEFAULT_PROMPT_TUNE_LANGUAGE,
+        help="透传给 GraphRAG prompt-tune 的 language 参数",
+    )
     parser.add_argument("--no-overwrite", action="store_true", help="不覆盖已有产物")
     parser.add_argument("--dry-run", action="store_true", help="只打印步骤，不执行")
     parser.add_argument(
@@ -721,6 +775,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--index-after-finalize",
         action="store_true",
         help="固化成功后执行 graphrag index --root .",
+    )
+    parser.add_argument(
+        "--allow-experimental-finalize",
+        action="store_true",
+        help="实验性允许 full top candidate 在 gate_passed=false 但 parse 成功率达标时固化；不会绕过 smoke gate",
     )
     return parser
 
@@ -743,11 +802,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         concurrency=args.concurrency,
         sample_timeout_seconds=args.sample_timeout,
         stream_mode=args.stream_mode,
+        candidate_view=args.candidate_view,
+        prompt_tune_no_entity_types=args.prompt_tune_no_entity_types,
+        prompt_tune_domain=args.prompt_tune_domain,
+        prompt_tune_language=args.prompt_tune_language,
         overwrite=not args.no_overwrite,
         dry_run=args.dry_run,
         finalize_best=args.finalize_best,
         min_parse_success_rate=args.min_parse_success_rate,
         index_after_finalize=args.index_after_finalize,
+        allow_experimental_finalize=args.allow_experimental_finalize,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if summary.get("status") in {"success", "dry_run"} else 1

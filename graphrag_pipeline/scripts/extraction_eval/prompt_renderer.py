@@ -124,9 +124,7 @@ def _compact_candidate_prompt(text: str) -> str:
     if real_data_index >= 0:
         compact = compact[:real_data_index]
 
-    example_match = re_search_example_start(compact)
-    if example_match >= 0:
-        compact = compact[:example_match]
+    compact = _remove_legacy_examples(compact)
 
     lines: list[str] = []
     for raw_line in compact.splitlines():
@@ -139,6 +137,37 @@ def _compact_candidate_prompt(text: str) -> str:
             continue
         lines.append(raw_line.rstrip())
     return "\n".join(lines).strip()
+
+
+def _remove_legacy_examples(text: str) -> str:
+    """只移除旧通用示例，保留 schema 与压缩 few-shot 策略。"""
+
+    protected_indexes = [
+        index
+        for index in (
+            text.find("\n-Schema Constraints-"),
+            text.find("\n-Few-shot 示例-"),
+            text.find("\n-Course Baseline Constraints-"),
+        )
+        if index >= 0
+    ]
+    protected_start = min(protected_indexes) if protected_indexes else len(text)
+    start_candidates = [
+        index
+        for index in (
+            text.find("\n-Examples-"),
+            text.find("\nExamples:"),
+            re_search_example_start(text),
+        )
+        if 0 <= index < protected_start
+    ]
+    if not start_candidates:
+        return text
+
+    start = min(start_candidates)
+    end_candidates = [index for index in protected_indexes if index > start]
+    end = min(end_candidates) if end_candidates else len(text)
+    return f"{text[:start].rstrip()}\n\n{text[end:].lstrip()}"
 
 
 def re_search_example_start(text: str) -> int:

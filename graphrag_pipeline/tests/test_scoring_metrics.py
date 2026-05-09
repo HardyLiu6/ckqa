@@ -191,6 +191,72 @@ class TestEndpointValidRate(unittest.TestCase):
         ]
         self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 0.0)
 
+    def test_missing_endpoint_reasons_take_priority_over_schema_candidate(self):
+        schema = {
+            "contains": {
+                "source_types": [
+                    "Course",
+                    "Chapter",
+                    "KnowledgePoint",
+                    "Concept",
+                    "AlgorithmOrMethod",
+                ],
+                "target_types": [
+                    "Chapter",
+                    "KnowledgePoint",
+                    "Concept",
+                    "AlgorithmOrMethod",
+                ],
+            }
+        }
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "LRU页面置换算法", "type": "AlgorithmOrMethod"}],
+                [
+                    {
+                        "source": "LRU页面置换算法",
+                        "target": "最近最少使用原则",
+                        "type": "contains",
+                        "description": "算法包含最近最少使用原则。",
+                        "evidence": "LRU页面置换算法依据最近最少使用原则。",
+                    },
+                    {
+                        "source": "缺失的算法实体",
+                        "target": "LRU页面置换算法",
+                        "type": "contains",
+                        "description": "缺失源实体的关系。",
+                        "evidence": "示例证据。",
+                    },
+                    {
+                        "source": "缺失的源实体",
+                        "target": "缺失的目标实体",
+                        "type": "contains",
+                        "description": "两端都缺失的关系。",
+                        "evidence": "示例证据。",
+                    },
+                ],
+            )
+        ]
+
+        analysis = analyze_endpoint_validity(results, schema)
+
+        self.assertEqual(analysis["invalid_count"], 3)
+        combos_by_reason = {
+            combo["reason"]: combo for combo in analysis["invalid_combinations"]
+        }
+        self.assertEqual(
+            set(combos_by_reason),
+            {"missing_source", "missing_target", "missing_endpoint"},
+        )
+        self.assertEqual(
+            combos_by_reason["missing_target"]["source_type"], "AlgorithmOrMethod"
+        )
+        self.assertIsNone(combos_by_reason["missing_target"]["target_type"])
+        for combo in combos_by_reason.values():
+            self.assertEqual(
+                combo["suggested_action"], "complete_entity_or_skip_relation"
+            )
+
     def test_invalid_relation_type_excluded_from_denominator(self):
         results = [
             _success_result(
