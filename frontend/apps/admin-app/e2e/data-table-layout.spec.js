@@ -2,7 +2,9 @@ import { expect, test } from '@playwright/test'
 
 const API_PREFIX = '/api/v1'
 
-test('课程列表操作列固定在右侧且横向滚动不遮挡内容列', async ({ page }) => {
+test.skip('课程列表操作列固定在右侧且横向滚动不遮挡内容列', async ({ page }) => {
+  // M4 后 /app/courses 改走 CourseListPage（卡片网格），原 ModulePage 的固定操作列表格已不再使用。
+  // 本用例在 M5/M6 阶段会被更适合卡片网格的新断言替代。
   await installApiMocks(page, {
     'GET /courses': () => ({
       items: [
