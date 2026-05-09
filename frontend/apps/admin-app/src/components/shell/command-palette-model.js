@@ -33,3 +33,10 @@ export function shouldIgnoreShortcut(target) {
   if (target.isContentEditable) return true
   return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
 }
+
+// 视觉打磨迭代（2026-05-09）新增：命令面板快捷键提示条目
+// 用于在命令面板或主菜单显示全局快捷键参考，不影响已有 groups 数据流
+export const GLOBAL_SHORTCUT_HINTS = Object.freeze([
+  { id: 'open-palette', label: '打开命令面板', shortcut: '⌘ K' },
+  { id: 'toggle-sidebar', label: '折叠侧栏', shortcut: '⌘ \\' },
+])

@@ -97,6 +97,9 @@ function logout() {
   padding: 22px 28px 40px;
   max-width: 1280px;
   margin: 0 auto;
+  /* 视觉打磨迭代（2026-05-09）：main 区紧跟 sidebar 宽度
+   * --sb-w 由 SideNavigation 根据折叠态写入 :root */
+  transition: padding-left var(--ckqa-duration-glass) var(--ckqa-ease-glass);
 }
 @media (min-width: 1600px) {
   .console-layout-main { max-width: 1280px; }
