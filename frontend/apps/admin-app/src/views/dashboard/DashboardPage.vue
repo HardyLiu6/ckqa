@@ -5,6 +5,7 @@ import CkPageHero from '../../components/common/CkPageHero.vue'
 import CkPipelineHero from '../../components/common/CkPipelineHero.vue'
 import CkActivityFeed from '../../components/common/CkActivityFeed.vue'
 import CkTaskList from '../../components/common/CkTaskList.vue'
+import CkQuickActions from '../../components/common/CkQuickActions.vue'
 
 import { useDashboardSummary } from '../../composables/useDashboardSummary.js'
 import { useDashboardFeed } from '../../composables/useDashboardFeed.js'
@@ -28,13 +29,36 @@ const greeting = computed(() => {
   return `${greetingPrefix()}，${name}`
 })
 
+// 视觉打磨迭代（2026-05-09）：hero subtitle 改为数字化文案
+// 数据源：
+//   runningTaskCount 首选 summary.taskInProgressCount，降级时从 feed.state.tasks 计数
+//   weeklyQaCount    首选 summary.qaWeeklyCount / summary.qaSessionCount 兜底，降级时 0
+const runningTaskCount = computed(() => {
+  const fromSummary = summary.state.summary?.taskInProgressCount
+  if (typeof fromSummary === 'number') return fromSummary
+  const tasks = feed.state.tasks
+  if (Array.isArray(tasks)) return tasks.filter((t) => t.status === 'running').length
+  return 0
+})
+
+const weeklyQaCount = computed(() => {
+  const weekly = summary.state.summary?.qaWeeklyCount
+  if (typeof weekly === 'number') return weekly
+  // 降级到累计数或 0（累计数至少保证 subtitle 有信息）
+  const totalQa = summary.state.summary?.qaSessionCount
+  if (typeof totalQa === 'number') return totalQa
+  return 0
+})
+
 const subtitle = computed(() => {
-  if (!summary.state.summary) return COPY.dashboard.summarySentence(null, null, null)
-  return COPY.dashboard.summarySentence(
-    summary.state.summary.courseCount,
-    summary.state.summary.materialCount,
-    summary.state.summary.knowledgeBaseCount,
-  )
+  const hasTasks = runningTaskCount.value > 0
+  const hasQa = weeklyQaCount.value > 0
+  if (hasTasks && hasQa) {
+    return COPY.dashboard.heroSubtitle.withTasks(runningTaskCount.value, weeklyQaCount.value)
+  }
+  if (hasTasks) return COPY.dashboard.heroSubtitle.withOnlyTasks(runningTaskCount.value)
+  if (hasQa) return COPY.dashboard.heroSubtitle.withOnlyQa(weeklyQaCount.value)
+  return COPY.dashboard.heroSubtitle.empty
 })
 
 watch(() => scopeStore.state.activeCourseId, () => {
@@ -53,11 +77,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="dashboard-page">
-    <CkPageHero :title="greeting" :subtitle="subtitle" eyebrow="工作台" />
+    <CkPageHero :title="greeting" :subtitle="subtitle" />
 
-    <p v-if="summary.state.usingFallback" class="dashboard-page-fallback-hint">
-      {{ COPY.dashboard.fallbackHint }}
-    </p>
+    <!-- 视觉打磨迭代：fallback 黄色长 banner 改为 hero 下方 inline pill -->
+    <div v-if="summary.state.usingFallback" class="ck-fallback-pill" data-test-id="dashboard-fallback">
+      <i class="ck-spinner" aria-hidden="true" />
+      <span>{{ COPY.dashboard.fallbackHint }}</span>
+    </div>
 
     <section class="dashboard-page-pipeline" :aria-label="COPY.dashboard.sectionLabels.pipeline">
       <CkPipelineHero
@@ -75,59 +101,40 @@ onBeforeUnmount(() => {
       <section class="dashboard-page-tasks" :aria-label="COPY.dashboard.sectionLabels.tasks">
         <h2 class="dashboard-page-section-title">{{ COPY.dashboard.sectionLabels.tasks }}</h2>
         <CkTaskList :tasks="feed.state.tasks" :loading="feed.state.loading" />
-        <h2 class="dashboard-page-section-title">{{ COPY.dashboard.sectionLabels.quickActions }}</h2>
-        <ul class="dashboard-page-quick-actions">
-          <li v-for="action in COPY.dashboard.quickActions" :key="action.key">
-            <RouterLink :to="action.to">{{ action.label }}</RouterLink>
-          </li>
-        </ul>
       </section>
     </div>
+
+    <section class="dashboard-page-quick" :aria-label="COPY.dashboard.sectionLabels.quickActions">
+      <h2 class="dashboard-page-section-title">{{ COPY.dashboard.sectionLabels.quickActions }}</h2>
+      <CkQuickActions :actions="COPY.dashboard.quickActionCards" />
+    </section>
   </div>
 </template>
 
 <style scoped lang="scss">
-.dashboard-page { display: flex; flex-direction: column; gap: var(--ckqa-space-6); }
-.dashboard-page-fallback-hint {
-  margin: 0;
-  padding: var(--ckqa-space-2) var(--ckqa-space-3);
-  background: var(--ckqa-warning-soft);
-  border-left: 3px solid var(--ckqa-warning);
-  font-size: var(--ckqa-text-sm-size);
-  color: var(--ckqa-text);
-  border-radius: var(--ckqa-radius-md);
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-6);
 }
+
 .dashboard-page-grid {
   display: grid;
   grid-template-columns: 1.55fr 1fr;
   gap: var(--ckqa-space-6);
 }
+
 @media (max-width: 1080px) {
-  .dashboard-page-grid { grid-template-columns: 1fr; }
+  .dashboard-page-grid {
+    grid-template-columns: 1fr;
+  }
 }
+
 .dashboard-page-section-title {
   margin: 0 0 var(--ckqa-space-3);
   font-size: var(--ckqa-text-md-size);
+  line-height: var(--ckqa-text-md-line);
   font-weight: var(--ckqa-fw-medium);
   color: var(--ckqa-text);
-}
-.dashboard-page-section-title + .dashboard-page-section-title { margin-top: var(--ckqa-space-5); }
-.dashboard-page-quick-actions {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: 1fr 1fr; gap: var(--ckqa-space-2);
-}
-.dashboard-page-quick-actions li a {
-  display: block; padding: var(--ckqa-space-3);
-  background: var(--ckqa-surface);
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
-  color: var(--ckqa-text);
-  text-decoration: none;
-  font-size: var(--ckqa-text-sm-size);
-}
-.dashboard-page-quick-actions li a:hover {
-  background: var(--ckqa-accent-soft);
-  border-color: var(--ckqa-accent);
-  color: var(--ckqa-accent-strong);
 }
 </style>

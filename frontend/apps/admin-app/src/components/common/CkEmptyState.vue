@@ -30,8 +30,9 @@ defineProps({
 
 <style scoped lang="scss">
 .ck-empty-state {
-  display: flex; flex-direction: column; align-items: center;
-  padding: var(--ckqa-space-10) var(--ckqa-space-6);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 200px;
+  padding: var(--ckqa-space-8) var(--ckqa-space-6);
   text-align: center;
   color: var(--ckqa-text-muted);
 }
@@ -41,7 +42,7 @@ defineProps({
   background: var(--ckqa-surface-muted);
   border-radius: var(--ckqa-radius-full);
   font-size: 22px;
-  margin-bottom: var(--ckqa-space-4);
+  margin-bottom: var(--ckqa-space-3);
 }
 .ck-empty-state-title {
   margin: 0 0 var(--ckqa-space-2);
@@ -50,7 +51,7 @@ defineProps({
   color: var(--ckqa-text);
 }
 .ck-empty-state-desc {
-  margin: 0 0 var(--ckqa-space-5);
+  margin: 0 0 var(--ckqa-space-4);
   max-width: 360px;
   font-size: var(--ckqa-text-sm-size); line-height: var(--ckqa-text-sm-line);
 }

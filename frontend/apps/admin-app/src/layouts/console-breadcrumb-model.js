@@ -33,7 +33,12 @@ export function buildConsoleBreadcrumbItems(route) {
 
   const items = []
 
-  if (sectionLabel) {
+  // 视觉打磨迭代（2026-05-09）：leaf 路由 title 与 section 同名时去重
+  // （例如 dashboard 工作台：避免"工作台 / 工作台"的重复）
+  const leafTitle = route.meta?.title
+  const shouldDedupeSection = sectionLabel && leafTitle && sectionLabel === leafTitle
+
+  if (sectionLabel && !shouldDedupeSection) {
     items.push(
       sectionHome
         ? { kind: 'section', label: sectionLabel, to: sectionHome }
@@ -46,8 +51,8 @@ export function buildConsoleBreadcrumbItems(route) {
     items.push({ kind: 'context', label: ctx.label, to: ctx.to })
   }
 
-  if (route.meta?.title) {
-    items.push({ kind: 'current', label: route.meta.title })
+  if (leafTitle) {
+    items.push({ kind: 'current', label: leafTitle })
   }
 
   return collapseIfTooDeep(items)

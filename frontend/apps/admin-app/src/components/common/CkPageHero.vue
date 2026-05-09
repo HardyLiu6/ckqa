@@ -35,13 +35,13 @@ defineProps({
 }
 .ck-page-hero-title {
   margin: 0;
-  font-size: var(--ckqa-text-2xl-size); line-height: var(--ckqa-text-2xl-line);
-  font-weight: var(--ckqa-fw-medium); letter-spacing: -0.2px;
+  font-size: var(--ckqa-text-3xl-size); line-height: var(--ckqa-text-3xl-line);
+  font-weight: var(--ckqa-fw-semibold); letter-spacing: var(--ckqa-tracking-tight);
   color: var(--ckqa-text);
 }
 .ck-page-hero-subtitle {
   margin: var(--ckqa-space-2) 0 0;
-  font-size: var(--ckqa-text-sm-size); line-height: var(--ckqa-text-sm-line);
+  font-size: var(--ckqa-text-md-size); line-height: var(--ckqa-text-md-line);
   color: var(--ckqa-text-muted);
 }
 .ck-page-hero-actions {
