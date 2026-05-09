@@ -3,7 +3,7 @@
 ## 作用
 
 - 候选名称：`schema_fewshot`
-- 生成时间：`2026-05-09T20:52:59+08:00`
+- 生成时间：`2026-05-09T21:28:23+08:00`
 - 来源类型：`schema_fewshot`
 - 基础 Prompt 来源：`prompts/candidates/auto_tuned/extract_graph.txt`
 - 是否注入 schema：`yes`

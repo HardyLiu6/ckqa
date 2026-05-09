@@ -992,6 +992,11 @@ class TestEndToEnd(unittest.TestCase):
                                     "selected_source_sample_ids": ["s2", "s3"]
                                 },
                             },
+                            {
+                                "candidate_name": "schema_fewshot_distilled_v2",
+                                "source_type": "schema_fewshot_distilled_v2",
+                                "source_sample_ids": ["s3", "s4"],
+                            },
                         ]
                     },
                     ensure_ascii=False,
@@ -1001,7 +1006,7 @@ class TestEndToEnd(unittest.TestCase):
 
             self.assertEqual(
                 _load_fewshot_source_sample_ids(manifest_path),
-                ["s1", "s2", "s3"],
+                ["s1", "s2", "s3", "s4"],
             )
 
 

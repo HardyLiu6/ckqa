@@ -290,9 +290,11 @@ def _load_fewshot_source_sample_ids(manifest_path: Path | None) -> list[str]:
         is_fewshot_candidate = candidate_name in {
             "schema_fewshot",
             "schema_fewshot_distilled",
+            "schema_fewshot_distilled_v2",
         } or source_type in {
             "schema_fewshot",
             "schema_fewshot_distilled",
+            "schema_fewshot_distilled_v2",
         }
         if not is_fewshot_candidate:
             continue

@@ -9,7 +9,8 @@
 职责边界：
 1. 读取默认 Prompt、schema、样本与 audit 数据。
 2. 生成 default / auto_tuned / schema_aware / schema_fewshot /
-   schema_aware_directional / schema_fewshot_distilled 六类候选 Prompt。
+   schema_aware_directional / schema_fewshot_distilled /
+   schema_fewshot_distilled_v2 七类候选 Prompt。
 3. 把候选 Prompt、说明文件、manifest 与报告写入标准目录。
 
 非职责：
@@ -56,6 +57,39 @@ DISTILLED_MICRO_EXAMPLE_MAX_CHARS = 96
 DISTILLED_MAX_MICRO_EXAMPLES = 8
 DISTILLED_MAX_SCHEMA_AWARE_RATIO = 1.35
 RELATED_TO_GENERIC_NEGATIVE_EXAMPLE = "不能用 related_to 代替缺失端点或更具体关系"
+DISTILLED_V2_NEGATIVE_RULES: tuple[dict[str, str], ...] = (
+    {
+        "relation_type": "evaluated_by",
+        "rule": "不要输出 Assignment -> Concept 的 evaluated_by；正确方向：Concept/KnowledgePoint/AlgorithmOrMethod -> Assignment；Term 先升格或跳过。",
+    },
+    {
+        "relation_type": "appears_in",
+        "rule": "不要输出 Section/Assignment -> Concept 的 appears_in；正确方向：知识实体 -> 位置容器。",
+    },
+    {
+        "relation_type": "defined_by",
+        "rule": "别名、简称、英文全称、存在标志、背景解释不用 defined_by；只保留公式、符号或判定条件。",
+    },
+    {
+        "relation_type": "applied_in",
+        "rule": "不要用 Concept -> AlgorithmOrMethod 表达“通过算法处理”；target 必须是主题、实验、作业或平台场景。",
+    },
+    {
+        "relation_type": "related_to",
+        "rule": "端点缺失时跳过 related_to；不能补 missing、unknown、N/A 或临时占位实体。",
+    },
+)
+DISTILLED_V2_NEGATIVE_RULE_POLICY = {
+    "strategy": "short_directional_negative_rules",
+    "audit_text_policy": "omit_full_audit_text",
+    "covered_relation_types": [
+        "evaluated_by",
+        "appears_in",
+        "defined_by",
+        "applied_in",
+        "related_to",
+    ],
+}
 TUPLE_DELIMITER = "<|>"
 RECORD_DELIMITER = "##"
 COMPLETION_DELIMITER = "<|COMPLETE|>"
@@ -1406,6 +1440,19 @@ def build_schema_fewshot_distilled_prompt(
     return prompt
 
 
+def _format_distilled_v2_negative_rules() -> str:
+    lines = [
+        "-Short negative direction rules-",
+    ]
+    for item in DISTILLED_V2_NEGATIVE_RULES:
+        lines.append(f"- `{item['relation_type']}`：{item['rule']}")
+    return "\n".join(lines) + "\n"
+
+
+def build_schema_fewshot_distilled_v2_prompt(schema_fewshot_distilled_prompt: str) -> str:
+    return schema_fewshot_distilled_prompt.rstrip() + "\n\n" + _format_distilled_v2_negative_rules()
+
+
 def _candidate_readme(
     name: str,
     generated_at: str,
@@ -1602,6 +1649,9 @@ def generate_candidate_prompts(
         max_relations=fewshot_max_relations,
         micro_example_lines=[item["line"] for item in distilled_micro_example_items],
     )
+    schema_fewshot_distilled_v2_prompt_text = build_schema_fewshot_distilled_v2_prompt(
+        schema_fewshot_distilled_prompt_text
+    )
 
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
@@ -1617,6 +1667,7 @@ def generate_candidate_prompts(
     schema_fewshot_prompt_text = _render_delimiter_placeholders(schema_fewshot_prompt_text)
     schema_aware_directional_prompt_text = _render_delimiter_placeholders(schema_aware_directional_prompt_text)
     schema_fewshot_distilled_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_prompt_text)
+    schema_fewshot_distilled_v2_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_v2_prompt_text)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1675,6 +1726,14 @@ def generate_candidate_prompts(
             rendered_micro_example_coverage_summary,
         ]
     )
+    schema_fewshot_distilled_v2_notes = _dedupe_preserve_order(
+        [
+            "schema_fewshot_distilled_v2 继承 schema_fewshot_distilled，并追加短反向负例和缺端点跳过规则。",
+            "v2 不嵌入完整 audit 样本文本，重点压制 evaluated_by / appears_in / defined_by / applied_in / related_to 的高频残留错误。",
+            "长度目标仍接近 schema_aware_directional，避免回到 full schema_fewshot 的高成本形态。",
+            rendered_micro_example_coverage_summary,
+        ]
+    )
     auto_tuned_notes = _dedupe_preserve_order(auto_tuned_notes)
 
     fewshot_compression = {
@@ -1697,6 +1756,15 @@ def generate_candidate_prompts(
             "target": "near_schema_aware",
             "max_schema_aware_ratio": DISTILLED_MAX_SCHEMA_AWARE_RATIO,
             "base_prompt": "schema_aware_directional",
+        },
+    }
+    distilled_v2_extra_fields = {
+        **distilled_extra_fields,
+        "negative_rule_policy": dict(DISTILLED_V2_NEGATIVE_RULE_POLICY),
+        "length_policy": {
+            "target": "near_schema_aware_directional",
+            "max_schema_aware_ratio": DISTILLED_MAX_SCHEMA_AWARE_RATIO,
+            "base_prompt": "schema_fewshot_distilled",
         },
     }
 
@@ -1775,6 +1843,19 @@ def generate_candidate_prompts(
             "fewshot_strategy": "distilled_relation_micro_examples",
             "notes": schema_fewshot_distilled_notes,
             "extra_manifest_fields": distilled_extra_fields,
+        },
+        {
+            "name": "schema_fewshot_distilled_v2",
+            "prompt_text": schema_fewshot_distilled_v2_prompt_text,
+            "source_type": "schema_fewshot_distilled_v2",
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
+            "schema_used": True,
+            "audit_used": bool(audit_records),
+            "fewshot_used": bool(fewshot_selected_records),
+            "fewshot_example_count": len(fewshot_selected_records),
+            "fewshot_strategy": "distilled_negative_direction_rules",
+            "notes": schema_fewshot_distilled_v2_notes,
+            "extra_manifest_fields": distilled_v2_extra_fields,
         },
     ]
 
@@ -1870,13 +1951,14 @@ def generate_candidate_prompts(
             "compression": fewshot_compression,
         },
         "distilled": distilled_extra_fields,
+        "distilled_v2": distilled_v2_extra_fields,
         "fewshot_coverage": fewshot_coverage,
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
         "manifest_path": _safe_relpath(manifest_path),
         "notes": [
             "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
             "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
-            "schema_aware_directional / schema_fewshot_distilled 用短方向卡片和 micro-examples 降低关系方向泄漏风险。",
+            "schema_aware_directional / schema_fewshot_distilled / schema_fewshot_distilled_v2 用短方向卡片、micro-examples 和负例规则降低关系方向泄漏风险。",
             "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
         ],
     }
@@ -1987,7 +2069,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     print(
-        f"[完成] 已生成 6 类候选 Prompt，manifest: {result['manifest_path']}，"
+        f"[完成] 已生成 7 类候选 Prompt，manifest: {result['manifest_path']}，"
         f"report: {result['report_path']}"
     )
     return 0

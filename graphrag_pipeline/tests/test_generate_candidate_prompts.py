@@ -536,6 +536,7 @@ output:
                     "schema_fewshot",
                     "schema_aware_directional",
                     "schema_fewshot_distilled",
+                    "schema_fewshot_distilled_v2",
                 },
             )
             self.assertTrue((output_dir / "manifest.json").exists())
@@ -616,6 +617,7 @@ output:
                     "schema_fewshot",
                     "schema_aware_directional",
                     "schema_fewshot_distilled",
+                    "schema_fewshot_distilled_v2",
                 },
             )
 
@@ -655,6 +657,7 @@ output:
             fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
             directional_text = (output_dir / "schema_aware_directional" / "prompt.txt").read_text(encoding="utf-8")
             distilled_text = (output_dir / "schema_fewshot_distilled" / "prompt.txt").read_text(encoding="utf-8")
+            distilled_v2_text = (output_dir / "schema_fewshot_distilled_v2" / "prompt.txt").read_text(encoding="utf-8")
 
             self.assertIn("-关系方向卡片-", directional_text)
             self.assertIn("`applied_in`", directional_text)
@@ -710,6 +713,33 @@ output:
                     "target": "near_schema_aware",
                     "max_schema_aware_ratio": 1.35,
                     "base_prompt": "schema_aware_directional",
+                },
+            )
+
+            self.assertIn("-Short negative direction rules-", distilled_v2_text)
+            self.assertIn("不要输出 Assignment -> Concept 的 evaluated_by", distilled_v2_text)
+            self.assertIn("正确方向：Concept/KnowledgePoint/AlgorithmOrMethod -> Assignment", distilled_v2_text)
+            self.assertIn("不要输出 Section/Assignment -> Concept 的 appears_in", distilled_v2_text)
+            self.assertIn("端点缺失时跳过 related_to", distilled_v2_text)
+            self.assertNotIn("进程是程序的一次执行过程", distilled_v2_text)
+            self.assertNotIn("实验步骤：实现时间片轮转调度算法", distilled_v2_text)
+            self.assertLessEqual(len(distilled_v2_text), int(len(directional_text) * 1.35))
+
+            distilled_v2_entry = candidates["schema_fewshot_distilled_v2"]
+            self.assertEqual(distilled_v2_entry["source_type"], "schema_fewshot_distilled_v2")
+            self.assertEqual(distilled_v2_entry["fewshot_strategy"], "distilled_negative_direction_rules")
+            self.assertEqual(
+                distilled_v2_entry["negative_rule_policy"],
+                {
+                    "strategy": "short_directional_negative_rules",
+                    "audit_text_policy": "omit_full_audit_text",
+                    "covered_relation_types": [
+                        "evaluated_by",
+                        "appears_in",
+                        "defined_by",
+                        "applied_in",
+                        "related_to",
+                    ],
                 },
             )
 
