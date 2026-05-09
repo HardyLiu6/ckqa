@@ -90,6 +90,11 @@ export const COPY = Object.freeze({
     },
     fallbackHint: '正在以分资源接口聚合数据，加载略慢。',
   },
+  // 课程域页面文案集中在 src/views/courses/course-page-copy.js
+  // 资料域页面文案集中在 src/views/materials/material-page-copy.js
+  // 这里仅做指引占位，避免 admin.js 膨胀到上千行
+  course: { _docRef: './views/courses/course-page-copy.js' },
+  material: { _docRef: './views/materials/material-page-copy.js' },
 })
 
 export default COPY
