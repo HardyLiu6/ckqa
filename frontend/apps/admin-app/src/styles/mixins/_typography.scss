@@ -6,3 +6,18 @@
 @mixin text-xl    { font-size: var(--ckqa-text-xl-size);    line-height: var(--ckqa-text-xl-line); }
 @mixin text-2xl   { font-size: var(--ckqa-text-2xl-size);   line-height: var(--ckqa-text-2xl-line); }
 @mixin text-3xl   { font-size: var(--ckqa-text-3xl-size);   line-height: var(--ckqa-text-3xl-line); }
+
+/* 视觉打磨迭代（2026-05-09）：hero / display 排版 mixin */
+@mixin ckqa-hero {
+  font-size: var(--ckqa-text-3xl-size);
+  line-height: var(--ckqa-text-3xl-line);
+  font-weight: var(--ckqa-fw-semibold);
+  letter-spacing: var(--ckqa-tracking-tight);
+}
+
+@mixin ckqa-display {
+  font-size: var(--ckqa-text-display-size);
+  line-height: var(--ckqa-text-display-line);
+  font-weight: var(--ckqa-fw-semibold);
+  letter-spacing: var(--ckqa-tracking-tight);
+}

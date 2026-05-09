@@ -3053,3 +3053,138 @@ textarea.text-input {
     flex-direction: column;
   }
 }
+
+/* ============================================================
+ * 视觉打磨迭代（2026-05-09）：通用样式工具类
+ * ============================================================ */
+
+/* 玻璃态卡片底座：半透明 + backdrop-blur + 双层阴影 + 顶部 highlight
+ * 所有 dashboard / 列表卡片均可通过 class="ck-glass-card" 接入 */
+.ck-glass-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--ckqa-surface-glass);
+  backdrop-filter: blur(var(--ckqa-glass-blur)) saturate(var(--ckqa-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--ckqa-glass-blur)) saturate(var(--ckqa-glass-saturate));
+  border: 1px solid var(--ckqa-border-glass);
+  border-radius: 16px;
+  box-shadow: var(--ckqa-shadow-card);
+  transition:
+    transform var(--ckqa-duration-base) var(--ckqa-ease-spring),
+    box-shadow var(--ckqa-duration-base),
+    background var(--ckqa-duration-base);
+}
+
+.ck-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 50%;
+  background: var(--ckqa-highlight-top);
+  border-radius: 16px 16px 0 0;
+  pointer-events: none;
+}
+
+.ck-glass-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--ckqa-shadow-card-hover);
+  background: var(--ckqa-surface-glass-strong);
+}
+
+.ck-glass-card.is-active {
+  border-color: rgb(217 119 87 / 50%);
+  box-shadow: 0 0 0 3px rgb(217 119 87 / 12%), var(--ckqa-shadow-card);
+}
+
+/* 退化：低端 GPU / 旧浏览器不支持 backdrop-filter 时回落实色 surface */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ck-glass-card {
+    background: var(--ckqa-surface);
+  }
+
+  .ck-glass-card:hover {
+    background: var(--ckqa-surface-strong);
+  }
+}
+
+/* 可按压元素通用反馈：hover 上浮 1px + active 按压 scale + focus-visible ring */
+.ck-pressable {
+  transition:
+    background var(--ckqa-duration-fast),
+    color var(--ckqa-duration-fast),
+    transform var(--ckqa-duration-base) var(--ckqa-ease-spring),
+    box-shadow var(--ckqa-duration-base);
+  will-change: transform;
+}
+
+.ck-pressable:hover {
+  transform: translateY(-1px);
+}
+
+.ck-pressable:active {
+  transform: translateY(0) scale(0.94);
+  transition: transform var(--ckqa-duration-press) ease-out;
+}
+
+.ck-pressable:focus-visible {
+  outline: none;
+  box-shadow: var(--ckqa-focus-ring);
+}
+
+/* fallback pill：hero 下方的 inline 状态提示（原来的黄色长 banner 改为 pill） */
+.ck-fallback-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 6px 12px;
+  font-size: var(--ckqa-text-sm-size);
+  line-height: var(--ckqa-text-sm-line);
+  color: var(--ckqa-running);
+  background: var(--ckqa-running-soft);
+  border: 1px solid rgb(192 138 58 / 25%);
+  border-radius: 999px;
+}
+
+.ck-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgb(192 138 58 / 30%);
+  border-top-color: var(--ckqa-running);
+  border-radius: 50%;
+  animation: ck-spin 800ms linear infinite;
+}
+
+@keyframes ck-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* prefers-reduced-motion 全局退化：覆盖本期新增的 transition + keyframe + transform */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  /* 关闭本期新增的 keyframe 循环（折叠态呼吸、spinner、pulse 等） */
+  .sidebar.is-collapsed .sb-item,
+  .sidebar.is-collapsed .sb-item.is-active,
+  .ck-pulse-dot,
+  .ck-spinner {
+    animation: none !important;
+  }
+
+  /* 卡片 hover 上浮、按压 scale 全部禁用 */
+  .ck-glass-card:hover,
+  .ck-pressable:hover,
+  .ck-pressable:active,
+  .sidebar.is-collapsed .sb-item:hover,
+  .sidebar.is-collapsed .sb-item:active {
+    transform: none !important;
+  }
+}

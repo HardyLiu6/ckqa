@@ -8,3 +8,52 @@
 @use './base';
 @use './element-plus';
 @use './components';
+
+/* 视觉打磨迭代（2026-05-09）：全局 ambient 背景光斑
+ * 两个固定定位渐变光斑模拟"暖光从角落洒下" */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::before {
+  width: 60vw;
+  height: 60vw;
+  top: -20vw;
+  left: -10vw;
+  background: radial-gradient(circle at 30% 30%, var(--ckqa-ambient-warm) 0%, transparent 60%);
+  filter: blur(120px);
+  opacity: 0.55;
+  border-radius: 50%;
+}
+
+body::after {
+  width: 60vw;
+  height: 60vw;
+  bottom: -25vw;
+  right: -15vw;
+  background: radial-gradient(circle at 70% 70%, var(--ckqa-ambient-rust) 0%, transparent 60%);
+  filter: blur(120px);
+  opacity: 0.4;
+  border-radius: 50%;
+}
+
+/* 暗色下降低 ambient 强度避免喧宾夺主 */
+[data-theme='dark'] body::before {
+  opacity: 0.2;
+}
+
+[data-theme='dark'] body::after {
+  opacity: 0.15;
+}
+
+/* 确保应用内容位于 ambient 光斑之上 */
+.app-shell,
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
