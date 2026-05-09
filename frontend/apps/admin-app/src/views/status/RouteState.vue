@@ -79,7 +79,7 @@ const copy = computed(() => {
     return {
       eyebrow: '404 / Not Found',
       title: '页面不存在',
-      message: '目标地址没有匹配到 CKQA 管理台页面。',
+      message: '目标地址没有匹配到智课问答管理台页面。',
     }
   }
 

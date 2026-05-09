@@ -3441,3 +3441,105 @@ test('健康响应同时保留 reachable 和 ready', () => {
     tone: 'warning',
   })
 })
+
+// ————————————————————————————————————————————
+// 视觉打磨迭代（2026-05-09）smoke 测试
+// ————————————————————————————————————————————
+
+import { BRAND } from './copy/brand.js'
+import {
+  computeRailTop,
+  RAIL_HEIGHT_EXPANDED,
+  RAIL_HEIGHT_COLLAPSED,
+} from './components/shell/active-rail-model.js'
+import {
+  STORAGE_KEY as SIDEBAR_STORAGE_KEY,
+  isToggleKey,
+  readCollapsed,
+  writeCollapsed,
+} from './components/shell/sidebar-collapse-model.js'
+import { GLOBAL_SHORTCUT_HINTS } from './components/shell/command-palette-model.js'
+
+test('brand.js 导出「智课问答」品牌常量', () => {
+  assert.equal(BRAND.name, '智课问答')
+  assert.equal(BRAND.tagline, '教学知识平台')
+})
+
+test('active-rail-model 导出 computeRailTop 与高度常量', () => {
+  assert.equal(typeof computeRailTop, 'function')
+  assert.equal(RAIL_HEIGHT_EXPANDED, 36)
+  assert.equal(RAIL_HEIGHT_COLLAPSED, 40)
+})
+
+test('sidebar-collapse-model 导出折叠态读写与快捷键识别', () => {
+  assert.equal(typeof readCollapsed, 'function')
+  assert.equal(typeof writeCollapsed, 'function')
+  assert.equal(typeof isToggleKey, 'function')
+  assert.equal(SIDEBAR_STORAGE_KEY, 'ckqa.sidebar.collapsed')
+})
+
+test('command-palette-model 包含折叠侧栏快捷键提示', () => {
+  const ids = GLOBAL_SHORTCUT_HINTS.map((hint) => hint.id)
+  assert.ok(ids.includes('toggle-sidebar'))
+  const toggle = GLOBAL_SHORTCUT_HINTS.find((h) => h.id === 'toggle-sidebar')
+  assert.equal(toggle.shortcut, '⌘ \\')
+})
+
+test('SideNavigation 引入 BRAND 并渲染品牌文案', () => {
+  const sideNavigation = readFileSync(
+    new URL('./components/shell/SideNavigation.vue', import.meta.url),
+    'utf8',
+  )
+  assert.match(sideNavigation, /import\s*\{\s*BRAND\s*\}/)
+  assert.match(sideNavigation, /BRAND\.name/)
+  assert.doesNotMatch(sideNavigation, /CKQA Console/)
+})
+
+test('SideNavigation 挂载 sidebar data-test-id 与 active-rail data-test-id', () => {
+  const sideNavigation = readFileSync(
+    new URL('./components/shell/SideNavigation.vue', import.meta.url),
+    'utf8',
+  )
+  assert.match(sideNavigation, /data-test-id="sidebar"/)
+  assert.match(sideNavigation, /data-test-id="active-rail"/)
+  assert.match(sideNavigation, /data-test-id="sb-toggle"/)
+})
+
+test('DashboardPage 使用 CkQuickActions 与 fallback pill', () => {
+  const dashboard = readFileSync(
+    new URL('./views/dashboard/DashboardPage.vue', import.meta.url),
+    'utf8',
+  )
+  assert.match(dashboard, /CkQuickActions/)
+  assert.match(dashboard, /ck-fallback-pill/)
+  assert.match(dashboard, /heroSubtitle/)
+})
+
+test('components.scss 导出 .ck-glass-card / .ck-pressable / prefers-reduced-motion 退化', () => {
+  const componentsCss = readFileSync(
+    new URL('./styles/components.scss', import.meta.url),
+    'utf8',
+  )
+  assert.match(componentsCss, /\.ck-glass-card/)
+  assert.match(componentsCss, /\.ck-pressable/)
+  assert.match(componentsCss, /prefers-reduced-motion/)
+})
+
+test('typography token 字号上调到 base=14 / 3xl=30', () => {
+  const typographyTokens = readFileSync(
+    new URL('./styles/tokens/_typography.scss', import.meta.url),
+    'utf8',
+  )
+  assert.match(typographyTokens, /--ckqa-text-base-size:\s*14px/)
+  assert.match(typographyTokens, /--ckqa-text-3xl-size:\s*30px/)
+  assert.match(typographyTokens, /--ckqa-tracking-tight/)
+})
+
+test('motion token 导出 ease-spring 与 duration-glass', () => {
+  const motionTokens = readFileSync(
+    new URL('./styles/tokens/_motion.scss', import.meta.url),
+    'utf8',
+  )
+  assert.match(motionTokens, /--ckqa-ease-spring:\s*cubic-bezier/)
+  assert.match(motionTokens, /--ckqa-duration-glass:\s*350ms/)
+})

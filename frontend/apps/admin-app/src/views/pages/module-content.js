@@ -421,7 +421,7 @@ const configs = {
 const fallbackConfig = {
   variant: 'overview',
   dataSource: 'mock',
-  eyebrow: 'CKQA',
+  eyebrow: '智课问答',
   summary: '该页面已进入路由结构，等待后续业务能力接入。',
   primaryAction: { label: '返回工作台', to: '/app/dashboard' },
   secondaryAction: { label: '查看结构文档' },
