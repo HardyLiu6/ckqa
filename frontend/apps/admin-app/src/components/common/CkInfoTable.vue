@@ -12,7 +12,7 @@ const grouped = computed(() => splitEntriesIntoColumns(props.entries, props.colu
 </script>
 
 <template>
-  <dl class="ck-info-table" :data-columns="columns" data-test-id="info-table">
+  <dl class="ck-info-table" :data-columns="columns" data-testid="info-table">
     <div v-for="(col, idx) in grouped" :key="idx" class="ck-info-table-col">
       <div v-for="entry in col" :key="entry.label" class="ck-info-table-row">
         <dt>{{ entry.label }}</dt>

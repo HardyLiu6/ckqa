@@ -11,7 +11,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="material-audit-log-tab" data-test-id="material-audit-log-tab">
+  <div class="material-audit-log-tab" data-testid="material-audit-log-tab">
     <CkEmptyState
       icon="·"
       :title="MATERIAL_PAGE_COPY.auditLog.emptyTitle"

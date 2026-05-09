@@ -74,7 +74,7 @@ const heroEyebrow = computed(() =>
 </script>
 
 <template>
-  <div class="course-detail-page" data-test-id="course-detail-page">
+  <div class="course-detail-page" data-testid="course-detail-page">
     <CkSkeleton v-if="detail.loading" variant="card" :count="1" />
 
     <CkEmptyState
@@ -99,7 +99,7 @@ const heroEyebrow = computed(() =>
           role="tab"
           :aria-selected="activeTab === tab.key"
           :class="['course-detail-page-tab', { 'is-active': activeTab === tab.key }]"
-          :data-test-id="`course-tab-${tab.key}`"
+          :data-testid="`course-tab-${tab.key}`"
           @click="setActiveTab(tab.key)"
         >
           {{ tab.label }}

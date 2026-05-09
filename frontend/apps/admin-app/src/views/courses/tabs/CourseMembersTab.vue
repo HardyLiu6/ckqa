@@ -55,7 +55,7 @@ function updatedAt(row) {
 </script>
 
 <template>
-  <div class="course-members-tab" data-test-id="course-members-tab">
+  <div class="course-members-tab" data-testid="course-members-tab">
     <header class="course-members-tab-header">
       <p v-if="isArchived()" class="course-members-tab-archived-hint">
         {{ COURSE_PAGE_COPY.members.archivedHint }}

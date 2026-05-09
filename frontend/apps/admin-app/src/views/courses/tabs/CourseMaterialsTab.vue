@@ -20,7 +20,7 @@ const isArchived = computed(() => String(props.course?.status ?? '').toLowerCase
 </script>
 
 <template>
-  <div class="course-materials-tab" data-test-id="course-materials-tab">
+  <div class="course-materials-tab" data-testid="course-materials-tab">
     <header class="course-materials-tab-header">
       <p v-if="isArchived" class="course-materials-tab-archived-hint">
         {{ COURSE_PAGE_COPY.materials.archivedHint }}

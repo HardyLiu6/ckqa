@@ -17,7 +17,7 @@ const blockState = computed(() => props.detailData?.blocks?.knowledgeBases?.stat
 </script>
 
 <template>
-  <div class="course-kb-tab" data-test-id="course-kb-tab">
+  <div class="course-kb-tab" data-testid="course-kb-tab">
     <CkEmptyState
       v-if="blockState === 'error'"
       icon="!"

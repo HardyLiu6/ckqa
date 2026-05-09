@@ -11,7 +11,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="material-kb-tab" data-test-id="material-kb-references-tab">
+  <div class="material-kb-tab" data-testid="material-kb-references-tab">
     <CkEmptyState
       icon="◇"
       :title="MATERIAL_PAGE_COPY.kbReferences.emptyTitle"

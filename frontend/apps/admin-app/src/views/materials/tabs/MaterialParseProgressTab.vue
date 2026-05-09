@@ -83,7 +83,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="material-parse-progress-tab" data-test-id="material-parse-progress-tab">
+  <div class="material-parse-progress-tab" data-testid="material-parse-progress-tab">
     <p v-if="showTimeoutBanner" class="material-parse-progress-tab-banner">
       {{ MATERIAL_PAGE_COPY.detail.parseTimeoutBanner }}
     </p>

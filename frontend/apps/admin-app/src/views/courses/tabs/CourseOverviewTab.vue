@@ -48,7 +48,7 @@ function resolveStatusLabel(status) {
 </script>
 
 <template>
-  <div class="course-overview-tab" data-test-id="course-overview-tab">
+  <div class="course-overview-tab" data-testid="course-overview-tab">
     <CkInfoTable :entries="entries" :columns="2" />
   </div>
 </template>

@@ -127,7 +127,7 @@ function formatFileSize(value) {
 </script>
 
 <template>
-  <div class="material-detail-page" data-test-id="material-detail-page">
+  <div class="material-detail-page" data-testid="material-detail-page">
     <CkSkeleton v-if="detail.loading" variant="card" :count="1" />
 
     <CkEmptyState
@@ -159,7 +159,7 @@ function formatFileSize(value) {
           role="tab"
           :aria-selected="activeTab === tab.key"
           :class="['material-detail-page-tab', { 'is-active': activeTab === tab.key }]"
-          :data-test-id="`material-tab-${tab.key}`"
+          :data-testid="`material-tab-${tab.key}`"
           @click="setActiveTab(tab.key)"
         >
           {{ tab.label }}

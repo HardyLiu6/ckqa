@@ -96,7 +96,7 @@ const total = computed(() => state.value.pagination?.total ?? state.value.rows.l
 </script>
 
 <template>
-  <div class="course-list-page" data-test-id="course-list-page">
+  <div class="course-list-page" data-testid="course-list-page">
     <CkPageHero
       :title="COURSE_PAGE_COPY.list.title"
       :subtitle="COURSE_PAGE_COPY.list.subtitle"
@@ -106,7 +106,7 @@ const total = computed(() => state.value.pagination?.total ?? state.value.rows.l
         <RouterLink
           class="course-list-page-create ck-pressable"
           to="/app/courses?action=create"
-          data-test-id="course-list-create"
+          data-testid="course-list-create"
         >
           {{ COURSE_PAGE_COPY.list.createCta }}
         </RouterLink>

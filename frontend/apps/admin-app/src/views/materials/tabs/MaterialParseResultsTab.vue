@@ -18,7 +18,7 @@ const summary = computed(() => props.detailData?.blocks?.parseResults?.summary ?
 </script>
 
 <template>
-  <div class="material-parse-results-tab" data-test-id="material-parse-results-tab">
+  <div class="material-parse-results-tab" data-testid="material-parse-results-tab">
     <p v-if="summary && summary.total > 0" class="material-parse-results-tab-summary">
       共 {{ summary.total }} 份解析产物 · {{ summary.groupCount }} 种类型
       <span v-if="summary.imageCount"> · {{ summary.imageCount }} 张图片</span>

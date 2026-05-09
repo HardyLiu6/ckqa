@@ -23,7 +23,7 @@ const metaEntries = computed(() => formatMetaEntries(props.meta))
 </script>
 
 <template>
-  <article class="ck-resource-card ck-glass-card" data-test-id="resource-card">
+  <article class="ck-resource-card ck-glass-card" data-testid="resource-card">
     <RouterLink v-if="to" :to="to" class="ck-resource-card-link">
       <figure v-if="cover" class="ck-resource-card-cover">
         <img :src="cover" :alt="title" loading="lazy" />
