@@ -1,4 +1,4 @@
-import { createApiError } from '../../api/client.js'
+import { createApiError } from '../api/client.js'
 
 export const LONG_TASK_LIMITS = {
   parse: { intervalMs: 10000, timeoutMs: 900000 },
@@ -197,4 +197,20 @@ export function createLongTaskController(options = {}) {
   }
 
   return { start, cancel }
+}
+
+/**
+ * 组合式入口：暴露长任务控制器 + 状态解析 + 降级判断，
+ * 便于新页面（MaterialDetailPage / 未来的 KbBuildRunDetail）按需引用。
+ *
+ * 设计意图：保持 `createLongTaskController / resolveLongTaskState / shouldStartFallback`
+ * 作为单一的可测试函数（纯逻辑），`useLongTaskState()` 仅提供聚合 + 语义化入口。
+ */
+export function useLongTaskState() {
+  return {
+    createLongTaskController,
+    resolveLongTaskState,
+    shouldStartFallback,
+    LONG_TASK_LIMITS,
+  }
 }

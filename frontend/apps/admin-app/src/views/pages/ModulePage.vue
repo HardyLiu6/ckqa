@@ -76,7 +76,7 @@ import {
   LONG_TASK_LIMITS,
   createLongTaskController,
   resolveLongTaskState,
-} from './long-task-state.js'
+} from '../../composables/useLongTaskState.js'
 import {
   getModulePageConfig,
   resolveBuildStepNavigation,

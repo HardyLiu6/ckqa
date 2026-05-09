@@ -179,7 +179,7 @@ import {
   createLongTaskController,
   resolveLongTaskState,
   shouldStartFallback,
-} from './views/pages/long-task-state.js'
+} from './composables/useLongTaskState.js'
 import {
   createExportMissingTaskOptions,
   createMaterialExportTaskOptions,
