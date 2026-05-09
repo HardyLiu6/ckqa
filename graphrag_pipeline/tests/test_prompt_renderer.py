@@ -227,6 +227,38 @@ text: {input_text}
         self.assertIn("target_types: KnowledgePoint, Concept", user_message)
         self.assertIn("用于算法或方法应用到知识主题的明确表达", user_message)
 
+    def test_real_schema_endpoint_fix_rules_are_visible_in_rendered_prompt(self):
+        catalog = load_schema_catalog(
+            entity_schema_path=_PROJECT_ROOT / "config" / "schema" / "entity_types.json",
+            relation_schema_path=_PROJECT_ROOT / "config" / "schema" / "relation_types.json",
+        )
+        candidate = CandidatePrompt(
+            name="schema_fewshot",
+            prompt_text="候选策略会被截断。" + ("额外说明。" * 200),
+            prompt_path=_PROJECT_ROOT / "prompts" / "candidates" / "schema_fewshot" / "prompt.txt",
+            manifest_entry={"candidate_name": "schema_fewshot"},
+        )
+
+        messages = render_extraction_messages(
+            candidate=candidate,
+            sample={
+                "sample_id": "pts-endpoint-fixes",
+                "text": "死锁以银行家算法为例，习题考核 TLB。SPOOLing 系统出现在习题中。",
+            },
+            schema_catalog=catalog,
+            max_prompt_chars=40,
+        )
+        user_message = next(item["content"] for item in messages if item["role"] == "user")
+
+        self.assertIn("Y applied_in X", user_message)
+        self.assertIn("不能反向输出 X applied_in Y", user_message)
+        self.assertIn("source 必须是出现的知识实体", user_message)
+        self.assertIn("禁止 Section/Assignment 反向 appears_in", user_message)
+        self.assertIn("别名、简称、缩写、编号、存在标志", user_message)
+        self.assertIn("术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by", user_message)
+        self.assertIn("source/target 必须都在 entities 中", user_message)
+        self.assertIn("缺 target 时补实体或跳过", user_message)
+
 
 if __name__ == "__main__":
     unittest.main()

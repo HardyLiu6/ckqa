@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
@@ -45,7 +46,9 @@ from .scoring_audit import (
 from .scoring_metrics import (
     DEFAULT_WEIGHTS,
     aggregate_candidate_metrics,
+    analyze_endpoint_validity,
     compute_composite_score,
+    compute_output_stability,
     rank_candidates,
     select_top_k,
 )
@@ -67,6 +70,7 @@ DEFAULT_RELATION_SCHEMA = "config/schema/relation_types.json"
 DEFAULT_AUDIT_PATH = "data/eval/audit_extraction_set.json"
 DEFAULT_REPORTS_DIR = "results/reports"
 SCORING_SUBDIR = "extraction_scoring"
+FEWSHOT_SOURCE_NOTE_RE = re.compile(r"few-?shot\s*来源样本\s*[：:]\s*(.+)", re.IGNORECASE)
 
 
 def _resolve(path: str | Path | None, *, root: Path, default: str | None) -> Path | None:
@@ -169,6 +173,23 @@ def _detect_git_sha(root: Path) -> str | None:
 
 
 def _build_artifact_binding(*, root: Path, run_id: str, eval_files: Sequence[Path]) -> dict[str, Any]:
+    manifest_path = _resolve_manifest_from_eval_files(root=root, eval_files=eval_files)
+
+    return {
+        "run_id": run_id,
+        "manifest_path": str(manifest_path) if manifest_path else None,
+        "manifest_sha256": _sha256_file(manifest_path) if manifest_path else None,
+        "eval_file_sha256s": [
+            {
+                "path": str(path),
+                "sha256": _sha256_file(path),
+            }
+            for path in eval_files
+        ],
+    }
+
+
+def _resolve_manifest_from_eval_files(*, root: Path, eval_files: Sequence[Path]) -> Path | None:
     manifest_path: Path | None = None
     for eval_file in eval_files:
         try:
@@ -184,18 +205,99 @@ def _build_artifact_binding(*, root: Path, run_id: str, eval_files: Sequence[Pat
     if manifest_path is None and default_manifest.exists():
         manifest_path = default_manifest
 
-    return {
-        "run_id": run_id,
-        "manifest_path": str(manifest_path) if manifest_path else None,
-        "manifest_sha256": _sha256_file(manifest_path) if manifest_path else None,
-        "eval_file_sha256s": [
-            {
-                "path": str(path),
-                "sha256": _sha256_file(path),
-            }
-            for path in eval_files
-        ],
-    }
+    return manifest_path
+
+
+def _dedupe_preserve_order(values: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _split_sample_id_text(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [
+            token.strip().strip("`'\"，,。.;；")
+            for token in re.split(r"[,，、\s]+", value)
+            if token.strip().strip("`'\"，,。.;；")
+        ]
+    if isinstance(value, (list, tuple, set)):
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                out.extend(_collect_source_sample_ids_from_mapping(item))
+            else:
+                out.extend(_split_sample_id_text(item))
+        return out
+    return _split_sample_id_text(str(value))
+
+
+def _collect_source_sample_ids_from_mapping(payload: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    direct_keys = (
+        "source_sample_id",
+        "source_sample_ids",
+        "fewshot_source_sample_ids",
+        "fewshot_source_ids",
+        "selected_source_sample_ids",
+        "selected_sample_ids",
+    )
+    for key in direct_keys:
+        if key in payload:
+            out.extend(_split_sample_id_text(payload.get(key)))
+
+    coverage = payload.get("fewshot_coverage")
+    if isinstance(coverage, dict):
+        for key in direct_keys:
+            if key in coverage:
+                out.extend(_split_sample_id_text(coverage.get(key)))
+        records = coverage.get("selected_records") or coverage.get("selected_samples")
+        out.extend(_split_sample_id_text(records))
+
+    notes = payload.get("notes") or []
+    if isinstance(notes, str):
+        notes = [notes]
+    for note in notes:
+        match = FEWSHOT_SOURCE_NOTE_RE.search(str(note))
+        if match:
+            out.extend(_split_sample_id_text(match.group(1)))
+    return out
+
+
+def _load_fewshot_source_sample_ids(manifest_path: Path | None) -> list[str]:
+    if manifest_path is None or not manifest_path.exists():
+        return []
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+    out: list[str] = []
+    raw_candidates = payload.get("candidates") or []
+    for entry in raw_candidates:
+        if not isinstance(entry, dict):
+            continue
+        candidate_name = str(entry.get("candidate_name") or "").strip()
+        source_type = str(entry.get("source_type") or "").strip()
+        is_fewshot_candidate = candidate_name in {
+            "schema_fewshot",
+            "schema_fewshot_distilled",
+        } or source_type in {
+            "schema_fewshot",
+            "schema_fewshot_distilled",
+        }
+        if not is_fewshot_candidate:
+            continue
+        out.extend(_collect_source_sample_ids_from_mapping(entry))
+    return _dedupe_preserve_order(out)
 
 
 def _normalize_endpoint_cell(value: Any) -> str | None:
@@ -330,6 +432,243 @@ def _append_endpoint_summary_links_to_compare(
         handle.write(f"- Markdown：`{endpoint_summary_paths['markdown']}`\n")
 
 
+def _append_leakage_diagnostics_links_to_compare(
+    path: Path,
+    *,
+    leakage_diagnostics_paths: dict[str, str],
+) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n## 泄漏感知诊断产物\n\n")
+        handle.write(f"- JSON：`{leakage_diagnostics_paths['json']}`\n")
+        handle.write(f"- Markdown：`{leakage_diagnostics_paths['markdown']}`\n")
+
+
+def _mean_success_count(results: Sequence[StructuredExtractionResult], attr: str) -> float:
+    success_items = [item for item in results if item.status == "success"]
+    if not success_items:
+        return 0.0
+    if attr == "entities":
+        total = sum(len(item.entities) for item in success_items)
+    else:
+        total = sum(len(item.relationships) for item in success_items)
+    return total / len(success_items)
+
+
+def _coerce_numeric_usage(usage: Any) -> dict[str, float]:
+    if not isinstance(usage, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, value in usage.items():
+        if isinstance(value, bool):
+            continue
+        try:
+            out[str(key)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _summarize_token_usage(results: Sequence[StructuredExtractionResult]) -> dict[str, Any]:
+    usages: list[dict[str, float]] = []
+    for item in results:
+        debug = item.llm_debug if isinstance(item.llm_debug, dict) else {}
+        usage = _coerce_numeric_usage(debug.get("usage"))
+        if usage:
+            usages.append(usage)
+
+    keys = sorted({key for usage in usages for key in usage})
+    totals = {
+        key: sum(usage.get(key, 0.0) for usage in usages)
+        for key in keys
+    }
+    means = {
+        key: (totals[key] / len(usages) if usages else 0.0)
+        for key in keys
+    }
+    return {
+        "sample_count_with_usage": len(usages),
+        "total": totals,
+        "mean": means,
+    }
+
+
+def _build_leakage_group_metrics(
+    results: Sequence[StructuredExtractionResult],
+    *,
+    relation_schema: dict[str, Any],
+    audit_index: dict[str, Any],
+    audit_metrics_enabled: bool,
+    group_available: bool,
+) -> dict[str, Any]:
+    sample_ids = [item.sample_id for item in results]
+    success_count = sum(1 for item in results if item.status == "success")
+    if not group_available:
+        return {
+            "group_available": False,
+            "sample_count": 0,
+            "success_count": 0,
+            "sample_ids": [],
+            "endpoint_valid_rate": None,
+            "endpoint_total_count": 0,
+            "endpoint_invalid_count": 0,
+            "audit_entity_recall": None,
+            "audit_entity_precision": None,
+            "audit_relation_recall": None,
+            "output_stability": None,
+            "average_entity_count": None,
+            "average_relation_count": None,
+            "token_usage": _summarize_token_usage([]),
+        }
+
+    endpoint_analysis = analyze_endpoint_validity(results, relation_schema)
+    audit_ent = (
+        compute_audit_entity_recall(results, audit_index) if audit_metrics_enabled else None
+    )
+    audit_ent_prec = (
+        compute_audit_entity_precision(results, audit_index) if audit_metrics_enabled else None
+    )
+    audit_rel = (
+        compute_audit_relation_recall(results, audit_index) if audit_metrics_enabled else None
+    )
+    return {
+        "group_available": True,
+        "sample_count": len(results),
+        "success_count": success_count,
+        "sample_ids": sample_ids,
+        "endpoint_valid_rate": endpoint_analysis["valid_rate"],
+        "endpoint_total_count": endpoint_analysis["total"],
+        "endpoint_invalid_count": endpoint_analysis["invalid_count"],
+        "audit_entity_recall": audit_ent,
+        "audit_entity_precision": audit_ent_prec,
+        "audit_relation_recall": audit_rel,
+        "output_stability": compute_output_stability(results) if results else None,
+        "average_entity_count": _mean_success_count(results, "entities"),
+        "average_relation_count": _mean_success_count(results, "relationships"),
+        "token_usage": _summarize_token_usage(results),
+    }
+
+
+def _build_leakage_diagnostics(
+    *,
+    run_id: str,
+    manifest_path: Path | None,
+    fewshot_source_sample_ids: Sequence[str],
+    results_by_candidate: dict[str, Sequence[StructuredExtractionResult]],
+    relation_schema: dict[str, Any],
+    audit_index: dict[str, Any],
+    audit_metrics_enabled: bool,
+) -> dict[str, Any]:
+    source_ids = set(fewshot_source_sample_ids)
+    partition_available = bool(source_ids)
+    candidates: dict[str, Any] = {}
+    for candidate in sorted(results_by_candidate):
+        results = list(results_by_candidate[candidate])
+        overlap = [item for item in results if item.sample_id in source_ids]
+        holdout = [item for item in results if item.sample_id not in source_ids]
+        candidates[candidate] = {
+            "candidate": candidate,
+            "groups": {
+                "all": _build_leakage_group_metrics(
+                    results,
+                    relation_schema=relation_schema,
+                    audit_index=audit_index,
+                    audit_metrics_enabled=audit_metrics_enabled,
+                    group_available=True,
+                ),
+                "fewshot_overlap": _build_leakage_group_metrics(
+                    overlap,
+                    relation_schema=relation_schema,
+                    audit_index=audit_index,
+                    audit_metrics_enabled=audit_metrics_enabled,
+                    group_available=partition_available,
+                ),
+                "holdout": _build_leakage_group_metrics(
+                    holdout,
+                    relation_schema=relation_schema,
+                    audit_index=audit_index,
+                    audit_metrics_enabled=audit_metrics_enabled,
+                    group_available=partition_available,
+                ),
+            },
+        }
+
+    return {
+        "task": "leakage_diagnostics",
+        "run_id": run_id,
+        "manifest_path": str(manifest_path) if manifest_path else None,
+        "fewshot_source_sample_ids": list(fewshot_source_sample_ids),
+        "fewshot_source_sample_count": len(fewshot_source_sample_ids),
+        "partition_available": partition_available,
+        "audit_metrics_enabled": audit_metrics_enabled,
+        "candidates": candidates,
+    }
+
+
+def _write_leakage_diagnostics_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_leakage_diagnostics_markdown(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# 泄漏感知评分诊断",
+        "",
+        f"- `run_id`：{payload['run_id']}",
+        f"- `manifest_path`：`{payload.get('manifest_path') or ''}`",
+        f"- `fewshot_source_sample_count`：{payload['fewshot_source_sample_count']}",
+        f"- `partition_available`：{payload['partition_available']}",
+        "",
+        "## 分组指标",
+        "",
+    ]
+    columns = (
+        "candidate",
+        "group",
+        "sample_count",
+        "endpoint_total_count",
+        "endpoint_invalid_count",
+        "endpoint_valid_rate",
+        "audit_entity_recall",
+        "audit_entity_precision",
+        "audit_relation_recall",
+        "output_stability",
+        "average_entity_count",
+        "average_relation_count",
+        "usage_total_tokens",
+        "usage_mean_total_tokens",
+    )
+    lines.append("| " + " | ".join(columns) + " |")
+    lines.append("|" + "|".join(["---"] * len(columns)) + "|")
+    for candidate, candidate_payload in sorted(payload["candidates"].items()):
+        groups = candidate_payload.get("groups") or {}
+        for group_name in ("all", "fewshot_overlap", "holdout"):
+            group = groups.get(group_name) or {}
+            token_usage = group.get("token_usage") or {}
+            totals = token_usage.get("total") or {}
+            means = token_usage.get("mean") or {}
+            row = {
+                "candidate": candidate,
+                "group": group_name,
+                "usage_total_tokens": totals.get("total_tokens"),
+                "usage_mean_total_tokens": means.get("total_tokens"),
+                **group,
+            }
+            lines.append(
+                "| "
+                + " | ".join(_format_endpoint_markdown_cell(_format_value_for_markdown(row.get(col))) for col in columns)
+                + " |"
+            )
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _format_value_for_markdown(value: Any) -> Any:
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    return value
+
+
 def score_extraction_results(
     *,
     root: Path,
@@ -390,6 +729,7 @@ def score_extraction_results(
     effective_weights = dict(weights or DEFAULT_WEIGHTS)
 
     metrics_by_candidate: dict[str, dict[str, Any]] = {}
+    results_by_candidate: dict[str, list[StructuredExtractionResult]] = {}
     skipped_candidates: list[str] = []
     for eval_file in eval_files:
         skipped_candidate = _candidate_should_be_skipped(
@@ -421,6 +761,7 @@ def score_extraction_results(
         )
         metrics["composite_score"] = compute_composite_score(metrics, effective_weights)
         metrics_by_candidate[candidate] = metrics
+        results_by_candidate[candidate] = results
 
     if not metrics_by_candidate:
         raise ValueError("没有可评分的候选 Prompt；auto_tuned 当前可能只是 fallback 占位")
@@ -443,10 +784,18 @@ def score_extraction_results(
     run_meta_path = run_dir / "run_meta.json"
     run_endpoint_json = run_dir / "endpoint_error_summary.json"
     run_endpoint_md = run_dir / "endpoint_error_summary.md"
+    run_leakage_json = run_dir / "leakage_diagnostics.json"
+    run_leakage_md = run_dir / "leakage_diagnostics.md"
     endpoint_summary_paths = {
         "json": str(run_endpoint_json),
         "markdown": str(run_endpoint_md),
     }
+    leakage_diagnostics_paths = {
+        "json": str(run_leakage_json),
+        "markdown": str(run_leakage_md),
+    }
+    manifest_path = _resolve_manifest_from_eval_files(root=root, eval_files=eval_files)
+    fewshot_source_sample_ids = _load_fewshot_source_sample_ids(manifest_path)
 
     inputs = {
         "eval_dir": str(eval_root),
@@ -458,6 +807,8 @@ def score_extraction_results(
         "skipped_candidates": skipped_candidates,
         "audit_metrics_enabled": audit_metrics_enabled,
         "endpoint_error_summary_paths": endpoint_summary_paths,
+        "leakage_diagnostics_paths": leakage_diagnostics_paths,
+        "fewshot_source_sample_ids": fewshot_source_sample_ids,
         **gold_seed_summary,
     }
     artifact_binding = _build_artifact_binding(
@@ -466,6 +817,15 @@ def score_extraction_results(
         eval_files=eval_files,
     )
     endpoint_error_rows = _build_endpoint_error_rows(ranked)
+    leakage_diagnostics = _build_leakage_diagnostics(
+        run_id=effective_run_id,
+        manifest_path=manifest_path,
+        fewshot_source_sample_ids=fewshot_source_sample_ids,
+        results_by_candidate=results_by_candidate,
+        relation_schema=relation_type_block,
+        audit_index=audit_index,
+        audit_metrics_enabled=audit_metrics_enabled,
+    )
 
     write_extraction_compare_csv(run_csv, ranked)
     write_extraction_compare_markdown(
@@ -474,6 +834,10 @@ def score_extraction_results(
     _append_endpoint_summary_links_to_compare(
         run_md,
         endpoint_summary_paths=endpoint_summary_paths,
+    )
+    _append_leakage_diagnostics_links_to_compare(
+        run_md,
+        leakage_diagnostics_paths=leakage_diagnostics_paths,
     )
     _write_endpoint_error_summary_json(
         run_endpoint_json,
@@ -486,6 +850,8 @@ def score_extraction_results(
         run_id=effective_run_id,
         rows=endpoint_error_rows,
     )
+    _write_leakage_diagnostics_json(run_leakage_json, leakage_diagnostics)
+    _write_leakage_diagnostics_markdown(run_leakage_md, leakage_diagnostics)
     write_top_candidates_json(
         run_top, ranked=ranked, k=top_k,
         weights=effective_weights, inputs=inputs,
@@ -536,6 +902,8 @@ def score_extraction_results(
             "top_candidates_json": str(run_top),
             "endpoint_error_summary_json": str(run_endpoint_json),
             "endpoint_error_summary_md": str(run_endpoint_md),
+            "leakage_diagnostics_json": str(run_leakage_json),
+            "leakage_diagnostics_md": str(run_leakage_md),
         },
         "artifact_binding": artifact_binding,
     }

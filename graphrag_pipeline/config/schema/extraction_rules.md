@@ -312,16 +312,32 @@
 规则：
 
 1. 所有关系的 `source` 和 `target` 必须能在 `entities` 中找到。
-2. 如果关系端点在原文中证据充足但尚未输出实体，应先补齐该实体，再输出关系。
-3. 如果无法补齐端点实体，应跳过该关系。
-4. 不能输出 `<missing>`、`unknown`、`N/A`、空字符串或临时占位关系。
-5. 关系端点应使用实体标题，不要用章节字段、页码、行号或说明性短语临时占位。
+2. source/target 必须都在 `entities` 中，缺 target 时补实体或跳过。
+3. 如果关系端点在原文中证据充足但尚未输出实体，应先补齐该实体，再输出关系。
+4. 如果无法补齐端点实体，应跳过该关系。
+5. 不能输出 `<missing>`、`unknown`、`N/A`、空字符串或临时占位关系。
+6. 关系端点应使用实体标题，不要用章节字段、页码、行号或说明性短语临时占位。
 
 错误示例：
 
 1. `进程 related_to <missing>`
 2. `<missing> defined_by 响应比公式`
 3. `银行家算法 appears_in unknown`
+
+### 7.2.2 related_to 的端点完整性
+
+规则：
+
+1. `related_to` 只能连接两个已经抽取出来的实体。
+2. 不能用 `related_to` 代替缺失端点；如果 target 证据充足，应先补齐 target 实体。
+3. 如果无法补齐端点实体，应跳过该关系。
+4. source/target 必须都在 `entities` 中，缺 target 时补实体或跳过。
+
+错误示例：
+
+1. `进程 related_to <missing>`
+2. `磁盘高速缓存 related_to 文件访问速度`，但 `文件访问速度` 没有输出实体。
+3. `RAID related_to 系统容错`，但 `系统容错` 没有输出实体。
 
 ### 7.3 contains 与 belongs_to
 
@@ -356,6 +372,7 @@
 3. 英文全称、简称、缩写、别名解释不使用 `defined_by`，应进入实体 alias 或归一化字段。
 4. 禁止 `Concept->Concept` 和 `Term->Concept` 使用 `defined_by`。
 5. 存在标志、背景解释、普通说明、命名别名和简称展开不能用 `defined_by`。
+6. 别名、简称、缩写、编号、存在标志不建立 `defined_by`，进入 alias / 归一化字段，或直接跳过。
 
 正确示例：
 
@@ -379,7 +396,47 @@
 2. `prerequisite_of` 用于教学先修、学习顺序或实验前置要求。
 3. 若两者都成立，优先看文本是否强调“先学/先做”。
 
-### 7.5 appears_in 的边界
+### 7.5 applied_in 的方向边界
+
+规则：
+
+1. `applied_in` 表示算法、方法、公式或知识对象被应用到某知识主题、实验、作业、章节讲解或平台操作场景。
+2. 当文本表达“X 以 Y 为例/使用 Y”时，通常应输出 `Y applied_in X` 或 `X depends_on Y`。
+3. 如果 Y 是算法、方法、公式或知识对象，并且语义是 Y 用来解释或处理 X，输出 `Y applied_in X`。
+4. 如果语义是 X 的理解、实现或求解依赖 Y，输出 `X depends_on Y`。
+5. 不能反向输出 `X applied_in Y`，也不要为了修评分把 schema 放宽为 `Concept->AlgorithmOrMethod`。
+
+正确示例：
+
+1. `银行家算法 applied_in 死锁`
+2. `地址映射 applied_in 分页存储管理`
+
+错误示例：
+
+1. `死锁 applied_in 银行家算法`，这是反向的 `Concept->AlgorithmOrMethod`。
+2. `本节 applied_in 银行家算法`，结构标题不能反向应用到算法。
+
+### 7.6 evaluated_by 的端点边界
+
+规则：
+
+1. `evaluated_by` 表示课程、章节、节、知识点、概念、方法或实验被作业、测验、题组或实验任务评估。
+2. source 应为 `Course`、`Chapter`、`Section`、`KnowledgePoint`、`Concept`、`AlgorithmOrMethod` 或 `Experiment`。
+3. target 应为 `Assignment` 或 `Experiment`。
+4. 如果术语被习题考核，应先抽为 `Concept` / `KnowledgePoint`，或跳过 `evaluated_by`。
+5. 不要放宽为 `Term->Assignment`。
+
+正确示例：
+
+1. `死锁处理 evaluated_by 作业 3`
+2. `文件系统概念 evaluated_by 文件系统设计实验`
+
+错误示例：
+
+1. `TLB evaluated_by 习题 3`，如果 `TLB` 只是 `Term`，不要输出该关系。
+2. `PCB evaluated_by 期末复习题`，如果没有抽成可考核概念或知识点，应跳过。
+
+### 7.7 appears_in 的边界
 
 规则：
 
@@ -387,15 +444,18 @@
 2. 如果能判断“知识点用于实验”，应使用 `applied_in` 而不是 `appears_in`。
 3. 如果能判断“知识点被作业考核”，应使用 `evaluated_by` 而不是 `appears_in`。
 4. `appears_in` 的目标只能是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment`，不能指向另一个知识对象。
-5. 禁止反向 `Section appears_in Concept`；如果结构单元讲授或包含知识对象，优先使用 `contains`。
+5. source 必须是出现的知识实体，target 必须是 `Course`、`Chapter`、`Section`、`Experiment` 或 `Assignment`。
+6. 禁止反向 `Section appears_in Concept`，也禁止 `Section/Assignment appears_in 知识对象`。
+7. 如果结构单元讲授或包含知识对象，优先使用 `contains`。
 
 错误示例：
 
 1. `第三章 存储器管理 appears_in TLB`，这是反向 `Section appears_in Concept`。
 2. `实验一 appears_in 银行家算法`，这是反向或端点类型错误。
 3. `虚拟内存 appears_in 页面置换算法`，目标不是课程结构或学习活动容器。
+4. `习题 1 appears_in SPOOLing 系统`，这是反向 `Assignment appears_in ToolOrPlatform`。
 
-### 7.6 related_to 与 implemented_by 的端点边界
+### 7.8 related_to 与 implemented_by 的端点边界
 
 规则：
 

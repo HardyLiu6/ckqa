@@ -80,6 +80,55 @@ class TestRelationSchemaRules(unittest.TestCase):
             relation_types["implemented_by"]["negative_examples"],
         )
 
+    def test_remaining_endpoint_error_rules_are_explicit_in_schema(self):
+        payload = json.loads(
+            (PROJECT_ROOT / "config" / "schema" / "relation_types.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        relation_types = payload["relation_types"]
+
+        applied_in = relation_types["applied_in"]
+        self.assertIn("AlgorithmOrMethod", applied_in["source_types"])
+        self.assertNotIn("AlgorithmOrMethod", applied_in["target_types"])
+        self.assertIn("X 以 Y 为例/使用 Y", applied_in["extraction_hint"])
+        self.assertIn("Y applied_in X", applied_in["extraction_hint"])
+        self.assertIn("X depends_on Y", applied_in["extraction_hint"])
+        self.assertIn("不能反向输出 X applied_in Y", applied_in["extraction_hint"])
+        self.assertIn(
+            "Concept->AlgorithmOrMethod: 死锁以银行家算法为例 applied_in 银行家算法",
+            applied_in["negative_examples"],
+        )
+
+        appears_in = relation_types["appears_in"]
+        self.assertNotIn("Section", appears_in["source_types"])
+        self.assertNotIn("Assignment", appears_in["source_types"])
+        self.assertIn("source 必须是出现的知识实体", appears_in["extraction_hint"])
+        self.assertIn("禁止 Section/Assignment 反向 appears_in", appears_in["extraction_hint"])
+        self.assertIn(
+            "Assignment->ToolOrPlatform: 习题 1 appears_in SPOOLing 系统",
+            appears_in["negative_examples"],
+        )
+
+        defined_by_hint = relation_types["defined_by"]["extraction_hint"]
+        self.assertIn("别名、简称、缩写、编号、存在标志", defined_by_hint)
+        self.assertIn("进入 alias/归一化或跳过", defined_by_hint)
+
+        evaluated_by = relation_types["evaluated_by"]
+        self.assertNotIn("Term", evaluated_by["source_types"])
+        self.assertIn(
+            "术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by",
+            evaluated_by["extraction_hint"],
+        )
+        self.assertIn(
+            "Term->Assignment: TLB evaluated_by 习题 3",
+            evaluated_by["negative_examples"],
+        )
+
+        related_to_hint = relation_types["related_to"]["extraction_hint"]
+        self.assertIn("source/target 必须都在 entities 中", related_to_hint)
+        self.assertIn("缺 target 时补实体或跳过", related_to_hint)
+
     def test_extraction_rules_document_defined_by_alias_and_contains_boundaries(self):
         text = (PROJECT_ROOT / "config" / "schema" / "extraction_rules.md").read_text(
             encoding="utf-8"
@@ -96,6 +145,22 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("Section appears_in Concept", text)
         self.assertIn("不能用 `related_to` 代替缺失端点", text)
         self.assertIn("`implemented_by` 的目标必须是可执行方法或工具平台", text)
+
+    def test_extraction_rules_document_remaining_endpoint_fixes(self):
+        text = (PROJECT_ROOT / "config" / "schema" / "extraction_rules.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("X 以 Y 为例/使用 Y", text)
+        self.assertIn("应输出 `Y applied_in X` 或 `X depends_on Y`", text)
+        self.assertIn("不能反向输出 `X applied_in Y`", text)
+        self.assertIn("source 必须是出现的知识实体", text)
+        self.assertIn("禁止 `Section/Assignment appears_in 知识对象`", text)
+        self.assertIn("别名、简称、缩写、编号、存在标志不建立 `defined_by`", text)
+        self.assertIn("进入 alias / 归一化字段，或直接跳过", text)
+        self.assertIn("如果术语被习题考核，应先抽为 `Concept` / `KnowledgePoint`", text)
+        self.assertIn("不要放宽为 `Term->Assignment`", text)
+        self.assertIn("source/target 必须都在 `entities` 中", text)
+        self.assertIn("缺 target 时补实体或跳过", text)
 
 
 if __name__ == "__main__":

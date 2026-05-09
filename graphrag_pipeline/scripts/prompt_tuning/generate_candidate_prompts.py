@@ -8,7 +8,8 @@
 
 职责边界：
 1. 读取默认 Prompt、schema、样本与 audit 数据。
-2. 生成 default / auto_tuned / schema_aware / schema_fewshot 四类候选 Prompt。
+2. 生成 default / auto_tuned / schema_aware / schema_fewshot /
+   schema_aware_directional / schema_fewshot_distilled 六类候选 Prompt。
 3. 把候选 Prompt、说明文件、manifest 与报告写入标准目录。
 
 非职责：
@@ -51,6 +52,9 @@ DEFAULT_FEWSHOT_MAX_ENTITIES = 3
 DEFAULT_FEWSHOT_MAX_RELATIONS = 1
 MAX_RELATION_EXAMPLE_COUNT = 2
 MAX_RELATION_EXAMPLE_CHARS = 36
+DISTILLED_MICRO_EXAMPLE_MAX_CHARS = 96
+DISTILLED_MAX_MICRO_EXAMPLES = 8
+DISTILLED_MAX_SCHEMA_AWARE_RATIO = 1.35
 RELATED_TO_GENERIC_NEGATIVE_EXAMPLE = "不能用 related_to 代替缺失端点或更具体关系"
 TUPLE_DELIMITER = "<|>"
 RECORD_DELIMITER = "##"
@@ -122,6 +126,41 @@ FEWSHOT_RELATION_TYPE_PRIORITY = {
     "belongs_to": 7,
     "appears_in": 8,
     "related_to": 99,
+}
+DIRECTIONAL_RELATION_NAMES = ("applied_in", "appears_in", "defined_by", "evaluated_by", "related_to")
+DIRECTIONAL_RELATION_HINTS = {
+    "applied_in": {
+        "source": "source 是被应用的知识/方法/公式",
+        "target": "target 是知识主题、实验、作业或平台操作场景",
+        "negative": "反例：不要写成“实验/作业 -> 算法”；弱共现仍用 related_to 或跳过。",
+    },
+    "appears_in": {
+        "source": "source 是出现的实体",
+        "target": "target 是 Course/Chapter/Section/Experiment/Assignment 位置",
+        "negative": "反例：不要写成“章节 -> 知识点”；结构包含优先用 contains。",
+    },
+    "defined_by": {
+        "source": "source 是被定义对象",
+        "target": "target 是定义、公式、判定条件或符号",
+        "negative": "反例：不要写成“定义/公式 -> 概念”，也不要用 Concept->Concept 承接背景解释。",
+    },
+    "evaluated_by": {
+        "source": "source 是被考核或评估的知识、概念或方法",
+        "target": "target 是 Assignment/Experiment 等考核载体",
+        "negative": "反例：不要写成“作业/实验 -> 知识点”；普通出现位置优先用 appears_in。",
+    },
+    "related_to": {
+        "source": "source 与 target 都必须是已抽取且端点完整的实体",
+        "target": "target 不是 missing、unknown 或临时占位",
+        "negative": "反例：不能承接 missing 端点，也不能替代 defined_by / applied_in / appears_in 等更具体关系。",
+    },
+}
+MICRO_RELATION_DIRECTION_HINTS = {
+    "defined_by": "被定义对象 -> 定义/公式",
+    "applied_in": "被应用对象 -> 应用场景",
+    "evaluated_by": "被考核对象 -> 作业/实验",
+    "appears_in": "出现实体 -> 位置容器",
+    "related_to": "完整实体之间的弱关联",
 }
 NOISE_ENTITY_NAMES = {"无", "本章", "本节", "如下", "图", "表", "见图", "见下图"}
 ENTITY_TYPE_DESCRIPTION_OVERRIDES = {
@@ -686,6 +725,35 @@ def build_schema_aware_prompt(
     return prompt.rstrip() + "\n"
 
 
+def _relation_item_by_name(schema_catalog: SchemaCatalog) -> Dict[str, SchemaItem]:
+    return {item.name: item for item in schema_catalog.relation_types}
+
+
+def _build_relation_direction_cards(schema_catalog: SchemaCatalog) -> str:
+    relation_by_name = _relation_item_by_name(schema_catalog)
+    lines = ["-关系方向卡片-", "只补充高风险关系的方向判断，不嵌入完整 audit 样本文本。"]
+
+    for relation_name in DIRECTIONAL_RELATION_NAMES:
+        item = relation_by_name.get(relation_name)
+        if item is None:
+            continue
+        hint = DIRECTIONAL_RELATION_HINTS[relation_name]
+        lines.append(
+            f"- `{relation_name}`：{hint['source']}，{hint['target']}；{hint['negative']}"
+        )
+
+    if len(lines) == 2:
+        return ""
+    return "\n".join(lines)
+
+
+def build_schema_aware_directional_prompt(schema_catalog: SchemaCatalog, schema_aware_prompt: str) -> str:
+    direction_block = _build_relation_direction_cards(schema_catalog)
+    if not direction_block:
+        return schema_aware_prompt.rstrip() + "\n"
+    return _insert_before_real_data(schema_aware_prompt, direction_block).rstrip() + "\n"
+
+
 def _compact_assignment_text(text: str, *, max_items: int = 6) -> str:
     lines: List[str] = []
     for raw_line in text.splitlines():
@@ -1146,6 +1214,198 @@ def build_schema_fewshot_prompt(
     return prompt
 
 
+def _format_distilled_micro_example_line(
+    record: Dict[str, Any],
+    relation: Dict[str, Any],
+    entity_name_map: Dict[str, str],
+    *,
+    max_chars: int,
+) -> str:
+    source_name = entity_name_map.get(_clean_string(relation.get("source_entity_id")), "未知源实体")
+    target_name = entity_name_map.get(_clean_string(relation.get("target_entity_id")), "未知目标实体")
+    relation_type = _clean_string(relation.get("type")) or "related_to"
+    direction_hint = MICRO_RELATION_DIRECTION_HINTS.get(relation_type, "source -> target")
+    source_id = _clean_string(record.get("source_sample_id")) or _clean_string(record.get("id")) or "unknown-source"
+
+    line = (
+        f"- {source_id}: {source_name} -> {target_name}: "
+        f"[type={relation_type}] {direction_hint}"
+    )
+    if len(line) <= max_chars:
+        return line
+
+    compact_line = (
+        f"- {source_id}: {_shorten_text(source_name, 14)} -> {_shorten_text(target_name, 14)}: "
+        f"[type={relation_type}] {direction_hint}"
+    )
+    if len(compact_line) <= max_chars:
+        return compact_line
+
+    minimal_line = (
+        f"- {source_id}: {_shorten_text(source_name, 10)} -> {_shorten_text(target_name, 10)}: "
+        f"[type={relation_type}]"
+    )
+    return _shorten_text(minimal_line, max_chars)
+
+
+def _build_distilled_micro_example_items(
+    selected_records: Sequence[Dict[str, Any]],
+    *,
+    max_entities: int,
+    max_relations: int,
+    max_chars: int,
+    max_examples: int = DISTILLED_MAX_MICRO_EXAMPLES,
+) -> List[Dict[str, str]]:
+    candidates: List[Dict[str, str]] = []
+    for record in selected_records:
+        entities = [item for item in record.get("gold_entities", []) if isinstance(item, dict)]
+        relations = [item for item in record.get("gold_relations", []) if isinstance(item, dict)]
+        selected_entities, selected_relations = _select_fewshot_gold_items(
+            entities,
+            relations,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+        entity_name_map = {
+            _clean_string(item.get("entity_id")): _clean_string(item.get("name")) or _clean_string(item.get("normalized_name"))
+            for item in selected_entities
+        }
+        source_id = _clean_string(record.get("source_sample_id")) or _clean_string(record.get("id")) or "unknown-source"
+        for relation in selected_relations:
+            relation_type = _clean_string(relation.get("type")) or "related_to"
+            candidates.append({
+                "relation_type": relation_type,
+                "source_sample_id": source_id,
+                "line": _format_distilled_micro_example_line(
+                    record,
+                    relation,
+                    entity_name_map,
+                    max_chars=max_chars,
+                ),
+            })
+
+    if max_examples <= 0:
+        return []
+
+    selected_items: List[Dict[str, str]] = []
+    selected_line_values: set[str] = set()
+    covered_relation_types: set[str] = set()
+
+    for item in candidates:
+        relation_type = item["relation_type"]
+        line = item["line"]
+        if relation_type in covered_relation_types:
+            continue
+        selected_items.append(item)
+        selected_line_values.add(line)
+        covered_relation_types.add(relation_type)
+        if len(selected_items) >= max_examples:
+            return selected_items
+
+    for item in candidates:
+        line = item["line"]
+        if line in selected_line_values:
+            continue
+        selected_items.append(item)
+        selected_line_values.add(line)
+        if len(selected_items) >= max_examples:
+            return selected_items
+
+    return selected_items
+
+
+def _build_distilled_micro_example_lines(
+    selected_records: Sequence[Dict[str, Any]],
+    *,
+    max_entities: int,
+    max_relations: int,
+    max_chars: int,
+    max_examples: int = DISTILLED_MAX_MICRO_EXAMPLES,
+) -> List[str]:
+    return [
+        item["line"]
+        for item in _build_distilled_micro_example_items(
+            selected_records,
+            max_entities=max_entities,
+            max_relations=max_relations,
+            max_chars=max_chars,
+            max_examples=max_examples,
+        )
+    ]
+
+
+def _build_rendered_micro_example_coverage(
+    schema_catalog: SchemaCatalog,
+    micro_example_items: Sequence[Dict[str, str]],
+) -> Dict[str, Any]:
+    covered_relation_types = _dedupe_preserve_order([
+        item.get("relation_type", "")
+        for item in micro_example_items
+        if item.get("relation_type")
+    ])
+    relation_order = [item.name for item in schema_catalog.relation_types]
+    missing_relation_types = [
+        relation_type
+        for relation_type in relation_order
+        if relation_type not in set(covered_relation_types)
+    ]
+    return {
+        "selection_strategy": "first_distilled_micro_example_per_relation",
+        "rendered_micro_example_count": len(micro_example_items),
+        "covered_relation_types": covered_relation_types,
+        "missing_relation_types": missing_relation_types,
+        "source_sample_ids": _dedupe_preserve_order([
+            item.get("source_sample_id", "")
+            for item in micro_example_items
+            if item.get("source_sample_id")
+        ]),
+    }
+
+
+def _format_rendered_micro_example_coverage_summary(coverage: Dict[str, Any]) -> str:
+    covered_relation_count = len(coverage.get("covered_relation_types") or [])
+    missing_relation_count = len(coverage.get("missing_relation_types") or [])
+    total_relation_count = covered_relation_count + missing_relation_count
+    return (
+        "distilled 渲染覆盖摘要："
+        f"关系 {covered_relation_count}/{total_relation_count}，"
+        f"micro-example {coverage.get('rendered_micro_example_count', 0)} 条"
+    )
+
+
+def build_schema_fewshot_distilled_prompt(
+    schema_catalog: SchemaCatalog,
+    language: str,
+    schema_aware_directional_prompt: str,
+    selected_records: Sequence[Dict[str, Any]],
+    *,
+    max_entities: int,
+    max_relations: int,
+    max_micro_example_chars: int = DISTILLED_MICRO_EXAMPLE_MAX_CHARS,
+    micro_example_lines: Sequence[str] | None = None,
+) -> str:
+    _ = (schema_catalog, language)
+    prompt = schema_aware_directional_prompt.rstrip()
+    if micro_example_lines is None:
+        micro_example_lines = _build_distilled_micro_example_lines(
+            selected_records,
+            max_entities=max_entities,
+            max_relations=max_relations,
+            max_chars=max_micro_example_chars,
+            max_examples=DISTILLED_MAX_MICRO_EXAMPLES,
+        )
+
+    prompt += (
+        "\n\n-Micro-examples-\n"
+        "只蒸馏端点和类型，不嵌完整 audit text。\n"
+    )
+    if not micro_example_lines:
+        prompt += "- 当前无可蒸馏 micro-example；继续依赖 schema 与方向卡片。\n"
+    else:
+        prompt += "\n".join(micro_example_lines) + "\n"
+    return prompt
+
+
 def _candidate_readme(
     name: str,
     generated_at: str,
@@ -1194,6 +1454,7 @@ def _candidate_manifest_entry(
     generated_at: str,
     fewshot_compression: Optional[Dict[str, int]] = None,
     fewshot_coverage: Optional[Dict[str, Any]] = None,
+    extra_fields: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     entry = {
         "candidate_name": candidate_name,
@@ -1215,6 +1476,9 @@ def _candidate_manifest_entry(
         entry["fewshot_compression"] = dict(fewshot_compression)
     if fewshot_coverage is not None:
         entry["fewshot_coverage"] = dict(fewshot_coverage)
+    if extra_fields:
+        for key, value in extra_fields.items():
+            entry[key] = value
     return entry
 
 
@@ -1295,6 +1559,10 @@ def generate_candidate_prompts(
         base_prompt_text=schema_aware_base_text,
         base_label=schema_aware_base_label,
     )
+    schema_aware_directional_prompt_text = build_schema_aware_directional_prompt(
+        schema_catalog=schema_catalog,
+        schema_aware_prompt=schema_aware_prompt_text,
+    )
 
     fewshot_examples, fewshot_strategy, fewshot_source_ids, fewshot_notes, fewshot_selected_records = _select_fewshot_examples(
         audit_records=audit_records,
@@ -1314,6 +1582,26 @@ def generate_candidate_prompts(
         schema_aware_prompt=schema_aware_prompt_text,
         examples=fewshot_examples,
     )
+    distilled_micro_example_items = _build_distilled_micro_example_items(
+        fewshot_selected_records,
+        max_entities=fewshot_max_entities,
+        max_relations=fewshot_max_relations,
+        max_chars=DISTILLED_MICRO_EXAMPLE_MAX_CHARS,
+        max_examples=DISTILLED_MAX_MICRO_EXAMPLES,
+    )
+    rendered_micro_example_coverage = _build_rendered_micro_example_coverage(
+        schema_catalog,
+        distilled_micro_example_items,
+    )
+    schema_fewshot_distilled_prompt_text = build_schema_fewshot_distilled_prompt(
+        schema_catalog=schema_catalog,
+        language=language,
+        schema_aware_directional_prompt=schema_aware_directional_prompt_text,
+        selected_records=fewshot_selected_records,
+        max_entities=fewshot_max_entities,
+        max_relations=fewshot_max_relations,
+        micro_example_lines=[item["line"] for item in distilled_micro_example_items],
+    )
 
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
@@ -1327,6 +1615,8 @@ def generate_candidate_prompts(
     auto_tuned_prompt_text = _render_delimiter_placeholders(auto_tuned_prompt_text)
     schema_aware_prompt_text = _render_delimiter_placeholders(schema_aware_prompt_text)
     schema_fewshot_prompt_text = _render_delimiter_placeholders(schema_fewshot_prompt_text)
+    schema_aware_directional_prompt_text = _render_delimiter_placeholders(schema_aware_directional_prompt_text)
+    schema_fewshot_distilled_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_prompt_text)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1343,6 +1633,9 @@ def generate_candidate_prompts(
         max_relations=fewshot_max_relations,
     )
     fewshot_coverage_summary = _format_fewshot_coverage_summary(fewshot_coverage)
+    rendered_micro_example_coverage_summary = _format_rendered_micro_example_coverage_summary(
+        rendered_micro_example_coverage
+    )
 
     default_candidate_notes = list(default_notes)
     if sample_records:
@@ -1355,6 +1648,13 @@ def generate_candidate_prompts(
         "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。",
     ]
     schema_aware_notes = _dedupe_preserve_order(schema_aware_notes)
+    schema_aware_directional_notes = _dedupe_preserve_order(
+        [
+            "schema_aware_directional 继承 schema_aware，并额外加入短关系方向卡片。",
+            "方向卡片覆盖 applied_in / appears_in / defined_by / evaluated_by / related_to 等高风险关系，不嵌入完整 audit 样本文本。",
+            "用于降低关系反向、related_to 滥用和缺失端点占位风险。",
+        ]
+    )
     schema_fewshot_notes = list(fewshot_notes)
     schema_fewshot_notes.insert(0, f"schema_fewshot 继承 schema_aware，并继续沿用 {schema_aware_base_label} 作为底稿。")
     if fewshot_source_ids:
@@ -1366,12 +1666,38 @@ def generate_candidate_prompts(
         "few-shot 示例已压缩：限制输入长度、实体数量和关系数量，避免候选 Prompt 过长。"
     )
     schema_fewshot_notes = _dedupe_preserve_order(schema_fewshot_notes)
+    schema_fewshot_distilled_notes = _dedupe_preserve_order(
+        [
+            "schema_fewshot_distilled 继承 schema_aware_directional，只保留关系方向 micro-examples。",
+            "distilled micro-examples 来源于已选 audit gold，但省略完整输入文本，降低 overlap/holdout 泄漏风险。",
+            "长度目标接近 schema_aware，避免回到长 few-shot Prompt。",
+            fewshot_coverage_summary,
+            rendered_micro_example_coverage_summary,
+        ]
+    )
     auto_tuned_notes = _dedupe_preserve_order(auto_tuned_notes)
 
     fewshot_compression = {
         "input_max_chars": fewshot_input_max_chars,
         "max_entities": fewshot_max_entities,
         "max_relations": fewshot_max_relations,
+    }
+    distilled_extra_fields = {
+        "source_sample_ids": list(fewshot_source_ids),
+        "coverage": dict(rendered_micro_example_coverage),
+        "selected_audit_coverage": dict(fewshot_coverage),
+        "rendered_micro_example_coverage": dict(rendered_micro_example_coverage),
+        "compression": {
+            "strategy": "micro_examples_without_full_audit_text",
+            "input_text_policy": "omit_full_audit_text",
+            "max_micro_example_chars": DISTILLED_MICRO_EXAMPLE_MAX_CHARS,
+            "max_micro_examples": DISTILLED_MAX_MICRO_EXAMPLES,
+        },
+        "length_policy": {
+            "target": "near_schema_aware",
+            "max_schema_aware_ratio": DISTILLED_MAX_SCHEMA_AWARE_RATIO,
+            "base_prompt": "schema_aware_directional",
+        },
     }
 
     candidates = [
@@ -1425,6 +1751,31 @@ def generate_candidate_prompts(
             "fewshot_coverage": fewshot_coverage,
             "notes": schema_fewshot_notes,
         },
+        {
+            "name": "schema_aware_directional",
+            "prompt_text": schema_aware_directional_prompt_text,
+            "source_type": "schema_directional",
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
+            "schema_used": True,
+            "audit_used": False,
+            "fewshot_used": False,
+            "fewshot_example_count": 0,
+            "fewshot_strategy": None,
+            "notes": schema_aware_directional_notes,
+        },
+        {
+            "name": "schema_fewshot_distilled",
+            "prompt_text": schema_fewshot_distilled_prompt_text,
+            "source_type": "schema_fewshot_distilled",
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
+            "schema_used": True,
+            "audit_used": bool(audit_records),
+            "fewshot_used": bool(fewshot_selected_records),
+            "fewshot_example_count": len(fewshot_selected_records),
+            "fewshot_strategy": "distilled_relation_micro_examples",
+            "notes": schema_fewshot_distilled_notes,
+            "extra_manifest_fields": distilled_extra_fields,
+        },
     ]
 
     manifest_candidates: List[Dict[str, Any]] = []
@@ -1464,6 +1815,7 @@ def generate_candidate_prompts(
             fewshot_strategy=candidate["fewshot_strategy"],
             fewshot_compression=candidate.get("fewshot_compression"),
             fewshot_coverage=candidate.get("fewshot_coverage"),
+            extra_fields=candidate.get("extra_manifest_fields"),
             notes=candidate["notes"],
             output_dir=output_dir,
             generated_at=generated_at,
@@ -1517,12 +1869,14 @@ def generate_candidate_prompts(
             "example_ids": [example.example_id for example in fewshot_examples],
             "compression": fewshot_compression,
         },
+        "distilled": distilled_extra_fields,
         "fewshot_coverage": fewshot_coverage,
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
         "manifest_path": _safe_relpath(manifest_path),
         "notes": [
             "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
             "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
+            "schema_aware_directional / schema_fewshot_distilled 用短方向卡片和 micro-examples 降低关系方向泄漏风险。",
             "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
         ],
     }
@@ -1633,7 +1987,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     print(
-        f"[完成] 已生成 4 类候选 Prompt，manifest: {result['manifest_path']}，"
+        f"[完成] 已生成 6 类候选 Prompt，manifest: {result['manifest_path']}，"
         f"report: {result['report_path']}"
     )
     return 0

@@ -76,8 +76,27 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 -Base Prompt Note-
 - 当前候选版本以 官方 auto_tuned Prompt 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
 
+-关系方向卡片-
+只补充高风险关系的方向判断，不嵌入完整 audit 样本文本。
+- `applied_in`：source 是被应用的知识/方法/公式，target 是知识主题、实验、作业或平台操作场景；反例：不要写成“实验/作业 -> 算法”；弱共现仍用 related_to 或跳过。
+- `appears_in`：source 是出现的实体，target 是 Course/Chapter/Section/Experiment/Assignment 位置；反例：不要写成“章节 -> 知识点”；结构包含优先用 contains。
+- `defined_by`：source 是被定义对象，target 是定义、公式、判定条件或符号；反例：不要写成“定义/公式 -> 概念”，也不要用 Concept->Concept 承接背景解释。
+- `evaluated_by`：source 是被考核或评估的知识、概念或方法，target 是 Assignment/Experiment 等考核载体；反例：不要写成“作业/实验 -> 知识点”；普通出现位置优先用 appears_in。
+- `related_to`：source 与 target 都必须是已抽取且端点完整的实体，target 不是 missing、unknown 或临时占位；反例：不能承接 missing 端点，也不能替代 defined_by / applied_in / appears_in 等更具体关系。
+
 -Real Data-
 ######################
 text: {input_text}
 ######################
 output:
+
+-Micro-examples-
+只蒸馏端点和类型，不嵌完整 audit text。
+- pts-0066-4bacda7c7a: 进程 -> 进程定义: [type=defined_by] 被定义对象 -> 定义/公式
+- pts-0066-4bacda7c7a: 进程同步机制 -> 进程: [type=applied_in] 被应用对象 -> 应用场景
+- pts-0066-4bacda7c7a: 第二章 进程的描述与控制 -> 2.2.1 进程的定义和特征: [type=contains] source -> target
+- pts-0066-4bacda7c7a: 进程 -> 2.2.1 进程的定义和特征: [type=belongs_to] source -> target
+- pts-0046-a99abcf7ae: 第三章 处理机调度与死锁 -> 第三章习题: [type=evaluated_by] 被考核对象 -> 作业/实验
+- pts-0046-a99abcf7ae: 高级调度 -> 中级调度: [type=prerequisite_of] source -> target
+- pts-0046-a99abcf7ae: 高响应比优先调度算法 -> 第三章习题: [type=appears_in] 出现实体 -> 位置容器
+- pts-0046-a99abcf7ae: 高级调度 -> 低级调度: [type=related_to] 完整实体之间的弱关联

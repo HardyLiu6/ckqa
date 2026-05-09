@@ -4,7 +4,7 @@
 候选 Prompt 生成脚本测试
 ========================
 验证候选 Prompt 生成模块能够：
-1. 统一生成四类候选 Prompt 目录与 manifest。
+1. 统一生成六类候选 Prompt 目录与 manifest。
 2. 在缺少 auto-tuned 输出时稳定降级，不中断执行。
 3. 在缺少默认 Prompt 或 audit gold 时退回最小可运行版本。
 """
@@ -161,6 +161,46 @@ class TestGenerateCandidatePrompts(unittest.TestCase):
         _write_json(schema_dir / "entity_types.json", entity_payload)
         _write_json(schema_dir / "relation_types.json", relation_payload)
         (schema_dir / "extraction_rules.md").write_text(rules_text, encoding="utf-8")
+
+    def _write_directional_schema_files(self, schema_dir: Path) -> None:
+        self._write_schema_files(schema_dir)
+        relation_path = schema_dir / "relation_types.json"
+        relation_payload = json.loads(relation_path.read_text(encoding="utf-8"))
+        relation_payload["relation_type_order"] = [
+            "contains",
+            "defined_by",
+            "applied_in",
+            "implemented_by",
+            "evaluated_by",
+            "appears_in",
+            "related_to",
+        ]
+        relation_payload["relation_types"]["applied_in"] = {
+            "label_zh": "应用于",
+            "description": "表示知识、方法或算法被应用到某知识主题、实验、作业或平台操作场景。",
+            "extraction_hint": "source 是被应用对象，target 是应用场景，不要反向。",
+            "examples": [
+                "银行家算法 applied_in 死锁",
+                "周转时间公式 applied_in 调度算法作业",
+            ],
+            "source_types": ["Concept", "AlgorithmOrMethod"],
+            "target_types": ["Concept", "Experiment", "Assignment"],
+        }
+        relation_payload["relation_types"]["appears_in"] = {
+            "label_zh": "出现于",
+            "description": "表示实体在章节、实验或作业中出现，是弱定位关系。",
+            "extraction_hint": "source 是出现的实体，target 是 Course/Chapter/Section/Experiment/Assignment 位置。",
+            "examples": [
+                "TLB appears_in 第三章 存储器管理",
+                "银行家算法 appears_in 作业 2",
+            ],
+            "negative_examples": [
+                "Section->Concept: 第三章 appears_in TLB",
+            ],
+            "source_types": ["Concept", "AlgorithmOrMethod", "Experiment", "Assignment"],
+            "target_types": ["Course", "Chapter", "Section", "Experiment", "Assignment"],
+        }
+        _write_json(relation_path, relation_payload)
 
     def _write_default_prompt(self, default_prompt_dir: Path) -> None:
         default_prompt_dir.mkdir(parents=True, exist_ok=True)
@@ -452,7 +492,7 @@ output:
         )
         return payload
 
-    def test_generate_candidate_prompts_writes_four_candidates_and_manifest(self):
+    def test_generate_candidate_prompts_writes_six_candidates_and_manifest(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             schema_dir = root / "config" / "schema"
@@ -489,7 +529,14 @@ output:
             self.assertEqual(manifest["task"], "candidate_prompt_generation")
             self.assertEqual(
                 set(candidates.keys()),
-                {"default", "auto_tuned", "schema_aware", "schema_fewshot"},
+                {
+                    "default",
+                    "auto_tuned",
+                    "schema_aware",
+                    "schema_fewshot",
+                    "schema_aware_directional",
+                    "schema_fewshot_distilled",
+                },
             )
             self.assertTrue((output_dir / "manifest.json").exists())
             self.assertTrue(report_file.exists())
@@ -501,10 +548,15 @@ output:
             self.assertEqual(candidates["default"]["source_type"], "default_adapted")
             self.assertEqual(candidates["auto_tuned"]["source_type"], "fallback_default_copy")
             self.assertTrue(candidates["schema_aware"]["schema_used"])
+            self.assertTrue(candidates["schema_aware_directional"]["schema_used"])
             self.assertTrue(candidates["schema_fewshot"]["schema_used"])
+            self.assertTrue(candidates["schema_fewshot_distilled"]["schema_used"])
             self.assertTrue(candidates["schema_fewshot"]["audit_used"])
             self.assertTrue(candidates["schema_fewshot"]["fewshot_used"])
             self.assertEqual(candidates["schema_fewshot"]["fewshot_example_count"], 2)
+            self.assertTrue(candidates["schema_fewshot_distilled"]["audit_used"])
+            self.assertTrue(candidates["schema_fewshot_distilled"]["fewshot_used"])
+            self.assertEqual(candidates["schema_fewshot_distilled"]["fewshot_example_count"], 2)
             self.assertIn("GraphRAG 官方 auto-tuned 输出不存在", "\n".join(candidates["auto_tuned"]["notes"]))
 
             default_text = (output_dir / "default" / "prompt.txt").read_text(encoding="utf-8")
@@ -555,6 +607,111 @@ output:
             )
             report_payload = json.loads(report_file.read_text(encoding="utf-8"))
             self.assertEqual(report_payload["fewshot"]["compression"]["input_max_chars"], 80)
+            self.assertEqual(
+                set(report_payload["candidate_names"]),
+                {
+                    "default",
+                    "auto_tuned",
+                    "schema_aware",
+                    "schema_fewshot",
+                    "schema_aware_directional",
+                    "schema_fewshot_distilled",
+                },
+            )
+
+    def test_directional_and_distilled_candidates_avoid_full_audit_text_and_record_source_policy(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            schema_dir = root / "config" / "schema"
+            default_prompt_dir = root / "prompts"
+            output_dir = root / "prompts" / "candidates"
+            samples_file = root / "data" / "prompt_tuning_samples" / "prompt_tuning_samples.json"
+            audit_file = root / "data" / "eval" / "audit_extraction_set.json"
+            report_file = root / "results" / "reports" / "prompt_generation_report.json"
+
+            self._write_directional_schema_files(schema_dir)
+            self._write_default_prompt(default_prompt_dir)
+            _write_json(samples_file, self._build_samples_payload())
+            _write_json(audit_file, self._build_audit_payload(with_gold=True))
+
+            result = generate_candidate_prompts(
+                schema_dir=schema_dir,
+                samples_file=samples_file,
+                audit_file=audit_file,
+                default_prompt_dir=default_prompt_dir,
+                auto_tuned_prompt_dir=root / "missing-auto-tuned",
+                output_dir=output_dir,
+                fewshot_k=2,
+                fewshot_input_max_chars=160,
+                fewshot_max_entities=2,
+                fewshot_max_relations=1,
+                language="zh",
+                overwrite=True,
+                report_file=report_file,
+            )
+
+            candidates = {item["candidate_name"]: item for item in result["manifest"]["candidates"]}
+            schema_aware_text = (output_dir / "schema_aware" / "prompt.txt").read_text(encoding="utf-8")
+            fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
+            directional_text = (output_dir / "schema_aware_directional" / "prompt.txt").read_text(encoding="utf-8")
+            distilled_text = (output_dir / "schema_fewshot_distilled" / "prompt.txt").read_text(encoding="utf-8")
+
+            self.assertIn("-关系方向卡片-", directional_text)
+            self.assertIn("`applied_in`", directional_text)
+            self.assertIn("source 是被应用的知识/方法/公式", directional_text)
+            self.assertIn("`appears_in`", directional_text)
+            self.assertIn("source 是出现的实体", directional_text)
+            self.assertIn("`defined_by`", directional_text)
+            self.assertIn("source 是被定义对象", directional_text)
+            self.assertIn("`evaluated_by`", directional_text)
+            self.assertIn("source 是被考核或评估的知识、概念或方法", directional_text)
+            self.assertIn("`related_to`", directional_text)
+            self.assertIn("不能承接 missing 端点", directional_text)
+            self.assertNotIn("进程是程序的一次执行过程", directional_text)
+            self.assertNotIn("实验步骤：实现时间片轮转调度算法", directional_text)
+
+            self.assertIn("-Micro-examples-", distilled_text)
+            self.assertIn("[type=contains]", distilled_text)
+            self.assertIn("[type=implemented_by]", distilled_text)
+            self.assertNotIn("进程是程序的一次执行过程", distilled_text)
+            self.assertNotIn("实验步骤：实现时间片轮转调度算法", distilled_text)
+            self.assertLess(len(distilled_text), len(fewshot_text))
+            self.assertLessEqual(len(distilled_text), int(len(schema_aware_text) * 1.35))
+
+            distilled_entry = candidates["schema_fewshot_distilled"]
+            self.assertEqual(distilled_entry["source_type"], "schema_fewshot_distilled")
+            self.assertEqual(distilled_entry["fewshot_strategy"], "distilled_relation_micro_examples")
+            self.assertEqual(distilled_entry["source_sample_ids"], ["pts-001", "pts-002"])
+            self.assertEqual(
+                distilled_entry["selected_audit_coverage"]["selection_strategy"],
+                "greedy_relation_entity_coverage",
+            )
+            self.assertEqual(
+                distilled_entry["coverage"]["selection_strategy"],
+                "first_distilled_micro_example_per_relation",
+            )
+            self.assertEqual(
+                distilled_entry["rendered_micro_example_coverage"]["covered_relation_types"],
+                ["contains", "implemented_by"],
+            )
+            self.assertEqual(distilled_entry["coverage"]["rendered_micro_example_count"], 2)
+            self.assertEqual(
+                distilled_entry["compression"],
+                {
+                    "strategy": "micro_examples_without_full_audit_text",
+                    "input_text_policy": "omit_full_audit_text",
+                    "max_micro_example_chars": 96,
+                    "max_micro_examples": 8,
+                },
+            )
+            self.assertEqual(
+                distilled_entry["length_policy"],
+                {
+                    "target": "near_schema_aware",
+                    "max_schema_aware_ratio": 1.35,
+                    "base_prompt": "schema_aware_directional",
+                },
+            )
 
     def test_schema_fewshot_prefers_relation_coverage_before_priority(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

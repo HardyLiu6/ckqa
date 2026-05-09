@@ -214,7 +214,7 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "只有在 contains、defined_by、depends_on、applied_in、implemented_by、evaluated_by 等都不合适时才使用。source 和 target 必须都是已抽取实体；如果 target 在原文中证据充足，必须先补齐 target 实体，再输出 related_to；如果无法补齐 target，则跳过关系，不能用作缺失关系占位。",
+      "extraction_hint": "只有在 contains、defined_by、depends_on、applied_in、implemented_by、evaluated_by 等都不合适时才使用。source/target 必须都在 entities 中；缺 target 时补实体或跳过。source 和 target 必须都是已抽取实体；如果 target 在原文中证据充足，必须先补齐 target 实体，再输出 related_to；如果无法补齐 target，则跳过关系，不能用作缺失关系占位。",
       "examples": [
         "死锁处理 related_to 资源分配图",
         "虚拟内存 related_to 页面置换算法"
@@ -242,7 +242,7 @@
         "FormulaOrDefinition",
         "Term"
       ],
-      "extraction_hint": "用于正式定义、公式、定律或判定条件。禁止 Concept->Concept，禁止 Term->Concept；别名、简称、存在标志、背景解释不能用 defined_by。当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释应进入实体 alias 或归一化字段。",
+      "extraction_hint": "用于正式定义、公式、定律或判定条件。禁止 Concept->Concept，禁止 Term->Concept；别名、简称、缩写、编号、存在标志、背景解释不能用 defined_by，进入 alias/归一化或跳过。当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释应进入实体 alias 或归一化字段。",
       "examples": [
         "进程 defined_by 进程定义",
         "周转时间 defined_by 周转时间公式",
@@ -280,12 +280,17 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类关系；表达算法、方法或知识被用于解释、处理、解决某个知识主题或教学场景。不要放宽为任意共现或泛泛相关，弱相关仍使用 related_to。",
+      "extraction_hint": "用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类关系；表达算法、方法或知识被用于解释、处理、解决某个知识主题或教学场景。遇到“X 以 Y 为例/使用 Y”时，若 Y 是算法、方法、公式或知识对象，通常应输出 Y applied_in X；若语义是 X 的理解、实现或求解依赖 Y，则输出 X depends_on Y；不能反向输出 X applied_in Y。不要放宽为 Concept->AlgorithmOrMethod，也不要放宽为任意共现或泛泛相关，弱相关仍使用 related_to。",
       "examples": [
         "银行家算法 applied_in 死锁",
         "地址映射 applied_in 分页存储管理",
         "PV 同步方法 applied_in 生产者-消费者实验",
         "周转时间公式 applied_in 调度算法作业"
+      ],
+      "negative_examples": [
+        "Concept->AlgorithmOrMethod: 死锁以银行家算法为例 applied_in 银行家算法",
+        "Section->AlgorithmOrMethod: 本节使用银行家算法 applied_in 银行家算法",
+        "Concept->ToolOrPlatform: 页面置换使用 Python 模拟器 applied_in Python 模拟器"
       ]
     },
     "implemented_by": {
@@ -337,10 +342,14 @@
         "Assignment",
         "Experiment"
       ],
-      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。",
+      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。source 应为 Course/Chapter/Section/KnowledgePoint/Concept/AlgorithmOrMethod/Experiment；如果术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by，不要放宽为 Term->Assignment。",
       "examples": [
         "死锁处理 evaluated_by 作业 3",
         "文件系统概念 evaluated_by 文件系统设计实验"
+      ],
+      "negative_examples": [
+        "Term->Assignment: TLB evaluated_by 习题 3",
+        "Term->Assignment: PCB evaluated_by 期末复习题"
       ]
     },
     "appears_in": {
@@ -356,9 +365,7 @@
         "Term",
         "FormulaOrDefinition",
         "AlgorithmOrMethod",
-        "ToolOrPlatform",
-        "Experiment",
-        "Assignment"
+        "ToolOrPlatform"
       ],
       "target_types": [
         "Course",
@@ -367,13 +374,14 @@
         "Experiment",
         "Assignment"
       ],
-      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；目标必须是 Course/Chapter/Section/Experiment/Assignment。禁止反向 Section appears_in Concept，结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
+      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；source 必须是出现的知识实体，目标必须是 Course/Chapter/Section/Experiment/Assignment，target 必须是 Course/Chapter/Section/Experiment/Assignment。禁止反向 Section appears_in Concept，禁止 Section/Assignment 反向 appears_in 到知识对象；结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
       "examples": [
         "TLB appears_in 第三章 存储器管理",
         "银行家算法 appears_in 作业 2"
       ],
       "negative_examples": [
         "Section->Concept: 第三章 存储器管理 appears_in TLB",
+        "Assignment->ToolOrPlatform: 习题 1 appears_in SPOOLing 系统",
         "Experiment->Concept: 实验一 appears_in 银行家算法",
         "Concept->Concept: 虚拟内存 appears_in 页面置换算法"
       ]

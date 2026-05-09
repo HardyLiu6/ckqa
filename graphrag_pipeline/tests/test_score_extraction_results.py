@@ -12,7 +12,7 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from score_extraction_results import score_extraction_results
+from score_extraction_results import _load_fewshot_source_sample_ids, score_extraction_results
 
 
 ENTITY_SCHEMA = {
@@ -774,6 +774,235 @@ class TestEndToEnd(unittest.TestCase):
             )
             compare_markdown = Path(summary["reports"]["markdown"]).read_text(encoding="utf-8")
             self.assertIn("endpoint_error_summary.json", compare_markdown)
+
+    def test_leakage_diagnostics_split_overlap_and_holdout_from_manifest_notes(self):
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "schema_fewshot",
+            "manifest_file": "prompts/candidates/manifest.json",
+            "results": [
+                {
+                    "sample_id": "s_overlap",
+                    "candidate": "schema_fewshot",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "第一章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第一章", "type": "contains",
+                         "description": "", "evidence": ""},
+                        {"source": "操作系统", "target": "第一章", "type": "defined_by",
+                         "description": "", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": {
+                        "usage": {
+                            "prompt_tokens": 10,
+                            "completion_tokens": 5,
+                            "total_tokens": 15,
+                        }
+                    },
+                },
+                {
+                    "sample_id": "s_holdout",
+                    "candidate": "schema_fewshot",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e3", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "第二章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第二章", "type": "applied_in",
+                         "description": "", "evidence": ""},
+                        {"source": "第二章", "target": "操作系统", "type": "contains",
+                         "description": "反向端点错误", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": {
+                        "usage": {
+                            "prompt_tokens": 20,
+                            "completion_tokens": 6,
+                            "total_tokens": 26,
+                        }
+                    },
+                },
+            ],
+        }
+
+        audit_payload = {
+            "audit_samples": [
+                {
+                    "source_sample_id": "s_overlap",
+                    "gold_seed": True,
+                    "gold_seed_version": "manual_gold_seed_v1",
+                    "gold_entities": [
+                        {"entity_id": "g1", "name": "操作系统", "type": "Course", "alias": []},
+                        {"entity_id": "g2", "name": "第一章", "type": "Chapter", "alias": []},
+                    ],
+                    "gold_relations": [
+                        {
+                            "relation_id": "r1",
+                            "source_entity_id": "g1",
+                            "target_entity_id": "g2",
+                            "type": "defined_by",
+                        }
+                    ],
+                },
+                {
+                    "source_sample_id": "s_holdout",
+                    "gold_seed": True,
+                    "gold_seed_version": "manual_gold_seed_v1",
+                    "gold_entities": [
+                        {"entity_id": "g3", "name": "操作系统", "type": "Course", "alias": []},
+                        {"entity_id": "g4", "name": "第二章", "type": "Chapter", "alias": []},
+                    ],
+                    "gold_relations": [
+                        {
+                            "relation_id": "r2",
+                            "source_entity_id": "g3",
+                            "target_entity_id": "g4",
+                            "type": "applied_in",
+                        },
+                        {
+                            "relation_id": "r3",
+                            "source_entity_id": "g3",
+                            "target_entity_id": "g4",
+                            "type": "depends_on",
+                        },
+                    ],
+                },
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "leakage"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "candidate_name": "schema_fewshot",
+                                "source_type": "schema_fewshot",
+                                "fewshot_used": True,
+                                "notes": ["few-shot 来源样本：s_overlap"],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (eval_dir / "schema_fewshot.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(audit_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="leakage",
+            )
+
+            json_path = Path(summary["reports"]["leakage_diagnostics_json"])
+            md_path = Path(summary["reports"]["leakage_diagnostics_md"])
+            self.assertTrue(json_path.exists())
+            self.assertTrue(md_path.exists())
+
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["fewshot_source_sample_ids"], ["s_overlap"])
+            groups = payload["candidates"]["schema_fewshot"]["groups"]
+            self.assertEqual(groups["all"]["sample_count"], 2)
+            self.assertEqual(groups["fewshot_overlap"]["sample_count"], 1)
+            self.assertEqual(groups["holdout"]["sample_count"], 1)
+            self.assertEqual(groups["fewshot_overlap"]["endpoint_total_count"], 2)
+            self.assertEqual(groups["fewshot_overlap"]["endpoint_invalid_count"], 0)
+            self.assertEqual(groups["holdout"]["endpoint_total_count"], 2)
+            self.assertEqual(groups["holdout"]["endpoint_invalid_count"], 1)
+            self.assertAlmostEqual(groups["holdout"]["endpoint_valid_rate"], 0.5)
+            self.assertAlmostEqual(groups["all"]["average_entity_count"], 2.0)
+            self.assertAlmostEqual(groups["all"]["average_relation_count"], 2.0)
+            self.assertEqual(groups["all"]["token_usage"]["total"]["total_tokens"], 41)
+            self.assertAlmostEqual(groups["all"]["token_usage"]["mean"]["prompt_tokens"], 15.0)
+            self.assertAlmostEqual(groups["fewshot_overlap"]["audit_entity_recall"], 1.0)
+            self.assertAlmostEqual(groups["holdout"]["audit_relation_recall"], 0.5)
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                top["inputs"]["leakage_diagnostics_paths"]["json"],
+                str(json_path),
+            )
+            meta = json.loads(Path(summary["reports"]["run_meta"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                meta["inputs"]["leakage_diagnostics_paths"]["markdown"],
+                str(md_path),
+            )
+            compare_markdown = Path(summary["reports"]["markdown"]).read_text(encoding="utf-8")
+            self.assertIn("leakage_diagnostics.json", compare_markdown)
+
+    def test_loads_distilled_fewshot_source_ids_from_structured_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "candidate_name": "schema_aware_directional",
+                                "source_type": "schema_aware_directional",
+                                "source_sample_ids": ["ignored"],
+                            },
+                            {
+                                "candidate_name": "schema_fewshot_distilled",
+                                "source_type": "schema_fewshot_distilled",
+                                "source_sample_ids": ["s1", "s2"],
+                                "fewshot_coverage": {
+                                    "selected_source_sample_ids": ["s2", "s3"]
+                                },
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                _load_fewshot_source_sample_ids(manifest_path),
+                ["s1", "s2", "s3"],
+            )
 
 
 if __name__ == "__main__":

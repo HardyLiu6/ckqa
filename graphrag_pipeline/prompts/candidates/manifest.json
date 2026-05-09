@@ -1,7 +1,7 @@
 {
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
-  "generated_at": "2026-05-09T18:30:21+08:00",
+  "generated_at": "2026-05-09T20:52:59+08:00",
   "language": "zh",
   "output_dir": "prompts/candidates",
   "inputs": {
@@ -27,7 +27,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-09T18:30:21+08:00",
+      "generation_time": "2026-05-09T20:52:59+08:00",
       "files": {
         "prompt": "prompts/candidates/default/prompt.txt",
         "readme": "prompts/candidates/default/README.md"
@@ -47,7 +47,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-09T18:30:21+08:00",
+      "generation_time": "2026-05-09T20:52:59+08:00",
       "files": {
         "prompt": "prompts/candidates/auto_tuned/prompt.txt",
         "readme": "prompts/candidates/auto_tuned/README.md"
@@ -79,7 +79,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-09T18:30:21+08:00",
+      "generation_time": "2026-05-09T20:52:59+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_aware/prompt.txt",
         "readme": "prompts/candidates/schema_aware/README.md"
@@ -99,7 +99,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 8,
       "fewshot_strategy": "audit_gold",
-      "generation_time": "2026-05-09T18:30:21+08:00",
+      "generation_time": "2026-05-09T20:52:59+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot/README.md"
@@ -156,6 +156,154 @@
           "Experiment"
         ],
         "selection_strategy": "greedy_relation_entity_coverage"
+      }
+    },
+    {
+      "candidate_name": "schema_aware_directional",
+      "source_type": "schema_directional",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-09T20:52:59+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_aware_directional/prompt.txt",
+        "readme": "prompts/candidates/schema_aware_directional/README.md"
+      },
+      "notes": [
+        "schema_aware_directional 继承 schema_aware，并额外加入短关系方向卡片。",
+        "方向卡片覆盖 applied_in / appears_in / defined_by / evaluated_by / related_to 等高风险关系，不嵌入完整 audit 样本文本。",
+        "用于降低关系反向、related_to 滥用和缺失端点占位风险。"
+      ]
+    },
+    {
+      "candidate_name": "schema_fewshot_distilled",
+      "source_type": "schema_fewshot_distilled",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": true,
+      "fewshot_used": true,
+      "fewshot_example_count": 8,
+      "fewshot_strategy": "distilled_relation_micro_examples",
+      "generation_time": "2026-05-09T20:52:59+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_fewshot_distilled/prompt.txt",
+        "readme": "prompts/candidates/schema_fewshot_distilled/README.md"
+      },
+      "notes": [
+        "schema_fewshot_distilled 继承 schema_aware_directional，只保留关系方向 micro-examples。",
+        "distilled micro-examples 来源于已选 audit gold，但省略完整输入文本，降低 overlap/holdout 泄漏风险。",
+        "长度目标接近 schema_aware，避免回到长 few-shot Prompt。",
+        "few-shot 覆盖摘要：关系 10/10，实体 10/11；缺失关系：无。",
+        "distilled 渲染覆盖摘要：关系 8/10，micro-example 8 条"
+      ],
+      "source_sample_ids": [
+        "pts-0066-4bacda7c7a",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10",
+        "pts-0005-2d46298ac6",
+        "pts-0007-a73bc0db67",
+        "pts-0049-bd80db3cdf",
+        "pts-0073-6ac17ffc34",
+        "pts-0032-8c474610bc"
+      ],
+      "coverage": {
+        "selection_strategy": "first_distilled_micro_example_per_relation",
+        "rendered_micro_example_count": 8,
+        "covered_relation_types": [
+          "defined_by",
+          "applied_in",
+          "contains",
+          "belongs_to",
+          "evaluated_by",
+          "prerequisite_of",
+          "appears_in",
+          "related_to"
+        ],
+        "missing_relation_types": [
+          "depends_on",
+          "implemented_by"
+        ],
+        "source_sample_ids": [
+          "pts-0066-4bacda7c7a",
+          "pts-0046-a99abcf7ae"
+        ]
+      },
+      "selected_audit_coverage": {
+        "selected_example_ids": [
+          "audit-ext-0005-7c810e4c30",
+          "audit-ext-0004-7396d8021d",
+          "audit-ext-0010-84c282a5ee",
+          "audit-ext-0013-b0a4bc8d84",
+          "audit-ext-0019-16344d0d4b",
+          "audit-ext-0003-4163630cd6",
+          "audit-ext-0009-c91f702519",
+          "audit-ext-0017-aba43112ef"
+        ],
+        "covered_relation_types": [
+          "contains",
+          "belongs_to",
+          "depends_on",
+          "prerequisite_of",
+          "related_to",
+          "defined_by",
+          "applied_in",
+          "implemented_by",
+          "evaluated_by",
+          "appears_in"
+        ],
+        "missing_relation_types": [],
+        "covered_entity_types": [
+          "Course",
+          "Chapter",
+          "Section",
+          "KnowledgePoint",
+          "Concept",
+          "Term",
+          "FormulaOrDefinition",
+          "AlgorithmOrMethod",
+          "Assignment",
+          "ToolOrPlatform"
+        ],
+        "missing_entity_types": [
+          "Experiment"
+        ],
+        "selection_strategy": "greedy_relation_entity_coverage"
+      },
+      "rendered_micro_example_coverage": {
+        "selection_strategy": "first_distilled_micro_example_per_relation",
+        "rendered_micro_example_count": 8,
+        "covered_relation_types": [
+          "defined_by",
+          "applied_in",
+          "contains",
+          "belongs_to",
+          "evaluated_by",
+          "prerequisite_of",
+          "appears_in",
+          "related_to"
+        ],
+        "missing_relation_types": [
+          "depends_on",
+          "implemented_by"
+        ],
+        "source_sample_ids": [
+          "pts-0066-4bacda7c7a",
+          "pts-0046-a99abcf7ae"
+        ]
+      },
+      "compression": {
+        "strategy": "micro_examples_without_full_audit_text",
+        "input_text_policy": "omit_full_audit_text",
+        "max_micro_example_chars": 96,
+        "max_micro_examples": 8
+      },
+      "length_policy": {
+        "target": "near_schema_aware",
+        "max_schema_aware_ratio": 1.35,
+        "base_prompt": "schema_aware_directional"
       }
     }
   ]
