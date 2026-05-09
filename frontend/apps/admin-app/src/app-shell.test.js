@@ -61,6 +61,10 @@ import {
   truncate,
 } from './components/common/resource-card-model.js'
 import {
+  sanitizeEntries,
+  splitEntriesIntoColumns,
+} from './components/common/info-table-model.js'
+import {
   mergeFeed,
   hasUnseenFailures,
 } from './components/shell/notification-feed-model.js'
@@ -3374,6 +3378,11 @@ test('CkResourceCard model exports are wired', () => {
   assert.equal(resolveCardStatus('active').tone, 'success')
   assert.deepEqual(formatMetaEntries([]), [])
   assert.equal(truncate('1234567890', 5), '12345…')
+})
+
+test('CkInfoTable model exports are wired', () => {
+  assert.deepEqual(sanitizeEntries(null), [])
+  assert.equal(splitEntriesIntoColumns([], 2).length, 2)
 })
 
 test('NotificationDropdown model exports are wired', () => {
