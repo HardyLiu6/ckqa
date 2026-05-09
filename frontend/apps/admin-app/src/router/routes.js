@@ -100,7 +100,7 @@ export const APP_ROUTES = [
   {
     path: '/app/courses',
     name: 'courses',
-    componentKey: 'ModulePage',
+    componentKey: 'CourseListPage',
     meta: {
       title: '课程列表',
       layout: 'console',
@@ -114,7 +114,7 @@ export const APP_ROUTES = [
   {
     path: '/app/courses/:courseId',
     name: 'course-detail',
-    componentKey: 'ModulePage',
+    componentKey: 'CourseDetailPage',
     meta: {
       title: '课程详情',
       layout: 'detail',
@@ -124,12 +124,13 @@ export const APP_ROUTES = [
       section: 'production',
       resource: 'course',
       scope: 'course',
+      defaultTab: 'overview',
     },
   },
   {
     path: '/app/courses/:courseId/members',
     name: 'course-members',
-    componentKey: 'ModulePage',
+    componentKey: 'CourseDetailPage',
     meta: {
       title: '课程成员',
       layout: 'detail',
@@ -139,12 +140,13 @@ export const APP_ROUTES = [
       section: 'production',
       resource: 'courseMembers',
       scope: 'course',
+      defaultTab: 'members',
     },
   },
   {
     path: '/app/courses/:courseId/materials',
     name: 'course-materials',
-    componentKey: 'ModulePage',
+    componentKey: 'CourseDetailPage',
     meta: {
       title: '课程资料',
       layout: 'detail',
@@ -154,12 +156,13 @@ export const APP_ROUTES = [
       section: 'production',
       resource: 'courseMaterials',
       scope: 'course',
+      defaultTab: 'materials',
     },
   },
   {
     path: '/app/materials/:materialId',
     name: 'material-detail',
-    componentKey: 'ModulePage',
+    componentKey: 'MaterialDetailPage',
     meta: {
       title: '资料详情',
       layout: 'detail',
@@ -169,12 +172,13 @@ export const APP_ROUTES = [
       section: 'production',
       resource: 'material',
       scope: 'course',
+      defaultTab: 'parse-progress',
     },
   },
   {
     path: '/app/materials/:materialId/parse-results',
     name: 'parse-results',
-    componentKey: 'ModulePage',
+    componentKey: 'MaterialDetailPage',
     meta: {
       title: '解析结果详情',
       layout: 'detail',
@@ -184,6 +188,7 @@ export const APP_ROUTES = [
       section: 'production',
       resource: 'parseResult',
       scope: 'course',
+      defaultTab: 'parse-results',
     },
   },
   {

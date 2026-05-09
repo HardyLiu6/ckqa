@@ -9,6 +9,9 @@ import LoginView from '../views/auth/LoginView.vue'
 import DashboardPage from '../views/dashboard/DashboardPage.vue'
 import HealthView from '../views/system/HealthView.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
+import CourseListPage from '../views/courses/CourseListPage.vue'
+import CourseDetailPage from '../views/courses/CourseDetailPage.vue'
+import MaterialDetailPage from '../views/materials/MaterialDetailPage.vue'
 import RouteState from '../views/status/RouteState.vue'
 import UnifiedErrorView from '../views/status/UnifiedErrorView.vue'
 import { getAdminPinia } from '../stores/pinia.js'
@@ -20,6 +23,9 @@ const componentMap = {
   DashboardPage,
   HealthView,
   ModulePage,
+  CourseListPage,
+  CourseDetailPage,
+  MaterialDetailPage,
   RouteState,
   UnifiedErrorView,
 }
