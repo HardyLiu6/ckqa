@@ -33,7 +33,9 @@ import { BRAND } from '../copy/brand.js'
 }
 .auth-layout-glow--top    { top: -180px; right: -120px; }
 .auth-layout-glow--bottom { bottom: -200px; left: -140px; }
-.auth-layout-content { position: relative; z-index: 1; width: min(420px, 92vw); padding: 32px; }
+/* 宽度交给子内容（登录页双栏需要 1040px，错误页 .route-state 自然左对齐即可），
+   这里只保留定位与层级。 */
+.auth-layout-content { position: relative; z-index: 1; }
 .auth-layout-footer {
   position: absolute; bottom: 18px;
   font-size: var(--ckqa-text-xs-size);

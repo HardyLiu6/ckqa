@@ -7,6 +7,7 @@ import SideNavigation from '../components/shell/SideNavigation.vue'
 import CkBreadcrumbs from '../components/common/CkBreadcrumbs.vue'
 
 import { buildNavigationSections, findActiveNavigationPath } from '../components/shell/navigation-model.js'
+import { buildCommandGroupsFromNavigation } from '../components/shell/command-groups-model.js'
 import { primaryNavigation, NAV_SECTIONS } from '../router/routes.js'
 import { buildConsoleBreadcrumbItems } from './console-breadcrumb-model.js'
 import { API_BASE_URL } from '../axios/index.js'
@@ -28,6 +29,10 @@ const sectionLabels = computed(() => {
 })
 
 const activePath = computed(() => findActiveNavigationPath(sections.value, route.path))
+
+const commandGroups = computed(() =>
+  buildCommandGroupsFromNavigation(sections.value, sectionLabels.value),
+)
 
 const breadcrumbItems = computed(() => buildConsoleBreadcrumbItems({
   path: route.path,
@@ -52,7 +57,7 @@ function logout() {
       :api-base-url="API_BASE_URL"
       :current-user="currentUser"
       :data-scope-label="dataScopeLabel"
-      :command-groups="[]"
+      :command-groups="commandGroups"
       @logout="logout"
     />
 

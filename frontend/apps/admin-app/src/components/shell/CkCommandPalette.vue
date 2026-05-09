@@ -19,19 +19,39 @@ const open = ref(false)
 const query = ref('')
 const activeIndex = ref(0)
 const inputRef = ref(null)
+// 打开前的焦点元素，关闭时归还焦点，配合 role="dialog" 的 a11y 语义
+let lastFocusedElement = null
 
 const filtered = computed(() => filterGroups(props.groups, query.value))
 const flat = computed(() => flattenForKeyboard(filtered.value))
 
+function openPalette() {
+  if (open.value) return
+  lastFocusedElement = typeof document !== 'undefined' ? document.activeElement : null
+  open.value = true
+  nextTick(() => inputRef.value?.focus())
+}
+
+function closePalette() {
+  if (!open.value) return
+  open.value = false
+  query.value = ''
+  activeIndex.value = 0
+  if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+    lastFocusedElement.focus()
+  }
+  lastFocusedElement = null
+}
+
 function handleKeydown(event) {
   if (isCommandShortcut(event) && !shouldIgnoreShortcut(event.target)) {
     event.preventDefault()
-    open.value = true
-    nextTick(() => inputRef.value?.focus())
+    openPalette()
     return
   }
   if (event.key === 'Escape' && open.value) {
-    open.value = false
+    event.preventDefault()
+    closePalette()
     return
   }
   if (!open.value) return
@@ -54,65 +74,82 @@ function activate(item) {
   } else if (typeof item.onActivate === 'function') {
     item.onActivate()
   }
-  open.value = false
-  query.value = ''
+  closePalette()
 }
 
 watch(query, () => { activeIndex.value = 0 })
 
+// 打开时锁定背景滚动，关闭时恢复，避免 backdrop 后页面仍可滚动
+watch(open, (next) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = next ? 'hidden' : ''
+})
+
 onMounted(() => window.addEventListener('keydown', handleKeydown))
-onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  if (typeof document !== 'undefined') document.body.style.overflow = ''
+})
 </script>
 
 <template>
-  <div v-if="open" class="ck-cmdpalette" role="dialog" aria-modal="true">
-    <div class="ck-cmdpalette-backdrop" @click="open = false" />
-    <div class="ck-cmdpalette-frame">
-      <input
-        ref="inputRef"
-        v-model="query"
-        class="ck-cmdpalette-input"
-        type="search"
-        placeholder="搜索课程 / 资料 / 知识库 / 操作"
-        aria-label="命令面板搜索"
-      >
-      <div class="ck-cmdpalette-results">
-        <div v-if="!filtered.length" class="ck-cmdpalette-empty">暂无匹配</div>
-        <section
-          v-for="group in filtered"
-          :key="group.key"
-          class="ck-cmdpalette-group"
-        >
-          <header>{{ group.label }}</header>
-          <ul>
-            <li
-              v-for="item in group.items"
-              :key="item.id"
-              :class="{ 'is-active': item === flat[activeIndex] }"
-              @click="activate(item)"
+  <Teleport to="body">
+    <Transition name="ck-cmdpalette-fade">
+      <div v-if="open" class="ck-cmdpalette" role="dialog" aria-modal="true" aria-label="命令面板">
+        <div class="ck-cmdpalette-backdrop" @click="closePalette" />
+        <div class="ck-cmdpalette-frame" role="document">
+          <input
+            ref="inputRef"
+            v-model="query"
+            class="ck-cmdpalette-input"
+            type="search"
+            placeholder="搜索课程 / 资料 / 知识库 / 操作"
+            aria-label="命令面板搜索"
+          >
+          <div class="ck-cmdpalette-results">
+            <div v-if="!filtered.length" class="ck-cmdpalette-empty">暂无匹配</div>
+            <section
+              v-for="group in filtered"
+              :key="group.key"
+              class="ck-cmdpalette-group"
             >
-              <span>{{ item.label }}</span>
-              <span v-if="item.hint" class="ck-cmdpalette-hint">{{ item.hint }}</span>
-            </li>
-          </ul>
-        </section>
+              <header>{{ group.label }}</header>
+              <ul>
+                <li
+                  v-for="item in group.items"
+                  :key="item.id"
+                  :class="{ 'is-active': item === flat[activeIndex] }"
+                  @click="activate(item)"
+                >
+                  <span>{{ item.label }}</span>
+                  <span v-if="item.hint" class="ck-cmdpalette-hint">{{ item.hint }}</span>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <footer class="ck-cmdpalette-footer">
+            <span>↑↓ 选择</span><span>Enter 确认</span><span>Esc 关闭</span>
+          </footer>
+        </div>
       </div>
-      <footer class="ck-cmdpalette-footer">
-        <span>↑↓ 选择</span><span>Enter 确认</span><span>Esc 关闭</span>
-      </footer>
-    </div>
-  </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped lang="scss">
 .ck-cmdpalette {
-  position: fixed; inset: 0; z-index: 60;
+  position: fixed; inset: 0; z-index: 1000;
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
 }
 .ck-cmdpalette-backdrop {
   position: absolute; inset: 0;
-  background: rgb(28 26 23 / 30%);
+  background: rgb(18 14 10 / 48%);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+}
+[data-theme='dark'] .ck-cmdpalette-backdrop {
+  background: rgb(0 0 0 / 58%);
 }
 .ck-cmdpalette-frame {
   position: relative;
@@ -120,9 +157,42 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
   background: var(--ckqa-surface);
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-xl);
-  box-shadow: var(--ckqa-shadow-lg);
+  box-shadow:
+    0 24px 48px -12px rgb(28 26 23 / 28%),
+    0 8px 16px -6px rgb(28 26 23 / 18%);
   overflow: hidden;
 }
+
+/* 进出场：backdrop 仅淡入，frame 同时微缩放上滑。
+ * 使用 ::v-deep 避免 scoped 选择器穿透不到 .ck-cmdpalette-backdrop / frame */
+.ck-cmdpalette-fade-enter-active,
+.ck-cmdpalette-fade-leave-active {
+  transition: opacity var(--ckqa-duration-base, 0.18s) var(--ckqa-ease-glass, ease-out);
+}
+.ck-cmdpalette-fade-enter-from,
+.ck-cmdpalette-fade-leave-to { opacity: 0; }
+
+.ck-cmdpalette-fade-enter-active .ck-cmdpalette-frame,
+.ck-cmdpalette-fade-leave-active .ck-cmdpalette-frame {
+  transition:
+    transform var(--ckqa-duration-base, 0.18s) var(--ckqa-ease-spring, cubic-bezier(0.34, 1.3, 0.64, 1)),
+    opacity var(--ckqa-duration-base, 0.18s) var(--ckqa-ease-glass, ease-out);
+}
+.ck-cmdpalette-fade-enter-from .ck-cmdpalette-frame,
+.ck-cmdpalette-fade-leave-to .ck-cmdpalette-frame {
+  transform: translateY(-8px) scale(0.97);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-cmdpalette-fade-enter-active,
+  .ck-cmdpalette-fade-leave-active,
+  .ck-cmdpalette-fade-enter-active .ck-cmdpalette-frame,
+  .ck-cmdpalette-fade-leave-active .ck-cmdpalette-frame {
+    transition: none;
+  }
+}
+
 .ck-cmdpalette-input {
   width: 100%; padding: 14px 16px;
   border: none; border-bottom: 1px solid var(--ckqa-border-soft);
