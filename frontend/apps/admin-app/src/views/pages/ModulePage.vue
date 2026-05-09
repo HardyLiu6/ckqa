@@ -94,7 +94,7 @@ import {
   createMaterialExportTaskOptions,
   createParallelParseTaskOptions,
   resolveMaterialExportPayload,
-} from './material-lifecycle-actions.js'
+} from '../../composables/useMaterialLifecycle.js'
 import {
   DEFAULT_COURSE_COVER_URL,
   applyMaterialParseSnapshotToRow,

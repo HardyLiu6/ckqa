@@ -1,5 +1,5 @@
-import { hasCompleteGraphRagExport } from '../../api/materials.js'
-import { resolveParseTaskRows } from './module-content.js'
+import { hasCompleteGraphRagExport } from '../api/materials.js'
+import { resolveParseTaskRows } from '../views/pages/module-content.js'
 
 export function resolveMaterialExportPayload(actions = {}, confirmOverwrite) {
   const payload = { ...(actions.exportPayload ?? { mode: 'section', withPageDocs: true, force: false }) }
@@ -108,5 +108,20 @@ function summarizeSettledBatch(total, results) {
     submitted: results.filter((item) => item.status === 'fulfilled').length,
     failed: results.filter((item) => item.status === 'rejected').length,
     results,
+  }
+}
+
+/**
+ * 组合式入口：将上面的独立动作集中暴露，便于新页面（CourseDetailPage / MaterialDetailPage）
+ * 统一调用。不强制要求每个动作都绑定到 scopeStore，调用方可以按需只取用。
+ *
+ * 此函数保留所有原始独立导出的语义，仅做一次聚合包装。
+ */
+export function useMaterialLifecycle(_context = {}) {
+  return {
+    resolveMaterialExportPayload,
+    createMaterialExportTaskOptions,
+    createParallelParseTaskOptions,
+    createExportMissingTaskOptions,
   }
 }

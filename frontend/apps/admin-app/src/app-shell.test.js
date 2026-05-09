@@ -185,7 +185,7 @@ import {
   createMaterialExportTaskOptions,
   createParallelParseTaskOptions,
   resolveMaterialExportPayload,
-} from './views/pages/material-lifecycle-actions.js'
+} from './composables/useMaterialLifecycle.js'
 import {
   ACCESS_POLICY_OPTIONS,
   COURSE_STATUS_OPTIONS,
