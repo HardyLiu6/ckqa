@@ -32,7 +32,7 @@ class TestRelationSchemaRules(unittest.TestCase):
         )
         self.assertEqual(
             relation_types["appears_in"]["target_types"],
-            ["Course", "Chapter", "Section", "Experiment", "Assignment"],
+            ["Course", "Chapter", "Section", "Experiment", "Assignment", "ToolOrPlatform"],
         )
         self.assertIn("Term", relation_types["defined_by"]["target_types"])
         self.assertNotIn("Concept", relation_types["defined_by"]["target_types"])
@@ -58,8 +58,9 @@ class TestRelationSchemaRules(unittest.TestCase):
         )
 
         appears_in_hint = relation_types["appears_in"]["extraction_hint"]
-        self.assertIn("目标必须是 Course/Chapter/Section/Experiment/Assignment", appears_in_hint)
+        self.assertIn("目标必须是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform", appears_in_hint)
         self.assertIn("禁止反向 Section appears_in Concept", appears_in_hint)
+        self.assertIn("Linux 系统调用", appears_in_hint)
         self.assertIn(
             "Section->Concept: 第三章 存储器管理 appears_in TLB",
             relation_types["appears_in"]["negative_examples"],
@@ -115,14 +116,14 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("进入 alias/归一化或跳过", defined_by_hint)
 
         evaluated_by = relation_types["evaluated_by"]
-        self.assertNotIn("Term", evaluated_by["source_types"])
+        self.assertIn("Term", evaluated_by["source_types"])
         self.assertIn(
-            "术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by",
+            "术语本身是考核对象时允许 Term->Assignment",
             evaluated_by["extraction_hint"],
         )
         self.assertIn(
-            "Term->Assignment: TLB evaluated_by 习题 3",
-            evaluated_by["negative_examples"],
+            "PCB evaluated_by 第二章习题",
+            evaluated_by["examples"],
         )
 
         related_to_hint = relation_types["related_to"]["extraction_hint"]
@@ -157,8 +158,9 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("禁止 `Section/Assignment appears_in 知识对象`", text)
         self.assertIn("别名、简称、缩写、编号、存在标志不建立 `defined_by`", text)
         self.assertIn("进入 alias / 归一化字段，或直接跳过", text)
-        self.assertIn("如果术语被习题考核，应先抽为 `Concept` / `KnowledgePoint`", text)
-        self.assertIn("不要放宽为 `Term->Assignment`", text)
+        self.assertIn("如果术语本身就是题目考核对象，允许 `Term->Assignment`", text)
+        self.assertIn("`PCB evaluated_by 第二章习题`", text)
+        self.assertIn("允许 `Concept/Term/AlgorithmOrMethod -> ToolOrPlatform`", text)
         self.assertIn("source/target 必须都在 `entities` 中", text)
         self.assertIn("缺 target 时补实体或跳过", text)
 

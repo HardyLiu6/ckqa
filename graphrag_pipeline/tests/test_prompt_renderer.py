@@ -255,7 +255,7 @@ text: {input_text}
         self.assertIn("source 必须是出现的知识实体", user_message)
         self.assertIn("禁止 Section/Assignment 反向 appears_in", user_message)
         self.assertIn("别名、简称、缩写、编号、存在标志", user_message)
-        self.assertIn("术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by", user_message)
+        self.assertIn("术语本身是考核对象时允许 Term->Assignment", user_message)
         self.assertIn("source/target 必须都在 entities 中", user_message)
         self.assertIn("缺 target 时补实体或跳过", user_message)
 

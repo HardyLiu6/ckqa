@@ -3,7 +3,7 @@
 ## 作用
 
 - 候选名称：`default`
-- 生成时间：`2026-05-09T21:28:23+08:00`
+- 生成时间：`2026-05-09T22:15:34+08:00`
 - 来源类型：`default_adapted`
 - 基础 Prompt 来源：`prompts/extract_graph.txt`
 - 是否注入 schema：`no`

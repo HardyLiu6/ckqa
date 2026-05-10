@@ -328,13 +328,14 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": false,
-      "description": "表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。",
+      "description": "表示课程目标、章节、知识点、概念、术语、方法或实验由作业、测验或实验任务进行评估与验证。",
       "source_types": [
         "Course",
         "Chapter",
         "Section",
         "KnowledgePoint",
         "Concept",
+        "Term",
         "AlgorithmOrMethod",
         "Experiment"
       ],
@@ -342,14 +343,16 @@
         "Assignment",
         "Experiment"
       ],
-      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。source 应为 Course/Chapter/Section/KnowledgePoint/Concept/AlgorithmOrMethod/Experiment；如果术语被习题考核，应先抽为 Concept/KnowledgePoint 或跳过 evaluated_by，不要放宽为 Term->Assignment。",
+      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。source 应为 Course/Chapter/Section/KnowledgePoint/Concept/Term/AlgorithmOrMethod/Experiment；术语本身是考核对象时允许 Term->Assignment，例如 PCB evaluated_by 第二章习题；但别名展开、英文全称解释或普通出现不能误判为 evaluated_by。",
       "examples": [
         "死锁处理 evaluated_by 作业 3",
-        "文件系统概念 evaluated_by 文件系统设计实验"
+        "文件系统概念 evaluated_by 文件系统设计实验",
+        "PCB evaluated_by 第二章习题"
       ],
       "negative_examples": [
-        "Term->Assignment: TLB evaluated_by 习题 3",
-        "Term->Assignment: PCB evaluated_by 期末复习题"
+        "Assignment->Concept: 习题 evaluated_by 进程",
+        "Assignment->Term: 习题 evaluated_by PCB",
+        "Term->Assignment: TLB evaluated_by 习题 3（仅普通出现而非被考核对象时）"
       ]
     },
     "appears_in": {
@@ -358,7 +361,7 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": true,
-      "description": "表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。",
+      "description": "表示实体在某章、某节、某实验、某作业或平台上下文中出现，是弱定位关系。",
       "source_types": [
         "KnowledgePoint",
         "Concept",
@@ -372,18 +375,21 @@
         "Chapter",
         "Section",
         "Experiment",
-        "Assignment"
+        "Assignment",
+        "ToolOrPlatform"
       ],
-      "extraction_hint": "当只有位置或讲授场景信息，而缺少更强语义时使用；source 必须是出现的知识实体，目标必须是 Course/Chapter/Section/Experiment/Assignment，target 必须是 Course/Chapter/Section/Experiment/Assignment。禁止反向 Section appears_in Concept，禁止 Section/Assignment 反向 appears_in 到知识对象；结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
+      "extraction_hint": "当只有位置、讲授场景或平台上下文信息，而缺少更强语义时使用；source 必须是出现的知识实体，目标必须是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform。平台/工具上下文中允许 Concept/Term/AlgorithmOrMethod -> ToolOrPlatform，例如 Linux 系统调用可抽为 系统调用 appears_in Linux。禁止反向 Section appears_in Concept，禁止 Section/Assignment 反向 appears_in 到知识对象；结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
       "examples": [
         "TLB appears_in 第三章 存储器管理",
-        "银行家算法 appears_in 作业 2"
+        "银行家算法 appears_in 作业 2",
+        "系统调用 appears_in Linux"
       ],
       "negative_examples": [
         "Section->Concept: 第三章 存储器管理 appears_in TLB",
         "Assignment->ToolOrPlatform: 习题 1 appears_in SPOOLing 系统",
         "Experiment->Concept: 实验一 appears_in 银行家算法",
-        "Concept->Concept: 虚拟内存 appears_in 页面置换算法"
+        "Concept->Concept: 虚拟内存 appears_in 页面置换算法",
+        "ToolOrPlatform->Concept: Linux appears_in 系统调用"
       ]
     }
   }

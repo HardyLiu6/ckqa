@@ -420,33 +420,36 @@
 
 规则：
 
-1. `evaluated_by` 表示课程、章节、节、知识点、概念、方法或实验被作业、测验、题组或实验任务评估。
-2. source 应为 `Course`、`Chapter`、`Section`、`KnowledgePoint`、`Concept`、`AlgorithmOrMethod` 或 `Experiment`。
+1. `evaluated_by` 表示课程、章节、节、知识点、概念、术语、方法或实验被作业、测验、题组或实验任务评估。
+2. source 应为 `Course`、`Chapter`、`Section`、`KnowledgePoint`、`Concept`、`Term`、`AlgorithmOrMethod` 或 `Experiment`。
 3. target 应为 `Assignment` 或 `Experiment`。
-4. 如果术语被习题考核，应先抽为 `Concept` / `KnowledgePoint`，或跳过 `evaluated_by`。
-5. 不要放宽为 `Term->Assignment`。
+4. 如果术语本身就是题目考核对象，允许 `Term->Assignment`，例如习题直接询问 `PCB` 的作用和组织方式。
+5. 但别名展开、英文全称解释、普通出现位置不能误判为 `evaluated_by`。
 
 正确示例：
 
 1. `死锁处理 evaluated_by 作业 3`
 2. `文件系统概念 evaluated_by 文件系统设计实验`
+3. `PCB evaluated_by 第二章习题`
 
 错误示例：
 
-1. `TLB evaluated_by 习题 3`，如果 `TLB` 只是 `Term`，不要输出该关系。
-2. `PCB evaluated_by 期末复习题`，如果没有抽成可考核概念或知识点，应跳过。
+1. `习题 evaluated_by 进程`，这是反向 `Assignment->Concept`。
+2. `习题 evaluated_by PCB`，这是反向 `Assignment->Term`。
+3. `TLB evaluated_by 习题 3`，如果只是普通出现而不是题目考核对象，应使用 `appears_in` 或跳过。
 
 ### 7.7 appears_in 的边界
 
 规则：
 
-1. 当实体只是出现在某章、某节、某实验或某题组中，但没有更强关系时，用 `appears_in`。
+1. 当实体只是出现在某章、某节、某实验、某题组或平台上下文中，但没有更强关系时，用 `appears_in`。
 2. 如果能判断“知识点用于实验”，应使用 `applied_in` 而不是 `appears_in`。
 3. 如果能判断“知识点被作业考核”，应使用 `evaluated_by` 而不是 `appears_in`。
-4. `appears_in` 的目标只能是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment`，不能指向另一个知识对象。
-5. source 必须是出现的知识实体，target 必须是 `Course`、`Chapter`、`Section`、`Experiment` 或 `Assignment`。
+4. `appears_in` 的目标只能是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment` 或 `ToolOrPlatform`，不能指向另一个知识对象。
+5. source 必须是出现的知识实体，target 必须是 `Course`、`Chapter`、`Section`、`Experiment`、`Assignment` 或 `ToolOrPlatform`。
 6. 禁止反向 `Section appears_in Concept`，也禁止 `Section/Assignment appears_in 知识对象`。
 7. 如果结构单元讲授或包含知识对象，优先使用 `contains`。
+8. 平台/工具上下文中允许 `Concept/Term/AlgorithmOrMethod -> ToolOrPlatform`，例如 `系统调用 appears_in Linux`。
 
 错误示例：
 
@@ -454,6 +457,7 @@
 2. `实验一 appears_in 银行家算法`，这是反向或端点类型错误。
 3. `虚拟内存 appears_in 页面置换算法`，目标不是课程结构或学习活动容器。
 4. `习题 1 appears_in SPOOLing 系统`，这是反向 `Assignment appears_in ToolOrPlatform`。
+5. `Linux appears_in 系统调用`，这是反向 `ToolOrPlatform->Concept`。
 
 ### 7.8 related_to 与 implemented_by 的端点边界
 

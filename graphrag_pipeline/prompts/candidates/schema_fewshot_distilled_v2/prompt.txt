@@ -54,8 +54,8 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 - `defined_by`（由…定义）：表示概念、术语、知识点或算法方法由某一定义、公式、定律或判定条件来界定。；抽取提示：用于正式定义、公式、定律或判定条件。禁止 Concept->Concept…；正例：进程 defined_by 进程定义、周转时间 defined_by 周转时间公式；禁例：Concept->Concept: 进程 defined_by 线程、Term->Concept: PCB defined_by 进程控制块
 - `applied_in`（应用于）：表示知识、方法、公式或算法被应用到某知识主题、实验、作业、章节讲解或平台操作场景。；抽取提示：用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应…；正例：银行家算法 applied_in 死锁、地址映射 applied_in 分页存储管理；禁例：Concept->AlgorithmOrMethod: 死锁以银行家算…、Section->AlgorithmOrMethod: 本节使用银行家…
 - `implemented_by`（由…实现）：表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。；抽取提示：用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”…；正例：进程同步 implemented_by PV 同步方法、页面置换实验 implemented_by Python 模拟器；禁例：AlgorithmOrMethod->Concept: 高响应比优先调…、Concept->Term: 进程同步 implemented_by…
-- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、方法或实验由作业、测验或实验任务进行评估与验证。；抽取提示：用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学…；正例：死锁处理 evaluated_by 作业 3、文件系统概念 evaluated_by 文件系统设计实验；禁例：Term->Assignment: TLB evaluated_by…、Term->Assignment: PCB evaluated_by…
-- `appears_in`（出现于）：表示实体在某章、某节、某实验或某作业中出现，是弱定位关系。；抽取提示：当只有位置或讲授场景信息，而缺少更强语义时使用；source 必须是出现的…；正例：TLB appears_in 第三章 存储器管理、银行家算法 appears_in 作业 2；禁例：Section->Concept: 第三章 存储器管理 appears…、Assignment->ToolOrPlatform: 习题 1 ap…
+- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、概念、术语、方法或实验由作业、测验或实验任务进行评估与…；抽取提示：用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学…；正例：死锁处理 evaluated_by 作业 3、文件系统概念 evaluated_by 文件系统设计实验；禁例：Assignment->Concept: 习题 evaluated_b…、Assignment->Term: 习题 evaluated_by P…
+- `appears_in`（出现于）：表示实体在某章、某节、某实验、某作业或平台上下文中出现，是弱定位关系。；抽取提示：当只有位置、讲授场景或平台上下文信息，而缺少更强语义时使用；source…；正例：TLB appears_in 第三章 存储器管理、银行家算法 appears_in 作业 2；禁例：Section->Concept: 第三章 存储器管理 appears…、Assignment->ToolOrPlatform: 习题 1 ap…
 
 关键抽取规则摘要：
 - 只抽取对课程问答、知识建图和教学评测有稳定价值的实体与关系。
@@ -79,9 +79,9 @@ Format each relationship as ("relationship"<|><source_entity><|><target_entity><
 -关系方向卡片-
 只补充高风险关系的方向判断，不嵌入完整 audit 样本文本。
 - `applied_in`：source 是被应用的知识/方法/公式，target 是知识主题、实验、作业或平台操作场景；反例：不要写成“实验/作业 -> 算法”；弱共现仍用 related_to 或跳过。
-- `appears_in`：source 是出现的实体，target 是 Course/Chapter/Section/Experiment/Assignment 位置；反例：不要写成“章节 -> 知识点”；结构包含优先用 contains。
+- `appears_in`：source 是出现的实体，target 是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform 上下文；反例：不要写成“章节 -> 知识点”；结构包含优先用 contains。
 - `defined_by`：source 是被定义对象，target 是定义、公式、判定条件或符号；反例：不要写成“定义/公式 -> 概念”，也不要用 Concept->Concept 承接背景解释。
-- `evaluated_by`：source 是被考核或评估的知识、概念或方法，target 是 Assignment/Experiment 等考核载体；反例：不要写成“作业/实验 -> 知识点”；普通出现位置优先用 appears_in。
+- `evaluated_by`：source 是被考核或评估的知识、概念、术语或方法，target 是 Assignment/Experiment 等考核载体；反例：不要写成“作业/实验 -> 知识点”；普通出现位置优先用 appears_in。
 - `related_to`：source 与 target 都必须是已抽取且端点完整的实体，target 不是 missing、unknown 或临时占位；反例：不能承接 missing 端点，也不能替代 defined_by / applied_in / appears_in 等更具体关系。
 
 -Real Data-
@@ -102,8 +102,8 @@ output:
 - pts-0046-a99abcf7ae: 高级调度 -> 低级调度: [type=related_to] 完整实体之间的弱关联
 
 -Short negative direction rules-
-- `evaluated_by`：不要输出 Assignment -> Concept 的 evaluated_by；正确方向：Concept/KnowledgePoint/AlgorithmOrMethod -> Assignment；Term 先升格或跳过。
-- `appears_in`：不要输出 Section/Assignment -> Concept 的 appears_in；正确方向：知识实体 -> 位置容器。
+- `evaluated_by`：不要输出 Assignment -> Concept/Term 的 evaluated_by；正确方向：Concept/Term/KnowledgePoint/AlgorithmOrMethod -> Assignment；Term 只有被题目直接考核时才输出。
+- `appears_in`：不要输出 Section/Assignment -> Concept 的 appears_in；正确方向：知识实体 -> 位置容器或平台上下文。
 - `defined_by`：别名、简称、英文全称、存在标志、背景解释不用 defined_by；只保留公式、符号或判定条件。
 - `applied_in`：不要用 Concept -> AlgorithmOrMethod 表达“通过算法处理”；target 必须是主题、实验、作业或平台场景。
 - `related_to`：端点缺失时跳过 related_to；不能补 missing、unknown、N/A 或临时占位实体。
