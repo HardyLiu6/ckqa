@@ -46,10 +46,6 @@ const EXCLUDED_DIR_PREFIXES = [
 // 每一条请附一个简短原因说明，便于 PR 审阅者追溯。
 const LEGACY_ALLOWLIST = new Map([
   [
-    'src/components/shell/CkCommandPalette.vue',
-    'M1~M2 命令面板背板/阴影仍用裸值，后续 spec 清理',
-  ],
-  [
     'src/components/common/CkTaskList.vue',
     'M1~M2 任务列表 tone 阴影仍用裸值，后续 spec 清理',
   ],

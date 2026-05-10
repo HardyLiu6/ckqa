@@ -144,12 +144,12 @@ onUnmounted(() => {
 }
 .ck-cmdpalette-backdrop {
   position: absolute; inset: 0;
-  background: rgb(18 14 10 / 48%);
+  background: var(--ckqa-overlay-backdrop);
   backdrop-filter: blur(6px) saturate(120%);
   -webkit-backdrop-filter: blur(6px) saturate(120%);
 }
 [data-theme='dark'] .ck-cmdpalette-backdrop {
-  background: rgb(0 0 0 / 58%);
+  background: var(--ckqa-overlay-backdrop);
 }
 .ck-cmdpalette-frame {
   position: relative;
@@ -157,9 +157,7 @@ onUnmounted(() => {
   background: var(--ckqa-surface);
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-xl);
-  box-shadow:
-    0 24px 48px -12px rgb(28 26 23 / 28%),
-    0 8px 16px -6px rgb(28 26 23 / 18%);
+  box-shadow: var(--ckqa-shadow-modal);
   overflow: hidden;
 }
 

@@ -35,6 +35,10 @@ $shadow-sidebar-active-breathe-to: inset 0 0 0 1px rgb(217 119 87 / 40%),
   inset 0 1px 0 rgb(255 255 255 / 60%),
   0 0 0 5px rgb(217 119 87 / 8%);
 
+/* M8 Task 2.3：模态/弹层深度阴影（命令面板等浮层） */
+$shadow-modal: 0 24px 48px -12px rgb(28 26 23 / 28%),
+  0 8px 16px -6px rgb(28 26 23 / 18%);
+
 :root {
   --ckqa-shadow-xs: #{$shadow-xs};
   --ckqa-shadow-sm: #{$shadow-sm};
@@ -51,5 +55,6 @@ $shadow-sidebar-active-breathe-to: inset 0 0 0 1px rgb(217 119 87 / 40%),
   --ckqa-shadow-sidebar-item-collapsed-hover: #{$shadow-sidebar-item-collapsed-hover};
   --ckqa-shadow-sidebar-active-breathe-from: #{$shadow-sidebar-active-breathe-from};
   --ckqa-shadow-sidebar-active-breathe-to: #{$shadow-sidebar-active-breathe-to};
+  --ckqa-shadow-modal: #{$shadow-modal};
   --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
 }

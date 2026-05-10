@@ -85,6 +85,9 @@
   /* M8 Task 2.2：accent 半透明描边（用于 toggle:hover 与折叠态 item:hover 的边） */
   --ckqa-border-accent-soft: rgb(217 119 87 / 35%);
 
+  /* M8 Task 2.3：模态/弹层背景遮罩（命令面板等浮层） */
+  --ckqa-overlay-backdrop: rgb(18 14 10 / 48%);
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -171,6 +174,7 @@
   --ckqa-surface-toggle-collapsed: linear-gradient(180deg, #3a352d, #2a261f);
   --ckqa-surface-collapsed-hover: rgb(70 65 58 / 92%);
   --ckqa-border-accent-soft: rgb(232 145 111 / 35%);
+  --ckqa-overlay-backdrop: rgb(0 0 0 / 58%);
 }
 
 [data-accent='indigo'] {
