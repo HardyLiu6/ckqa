@@ -88,7 +88,7 @@ function openCommandPalette() {
   width: 22px; height: 22px;
   background: linear-gradient(135deg, var(--ckqa-accent), var(--ckqa-accent-strong));
   border-radius: var(--ckqa-radius-md);
-  box-shadow: 0 2px 6px rgb(217 119 87 / 30%);
+  box-shadow: var(--ckqa-shadow-accent-glow);
 }
 .app-topbar-cmd-trigger {
   height: 28px; padding: 0 9px;
@@ -104,8 +104,8 @@ function openCommandPalette() {
 .app-topbar-avatar {
   width: 28px; height: 28px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #c4ad8b, #8d6e54);
-  color: white;
+  background: var(--ckqa-avatar-fallback-gradient);
+  color: var(--ckqa-text-inverse);
   border: none;
   border-radius: var(--ckqa-radius-full);
   font-size: var(--ckqa-text-xs-size);

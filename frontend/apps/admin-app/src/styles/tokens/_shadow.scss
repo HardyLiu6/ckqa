@@ -7,6 +7,9 @@ $shadow-lg: 0 24px 56px rgb(26 23 17 / 14%);
 $shadow-card: 0 1px 1px rgb(28 26 23 / 4%), 0 8px 24px rgb(110 70 40 / 6%);
 $shadow-card-hover: 0 2px 4px rgb(28 26 23 / 5%), 0 18px 44px rgb(110 70 40 / 12%);
 
+/* M8 收尾巡查新增：accent 暖橙的小型 brand 投影（如顶栏品牌图标、流水线脉冲点） */
+$shadow-accent-glow: 0 2px 6px rgb(217 119 87 / 30%);
+
 :root {
   --ckqa-shadow-xs: #{$shadow-xs};
   --ckqa-shadow-sm: #{$shadow-sm};
@@ -14,5 +17,6 @@ $shadow-card-hover: 0 2px 4px rgb(28 26 23 / 5%), 0 18px 44px rgb(110 70 40 / 12
   --ckqa-shadow-lg: #{$shadow-lg};
   --ckqa-shadow-card: #{$shadow-card};
   --ckqa-shadow-card-hover: #{$shadow-card-hover};
+  --ckqa-shadow-accent-glow: #{$shadow-accent-glow};
   --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
 }
