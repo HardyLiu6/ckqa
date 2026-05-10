@@ -8,7 +8,6 @@ import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import DashboardPage from '../views/dashboard/DashboardPage.vue'
 import HealthPage from '../views/system/HealthPage.vue'
-import ModulePage from '../views/pages/ModulePage.vue'
 import CourseListPage from '../views/courses/CourseListPage.vue'
 import CourseDetailPage from '../views/courses/CourseDetailPage.vue'
 import MaterialDetailPage from '../views/materials/MaterialDetailPage.vue'
@@ -32,7 +31,6 @@ const componentMap = {
   LoginView,
   DashboardPage,
   HealthPage,
-  ModulePage,
   CourseListPage,
   CourseDetailPage,
   MaterialDetailPage,
