@@ -16,6 +16,8 @@ import KbListPage from '../views/knowledge-bases/KbListPage.vue'
 import KbDetailPage from '../views/knowledge-bases/KbDetailPage.vue'
 import KbBuildWizardPage from '../views/knowledge-bases/KbBuildWizardPage.vue'
 import IndexRunDetailPage from '../views/knowledge-bases/IndexRunDetailPage.vue'
+import QaSessionListPage from '../views/qa-sessions/QaSessionListPage.vue'
+import QaSessionDetailPage from '../views/qa-sessions/QaSessionDetailPage.vue'
 import RouteState from '../views/status/RouteState.vue'
 import UnifiedErrorView from '../views/status/UnifiedErrorView.vue'
 import { getAdminPinia } from '../stores/pinia.js'
@@ -34,6 +36,8 @@ const componentMap = {
   KbDetailPage,
   KbBuildWizardPage,
   IndexRunDetailPage,
+  QaSessionListPage,
+  QaSessionDetailPage,
   RouteState,
   UnifiedErrorView,
 }

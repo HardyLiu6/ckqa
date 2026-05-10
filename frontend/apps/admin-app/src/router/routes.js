@@ -270,7 +270,7 @@ export const APP_ROUTES = [
   {
     path: '/app/qa-sessions',
     name: 'qa-sessions',
-    componentKey: 'ModulePage',
+    componentKey: 'QaSessionListPage',
     meta: {
       title: '问答会话列表',
       layout: 'console',
@@ -284,7 +284,7 @@ export const APP_ROUTES = [
   {
     path: '/app/qa-sessions/:sessionId',
     name: 'qa-session-detail',
-    componentKey: 'ModulePage',
+    componentKey: 'QaSessionDetailPage',
     meta: {
       title: '问答会话详情',
       layout: 'detail',

@@ -276,6 +276,26 @@ test('M5：知识库文案不含内部术语 embedding / 实体抽取 / MinerU /
   }
 })
 
+test('M6：问答会话路由切换到独立页面', () => {
+  const findByName = (name) => routeRecords.find((r) => r.name === name)
+
+  assert.equal(findByName('qa-sessions').componentKey, 'QaSessionListPage')
+  assert.equal(findByName('qa-session-detail').componentKey, 'QaSessionDetailPage')
+  assert.equal(findByName('qa-session-detail').meta.layout, 'detail')
+})
+
+test('M6：问答会话文案不含内部术语 embedding / 实体抽取 / MinerU / P95 / 冒烟 / smoke', async () => {
+  const mod = await import('./views/qa-sessions/qa-session-copy.js')
+  const serialized = JSON.stringify(mod)
+  assert.doesNotMatch(serialized, /embedding/i, 'qa-session-copy 不得出现 embedding')
+  assert.doesNotMatch(serialized, /实体抽取/, 'qa-session-copy 不得出现 实体抽取')
+  assert.doesNotMatch(serialized, /MinerU/, 'qa-session-copy 不得出现 MinerU')
+  assert.doesNotMatch(serialized, /\bP95\b/, 'qa-session-copy 不得出现 P95')
+  assert.doesNotMatch(serialized, /冒烟/, 'qa-session-copy 不得出现 冒烟')
+  // smoke 是 sessionType 后端枚举，UI 文案中不得出现；SESSION_TYPE_LABELS 的 key 允许
+  assert.doesNotMatch(serialized, /\bsmoke test\b/i, 'qa-session-copy 不得出现 smoke test')
+})
+
 test('认证状态支持开发态管理员和教师身份切换', () => {
   const auth = createAuthStore()
 

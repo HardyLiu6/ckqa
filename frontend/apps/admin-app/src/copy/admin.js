@@ -94,11 +94,13 @@ export const COPY = Object.freeze({
   // 资料域页面文案集中在 src/views/materials/material-page-copy.js
   // 知识库域页面文案集中在 src/views/knowledge-bases/kb-page-copy.js
   // 知识库构建向导文案集中在 src/views/knowledge-bases/kb-build-copy.js
+  // 问答会话域页面文案集中在 src/views/qa-sessions/qa-session-copy.js
   // 这里仅做指引占位，避免 admin.js 膨胀到上千行
   course: { _docRef: './views/courses/course-page-copy.js' },
   material: { _docRef: './views/materials/material-page-copy.js' },
   knowledgeBase: { _docRef: './views/knowledge-bases/kb-page-copy.js' },
   kbBuild: { _docRef: './views/knowledge-bases/kb-build-copy.js' },
+  qa: { _docRef: './views/qa-sessions/qa-session-copy.js' },
 })
 
 export default COPY
