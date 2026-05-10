@@ -69,9 +69,11 @@
       "label_zh": "属于",
       "directed": true,
       "symmetric": false,
-      "inverse_of": "contains",
+      "inverse_of": null,
       "can_be_derived": true,
-      "description": "表示实体从属于某个课程结构单元或教学容器，是 contains 的反向表达。",
+      "derivation_source": "contains.derivable_inverse",
+      "derivation_hint": "仅当 contains 的 source 为 Course/Chapter/Section 时，由 contains.derivable_inverse 机制派生；脚本不应读取 belongs_to.inverse_of 自行推导。",
+      "description": "表示实体从属于某个课程结构单元或教学容器，是结构性 contains 的条件反向表达。",
       "source_types": [
         "Chapter",
         "Section",
@@ -229,11 +231,11 @@
       ],
       "extraction_hint": "用于正式定义、公式、定律或判定条件。禁止 Concept->Concept，禁止 Term->Concept；别名、简称、缩写、编号、存在标志、背景解释不能用 defined_by，进入 alias/归一化或跳过。当 target 是 Term 时，只允许其承担符号、变量、参数或公式记号角色，例如“工作集 defined_by Δ”“响应比 defined_by HRN”。英文全称、简称、缩写、别名解释应进入实体 alias 或归一化字段。",
       "examples": [
-        "进程 defined_by 进程定义",
         "周转时间 defined_by 周转时间公式",
         "高响应比优先调度算法 defined_by 响应比公式",
         "工作集 defined_by Δ",
-        "响应比 defined_by HRN"
+        "响应比 defined_by HRN",
+        "加速比 defined_by Amdahl 定律"
       ],
       "negative_examples": [
         "Concept->Concept: 进程 defined_by 线程",
@@ -269,6 +271,7 @@
       "examples": [
         "银行家算法 applied_in 死锁",
         "地址映射 applied_in 分页存储管理",
+        "银行家算法 applied_in 死锁检测与处理节",
         "PV 同步方法 applied_in 生产者-消费者实验",
         "周转时间公式 applied_in 调度算法作业"
       ],
@@ -296,7 +299,7 @@
         "AlgorithmOrMethod",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”这类实现关系。目标只能是 AlgorithmOrMethod 或 ToolOrPlatform；如果目标只是概念、属性、原则或效果，应改用 depends_on、applied_in、related_to 或跳过。",
+      "extraction_hint": "用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”这类实现关系。目标只能是 AlgorithmOrMethod 或 ToolOrPlatform；如果目标只是概念、属性、原则或效果，应改用 depends_on、applied_in、related_to 或跳过。当 source 与 target 均为 AlgorithmOrMethod 时，必须谨慎判断：只有当 target 是 source 的具体执行载体、底层实现算法、调用协议或实现策略，且原文明确表达“由……实现”时，才使用 implemented_by；若语义是 X 依赖 Y 计算、使用 Y 推导或借助 Y 处理，应改用 depends_on 或 applied_in。",
       "examples": [
         "进程同步 implemented_by PV 同步方法",
         "页面置换实验 implemented_by Python 模拟器"

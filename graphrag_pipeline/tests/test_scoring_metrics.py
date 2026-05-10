@@ -411,6 +411,18 @@ class TestEndpointValidRate(unittest.TestCase):
         self.assertFalse(can_derive_inverse_relation("depends_on", "Concept", schema))
         self.assertFalse(can_derive_inverse_relation("prerequisite_of", "Concept", schema))
 
+    def test_belongs_to_derivation_source_does_not_trigger_inverse_generation(self):
+        schema = {
+            "belongs_to": {
+                "inverse_of": None,
+                "can_be_derived": True,
+                "derivation_source": "contains.derivable_inverse",
+            }
+        }
+
+        self.assertFalse(can_derive_inverse_relation("belongs_to", "Concept", schema))
+        self.assertFalse(can_derive_inverse_relation("belongs_to", "Section", schema))
+
 
 class TestDuplicateAndNoise(unittest.TestCase):
     def test_duplicate_rate_counts_extras(self):

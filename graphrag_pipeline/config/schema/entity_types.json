@@ -148,7 +148,7 @@
       "examples": [
         "2.1 前趋图和程序执行",
         "2.1.1 进程的定义",
-        "实验一 进程调度"
+        "实验一 进程调度（仅当其作为教材目录、课件章节或文档结构标题时）"
       ]
     },
     "KnowledgePoint": {
@@ -156,7 +156,7 @@
       "category": "learning_object",
       "identity_scope": "course",
       "description": "课程中需要掌握、理解、记忆或考核的稳定知识单元，通常能直接成为问答或考核对象。",
-      "canonical_name_rule": "使用最短且稳定的教学名词短语，不使用完整陈述句；syllabus、学习目标、考核要求字段中的对象优先按 KnowledgePoint 处理。",
+      "canonical_name_rule": "完整判定规则见 extraction_rules.md 第 4.1 节；本类型优先用于教学目标、考点和课程掌握单元，实体名使用最短且稳定的教学名词短语。",
       "preferred_context_fields": [
         "course_id",
         "chapter",
@@ -197,7 +197,7 @@
       "category": "knowledge_content",
       "identity_scope": "course",
       "description": "可被独立解释、比较和问答的理论概念、机制或对象。",
-      "canonical_name_rule": "优先使用课程正文中的标准概念名称；正文解释性段落且有“X 是/指/表示”类定义句式时优先按 Concept 处理；若同时满足教学目标与概念解释，以 KnowledgePoint 为准。",
+      "canonical_name_rule": "完整判定规则见 extraction_rules.md 第 4.1 节；本类型优先用于理论概念、机制和可独立解释的知识对象。",
       "preferred_context_fields": [
         "course_id",
         "chapter",

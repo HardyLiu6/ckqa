@@ -173,6 +173,8 @@
 
 1. 如果一个对象既可视为概念又可视为术语，优先保留为 `Concept`。
 2. `Term` 主要用于缩写、英文名、符号名或专有短语的归一化。
+3. `Term` 只有在缩写、符号、变量或标准术语本身是被解释、被比较、被考核或被公式引用的对象时，才单独抽取为实体。
+4. 如果缩写只是 `Concept`、`AlgorithmOrMethod`、`ToolOrPlatform` 的别名，应进入 alias，不单独生成 `Term`。
 
 示例：
 
@@ -368,6 +370,7 @@
 6. 知识对象之间的 `contains` 只在原文明示分类、组成或步骤分解时使用，不派生反向 `belongs_to`。
 7. 共现、同段出现、主题相关不构成 `contains`。
 8. 知识对象之间不要用 `belongs_to` 表达上下位、组成或相关；应按证据改用 `contains`、`depends_on`、`applied_in`、`related_to`，证据不足则跳过。
+9. 后处理脚本应读取 `contains.derivable_inverse` 判断是否派生反向边，不应读取 `belongs_to.inverse_of` 自行做无条件互推。
 
 正确示例：
 
@@ -427,12 +430,17 @@
 
 1. 知识解释场景：target 为 `KnowledgePoint` 或 `Concept`，表示某算法、公式、方法或知识对象用于解释、分析或处理该知识主题。
 2. 实践应用场景：target 为 `Experiment`、`Assignment` 或 `ToolOrPlatform`，表示知识对象、算法、方法或公式用于实验、评测任务、工具平台操作或实现环境。
-3. 步骤 8 评测建议按上述 target 场景分别统计 `endpoint_valid_rate`，避免知识解释类与实践应用类错误混在一起。
+3. 章节讲解场景：target 为 `Section`，表示某知识对象、算法、方法或公式被用于解释、贯穿或支撑某一章节/小节的讲解内容。
+4. 如果只是出现在某节中，优先使用 `appears_in`；如果该节结构上包含该知识对象，优先使用 `Section contains KnowledgePoint/Concept/AlgorithmOrMethod`。
+5. 只有当文本表达“用于讲解、支撑、解决、分析该节主题”时才使用 `applied_in`。
+6. 步骤 8 评测建议按上述 target 场景分别统计 `endpoint_valid_rate`，避免知识解释类、章节讲解类与实践应用类错误混在一起。
 
 正确示例：
 
 1. `银行家算法 applied_in 死锁`
 2. `地址映射 applied_in 分页存储管理`
+3. `银行家算法 applied_in 死锁检测与处理节`
+4. `地址映射 applied_in 分页存储管理节`
 
 错误示例：
 
@@ -494,6 +502,8 @@
 3. 如果无法补齐 source 或 target，跳过该关系。
 4. `implemented_by` 的目标必须是可执行方法或工具平台，即 `AlgorithmOrMethod` 或 `ToolOrPlatform`。
 5. 如果目标只是概念、属性、原则或效果，不要用 `implemented_by`，应改用 `depends_on`、`applied_in`、`related_to` 或跳过。
+6. 当 source 与 target 均为 `AlgorithmOrMethod` 时，只有 target 是 source 的具体执行载体、底层实现算法、调用协议或实现策略，且原文明确表达“由……实现”时，才使用 `implemented_by`。
+7. 若算法之间的语义是 X 依赖 Y 计算、使用 Y 推导或借助 Y 处理，应改用 `depends_on` 或 `applied_in`。
 
 错误示例：
 

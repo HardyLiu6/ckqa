@@ -40,6 +40,20 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("复习题", entity_types["Assignment"]["description"])
         self.assertIn("普通概念解释", entity_types["FormulaOrDefinition"]["description"])
         self.assertIn("definition_text", entity_types["FormulaOrDefinition"]["canonical_name_rule"])
+        self.assertIn(
+            "完整判定规则见 extraction_rules.md 第 4.1 节",
+            entity_types["KnowledgePoint"]["canonical_name_rule"],
+        )
+        self.assertIn(
+            "完整判定规则见 extraction_rules.md 第 4.1 节",
+            entity_types["Concept"]["canonical_name_rule"],
+        )
+        self.assertTrue(
+            any(
+                "实验一 进程调度" in example and "仅当" in example
+                for example in entity_types["Section"]["examples"]
+            )
+        )
 
     def test_material_7_schema_keeps_hard_relation_boundaries(self):
         payload = json.loads(
@@ -95,6 +109,11 @@ class TestRelationSchemaRules(unittest.TestCase):
             relation_types["belongs_to"]["target_types"],
             ["Course", "Chapter", "Section"],
         )
+        belongs_to = relation_types["belongs_to"]
+        self.assertIsNone(belongs_to["inverse_of"])
+        self.assertTrue(belongs_to["can_be_derived"])
+        self.assertEqual(belongs_to["derivation_source"], "contains.derivable_inverse")
+        self.assertIn("不应读取 belongs_to.inverse_of", belongs_to["derivation_hint"])
         self.assertEqual(
             relation_types["appears_in"]["target_types"],
             ["Course", "Chapter", "Section", "Experiment", "Assignment", "ToolOrPlatform"],
@@ -112,6 +131,14 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn(
             "Term->Concept: PCB defined_by 进程控制块",
             relation_types["defined_by"]["negative_examples"],
+        )
+        self.assertNotIn(
+            "进程 defined_by 进程定义",
+            relation_types["defined_by"]["examples"],
+        )
+        self.assertIn(
+            "加速比 defined_by Amdahl 定律",
+            relation_types["defined_by"]["examples"],
         )
 
         belongs_to_hint = relation_types["belongs_to"]["extraction_hint"]
@@ -141,6 +168,8 @@ class TestRelationSchemaRules(unittest.TestCase):
 
         implemented_by_hint = relation_types["implemented_by"]["extraction_hint"]
         self.assertIn("目标只能是 AlgorithmOrMethod 或 ToolOrPlatform", implemented_by_hint)
+        self.assertIn("source 与 target 均为 AlgorithmOrMethod", implemented_by_hint)
+        self.assertIn("明确表达“由", implemented_by_hint)
         self.assertIn(
             "AlgorithmOrMethod->Concept: 高响应比优先调度算法 implemented_by 动态优先级",
             relation_types["implemented_by"]["negative_examples"],
@@ -221,6 +250,7 @@ class TestRelationSchemaRules(unittest.TestCase):
         )
         self.assertIn("知识对象之间的 `contains`", text)
         self.assertIn("不派生反向 `belongs_to`", text)
+        self.assertIn("脚本应读取 `contains.derivable_inverse`", text)
         self.assertIn("PCB defined_by Process Control Block", text)
         self.assertIn("alias", text)
         self.assertIn("端点完整性", text)
@@ -242,6 +272,8 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("两者均满足时，以 `KnowledgePoint` 为准", text)
         self.assertIn("普通概念解释不提升为 `FormulaOrDefinition`", text)
         self.assertIn("稳定名称、被复用/引用、可计算公式/定理/判定条件", text)
+        self.assertIn("只有在缩写、符号、变量或标准术语本身是被解释、被比较、被考核或被公式引用的对象时", text)
+        self.assertIn("如果缩写只是 `Concept`、`AlgorithmOrMethod`、`ToolOrPlatform` 的别名", text)
         self.assertIn("Section、Experiment 与 Assignment 的双角色处理", text)
         self.assertIn("同时抽取 `Section` 与 `Experiment` / `Assignment`", text)
         self.assertIn("建立 `Section contains Experiment` 或 `Section contains Assignment`", text)
@@ -264,10 +296,14 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("X 以 Y 为例/使用 Y", text)
         self.assertIn("应输出 `Y applied_in X` 或 `X depends_on Y`", text)
         self.assertIn("不能反向输出 `X applied_in Y`", text)
+        self.assertIn("章节讲解场景：target 为 `Section`", text)
+        self.assertIn("只有当文本表达“用于讲解、支撑、解决、分析该节主题”时才使用 `applied_in`", text)
         self.assertIn("source 必须是出现的知识实体", text)
         self.assertIn("禁止 `Section/Assignment appears_in 知识对象`", text)
         self.assertIn("别名、简称、缩写、编号、存在标志不建立 `defined_by`", text)
         self.assertIn("进入 alias / 归一化字段，或直接跳过", text)
+        self.assertIn("source 与 target 均为 `AlgorithmOrMethod` 时", text)
+        self.assertIn("应改用 `depends_on` 或 `applied_in`", text)
         self.assertIn("如果术语本身就是题目考核对象，允许 `Term->Assignment`", text)
         self.assertIn("`PCB evaluated_by 第二章习题`", text)
         self.assertIn("允许 `Concept/Term/AlgorithmOrMethod -> ToolOrPlatform`", text)
