@@ -1,3 +1,9 @@
+<!--
+  eslint-disable vue/no-multiple-template-root --
+  ModulePage 是 Vue 3 Fragment 路由分发器，平铺多个根节点（顶部 hero + 多个 dialog-backdrop +
+  workflow / detail / table 分支 section），由 Vue 3 编译器自动包进 Fragment。
+  该 lint 规则来自 Vue 2 规则集，Vue 3 不再强制单根节点，`pnpm build` 验证通过。
+-->
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
