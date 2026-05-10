@@ -76,7 +76,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dashboard-page">
+  <div class="dashboard-page" data-testid="dashboard-page">
     <CkPageHero :title="greeting" :subtitle="subtitle" />
 
     <!-- 视觉打磨迭代：fallback 黄色长 banner 改为 hero 下方 inline pill -->
