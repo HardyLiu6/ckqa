@@ -109,7 +109,7 @@ const sorted = computed(() => sortTasks(props.tasks))
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: rgb(232 226 216 / 60%);
+  background: var(--ckqa-progress-track);
   overflow: hidden;
 }
 
@@ -117,23 +117,23 @@ const sorted = computed(() => sortTasks(props.tasks))
   display: block;
   height: 100%;
   background: linear-gradient(90deg, var(--ckqa-accent), var(--ckqa-accent-strong));
-  box-shadow: 0 0 8px rgb(217 119 87 / 30%);
+  box-shadow: var(--ckqa-shadow-progress-glow-accent);
   border-radius: 2px;
   transition: width var(--ckqa-duration-glass) var(--ckqa-ease-glass);
 }
 
 .ck-task-list-item[data-tone='danger'] .ck-task-list-item-progress-fill {
-  background: linear-gradient(90deg, var(--ckqa-danger), #a43a34);
-  box-shadow: 0 0 8px rgb(196 65 58 / 30%);
+  background: linear-gradient(90deg, var(--ckqa-danger), var(--ckqa-danger-strong));
+  box-shadow: var(--ckqa-shadow-progress-glow-danger);
 }
 
 .ck-task-list-item[data-tone='warning'] .ck-task-list-item-progress-fill {
-  background: linear-gradient(90deg, var(--ckqa-warning), #8a6a0a);
-  box-shadow: 0 0 8px rgb(184 134 11 / 30%);
+  background: linear-gradient(90deg, var(--ckqa-warning), var(--ckqa-warning-strong));
+  box-shadow: var(--ckqa-shadow-progress-glow-warning);
 }
 
 .ck-task-list-item[data-tone='success'] .ck-task-list-item-progress-fill {
-  background: linear-gradient(90deg, var(--ckqa-success), #345b41);
-  box-shadow: 0 0 8px rgb(74 124 89 / 30%);
+  background: linear-gradient(90deg, var(--ckqa-success), var(--ckqa-success-strong));
+  box-shadow: var(--ckqa-shadow-progress-glow-success);
 }
 </style>

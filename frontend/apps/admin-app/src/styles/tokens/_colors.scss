@@ -28,14 +28,17 @@
 
   /* semantic — solid + soft 双轨；色相与 accent 错开 */
   --ckqa-success: #4a7c59;
+  --ckqa-success-strong: #345b41;
   --ckqa-success-soft: #eef5ee;
   --ckqa-running: #c08a3a;
   --ckqa-running-soft: #faf1e1;
   --ckqa-warning: #b8860b;
+  --ckqa-warning-strong: #8a6a0a;
   --ckqa-warning-soft: #fef5d7;
   --ckqa-blocked: #8a847a;
   --ckqa-blocked-soft: #ece8df;
   --ckqa-danger: #c4413a;
+  --ckqa-danger-strong: #a43a34;
   --ckqa-danger-soft: #fceeec;
 
   /* focus */
@@ -88,6 +91,9 @@
   /* M8 Task 2.3：模态/弹层背景遮罩（命令面板等浮层） */
   --ckqa-overlay-backdrop: rgb(18 14 10 / 48%);
 
+  /* M8 Task 2.4：进度条轨道背景（半透明边框灰，避免裸 rgb） */
+  --ckqa-progress-track: rgb(232 226 216 / 60%);
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -131,14 +137,17 @@
   --ckqa-accent-contrast: #1a1a1a;
 
   --ckqa-success: #6a9b78;
+  --ckqa-success-strong: #4a7c59;
   --ckqa-success-soft: #1f2d22;
   --ckqa-running: #d4a04c;
   --ckqa-running-soft: #38301d;
   --ckqa-warning: #d4914c;
+  --ckqa-warning-strong: #a86c2c;
   --ckqa-warning-soft: #382a1d;
   --ckqa-blocked: #6e6a62;
   --ckqa-blocked-soft: #2a2724;
   --ckqa-danger: #d96860;
+  --ckqa-danger-strong: #b94c46;
   --ckqa-danger-soft: #38201e;
 
   --ckqa-focus: rgb(232 145 111 / 40%);
@@ -175,6 +184,9 @@
   --ckqa-surface-collapsed-hover: rgb(70 65 58 / 92%);
   --ckqa-border-accent-soft: rgb(232 145 111 / 35%);
   --ckqa-overlay-backdrop: rgb(0 0 0 / 58%);
+
+  /* M8 Task 2.4：暗色下进度条轨道（弱边框灰半透明） */
+  --ckqa-progress-track: rgb(56 51 43 / 60%);
 }
 
 [data-accent='indigo'] {

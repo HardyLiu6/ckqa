@@ -39,6 +39,12 @@ $shadow-sidebar-active-breathe-to: inset 0 0 0 1px rgb(217 119 87 / 40%),
 $shadow-modal: 0 24px 48px -12px rgb(28 26 23 / 28%),
   0 8px 16px -6px rgb(28 26 23 / 18%);
 
+/* M8 Task 2.4：进度条 fill 的 tone 发光（accent / danger / warning / success） */
+$shadow-progress-glow-accent: 0 0 8px rgb(217 119 87 / 30%);
+$shadow-progress-glow-danger: 0 0 8px rgb(196 65 58 / 30%);
+$shadow-progress-glow-warning: 0 0 8px rgb(184 134 11 / 30%);
+$shadow-progress-glow-success: 0 0 8px rgb(74 124 89 / 30%);
+
 :root {
   --ckqa-shadow-xs: #{$shadow-xs};
   --ckqa-shadow-sm: #{$shadow-sm};
@@ -56,5 +62,9 @@ $shadow-modal: 0 24px 48px -12px rgb(28 26 23 / 28%),
   --ckqa-shadow-sidebar-active-breathe-from: #{$shadow-sidebar-active-breathe-from};
   --ckqa-shadow-sidebar-active-breathe-to: #{$shadow-sidebar-active-breathe-to};
   --ckqa-shadow-modal: #{$shadow-modal};
+  --ckqa-shadow-progress-glow-accent: #{$shadow-progress-glow-accent};
+  --ckqa-shadow-progress-glow-danger: #{$shadow-progress-glow-danger};
+  --ckqa-shadow-progress-glow-warning: #{$shadow-progress-glow-warning};
+  --ckqa-shadow-progress-glow-success: #{$shadow-progress-glow-success};
   --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
 }
