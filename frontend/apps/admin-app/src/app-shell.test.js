@@ -246,6 +246,36 @@ test('routes 指向 DashboardPage', () => {
   assert.equal(dashboardRoute.componentKey, 'DashboardPage')
 })
 
+test('M5：知识库 / 构建向导 / 索引版本详情路由切换到独立页面', () => {
+  const findByName = (name) => routeRecords.find((r) => r.name === name)
+
+  assert.equal(findByName('knowledge-bases').componentKey, 'KbListPage')
+  assert.equal(findByName('knowledge-base-detail').componentKey, 'KbDetailPage')
+
+  const build = findByName('knowledge-base-build')
+  assert.equal(build.componentKey, 'KbBuildWizardPage')
+  // KbBuildWizardPage 自带 7fr/5fr 分屏，外层走 ConsoleLayout（而非 WorkflowLayout）
+  assert.equal(build.meta.layout, 'console')
+
+  assert.equal(findByName('index-run-detail').componentKey, 'IndexRunDetailPage')
+})
+
+test('M5：知识库文案不含内部术语 embedding / 实体抽取 / MinerU / P95 / 冒烟', async () => {
+  const paths = [
+    './views/knowledge-bases/kb-page-copy.js',
+    './views/knowledge-bases/kb-build-copy.js',
+  ]
+  for (const path of paths) {
+    const mod = await import(path)
+    const serialized = JSON.stringify(mod)
+    assert.doesNotMatch(serialized, /embedding/i, `${path} 不得出现 embedding`)
+    assert.doesNotMatch(serialized, /实体抽取/, `${path} 不得出现 实体抽取`)
+    assert.doesNotMatch(serialized, /MinerU/, `${path} 不得出现 MinerU`)
+    assert.doesNotMatch(serialized, /\bP95\b/, `${path} 不得出现 P95`)
+    assert.doesNotMatch(serialized, /冒烟/, `${path} 不得出现 冒烟`)
+  }
+})
+
 test('认证状态支持开发态管理员和教师身份切换', () => {
   const auth = createAuthStore()
 

@@ -12,6 +12,10 @@ import ModulePage from '../views/pages/ModulePage.vue'
 import CourseListPage from '../views/courses/CourseListPage.vue'
 import CourseDetailPage from '../views/courses/CourseDetailPage.vue'
 import MaterialDetailPage from '../views/materials/MaterialDetailPage.vue'
+import KbListPage from '../views/knowledge-bases/KbListPage.vue'
+import KbDetailPage from '../views/knowledge-bases/KbDetailPage.vue'
+import KbBuildWizardPage from '../views/knowledge-bases/KbBuildWizardPage.vue'
+import IndexRunDetailPage from '../views/knowledge-bases/IndexRunDetailPage.vue'
 import RouteState from '../views/status/RouteState.vue'
 import UnifiedErrorView from '../views/status/UnifiedErrorView.vue'
 import { getAdminPinia } from '../stores/pinia.js'
@@ -26,6 +30,10 @@ const componentMap = {
   CourseListPage,
   CourseDetailPage,
   MaterialDetailPage,
+  KbListPage,
+  KbDetailPage,
+  KbBuildWizardPage,
+  IndexRunDetailPage,
   RouteState,
   UnifiedErrorView,
 }

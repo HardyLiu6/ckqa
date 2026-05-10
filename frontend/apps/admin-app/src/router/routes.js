@@ -194,7 +194,7 @@ export const APP_ROUTES = [
   {
     path: '/app/knowledge-bases',
     name: 'knowledge-bases',
-    componentKey: 'ModulePage',
+    componentKey: 'KbListPage',
     meta: {
       title: '知识库列表',
       layout: 'console',
@@ -208,7 +208,7 @@ export const APP_ROUTES = [
   {
     path: '/app/knowledge-bases/:kbId',
     name: 'knowledge-base-detail',
-    componentKey: 'ModulePage',
+    componentKey: 'KbDetailPage',
     meta: {
       title: '知识库详情',
       layout: 'detail',
@@ -223,10 +223,12 @@ export const APP_ROUTES = [
   {
     path: '/app/knowledge-bases/:kbId/build',
     name: 'knowledge-base-build',
-    componentKey: 'ModulePage',
+    componentKey: 'KbBuildWizardPage',
     meta: {
+      // M5：KbBuildWizardPage 自己在内部用 CSS Grid 做 7fr/5fr 分屏，
+      // 故外层走 ConsoleLayout 而非 WorkflowLayout。
       title: '构建向导',
-      layout: 'workflow',
+      layout: 'console',
       permissions: ['kb:index'],
       status: 'mvp',
       navGroup: 'knowledge',
@@ -253,7 +255,7 @@ export const APP_ROUTES = [
   {
     path: '/app/index-runs/:indexRunId',
     name: 'index-run-detail',
-    componentKey: 'ModulePage',
+    componentKey: 'IndexRunDetailPage',
     meta: {
       title: '索引运行详情',
       layout: 'detail',
