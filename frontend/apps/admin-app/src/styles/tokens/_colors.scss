@@ -67,6 +67,24 @@
   /* M8 收尾巡查新增：avatar fallback 渐变（无头像用户的圆形占位） */
   --ckqa-avatar-fallback-gradient: linear-gradient(135deg, #c4ad8b, #8d6e54);
 
+  /* M8 Task 2.2：侧栏 toggle 与折叠态项专属渐变背景。
+     这些是亮色下的具体配色，与下方暗色块对应。 */
+  --ckqa-surface-toggle-rest: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 85%),
+    rgb(255 252 246 / 70%)
+  );
+  --ckqa-surface-toggle-hover: linear-gradient(
+    180deg,
+    #ffffff,
+    rgb(255 250 242 / 95%)
+  );
+  --ckqa-surface-toggle-collapsed: linear-gradient(180deg, #ffffff, #fdf9f1);
+  --ckqa-surface-collapsed-hover: rgb(255 252 246 / 92%);
+
+  /* M8 Task 2.2：accent 半透明描边（用于 toggle:hover 与折叠态 item:hover 的边） */
+  --ckqa-border-accent-soft: rgb(217 119 87 / 35%);
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -137,6 +155,22 @@
 
   /* M8: avatar fallback 暗色渐变 */
   --ckqa-avatar-fallback-gradient: linear-gradient(135deg, #a8916f, #6f5742);
+
+  /* M8 Task 2.2：侧栏专属表面与边框暗色映射。
+     暗色下白色高光降低不透明度，避免与暗背景过冲。 */
+  --ckqa-surface-toggle-rest: linear-gradient(
+    180deg,
+    rgb(60 56 50 / 85%),
+    rgb(46 42 36 / 70%)
+  );
+  --ckqa-surface-toggle-hover: linear-gradient(
+    180deg,
+    rgb(70 65 58 / 95%),
+    rgb(56 51 43 / 95%)
+  );
+  --ckqa-surface-toggle-collapsed: linear-gradient(180deg, #3a352d, #2a261f);
+  --ckqa-surface-collapsed-hover: rgb(70 65 58 / 92%);
+  --ckqa-border-accent-soft: rgb(232 145 111 / 35%);
 }
 
 [data-accent='indigo'] {

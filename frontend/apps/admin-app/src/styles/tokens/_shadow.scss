@@ -10,6 +10,31 @@ $shadow-card-hover: 0 2px 4px rgb(28 26 23 / 5%), 0 18px 44px rgb(110 70 40 / 12
 /* M8 收尾巡查新增：accent 暖橙的小型 brand 投影（如顶栏品牌图标、流水线脉冲点） */
 $shadow-accent-glow: 0 2px 6px rgb(217 119 87 / 30%);
 
+/* M8 Task 2.2：侧栏专属复合阴影。各 token 对应一种侧栏交互状态，
+   命名按"sidebar-{部位}-{状态}"约定，便于读图。 */
+$shadow-sidebar-toggle-rest: 0 1px 2px rgb(28 26 23 / 4%),
+  inset 0 1px 0 rgb(255 255 255 / 70%);
+$shadow-sidebar-toggle-hover: 0 0 0 4px rgb(217 119 87 / 8%),
+  0 4px 10px rgb(110 70 40 / 12%),
+  inset 0 1px 0 rgb(255 255 255 / 85%);
+$shadow-sidebar-toggle-collapsed: 0 4px 14px rgb(110 70 40 / 18%),
+  0 1px 2px rgb(28 26 23 / 6%),
+  inset 0 1px 0 rgb(255 255 255 / 95%);
+$shadow-sidebar-rail-glow: 0 0 12px rgb(217 119 87 / 50%);
+$shadow-sidebar-status: 0 1px 1px rgb(28 26 23 / 4%),
+  0 6px 16px rgb(110 70 40 / 8%),
+  inset 0 1px 0 rgb(255 255 255 / 60%);
+$shadow-sidebar-item-collapsed-hover: 0 0 0 1px rgb(217 119 87 / 18%),
+  0 0 0 5px rgb(217 119 87 / 8%),
+  0 6px 16px rgb(110 70 40 / 12%),
+  inset 0 1px 0 rgb(255 255 255 / 80%);
+$shadow-sidebar-active-breathe-from: inset 0 0 0 1px rgb(217 119 87 / 20%),
+  inset 0 1px 0 rgb(255 255 255 / 50%),
+  0 0 0 0 rgb(217 119 87 / 0%);
+$shadow-sidebar-active-breathe-to: inset 0 0 0 1px rgb(217 119 87 / 40%),
+  inset 0 1px 0 rgb(255 255 255 / 60%),
+  0 0 0 5px rgb(217 119 87 / 8%);
+
 :root {
   --ckqa-shadow-xs: #{$shadow-xs};
   --ckqa-shadow-sm: #{$shadow-sm};
@@ -18,5 +43,13 @@ $shadow-accent-glow: 0 2px 6px rgb(217 119 87 / 30%);
   --ckqa-shadow-card: #{$shadow-card};
   --ckqa-shadow-card-hover: #{$shadow-card-hover};
   --ckqa-shadow-accent-glow: #{$shadow-accent-glow};
+  --ckqa-shadow-sidebar-toggle-rest: #{$shadow-sidebar-toggle-rest};
+  --ckqa-shadow-sidebar-toggle-hover: #{$shadow-sidebar-toggle-hover};
+  --ckqa-shadow-sidebar-toggle-collapsed: #{$shadow-sidebar-toggle-collapsed};
+  --ckqa-shadow-sidebar-rail-glow: #{$shadow-sidebar-rail-glow};
+  --ckqa-shadow-sidebar-status: #{$shadow-sidebar-status};
+  --ckqa-shadow-sidebar-item-collapsed-hover: #{$shadow-sidebar-item-collapsed-hover};
+  --ckqa-shadow-sidebar-active-breathe-from: #{$shadow-sidebar-active-breathe-from};
+  --ckqa-shadow-sidebar-active-breathe-to: #{$shadow-sidebar-active-breathe-to};
   --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
 }

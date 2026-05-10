@@ -259,7 +259,7 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   font-family: var(--ckqa-font-sans);
   font-weight: var(--ckqa-fw-semibold);
   font-size: 16px;
-  box-shadow: 0 2px 6px rgb(217 119 87 / 30%);
+  box-shadow: var(--ckqa-shadow-accent-glow);
 }
 
 .sb-brand-text {
@@ -300,24 +300,19 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   flex: 0 0 26px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgb(255 255 255 / 85%), rgb(255 252 246 / 70%));
+  background: var(--ckqa-surface-toggle-rest);
   border: 1px solid var(--ckqa-border-glass);
   border-radius: 8px;
-  box-shadow:
-    0 1px 2px rgb(28 26 23 / 4%),
-    inset 0 1px 0 rgb(255 255 255 / 70%);
+  box-shadow: var(--ckqa-shadow-sidebar-toggle-rest);
   color: var(--ckqa-text-muted);
   cursor: pointer;
 }
 
 .sb-toggle:hover {
-  background: linear-gradient(180deg, #fff, rgb(255 250 242 / 95%));
+  background: var(--ckqa-surface-toggle-hover);
   color: var(--ckqa-accent-strong);
-  border-color: rgb(217 119 87 / 35%);
-  box-shadow:
-    0 0 0 4px rgb(217 119 87 / 8%),
-    0 4px 10px rgb(110 70 40 / 12%),
-    inset 0 1px 0 rgb(255 255 255 / 85%);
+  border-color: var(--ckqa-border-accent-soft);
+  box-shadow: var(--ckqa-shadow-sidebar-toggle-hover);
 }
 
 /* ————— Body（可滚动 nav 列表） ————— */
@@ -431,7 +426,7 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   left: -12px;
   border-radius: 3px;
   background: linear-gradient(180deg, var(--ckqa-accent), var(--ckqa-accent-strong));
-  box-shadow: 0 0 12px rgb(217 119 87 / 50%);
+  box-shadow: var(--ckqa-shadow-sidebar-rail-glow);
   transition:
     top var(--ckqa-duration-base) var(--ckqa-ease-spring),
     height var(--ckqa-duration-glass) var(--ckqa-ease-glass),
@@ -449,10 +444,7 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   background: var(--ckqa-surface-glass-strong);
   border: 1px solid var(--ckqa-border-glass);
   border-radius: 12px;
-  box-shadow:
-    0 1px 1px rgb(28 26 23 / 4%),
-    0 6px 16px rgb(110 70 40 / 8%),
-    inset 0 1px 0 rgb(255 255 255 / 60%);
+  box-shadow: var(--ckqa-shadow-sidebar-status);
 }
 
 .sb-avatar {
@@ -462,8 +454,8 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #c4ad8b, #8d6e54);
-  color: white;
+  background: var(--ckqa-avatar-fallback-gradient);
+  color: var(--ckqa-text-inverse);
   font-size: var(--ckqa-text-sm-size);
   font-weight: var(--ckqa-fw-semibold);
 }
@@ -540,13 +532,9 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
 }
 
 .sidebar.is-collapsed .sb-item:hover {
-  background: rgb(255 252 246 / 92%);
+  background: var(--ckqa-surface-collapsed-hover);
   transform: scale(1.07);
-  box-shadow:
-    0 0 0 1px rgb(217 119 87 / 18%),
-    0 0 0 5px rgb(217 119 87 / 8%),
-    0 6px 16px rgb(110 70 40 / 12%),
-    inset 0 1px 0 rgb(255 255 255 / 80%);
+  box-shadow: var(--ckqa-shadow-sidebar-item-collapsed-hover);
 }
 
 .sidebar.is-collapsed .sb-item:hover .sb-icon {
@@ -588,11 +576,8 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
   width: 28px;
   height: 28px;
   border-radius: 9px;
-  background: linear-gradient(180deg, #fff, #fdf9f1);
-  box-shadow:
-    0 4px 14px rgb(110 70 40 / 18%),
-    0 1px 2px rgb(28 26 23 / 6%),
-    inset 0 1px 0 rgb(255 255 255 / 95%);
+  background: var(--ckqa-surface-toggle-collapsed);
+  box-shadow: var(--ckqa-shadow-sidebar-toggle-collapsed);
   z-index: 20;
 }
 
@@ -607,17 +592,11 @@ const railHeight = computed(() => getRailHeight(collapsed.value))
 
 @keyframes breathe-glow {
   0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px rgb(217 119 87 / 20%),
-      inset 0 1px 0 rgb(255 255 255 / 50%),
-      0 0 0 0 rgb(217 119 87 / 0%);
+    box-shadow: var(--ckqa-shadow-sidebar-active-breathe-from);
   }
 
   50% {
-    box-shadow:
-      inset 0 0 0 1px rgb(217 119 87 / 40%),
-      inset 0 1px 0 rgb(255 255 255 / 60%),
-      0 0 0 5px rgb(217 119 87 / 8%);
+    box-shadow: var(--ckqa-shadow-sidebar-active-breathe-to);
   }
 }
 </style>
