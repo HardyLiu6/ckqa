@@ -78,7 +78,7 @@ test('索引构建失败在当前步骤主舞台内显示局部反馈', async ({
   await feedback.screenshot({ path: 'test-results/index-build-feedback.png' })
 })
 
-test('QA 冒烟验证失败在当前步骤主舞台内显示局部反馈', async ({ page }) => {
+test('QA 知识库验证失败在当前步骤主舞台内显示局部反馈', async ({ page }) => {
   await installApiMocks(page, {
     ...knowledgeBaseBuildMocks({ activeIndexRunId: 15 }),
     'POST /knowledge-base-build-runs/77/qa-smoke': () => failure(502, 5002, '问答会话创建失败'),
@@ -93,7 +93,7 @@ test('QA 冒烟验证失败在当前步骤主舞台内显示局部反馈', async
   const feedback = panel.locator('.operation-feedback')
   await expect(feedback).toBeVisible()
   await expect(feedback).toHaveAttribute('data-status', 'failed')
-  await expect(feedback).toContainText('问答冒烟验证失败')
+  await expect(feedback).toContainText('知识库验证失败')
   await expect(feedback).toContainText('问答会话创建失败')
   await feedback.screenshot({ path: 'test-results/qa-smoke-feedback.png' })
 })

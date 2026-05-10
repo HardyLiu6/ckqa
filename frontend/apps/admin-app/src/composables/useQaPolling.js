@@ -43,7 +43,11 @@ export function isQaFailedState(status) {
 
 function resolveModeDefaults(task = {}, requestMode) {
   const mode = String(task.mode ?? requestMode ?? 'local').toLowerCase()
-  return DEFAULT_LIMITS_BY_MODE[mode] ?? DEFAULT_LIMITS_BY_MODE.local
+  // 用 Object.hasOwn 守护：避免 mode 为 `__proto__` / `constructor` 等原型成员时
+  // 通过原型链拿到 Object.prototype，使得 `??` 兜底失效、返回 undefined。
+  return Object.hasOwn(DEFAULT_LIMITS_BY_MODE, mode)
+    ? DEFAULT_LIMITS_BY_MODE[mode]
+    : DEFAULT_LIMITS_BY_MODE.local
 }
 
 function normalizeStatus(status) {

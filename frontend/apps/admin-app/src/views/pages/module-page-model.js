@@ -1,4 +1,5 @@
 import { createApiError } from '../../api/client.js'
+import { COPY } from '../../copy/admin.js'
 
 export function buildPageQuery(query = {}, page) {
   return {
@@ -141,19 +142,19 @@ const OPERATION_FEEDBACK = {
       failed: '索引构建失败',
     },
     runningMessage: '索引运行已创建，正在等待后端同步运行状态。',
-    successMessage: '索引构建已完成，知识库可进入问答冒烟验证。',
+    successMessage: '索引构建已完成，知识库可进入知识库验证。',
     detail: '请确认 GraphRAG API、Python 根目录和导出产物可用后重试。',
   },
   'qa-smoke': {
     scope: 'qa',
     titles: {
-      running: '问答冒烟验证已提交',
-      confirming: '问答冒烟验证确认中',
-      success: '问答冒烟验证完成',
-      failed: '问答冒烟验证失败',
+      running: `${COPY.validation.page.title}已提交`,
+      confirming: `${COPY.validation.page.title}确认中`,
+      success: `${COPY.validation.page.title}完成`,
+      failed: `${COPY.validation.page.title}失败`,
     },
     runningMessage: '问答任务已提交，正在等待 GraphRAG 返回回答。',
-    successMessage: '问答冒烟验证完成，可以查看会话详情。',
+    successMessage: `${COPY.validation.page.title}完成，可以查看会话详情。`,
     detail: '请确认知识库有激活索引且 GraphRAG API 可查询后重试。',
   },
 }

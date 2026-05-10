@@ -87,7 +87,7 @@ export const APP_ROUTES = [
   {
     path: '/app/health',
     name: 'health',
-    componentKey: 'HealthView',
+    componentKey: 'HealthPage',
     meta: {
       title: '系统健康',
       layout: 'console',
@@ -329,22 +329,21 @@ export const APP_ROUTES = [
   {
     path: '/app/qa-smoke',
     name: 'qa-smoke',
-    componentKey: 'RouteState',
-    props: { state: 'coming-soon' },
+    componentKey: 'KbValidationPage',
     meta: {
       title: '知识库验证',
       layout: 'console',
       permissions: ['qa:read'],
-      status: 'upcoming',
-      routeState: 'coming-soon',
+      status: 'mvp',
       navGroup: 'qa',
       section: 'operations',
+      keepAlive: true,
     },
   },
   {
     path: '/app/users',
     name: 'users',
-    componentKey: 'ModulePage',
+    componentKey: 'UserListPage',
     meta: {
       title: '用户列表',
       layout: 'console',
@@ -373,7 +372,7 @@ export const APP_ROUTES = [
   {
     path: '/app/roles',
     name: 'roles',
-    componentKey: 'ModulePage',
+    componentKey: 'RoleListPage',
     meta: {
       title: '角色列表',
       layout: 'console',
@@ -386,7 +385,7 @@ export const APP_ROUTES = [
   {
     path: '/app/permissions',
     name: 'permissions',
-    componentKey: 'ModulePage',
+    componentKey: 'PermissionListPage',
     meta: {
       title: '权限列表',
       layout: 'console',

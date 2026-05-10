@@ -340,18 +340,18 @@ const configs = {
     variant: 'table',
     dataSource: 'mock',
     eyebrow: 'QA Operations',
-    summary: '问答运维列表必须区分正式问答与构建向导产生的冒烟验证会话。',
+    summary: '问答运维列表必须区分正式问答与构建向导产生的知识库验证会话。',
     primaryAction: { label: '查看正式问答', permission: 'qa:read' },
-    secondaryAction: { label: '包含冒烟验证', permission: 'qa:read' },
+    secondaryAction: { label: '包含知识库验证', permission: 'qa:read' },
     filters: [
-      { key: 'sessionType', label: '会话类型', columnIndex: 5, options: ['全部', '正式问答', '冒烟验证'] },
+      { key: 'sessionType', label: '会话类型', columnIndex: 5, options: ['全部', '正式问答', '知识库验证'] },
       { key: 'status', label: '任务状态', columnIndex: 4, options: ['全部', 'success', 'running', 'failed'] },
     ],
     columns: ['会话', '用户', '课程', '知识库', '状态', '类型'],
     rows: [
       ['期末复习问题', 'student-a', '操作系统', 'OS 知识库', 'success', '正式问答'],
-      ['构建后冒烟验证', 'teacher-a', '操作系统', 'OS 知识库', 'success', '冒烟验证'],
-      ['索引切换验证', 'teacher-b', '计算机网络', 'CN 课程库', 'running', '冒烟验证'],
+      ['构建后抽样问答', 'teacher-a', '操作系统', 'OS 知识库', 'success', '知识库验证'],
+      ['索引切换验证', 'teacher-b', '计算机网络', 'CN 课程库', 'running', '知识库验证'],
     ],
   },
   'qa-session-detail': {

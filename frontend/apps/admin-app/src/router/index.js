@@ -7,7 +7,7 @@ import DetailLayout from '../layouts/DetailLayout.vue'
 import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import DashboardPage from '../views/dashboard/DashboardPage.vue'
-import HealthView from '../views/system/HealthView.vue'
+import HealthPage from '../views/system/HealthPage.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
 import CourseListPage from '../views/courses/CourseListPage.vue'
 import CourseDetailPage from '../views/courses/CourseDetailPage.vue'
@@ -18,6 +18,10 @@ import KbBuildWizardPage from '../views/knowledge-bases/KbBuildWizardPage.vue'
 import IndexRunDetailPage from '../views/knowledge-bases/IndexRunDetailPage.vue'
 import QaSessionListPage from '../views/qa-sessions/QaSessionListPage.vue'
 import QaSessionDetailPage from '../views/qa-sessions/QaSessionDetailPage.vue'
+import UserListPage from '../views/users/UserListPage.vue'
+import RoleListPage from '../views/users/RoleListPage.vue'
+import PermissionListPage from '../views/users/PermissionListPage.vue'
+import KbValidationPage from '../views/operations/KbValidationPage.vue'
 import RouteState from '../views/status/RouteState.vue'
 import UnifiedErrorView from '../views/status/UnifiedErrorView.vue'
 import { getAdminPinia } from '../stores/pinia.js'
@@ -27,7 +31,7 @@ import { routeRecords } from './routes.js'
 const componentMap = {
   LoginView,
   DashboardPage,
-  HealthView,
+  HealthPage,
   ModulePage,
   CourseListPage,
   CourseDetailPage,
@@ -38,6 +42,10 @@ const componentMap = {
   IndexRunDetailPage,
   QaSessionListPage,
   QaSessionDetailPage,
+  UserListPage,
+  RoleListPage,
+  PermissionListPage,
+  KbValidationPage,
   RouteState,
   UnifiedErrorView,
 }

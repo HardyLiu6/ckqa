@@ -55,6 +55,10 @@ const moduleLabel = computed(() => {
   const queryModule = toQueryString(route.query.module)
   if (queryModule) return queryModule
 
+  // 列表路由 `/app/retrieval-logs` 的占位文案沿用运维导航分组的显式别名，
+  // 详情路由 `retrieval-log-detail` 继续走 navGroup 兜底逻辑。
+  if (route.name === 'retrieval-logs') return '运维 · 检索日志'
+
   return navGroupLabels[route.meta.navGroup] || '当前模块'
 })
 
@@ -105,6 +109,8 @@ function refreshPage() {
 
 <template>
   <section class="route-state">
+    <figure class="ck-route-state-illustration" aria-hidden="true" />
+
     <p class="eyebrow">{{ copy.eyebrow }}</p>
     <h1>{{ copy.title }}</h1>
     <p>{{ copy.message }}</p>
@@ -140,18 +146,12 @@ function refreshPage() {
     </dl>
 
     <div class="button-row">
-      <el-button
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
-        tag="router-link"
-        to="/app/dashboard"
-      >
+      <el-button type="primary" tag="router-link" to="/app/dashboard">
         <Gauge class="button-icon" :size="16" aria-hidden="true" />
         返回工作台
       </el-button>
       <el-button
         v-if="currentState === 'server-error'"
-        class="ckqa-el-button ckqa-el-button--secondary"
         native-type="button"
         @click="refreshPage"
       >
@@ -160,7 +160,6 @@ function refreshPage() {
       </el-button>
       <el-button
         v-if="currentState === 'server-error'"
-        class="ckqa-el-button ckqa-el-button--secondary"
         tag="router-link"
         to="/app/health"
       >
@@ -170,3 +169,63 @@ function refreshPage() {
     </div>
   </section>
 </template>
+
+<style scoped lang="scss">
+/*
+ * RouteState 视觉层：只做顶部品牌图形与局部布局，颜色与圆角全部取自 M1 Token。
+ * 按钮完全交给 Element Plus 主题映射（styles/element-plus.scss）接管，不再定义
+ * .ckqa-el-button / .ckqa-el-button--primary 等自定义样式段。
+ */
+
+.route-state {
+  position: relative;
+  overflow: hidden;
+  background: var(--ckqa-surface);
+}
+
+.ck-route-state-illustration {
+  width: 100%;
+  height: 120px;
+  margin: 0 0 4px;
+  border-radius: var(--ckqa-radius-md);
+  border: 1px solid var(--ckqa-border-soft);
+  background:
+    radial-gradient(
+      circle at 20% 30%,
+      var(--ckqa-accent-soft) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      circle at 80% 70%,
+      var(--ckqa-accent-soft) 0%,
+      transparent 55%
+    ),
+    var(--ckqa-bg-elevated);
+  pointer-events: none;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ck-route-state-illustration {
+    background:
+      radial-gradient(
+        circle at 50% 50%,
+        var(--ckqa-accent-soft) 0%,
+        transparent 65%
+      ),
+      var(--ckqa-bg-elevated);
+  }
+}
+
+@media (max-width: 560px) {
+  .ck-route-state-illustration {
+    height: 96px;
+  }
+}
+</style>
