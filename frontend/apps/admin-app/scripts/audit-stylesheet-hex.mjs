@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 // 文件说明：
-//   admin-app M7 样式巡检脚本。静态扫描 src/**/*.{vue,scss,css}，
+//   admin-app 样式巡检脚本。静态扫描 src/**/*.{vue,scss,css}，
 //   检测是否出现裸 hex（#RRGGBB 等）或裸 rgb()/rgba() 写法。
-//   例外路径来自 M7 requirements.md NFR-4 与 tasks.md 7.4：
-//     - src/styles/element-plus.scss
-//     - src/styles/tokens/**
+//   例外路径：
+//     - src/styles/element-plus.scss（EL 主题映射文件本身需要色值）
+//     - src/styles/tokens/**（Token 定义自身就是色值）
 //     - node_modules/**、dist/**（天然不在扫描范围，这里再防御性跳过）
-//   同时保留 M1~M2 历史遗留文件的"legacy allow-list"，原因与后续清理计划
-//   在白名单处逐条记录；本脚本仅负责把 M7 阶段 3~6 的新/改文件锁死为 Token。
+//   M8 收尾巡查后 LEGACY_ALLOWLIST 全量收敛为空（见设计稿 §14.1）。
 //
 // 使用方式：
 //   pnpm lint:style                # 正常巡检
