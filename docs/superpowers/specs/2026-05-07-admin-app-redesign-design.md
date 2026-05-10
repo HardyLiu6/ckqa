@@ -180,6 +180,8 @@
 --ckqa-fw-semibold: 600;
 ```
 
+> **2026-05-10 更新**：上述字号 token 在 [视觉打磨稿](2026-05-09-admin-app-visual-polish-design.md) §3 中整体上调一档（xs/sm/base/md/lg/xl/2xl/3xl 各 +1px ~ +2px，行高同步），实现以视觉打磨稿为准。本节保留原始数值仅作为决策记录。
+
 配套 SCSS 工具混合（`styles/mixins/_typography.scss`）：
 
 ```scss
