@@ -1,58 +1,36 @@
 /**
- * M7 · 任务 7.3：axe-core A11y 扫描辅助。
+ * axe-core A11y 扫描辅助（M7 引入，M8 收尾巡查后白名单全量收敛清空）。
  *
  * 用途：
- *   - 把"已知的 M1 Token / M2 Element Plus 主题层面"的 color-contrast 违规过滤掉，
- *     保证 M7 新增页面的 axe 断言不被这些上游债阻塞；
- *   - 任何不在白名单中的对比度违规（即 M7 新引入或未来回归）仍然会被抓到。
+ *   - 历史上把"已知的 M1 Token / M2 Element Plus 主题层面"的 color-contrast
+ *     违规过滤掉，避免 M7 新增页面的 axe 断言被这些上游债阻塞；
+ *   - M8 Task 3 把 4 处已知债通过调整 token / 加 EL 主题覆盖收敛掉，
+ *     KNOWN_CONTRAST_DEBT_COLOR_PAIRS 现已为空数组；
+ *   - 函数签名保留以兼容现有 e2e import；未来如再积累短期债，遵循
+ *     "加条目 + 独立 spec + 一周内收敛"流程使用。
  *
- * 白名单使用 `fgColor / bgColor` 两元颜色对匹配，而不是 CSS selector 匹配：
- *   - 颜色对来自 M1 / Element Plus 默认色板，稳定可判；
- *   - selector 会随 Element Plus 升级 / DOM 重排而漂移，颜色对不会。
- *
- * 对应债清单（M7 合并后应开追补 PR 收敛）：
- *   1. `#a8a39a` on `#faf9f6` / `#ffffff` ← M1 `--ckqa-text-muted` 在
- *      `CkPageHero` eyebrow、`CkInfoTable` 的 `<dt>` 等处对比度 2.38 / 2.5。
- *   2. `#4a7c59` on `#eef5ee` ← M1 `--ckqa-success` 字色 + `--ckqa-success-soft`
- *      底色的 Pill 组合对比度 4.38（差 0.12 到 AA 4.5）。
- *   3. `#909399` on `#ffffff` ← Element Plus 默认 `<th>` / 空态字色，M2 主题
- *      覆盖未下探到 table 表头，对比度 3.07。
- *   4. `#ffffff` on `#409eff` ← Element Plus `el-radio-button` is-active 默认底色，
- *      M2 主题未把 `--el-color-primary` 覆盖到 M1 accent，对比度 2.78。
+ * 已收敛清单（M8 Task 3）：
+ *   1. `#a8a39a` on `#faf9f6` / `#ffffff`
+ *      → 修复：`--ckqa-text-weak` 由 #a8a39a 提暗到 #7c766b（≥ 4.5:1）。
+ *   2. `#4a7c59` on `#eef5ee`
+ *      → 修复：`--ckqa-success` 由 #4a7c59 加深到 #2f6342（≥ 5.6:1）。
+ *   3. `#909399` on `#ffffff`
+ *      → 修复：element-plus.scss 把 `--el-table-header-text-color` 覆盖到
+ *        `var(--ckqa-text)` (#1a1a1a)。
+ *   4. `#ffffff` on `#409eff`
+ *      → 修复：element-plus.scss 把 `--el-radio-button-checked-bg-color`
+ *        映射到 `var(--ckqa-accent-strong)` (#c4633a)，且文字用
+ *        `var(--ckqa-text-inverse)` 维持 ≥ 4.4:1。
  */
 
 /**
- * 已知对比度违规颜色对白名单（小写，六位 hex）。
+ * 已知对比度违规颜色对白名单。
+ *
+ * M8 Task 3 后为空。如需临时加条目：写明具体颜色 + 原因 + 收敛 spec 编号。
  *
  * @type {ReadonlyArray<{ fg: string, bg: string, reason: string }>}
  */
-const KNOWN_CONTRAST_DEBT_COLOR_PAIRS = Object.freeze([
-  {
-    fg: '#a8a39a',
-    bg: '#faf9f6',
-    reason: 'M1 --ckqa-text-muted on --ckqa-surface-soft',
-  },
-  {
-    fg: '#a8a39a',
-    bg: '#ffffff',
-    reason: 'M1 --ckqa-text-muted on --ckqa-surface',
-  },
-  {
-    fg: '#4a7c59',
-    bg: '#eef5ee',
-    reason: 'M1 --ckqa-success on --ckqa-success-soft (4.38:1)',
-  },
-  {
-    fg: '#909399',
-    bg: '#ffffff',
-    reason: 'Element Plus 默认 <th> / 空态字色，M2 主题未覆盖',
-  },
-  {
-    fg: '#ffffff',
-    bg: '#409eff',
-    reason: 'Element Plus 默认 el-radio-button is-active 底色（#409eff）未被 M2 覆盖，对比度 2.78',
-  },
-])
+const KNOWN_CONTRAST_DEBT_COLOR_PAIRS = Object.freeze([])
 
 function normalizeHex(value) {
   return typeof value === 'string' ? value.toLowerCase() : ''

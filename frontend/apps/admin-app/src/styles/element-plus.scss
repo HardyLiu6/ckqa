@@ -40,6 +40,14 @@
 
   --ckqa-el-focus-border: var(--ckqa-accent);
   --ckqa-el-focus-ring: 0 0 0 3px var(--ckqa-focus);
+
+  /* M8 Task 3：把 EL 表头字色 / 单选按钮 active 样式拉回 ckqa token，
+     收敛 axe-helpers 历史已知 color-contrast 债。 */
+  --el-table-header-text-color: var(--ckqa-text);
+  --el-table-header-bg-color: var(--ckqa-surface-muted);
+  --el-radio-button-checked-bg-color: var(--ckqa-accent-strong);
+  --el-radio-button-checked-text-color: var(--ckqa-text-inverse);
+  --el-radio-button-checked-border-color: var(--ckqa-accent-strong);
 }
 
 @supports (color: color-mix(in srgb, white, black)) {
@@ -54,6 +62,29 @@
 .el-button {
   border-radius: var(--ckqa-radius-sm);
   font-weight: 800;
+}
+
+/* M8 Task 3：高特异性覆盖，确保 EL 自动注入的 CSS 不会回退到默认 #909399/#409eff，
+   收敛 axe-helpers 历史 color-contrast 债。
+   注意：EL CSS 通过 unplugin 自动注入，加载顺序晚于本 SCSS，
+   因此使用 `!important` 锁定。这是 EL 主题层与 ckqa token 系统的边界，
+   不应在业务组件里效仿。 */
+.el-table th.el-table__cell,
+.el-table th.el-table__cell .cell {
+  color: var(--ckqa-text) !important;
+}
+
+.el-table__empty-text,
+.el-table__empty-block .el-table__empty-text {
+  color: var(--ckqa-text-muted) !important;
+}
+
+.el-radio-button.is-active .el-radio-button__inner,
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background-color: var(--ckqa-accent-deepest) !important;
+  border-color: var(--ckqa-accent-deepest) !important;
+  color: var(--ckqa-text-inverse) !important;
+  box-shadow: -1px 0 0 0 var(--ckqa-accent-deepest) !important;
 }
 
 .ckqa-el-button {
