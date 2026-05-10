@@ -351,14 +351,65 @@ class TestEndpointValidRate(unittest.TestCase):
     def test_contains_inverse_derivation_is_limited_to_structural_sources(self):
         schema = {
             "contains": {
-                "inverse_of": "belongs_to",
-                "derivation_constraints": {
-                    "derive_inverse_only_when_source_types": ["Course", "Chapter", "Section"]
+                "inverse_of": None,
+                "derivable_inverse": {
+                    "relation": "belongs_to",
+                    "only_when_source_types": ["Course", "Chapter", "Section"],
                 },
             }
         }
         self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
         self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_legacy_inverse_derivation_constraints_remain_supported(self):
+        schema = {
+            "contains": {
+                "inverse_of": "belongs_to",
+                "derivation_constraints": {
+                    "derive_inverse_only_when_source_types": [
+                        "Course",
+                        "Chapter",
+                        "Section",
+                    ]
+                },
+            }
+        }
+
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_derivable_inverse_takes_priority_over_legacy_constraints(self):
+        schema = {
+            "contains": {
+                "inverse_of": "belongs_to",
+                "can_be_derived": True,
+                "derivable_inverse": {
+                    "relation": "belongs_to",
+                    "only_when_source_types": ["Course"],
+                },
+                "derivation_constraints": {
+                    "derive_inverse_only_when_source_types": ["Concept"]
+                },
+            }
+        }
+
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_dependency_relations_do_not_derive_inverse_edges(self):
+        schema = {
+            "depends_on": {
+                "inverse_of": None,
+                "can_be_derived": False,
+            },
+            "prerequisite_of": {
+                "inverse_of": None,
+                "can_be_derived": False,
+            },
+        }
+
+        self.assertFalse(can_derive_inverse_relation("depends_on", "Concept", schema))
+        self.assertFalse(can_derive_inverse_relation("prerequisite_of", "Concept", schema))
 
 
 class TestDuplicateAndNoise(unittest.TestCase):

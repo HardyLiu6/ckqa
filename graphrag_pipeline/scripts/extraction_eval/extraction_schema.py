@@ -81,13 +81,23 @@ class ExtractionEntity(BaseModel):
     id: str
     title: str
     type: str
+    alias: list[str] = Field(default_factory=list)
+    definition_text: str = ""
     description: str = ""
     evidence: str = ""
 
-    @field_validator("id", "title", "type", "description", "evidence", mode="before")
+    @field_validator("id", "title", "type", "definition_text", "description", "evidence", mode="before")
     @classmethod
     def _normalize_fields(cls, value: object) -> str:
         return _clean_text(value)
+
+    @field_validator("alias", mode="before")
+    @classmethod
+    def _normalize_alias(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        values = value if isinstance(value, list) else [value]
+        return [cleaned for item in values if (cleaned := _clean_text(item))]
 
 
 class ExtractionRelationship(BaseModel):

@@ -20,6 +20,18 @@
     "Assignment",
     "ToolOrPlatform"
   ],
+  "global_entity_attributes": {
+    "alias": {
+      "type": "List[str]",
+      "required": false,
+      "description": "实体的别名、缩写、英文全称或同义表达，供归一化、消歧和解析流程使用，不进入关系抽取。"
+    },
+    "definition_text": {
+      "type": "str",
+      "required": false,
+      "description": "普通概念解释文本；当解释不足以提升为 FormulaOrDefinition 实体时，保留在该字段中。"
+    }
+  },
   "entity_types": {
     "Course": {
       "label_zh": "课程",
@@ -144,7 +156,7 @@
       "category": "learning_object",
       "identity_scope": "course",
       "description": "课程中需要掌握、理解、记忆或考核的稳定知识单元，通常能直接成为问答或考核对象。",
-      "canonical_name_rule": "使用最短且稳定的教学名词短语，不使用完整陈述句；若它只是某个更大概念的考点，可保留课程内常用表述。",
+      "canonical_name_rule": "使用最短且稳定的教学名词短语，不使用完整陈述句；syllabus、学习目标、考核要求字段中的对象优先按 KnowledgePoint 处理。",
       "preferred_context_fields": [
         "course_id",
         "chapter",
@@ -185,7 +197,7 @@
       "category": "knowledge_content",
       "identity_scope": "course",
       "description": "可被独立解释、比较和问答的理论概念、机制或对象。",
-      "canonical_name_rule": "优先使用课程正文中的标准概念名称；如果一个对象既像术语又像概念，优先归为 Concept，除非它主要是缩写或符号。",
+      "canonical_name_rule": "优先使用课程正文中的标准概念名称；正文解释性段落且有“X 是/指/表示”类定义句式时优先按 Concept 处理；若同时满足教学目标与概念解释，以 KnowledgePoint 为准。",
       "preferred_context_fields": [
         "course_id",
         "chapter",
@@ -218,7 +230,9 @@
         "进程",
         "线程",
         "临界区",
-        "虚拟内存"
+        "虚拟内存",
+        "周转时间",
+        "时间片"
       ]
     },
     "Term": {
@@ -257,16 +271,19 @@
       "examples": [
         "PCB",
         "TLB",
-        "周转时间",
-        "时间片"
+        "HRN",
+        "FIFO",
+        "Δ",
+        "FCFS",
+        "SPOOLing"
       ]
     },
     "FormulaOrDefinition": {
       "label_zh": "公式或定义",
       "category": "formal_knowledge",
       "identity_scope": "course",
-      "description": "具有稳定名称的定义、公式、定律、判定条件或符号化表达，用于支撑定义问答与公式检索。",
-      "canonical_name_rule": "优先使用“X定义”“X公式”“X定律”这类可复用名称；不要把无标题、无语义的孤立公式片段直接当实体名。",
+      "description": "具有稳定名称、可复用或被引用的定义、公式、定理、定律、判定条件或符号化表达，用于支撑定义问答、公式检索和考核对象定位；普通概念解释不提升为该类型。",
+      "canonical_name_rule": "优先使用“X定义”“X公式”“X定理”“X判定条件”这类可复用名称；只有稳定名称、被复用/引用、可计算公式/定理/判定条件，或作为独立考核对象时才抽取；普通概念解释放入 definition_text。",
       "preferred_context_fields": [
         "course_id",
         "chapter",
@@ -293,7 +310,9 @@
       "negative_signals": [
         "孤立数学符号",
         "OCR 残片",
-        "图中坐标刻度"
+        "图中坐标刻度",
+        "普通概念解释",
+        "一次性说明句"
       ],
       "examples": [
         "进程定义",
@@ -384,10 +403,10 @@
       ]
     },
     "Assignment": {
-      "label_zh": "作业",
+      "label_zh": "作业/评测任务",
       "category": "learning_activity",
       "identity_scope": "course",
-      "description": "作业、习题、报告、测验、考试题组或用于评估学习结果的任务集合。",
+      "description": "作业、习题、报告、测验、考试题组、复习题或其它用于评估学习结果的任务集合。",
       "canonical_name_rule": "优先使用任务正式标题；如果只有编号，至少保留“作业x”“实验报告x”“期末题组”这类稳定标识。",
       "preferred_context_fields": [
         "course_id",

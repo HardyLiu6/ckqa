@@ -70,7 +70,9 @@ def render_extraction_messages(
 8. 若候选 Prompt 中仍出现 tuple/record delimiter 说明，仅把它视为候选策略参考，不要真的输出 tuple。
 9. 只输出合法 JSON，不要输出 ```json code fence。
 10. {scope_hint}
-11. {output_budget_hint}
+11. alias 用于别名、缩写、英文全称或同义表达，不作为关系端点类型。
+12. 普通概念解释可写 definition_text；不足以提升为 FormulaOrDefinition 时不要强行新增实体。
+13. {output_budget_hint}
 
 输出 JSON 结构示例：
 ```json
@@ -214,6 +216,8 @@ def _build_json_schema_example(schema_catalog: SchemaCatalog) -> str:
                 "id": "entity-1",
                 "title": "实体标题",
                 "type": schema_catalog.entity_type_names[0] if schema_catalog.entity_type_names else "Concept",
+                "alias": ["别名或缩写"],
+                "definition_text": "普通概念解释或定义性原文",
                 "description": "实体的稳定描述",
                 "evidence": "来自原文的直接证据",
             }

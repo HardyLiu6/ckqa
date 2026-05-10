@@ -120,6 +120,17 @@ def can_derive_inverse_relation(
     constraints = relation_schema.get(relation_type)
     if not isinstance(constraints, dict):
         return False
+
+    derivable_inverse = constraints.get("derivable_inverse")
+    if isinstance(derivable_inverse, dict):
+        inverse = derivable_inverse.get("relation")
+        allowed_sources = derivable_inverse.get("only_when_source_types")
+        if not inverse:
+            return False
+        if isinstance(allowed_sources, list) and allowed_sources:
+            return source_type in {str(item) for item in allowed_sources}
+        return True
+
     inverse = constraints.get("inverse_of")
     if not inverse:
         return False

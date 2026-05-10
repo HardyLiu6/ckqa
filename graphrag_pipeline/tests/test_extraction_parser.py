@@ -75,6 +75,42 @@ class TestExtractionParser(unittest.TestCase):
         self.assertEqual(result.status, "success")
         self.assertEqual(result.entities[0].evidence, r"某段时间间隔 \Delta 里访问页面的集合")
 
+    def test_parse_json_preserves_cleaned_alias_and_definition_text(self):
+        result = parse_extraction_output(
+            """
+{
+  "entities": [
+    {
+      "id": "e1",
+      "title": "  CPU 调度  ",
+      "type": "Concept",
+      "alias": [" CPU scheduling ", "", null, "处理器调度"],
+      "definition_text": "  从就绪队列中选择进程并分配处理器。  ",
+      "description": " 调度概念 ",
+      "evidence": " CPU 调度负责选择下一个运行进程。 "
+    },
+    {
+      "title": "TLB",
+      "type": "Concept",
+      "alias": "Translation Lookaside Buffer",
+      "definition_text": null
+    }
+  ],
+  "relationships": []
+}
+""",
+            sample_id="pts-003",
+            candidate="schema_aware",
+            schema_catalog=_build_schema_catalog(),
+        )
+
+        self.assertEqual(result.status, "success")
+        self.assertEqual(result.entities[0].title, "CPU 调度")
+        self.assertEqual(result.entities[0].alias, ["CPU scheduling", "处理器调度"])
+        self.assertEqual(result.entities[0].definition_text, "从就绪队列中选择进程并分配处理器。")
+        self.assertEqual(result.entities[1].alias, ["Translation Lookaside Buffer"])
+        self.assertEqual(result.entities[1].definition_text, "")
+
 
 if __name__ == "__main__":
     unittest.main()

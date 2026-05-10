@@ -227,6 +227,52 @@ text: {input_text}
         self.assertIn("target_types: KnowledgePoint, Concept", user_message)
         self.assertIn("用于算法或方法应用到知识主题的明确表达", user_message)
 
+    def test_rendered_prompt_documents_optional_alias_and_definition_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            schema_dir = root / "config" / "schema"
+            _write_json(
+                schema_dir / "entity_types.json",
+                {
+                    "entity_types": {
+                        "Concept": {"label_zh": "概念", "description": "课程概念"},
+                        "FormulaOrDefinition": {"label_zh": "公式定义", "description": "公式或严格定义"},
+                    }
+                },
+            )
+            _write_json(
+                schema_dir / "relation_types.json",
+                {
+                    "relation_types": {
+                        "related_to": {"label_zh": "相关", "description": "相关"},
+                    }
+                },
+            )
+            catalog = load_schema_catalog(
+                entity_schema_path=schema_dir / "entity_types.json",
+                relation_schema_path=schema_dir / "relation_types.json",
+            )
+            candidate = CandidatePrompt(
+                name="schema_aware",
+                prompt_text="识别课程知识实体。",
+                prompt_path=root / "prompt.txt",
+                manifest_entry={"candidate_name": "schema_aware"},
+            )
+
+            messages = render_extraction_messages(
+                candidate=candidate,
+                sample={"sample_id": "pts-alias", "text": "TLB 是 Translation Lookaside Buffer 的缩写。"},
+                schema_catalog=catalog,
+            )
+            user_message = next(item["content"] for item in messages if item["role"] == "user")
+
+        self.assertIn("alias 用于别名、缩写、英文全称或同义表达", user_message)
+        self.assertIn("不作为关系端点类型", user_message)
+        self.assertIn("普通概念解释可写 definition_text", user_message)
+        self.assertIn("不足以提升为 FormulaOrDefinition", user_message)
+        self.assertIn('"alias": [', user_message)
+        self.assertIn('"definition_text": "普通概念解释或定义性原文"', user_message)
+
     def test_real_schema_endpoint_fix_rules_are_visible_in_rendered_prompt(self):
         catalog = load_schema_catalog(
             entity_schema_path=_PROJECT_ROOT / "config" / "schema" / "entity_types.json",

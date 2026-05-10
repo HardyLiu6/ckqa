@@ -92,7 +92,7 @@ output:
 当前任务聚焦“课程知识图谱抽取”，不是通用信息抽取。
 请优先抽取课程结构、概念/术语、方法/算法、实验、作业等稳定对象。
 当前课程实体类型基线：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
-当前课程关系类型基线：[contains, belongs_to, depends_on, prerequisite_of, related_to, defined_by, applied_in, implemented_by, evaluated_by, appears_in]
+当前课程关系类型基线：[contains, belongs_to, defined_by, prerequisite_of, depends_on, implemented_by, applied_in, evaluated_by, related_to, appears_in]
 避免抽取课程通知、图表残片、页码、无关行政信息和重复实体。
 
 -Real Data-

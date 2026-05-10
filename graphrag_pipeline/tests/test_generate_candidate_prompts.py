@@ -233,12 +233,16 @@ output:
         payload = {
             "task": "candidate_prompt_generation",
             "generated_at": "2026-04-16T16:00:00+08:00",
+            "last_updated_at": "2026-05-08T18:54:04+08:00",
             "candidates": [
                 {
                     "candidate_name": "auto_tuned",
                     "source_type": "graphrag_prompt_tune",
                     "generation_method": "graphrag_official_prompt_tune",
                     "graphrag_invocation": "python -m graphrag prompt-tune",
+                    "root_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+                    "config_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/settings.yaml",
+                    "output_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned",
                     "notes": ["已有官方调优信息"],
                     "files": {"prompt": "/tmp/auto/prompt.txt"},
                 }
@@ -866,9 +870,14 @@ output:
             self.assertTrue(report_file.exists())
 
             manifest = result["manifest"]
+            self.assertEqual(manifest["last_updated_at"], manifest["generated_at"])
             auto_tuned_entry = next(item for item in manifest["candidates"] if item["candidate_name"] == "auto_tuned")
             self.assertEqual(auto_tuned_entry["generation_method"], "graphrag_official_prompt_tune")
             self.assertEqual(auto_tuned_entry["graphrag_invocation"], "python -m graphrag prompt-tune")
+            self.assertNotIn("root_path", auto_tuned_entry)
+            self.assertNotIn("config_path", auto_tuned_entry)
+            self.assertNotIn("output_path", auto_tuned_entry)
+            self.assertNotIn("/home/sunlight/", json.dumps(manifest, ensure_ascii=False))
 
     def test_generate_candidate_prompts_does_not_treat_fallback_auto_tuned_as_official_base(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1012,6 +1021,10 @@ output:
             self.assertEqual(
                 candidates["schema_fewshot"]["notes"][0],
                 "schema_fewshot 继承 schema_aware，并继续沿用 官方 auto_tuned Prompt 作为底稿。",
+            )
+            self.assertIn(
+                "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。",
+                candidates["schema_fewshot"]["notes"],
             )
             self.assertNotIn("旧的 few-shot 备注", candidates["schema_fewshot"]["notes"])
 

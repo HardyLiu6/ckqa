@@ -122,6 +122,8 @@ def _normalize_entities(raw_entities: list[dict[str, Any]], schema_catalog: Sche
         if not entity_type:
             continue
         description = _clean_text(item.get("description") or item.get("entity_description") or item.get("summary"))
+        alias = _normalize_aliases(item.get("alias"))
+        definition_text = _clean_text(item.get("definition_text"))
         evidence = _clean_text(item.get("evidence") or item.get("span_text") or item.get("quote"))
         entity_id = _clean_text(item.get("id") or item.get("entity_id")) or _make_entity_id(title, entity_type, index)
         entities.append(
@@ -129,6 +131,8 @@ def _normalize_entities(raw_entities: list[dict[str, Any]], schema_catalog: Sche
                 id=entity_id,
                 title=title,
                 type=entity_type,
+                alias=alias,
+                definition_text=definition_text,
                 description=description,
                 evidence=evidence,
             )
@@ -344,6 +348,11 @@ def _normalize_type(raw_type: Any, aliases: dict[str, str]) -> str:
     if not cleaned:
         return ""
     return aliases.get(cleaned.casefold(), "")
+
+
+def _normalize_aliases(raw_alias: Any) -> list[str]:
+    values = raw_alias if isinstance(raw_alias, list) else [raw_alias]
+    return [cleaned for value in values if (cleaned := _clean_text(value))]
 
 
 def _extract_relation_type(description: str) -> tuple[str, str]:

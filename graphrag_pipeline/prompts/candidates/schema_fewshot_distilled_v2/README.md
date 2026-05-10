@@ -3,7 +3,7 @@
 ## 作用
 
 - 候选名称：`schema_fewshot_distilled_v2`
-- 生成时间：`2026-05-09T22:15:34+08:00`
+- 生成时间：`2026-05-10T12:03:26+08:00`
 - 来源类型：`schema_fewshot_distilled_v2`
 - 基础 Prompt 来源：`prompts/candidates/auto_tuned/extract_graph.txt`
 - 是否注入 schema：`yes`
@@ -19,4 +19,5 @@
 - schema_fewshot_distilled_v2 继承 schema_fewshot_distilled，并追加短反向负例和缺端点跳过规则。
 - v2 不嵌入完整 audit 样本文本，重点压制 evaluated_by / appears_in / defined_by / applied_in / related_to 的高频残留错误。
 - 长度目标仍接近 schema_aware_directional，避免回到 full schema_fewshot 的高成本形态。
-- distilled 渲染覆盖摘要：关系 8/10，micro-example 8 条
+- distilled 渲染覆盖摘要：关系 3/10，micro-example 3 条
+- 本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。

@@ -101,11 +101,11 @@ DELIMITER_PLACEHOLDER_REPLACEMENTS = {
 AUTO_TUNED_MANIFEST_PASSTHROUGH_FIELDS = (
     "generation_method",
     "graphrag_invocation",
-    "root_path",
-    "config_path",
-    "output_path",
     "status",
     "collected_files",
+)
+FEWSHOT_COMPRESSION_CAVEAT = (
+    "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
 )
 
 DEFAULT_PROMPT_FILE_NAMES: tuple[str, ...] = (
@@ -1716,6 +1716,7 @@ def generate_candidate_prompts(
     schema_fewshot_notes.append(
         "few-shot 示例已压缩：限制输入长度、实体数量和关系数量，避免候选 Prompt 过长。"
     )
+    schema_fewshot_notes.append(FEWSHOT_COMPRESSION_CAVEAT)
     schema_fewshot_notes = _dedupe_preserve_order(schema_fewshot_notes)
     schema_fewshot_distilled_notes = _dedupe_preserve_order(
         [
@@ -1724,6 +1725,7 @@ def generate_candidate_prompts(
             "长度目标接近 schema_aware，避免回到长 few-shot Prompt。",
             fewshot_coverage_summary,
             rendered_micro_example_coverage_summary,
+            FEWSHOT_COMPRESSION_CAVEAT,
         ]
     )
     schema_fewshot_distilled_v2_notes = _dedupe_preserve_order(
@@ -1732,6 +1734,7 @@ def generate_candidate_prompts(
             "v2 不嵌入完整 audit 样本文本，重点压制 evaluated_by / appears_in / defined_by / applied_in / related_to 的高频残留错误。",
             "长度目标仍接近 schema_aware_directional，避免回到 full schema_fewshot 的高成本形态。",
             rendered_micro_example_coverage_summary,
+            FEWSHOT_COMPRESSION_CAVEAT,
         ]
     )
     auto_tuned_notes = _dedupe_preserve_order(auto_tuned_notes)
@@ -1905,10 +1908,11 @@ def generate_candidate_prompts(
         manifest_candidates.append(_merge_manifest_entry(existing_entry, generated_entry))
 
     manifest = {
-        **{k: v for k, v in existing_manifest.items() if k != "candidates"},
+        **{k: v for k, v in existing_manifest.items() if k not in {"candidates", "last_updated_at"}},
         "task": "candidate_prompt_generation",
         "schema_version": schema_catalog.schema_version,
         "generated_at": generated_at,
+        "last_updated_at": generated_at,
         "language": language,
         "output_dir": _safe_relpath(output_dir),
         "inputs": {
@@ -1960,6 +1964,7 @@ def generate_candidate_prompts(
             "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
             "schema_aware_directional / schema_fewshot_distilled / schema_fewshot_distilled_v2 用短方向卡片、micro-examples 和负例规则降低关系方向泄漏风险。",
             "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
+            FEWSHOT_COMPRESSION_CAVEAT,
         ],
     }
 

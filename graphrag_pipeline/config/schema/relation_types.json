@@ -10,13 +10,13 @@
   "relation_type_order": [
     "contains",
     "belongs_to",
-    "depends_on",
-    "prerequisite_of",
-    "related_to",
     "defined_by",
-    "applied_in",
+    "prerequisite_of",
+    "depends_on",
     "implemented_by",
+    "applied_in",
     "evaluated_by",
+    "related_to",
     "appears_in"
   ],
   "relation_types": {
@@ -24,7 +24,7 @@
       "label_zh": "包含",
       "directed": true,
       "symmetric": false,
-      "inverse_of": "belongs_to",
+      "inverse_of": null,
       "can_be_derived": false,
       "description": "表示结构化容器包含下级单元，或知识对象在原文明确表达分类、组成、步骤分解时包含子对象。",
       "source_types": [
@@ -47,25 +47,15 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "derivation_constraints": {
-        "derive_inverse_only_when_source_types": [
+      "derivable_inverse": {
+        "relation": "belongs_to",
+        "only_when_source_types": [
           "Course",
           "Chapter",
           "Section"
-        ],
-        "do_not_derive_inverse_when_source_types": [
-          "KnowledgePoint",
-          "Concept",
-          "Term",
-          "FormulaOrDefinition",
-          "AlgorithmOrMethod",
-          "Experiment",
-          "Assignment",
-          "ToolOrPlatform"
-        ],
-        "notes": "知识对象之间的 contains 只表达分类、组成或步骤分解，不自动反推 belongs_to。"
+        ]
       },
-      "extraction_hint": "用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明确的容器关系；知识对象之间仅在明确分类、组成或步骤分解时使用，不能因为同段出现或主题相关就建立 contains。",
+      "extraction_hint": "用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明确的容器关系；仅当 source 是 Course/Chapter/Section 时可派生反向 belongs_to。知识对象之间仅在明确分类、组成或步骤分解时使用，不自动派生 belongs_to，不能因为同段出现或主题相关就建立 contains。",
       "examples": [
         "Course -> Chapter",
         "Chapter -> Section",
@@ -115,7 +105,7 @@
       "label_zh": "依赖于",
       "directed": true,
       "symmetric": false,
-      "inverse_of": "prerequisite_of",
+      "inverse_of": null,
       "can_be_derived": false,
       "description": "表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。",
       "source_types": [
@@ -150,8 +140,8 @@
       "label_zh": "先修于",
       "directed": true,
       "symmetric": false,
-      "inverse_of": "depends_on",
-      "can_be_derived": true,
+      "inverse_of": null,
+      "can_be_derived": false,
       "description": "表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。",
       "source_types": [
         "Chapter",
@@ -175,7 +165,8 @@
         "Experiment",
         "Assignment"
       ],
-      "extraction_hint": "用于课程安排、教学目标、实验说明中的先修关系；若文本只给出 depends_on，也可由脚本在后处理阶段反推。",
+      "derivation_hint": "只有明确先修、前置、学习顺序、实验前置等教学组织证据才生成 prerequisite_of，不从 depends_on 自动推导。",
+      "extraction_hint": "用于课程安排、教学目标、实验说明中的先修关系；只有文本明确表达先修、前置、学习顺序或实验前置要求时才输出。",
       "examples": [
         "进程概念 prerequisite_of 进程同步",
         "环境配置 prerequisite_of 进程调度实验"
@@ -189,9 +180,6 @@
       "can_be_derived": false,
       "description": "表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。",
       "source_types": [
-        "Course",
-        "Chapter",
-        "Section",
         "KnowledgePoint",
         "Concept",
         "Term",
@@ -202,9 +190,6 @@
         "ToolOrPlatform"
       ],
       "target_types": [
-        "Course",
-        "Chapter",
-        "Section",
         "KnowledgePoint",
         "Concept",
         "Term",
@@ -328,7 +313,7 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": false,
-      "description": "表示课程目标、章节、知识点、概念、术语、方法或实验由作业、测验或实验任务进行评估与验证。",
+      "description": "表示课程目标、章节、知识点、概念、术语、方法或实验由作业或评测任务进行评估与验证。",
       "source_types": [
         "Course",
         "Chapter",
@@ -340,18 +325,18 @@
         "Experiment"
       ],
       "target_types": [
-        "Assignment",
-        "Experiment"
+        "Assignment"
       ],
-      "extraction_hint": "用于“通过作业/实验检验 X”“X 是某题组或实验报告的考核对象”这类教学评测关系。source 应为 Course/Chapter/Section/KnowledgePoint/Concept/Term/AlgorithmOrMethod/Experiment；术语本身是考核对象时允许 Term->Assignment，例如 PCB evaluated_by 第二章习题；但别名展开、英文全称解释或普通出现不能误判为 evaluated_by。",
+      "extraction_hint": "用于“通过作业/测验/评测任务检验 X”“X 是某题组或作业报告的考核对象”这类教学评测关系。source 应为 Course/Chapter/Section/KnowledgePoint/Concept/Term/AlgorithmOrMethod/Experiment，target 只能是 Assignment；术语本身是考核对象时允许 Term->Assignment，例如 PCB evaluated_by 第二章习题；实验任务本身被作业评估时允许 Experiment->Assignment。别名展开、英文全称解释或普通出现不能误判为 evaluated_by。",
       "examples": [
         "死锁处理 evaluated_by 作业 3",
-        "文件系统概念 evaluated_by 文件系统设计实验",
+        "文件系统实验 evaluated_by 实验报告作业",
         "PCB evaluated_by 第二章习题"
       ],
       "negative_examples": [
         "Assignment->Concept: 习题 evaluated_by 进程",
         "Assignment->Term: 习题 evaluated_by PCB",
+        "Experiment->Experiment: 文件系统设计实验 evaluated_by 实验任务",
         "Term->Assignment: TLB evaluated_by 习题 3（仅普通出现而非被考核对象时）"
       ]
     },
@@ -361,6 +346,7 @@
       "symmetric": false,
       "inverse_of": null,
       "can_be_derived": true,
+      "derivation_source": "metadata_first",
       "description": "表示实体在某章、某节、某实验、某作业或平台上下文中出现，是弱定位关系。",
       "source_types": [
         "KnowledgePoint",
@@ -378,7 +364,7 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "当只有位置、讲授场景或平台上下文信息，而缺少更强语义时使用；source 必须是出现的知识实体，目标必须是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform。平台/工具上下文中允许 Concept/Term/AlgorithmOrMethod -> ToolOrPlatform，例如 Linux 系统调用可抽为 系统调用 appears_in Linux。禁止反向 Section appears_in Concept，禁止 Section/Assignment 反向 appears_in 到知识对象；结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
+      "extraction_hint": "优先由标准化文档元数据生成；LLM 仅在文本明确表达出现位置或平台上下文，且缺少 contains、applied_in、evaluated_by 等更强语义时输出。source 必须是出现的知识实体，目标必须是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform。平台/工具上下文中允许 Concept/Term/AlgorithmOrMethod -> ToolOrPlatform，例如 Linux 系统调用可抽为 系统调用 appears_in Linux；不建议 ToolOrPlatform -> ToolOrPlatform。禁止反向 Section appears_in Concept，禁止 Section/Assignment 反向 appears_in 到知识对象；结构容器包含知识对象应使用 contains；若能判断 applied_in、evaluated_by 等关系，则优先使用更强关系。",
       "examples": [
         "TLB appears_in 第三章 存储器管理",
         "银行家算法 appears_in 作业 2",
@@ -389,6 +375,7 @@
         "Assignment->ToolOrPlatform: 习题 1 appears_in SPOOLing 系统",
         "Experiment->Concept: 实验一 appears_in 银行家算法",
         "Concept->Concept: 虚拟内存 appears_in 页面置换算法",
+        "ToolOrPlatform->ToolOrPlatform: Linux appears_in Docker",
         "ToolOrPlatform->Concept: Linux appears_in 系统调用"
       ]
     }
