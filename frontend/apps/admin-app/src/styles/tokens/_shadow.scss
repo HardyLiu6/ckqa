@@ -45,6 +45,12 @@ $shadow-progress-glow-danger: 0 0 8px rgb(196 65 58 / 30%);
 $shadow-progress-glow-warning: 0 0 8px rgb(184 134 11 / 30%);
 $shadow-progress-glow-success: 0 0 8px rgb(74 124 89 / 30%);
 
+/* M8 Task 2.5：脉冲点动画三相位（rest / from / to）。
+   命名 -pulse-* 对齐 sidebar-active-breathe-*，便于读图。 */
+$shadow-pulse-accent-rest: 0 0 0 0 rgb(217 119 87 / 60%);
+$shadow-pulse-accent-from: 0 0 0 0 rgb(217 119 87 / 0%);
+$shadow-pulse-accent-to: 0 0 0 6px rgb(217 119 87 / 15%);
+
 :root {
   --ckqa-shadow-xs: #{$shadow-xs};
   --ckqa-shadow-sm: #{$shadow-sm};
@@ -66,5 +72,8 @@ $shadow-progress-glow-success: 0 0 8px rgb(74 124 89 / 30%);
   --ckqa-shadow-progress-glow-danger: #{$shadow-progress-glow-danger};
   --ckqa-shadow-progress-glow-warning: #{$shadow-progress-glow-warning};
   --ckqa-shadow-progress-glow-success: #{$shadow-progress-glow-success};
+  --ckqa-shadow-pulse-accent-rest: #{$shadow-pulse-accent-rest};
+  --ckqa-shadow-pulse-accent-from: #{$shadow-pulse-accent-from};
+  --ckqa-shadow-pulse-accent-to: #{$shadow-pulse-accent-to};
   --ckqa-focus-ring: 0 0 0 3px var(--ckqa-focus, rgb(217 119 87 / 35%));
 }

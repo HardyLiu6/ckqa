@@ -46,10 +46,6 @@ const EXCLUDED_DIR_PREFIXES = [
 // 每一条请附一个简短原因说明，便于 PR 审阅者追溯。
 const LEGACY_ALLOWLIST = new Map([
   [
-    'src/components/common/CkPipelineHero.vue',
-    'M1~M2 流水线 Hero 脉冲阴影仍用裸值，后续 spec 清理',
-  ],
-  [
     'src/styles/components.scss',
     'M1~M2 全局组件样式集含大量历史裸值（Playwright/Element Plus 兼容写法），独立清理 PR 处理',
   ],

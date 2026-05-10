@@ -133,7 +133,7 @@ function jump(stage) {
   height: 8px;
   border-radius: 50%;
   background: var(--ckqa-accent);
-  box-shadow: 0 0 0 0 rgb(217 119 87 / 60%);
+  box-shadow: var(--ckqa-shadow-pulse-accent-rest);
   animation: ck-pipeline-pulse 1.6s ease-in-out infinite;
 }
 
@@ -180,7 +180,7 @@ function jump(stage) {
 .ck-pipeline-hero-card-trend-bar {
   flex: 1;
   min-height: 3px;
-  background: linear-gradient(180deg, rgb(217 119 87 / 50%), rgb(217 119 87 / 18%));
+  background: var(--ckqa-trend-bar-accent-gradient);
   border-radius: 2px;
   transition: height var(--ckqa-duration-base) var(--ckqa-ease-spring);
 }
@@ -193,11 +193,11 @@ function jump(stage) {
 
 @keyframes ck-pipeline-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgb(217 119 87 / 0%);
+    box-shadow: var(--ckqa-shadow-pulse-accent-from);
   }
 
   50% {
-    box-shadow: 0 0 0 6px rgb(217 119 87 / 15%);
+    box-shadow: var(--ckqa-shadow-pulse-accent-to);
   }
 }
 </style>

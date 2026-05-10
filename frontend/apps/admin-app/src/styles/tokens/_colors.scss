@@ -94,6 +94,13 @@
   /* M8 Task 2.4：进度条轨道背景（半透明边框灰，避免裸 rgb） */
   --ckqa-progress-track: rgb(232 226 216 / 60%);
 
+  /* M8 Task 2.5：accent 趋势条渐变（流水线 hero 顶部微图） */
+  --ckqa-trend-bar-accent-gradient: linear-gradient(
+    180deg,
+    rgb(217 119 87 / 50%),
+    rgb(217 119 87 / 18%)
+  );
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -187,6 +194,13 @@
 
   /* M8 Task 2.4：暗色下进度条轨道（弱边框灰半透明） */
   --ckqa-progress-track: rgb(56 51 43 / 60%);
+
+  /* M8 Task 2.5：暗色 accent 趋势条渐变 */
+  --ckqa-trend-bar-accent-gradient: linear-gradient(
+    180deg,
+    rgb(232 145 111 / 50%),
+    rgb(232 145 111 / 18%)
+  );
 }
 
 [data-accent='indigo'] {
