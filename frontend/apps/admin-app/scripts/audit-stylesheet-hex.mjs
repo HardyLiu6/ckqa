@@ -39,17 +39,10 @@ const EXCLUDED_DIR_PREFIXES = [
   'dist/',
 ]
 
-// M1~M2 已存在的历史文件，M7 不负责清理。后续拆独立的
-// "admin-app-style-legacy-cleanup" spec 时，删除对应条目并把裸色
-// 替换成 Token 引用。
-//
-// 每一条请附一个简短原因说明，便于 PR 审阅者追溯。
-const LEGACY_ALLOWLIST = new Map([
-  [
-    'src/styles/components.scss',
-    'M1~M2 全局组件样式集含大量历史裸值（Playwright/Element Plus 兼容写法），独立清理 PR 处理',
-  ],
-])
+// 历史 allowlist：M8 收尾巡查后已全量收敛为空，仅保留 Map 结构以便
+// 未来出现"短期无法立刻 token 化"的场景时，按"加条目 + 注明上下游 spec
+// + 一周内追补 PR 收敛"流程使用。任何新增条目必须在 PR 描述里附独立 spec。
+const LEGACY_ALLOWLIST = new Map([])
 
 // 命中规则（只扫 .vue 的 <style> 块与 .scss/.css 整文件）
 const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g

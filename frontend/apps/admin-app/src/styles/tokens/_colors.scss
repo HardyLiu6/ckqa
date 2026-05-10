@@ -101,6 +101,24 @@
     rgb(217 119 87 / 18%)
   );
 
+  /* M8 Task 2.6：components.scss legacy 调色板别名。
+     这些颜色是 M1 Token 体系建立前散落在 components.scss 的 Tailwind 系
+     色值，本期收敛到命名 token，便于未来主题切换 / a11y 审计统一调整。 */
+  --ckqa-info: #0f766e;
+  --ckqa-info-strong: #0c5e58;
+  --ckqa-blue: #2563eb;
+  --ckqa-blue-strong: #1d4ed8;
+  --ckqa-blue-soft: #93c5fd;
+  --ckqa-indigo: #6366f1;
+  --ckqa-slate-weak: #94a3b8;
+  --ckqa-slate-deep: #0f172a;
+  --ckqa-slate-deeper: #1e293b;
+  --ckqa-skip-link-bg: #020617;
+  --ckqa-surface-overlay-tint: #18212f;
+  --ckqa-surface-frost: #f8fafc;
+  --ckqa-border-cool: #cbd5e1;
+  --ckqa-border-cool-soft: #e2e8f0;
+
   /* legacy aliases — 保留以兼容 components.scss 与历史样式 */
   --bg: var(--ckqa-bg);
   --surface: var(--ckqa-surface);
@@ -201,6 +219,23 @@
     rgb(232 145 111 / 50%),
     rgb(232 145 111 / 18%)
   );
+
+  /* M8 Task 2.6：components.scss legacy 调色板暗色映射。
+     状态色调亮一档以保证暗背景下可读；中性 slate 也调亮。 */
+  --ckqa-info: #5eb6ad;
+  --ckqa-info-strong: #80cdc4;
+  --ckqa-blue: #6ea3ff;
+  --ckqa-blue-strong: #8dbcff;
+  --ckqa-blue-soft: #2a3b5e;
+  --ckqa-indigo: #9094f5;
+  --ckqa-slate-weak: #6e7889;
+  --ckqa-slate-deep: #cbd5e1;
+  --ckqa-slate-deeper: #94a3b8;
+  --ckqa-skip-link-bg: #f0ece4;
+  --ckqa-surface-overlay-tint: #38332b;
+  --ckqa-surface-frost: #2a261f;
+  --ckqa-border-cool: #4a443a;
+  --ckqa-border-cool-soft: #38332b;
 }
 
 [data-accent='indigo'] {

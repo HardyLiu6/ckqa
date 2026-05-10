@@ -7,8 +7,8 @@
   z-index: 20;
   padding: 8px 12px;
   border-radius: var(--ckqa-radius-sm);
-  color: #fff;
-  background: #020617;
+  color: var(--ckqa-text-inverse);
+  background: var(--ckqa-skip-link-bg);
   transform: translateY(-140%);
 }
 
@@ -74,9 +74,9 @@
 }
 
 .health-pill {
-  color: #0f766e;
-  border-color: rgb(15 118 110 / 24%);
-  background: rgb(15 118 110 / 8%);
+  color: var(--ckqa-info);
+  border-color: color-mix(in srgb, var(--ckqa-info) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-info) 8%, transparent);
 }
 
 .button-icon,
@@ -119,7 +119,7 @@
   padding: 24px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 14%, transparent), transparent 34%),
-    linear-gradient(225deg, rgb(15 118 110 / 10%), transparent 36%),
+    linear-gradient(225deg, color-mix(in srgb, var(--ckqa-info) 10%, transparent), transparent 36%),
     var(--ckqa-bg);
 }
 
@@ -401,7 +401,7 @@ textarea.text-input {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgb(15 23 42 / 48%);
+  background: color-mix(in srgb, var(--ckqa-slate-deep) 48%, transparent);
 }
 
 .creation-dialog {
@@ -692,7 +692,7 @@ textarea.text-input {
   padding: 16px 12px;
   border-right: 1px solid color-mix(in srgb, var(--ckqa-border) 82%, var(--ckqa-text-muted));
   background: color-mix(in srgb, var(--ckqa-surface) 96%, var(--ckqa-bg));
-  box-shadow: 12px 0 34px rgb(15 23 42 / 5%);
+  box-shadow: 12px 0 34px color-mix(in srgb, var(--ckqa-slate-deep) 5%, transparent);
 }
 
 .side-navigation.compact {
@@ -843,8 +843,8 @@ textarea.text-input {
   min-height: 20px;
   padding: 0 7px;
   border-radius: var(--ckqa-radius-full);
-  color: #b45309;
-  background: rgb(245 158 11 / 12%);
+  color: var(--ckqa-warning-strong);
+  background: color-mix(in srgb, var(--ckqa-warning) 12%, transparent);
   font-size: 11px;
   font-weight: 800;
 }
@@ -943,18 +943,18 @@ textarea.text-input {
 }
 
 .breadcrumb-item[data-kind="link"] {
-  color: #0f766e;
-  background: rgb(15 118 110 / 9%);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 9%, transparent);
 }
 
 .breadcrumb-item[data-kind="link"] a {
-  border: 1px solid rgb(15 118 110 / 18%);
+  border: 1px solid color-mix(in srgb, var(--ckqa-info) 18%, transparent);
 }
 
 .breadcrumb-item[data-kind="link"] a:hover,
 .breadcrumb-item[data-kind="link"] a:focus-visible {
-  color: #0f766e;
-  background: rgb(15 118 110 / 14%);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 14%, transparent);
 }
 
 .breadcrumb-item[data-kind="current"] {
@@ -989,28 +989,28 @@ textarea.text-input {
 }
 
 .status-badge[data-status="upcoming"] {
-  color: #b45309;
-  background: rgb(245 158 11 / 12%);
+  color: var(--ckqa-warning-strong);
+  background: color-mix(in srgb, var(--ckqa-warning) 12%, transparent);
 }
 
 .status-badge[data-tone="success"] {
-  color: #0f766e;
-  background: rgb(15 118 110 / 10%);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 10%, transparent);
 }
 
 .status-badge[data-tone="running"] {
   color: var(--ckqa-running);
-  background: rgb(37 99 235 / 10%);
+  background: color-mix(in srgb, var(--ckqa-blue) 10%, transparent);
 }
 
 .status-badge[data-tone="warning"] {
-  color: #b7791f;
-  background: rgb(183 121 31 / 12%);
+  color: var(--ckqa-warning);
+  background: color-mix(in srgb, var(--ckqa-warning) 12%, transparent);
 }
 
 .status-badge[data-tone="danger"] {
-  color: #c2413d;
-  background: rgb(194 65 61 / 12%);
+  color: var(--ckqa-danger);
+  background: color-mix(in srgb, var(--ckqa-danger) 12%, transparent);
 }
 
 .status-badge[data-tone="blocked"] {
@@ -1035,15 +1035,15 @@ textarea.text-input {
 }
 
 .data-source-chip[data-source="live"] {
-  color: #0f766e;
-  border-color: rgb(15 118 110 / 24%);
-  background: rgb(15 118 110 / 8%);
+  color: var(--ckqa-info);
+  border-color: color-mix(in srgb, var(--ckqa-info) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-info) 8%, transparent);
 }
 
 .data-source-chip[data-source="mock"] {
-  color: #b7791f;
-  border-color: rgb(183 121 31 / 24%);
-  background: rgb(183 121 31 / 10%);
+  color: var(--ckqa-warning);
+  border-color: color-mix(in srgb, var(--ckqa-warning) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-warning) 10%, transparent);
 }
 
 .data-source-chip__time {
@@ -1142,17 +1142,17 @@ textarea.text-input {
 
 .metric-tile[data-tone="success"] .metric-tile__value,
 .metric-card[data-tone="green"] strong {
-  color: #0f766e;
+  color: var(--ckqa-info);
 }
 
 .metric-tile[data-tone="warning"] .metric-tile__value,
 .metric-card[data-tone="amber"] strong {
-  color: #b7791f;
+  color: var(--ckqa-warning);
 }
 
 .metric-tile[data-tone="danger"] .metric-tile__value,
 .metric-card[data-tone="red"] strong {
-  color: #c2413d;
+  color: var(--ckqa-danger);
 }
 
 .production-track {
@@ -1208,18 +1208,18 @@ textarea.text-input {
 }
 
 .production-track__node[data-tone="danger"] .production-track__index {
-  color: #c2413d;
-  background: rgb(194 65 61 / 12%);
+  color: var(--ckqa-danger);
+  background: color-mix(in srgb, var(--ckqa-danger) 12%, transparent);
 }
 
 .production-track__node[data-tone="running"] .production-track__index {
   color: var(--ckqa-running);
-  background: rgb(37 99 235 / 10%);
+  background: color-mix(in srgb, var(--ckqa-blue) 10%, transparent);
 }
 
 .production-track__node[data-tone="success"] .production-track__index {
-  color: #0f766e;
-  background: rgb(15 118 110 / 10%);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 10%, transparent);
 }
 
 .flow-rail {
@@ -1310,7 +1310,7 @@ textarea.text-input {
 }
 
 .event-list strong[data-tone="success"] {
-  color: #0f766e;
+  color: var(--ckqa-info);
 }
 
 .event-list strong[data-tone="running"] {
@@ -1318,7 +1318,7 @@ textarea.text-input {
 }
 
 .event-list strong[data-tone="pending"] {
-  color: #b7791f;
+  color: var(--ckqa-warning);
 }
 
 .event-list time {
@@ -1394,18 +1394,18 @@ textarea.text-input {
 }
 
 .material-parse-progress[data-status='processing'] {
-  border-color: rgb(37 99 235 / 24%);
-  background: rgb(37 99 235 / 5%);
+  border-color: color-mix(in srgb, var(--ckqa-blue) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-blue) 5%, transparent);
 }
 
 .material-parse-progress[data-status='done'] {
-  border-color: rgb(15 118 110 / 24%);
-  background: rgb(15 118 110 / 7%);
+  border-color: color-mix(in srgb, var(--ckqa-info) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-info) 7%, transparent);
 }
 
 .material-parse-progress[data-status='failed'] {
-  border-color: rgb(194 65 61 / 22%);
-  background: rgb(194 65 61 / 6%);
+  border-color: color-mix(in srgb, var(--ckqa-danger) 22%, transparent);
+  background: color-mix(in srgb, var(--ckqa-danger) 6%, transparent);
 }
 
 .material-parse-progress__heading {
@@ -1694,10 +1694,10 @@ textarea.text-input {
   gap: 12px;
   align-items: start;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, #b7791f 30%, var(--ckqa-border));
+  border: 1px solid color-mix(in srgb, var(--ckqa-warning) 30%, var(--ckqa-border));
   border-radius: var(--ckqa-radius-sm);
-  color: #b7791f;
-  background: color-mix(in srgb, #b7791f 8%, var(--ckqa-surface));
+  color: var(--ckqa-warning);
+  background: color-mix(in srgb, var(--ckqa-warning) 8%, var(--ckqa-surface));
 }
 
 .course-archive-warning p {
@@ -1957,19 +1957,19 @@ textarea.text-input {
 
 .step-state[data-state="done"],
 .step-state[data-state="ready"] {
-  color: #0f766e;
-  background: rgb(15 118 110 / 10%);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 10%, transparent);
 }
 
 .step-state[data-state="running"] {
   color: var(--ckqa-running);
-  background: rgb(37 99 235 / 10%);
+  background: color-mix(in srgb, var(--ckqa-blue) 10%, transparent);
 }
 
 .step-state[data-state="pending"],
 .step-state[data-state="blocked"] {
-  color: #b7791f;
-  background: rgb(183 121 31 / 12%);
+  color: var(--ckqa-warning);
+  background: color-mix(in srgb, var(--ckqa-warning) 12%, transparent);
 }
 
 .workflow-focus {
@@ -2086,7 +2086,7 @@ textarea.text-input {
 
 .workflow-stepper__blocked {
   margin: 12px 0 0;
-  color: #b7791f;
+  color: var(--ckqa-warning);
   font-weight: 800;
 }
 
@@ -2164,22 +2164,22 @@ textarea.text-input {
 .workflow-progress-rail__step.el-button[data-status='done']::before,
 .workflow-progress-rail__step.el-button[data-status='success']::before,
 .workflow-progress-rail__step.el-button[data-status='complete']::before {
-  background: #0f766e;
+  background: var(--ckqa-info);
 }
 
 .workflow-progress-rail__step.el-button[data-status='ready']::before {
-  background: #2563eb;
+  background: var(--ckqa-blue);
 }
 
 .workflow-progress-rail__step.el-button[data-status='running'],
 .workflow-progress-rail__step.el-button[data-status='processing'] {
-  border-color: rgb(99 102 241 / 34%);
-  background: rgb(99 102 241 / 8%);
+  border-color: color-mix(in srgb, var(--ckqa-indigo) 34%, transparent);
+  background: color-mix(in srgb, var(--ckqa-indigo) 8%, transparent);
 }
 
 .workflow-progress-rail__step.el-button[data-status='running']::before,
 .workflow-progress-rail__step.el-button[data-status='processing']::before {
-  background: #6366f1;
+  background: var(--ckqa-indigo);
 }
 
 .workflow-progress-rail__step.el-button[data-status='blocked'] {
@@ -2188,11 +2188,11 @@ textarea.text-input {
 }
 
 .workflow-progress-rail__step.el-button[data-status='blocked']::before {
-  background: #94a3b8;
+  background: var(--ckqa-slate-weak);
 }
 
 .workflow-progress-rail__step.el-button[data-status='failed']::before {
-  background: #c2413d;
+  background: var(--ckqa-danger);
 }
 
 .workflow-progress-rail__step.el-button > span {
@@ -2204,9 +2204,9 @@ textarea.text-input {
 }
 
 .workflow-progress-rail__steps li.active .workflow-progress-rail__step.el-button {
-  border-color: rgb(99 102 241 / 48%);
-  background: color-mix(in srgb, rgb(99 102 241) 10%, var(--ckqa-surface));
-  box-shadow: 0 14px 28px rgb(99 102 241 / 12%);
+  border-color: color-mix(in srgb, var(--ckqa-indigo) 48%, transparent);
+  background: color-mix(in srgb, var(--ckqa-indigo) 10%, var(--ckqa-surface));
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--ckqa-indigo) 12%, transparent);
 }
 
 .workflow-step-index {
@@ -2310,21 +2310,21 @@ textarea.text-input {
 }
 
 .build-summary-chip[data-tone='ok'] {
-  border-color: rgb(15 118 110 / 24%);
-  color: #0f766e;
-  background: rgb(15 118 110 / 8%);
+  border-color: color-mix(in srgb, var(--ckqa-info) 24%, transparent);
+  color: var(--ckqa-info);
+  background: color-mix(in srgb, var(--ckqa-info) 8%, transparent);
 }
 
 .build-summary-chip[data-tone='warn'] {
-  border-color: rgb(183 121 31 / 28%);
-  color: #9a5c12;
-  background: rgb(183 121 31 / 9%);
+  border-color: color-mix(in srgb, var(--ckqa-warning) 28%, transparent);
+  color: var(--ckqa-warning-strong);
+  background: color-mix(in srgb, var(--ckqa-warning) 9%, transparent);
 }
 
 .build-summary-chip[data-tone='info'] {
-  border-color: rgb(37 99 235 / 24%);
-  color: #1d4ed8;
-  background: rgb(37 99 235 / 8%);
+  border-color: color-mix(in srgb, var(--ckqa-blue) 24%, transparent);
+  color: var(--ckqa-blue-strong);
+  background: color-mix(in srgb, var(--ckqa-blue) 8%, transparent);
 }
 
 .build-step-stage__body,
@@ -2373,24 +2373,24 @@ textarea.text-input {
 }
 
 .build-material-name[data-status='done'] .build-material-name__marker {
-  background: #0f766e;
-  box-shadow: 0 8px 16px rgb(15 118 110 / 18%);
+  background: var(--ckqa-info);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ckqa-info) 18%, transparent);
 }
 
 .build-material-name[data-status='pending'] .build-material-name__marker {
-  background: #b7791f;
-  box-shadow: 0 8px 16px rgb(183 121 31 / 18%);
+  background: var(--ckqa-warning);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ckqa-warning) 18%, transparent);
 }
 
 .build-material-name[data-status='processing'] .build-material-name__marker,
 .build-material-name[data-status='running'] .build-material-name__marker {
-  background: #2563eb;
-  box-shadow: 0 8px 16px rgb(37 99 235 / 18%);
+  background: var(--ckqa-blue);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ckqa-blue) 18%, transparent);
 }
 
 .build-material-name[data-status='failed'] .build-material-name__marker {
-  background: #c2413d;
-  box-shadow: 0 8px 16px rgb(194 65 61 / 18%);
+  background: var(--ckqa-danger);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--ckqa-danger) 18%, transparent);
 }
 
 .build-material-name strong,
@@ -2523,15 +2523,15 @@ textarea.text-input {
 }
 
 .artifact-cell[data-status='missing'] {
-  border-color: rgb(194 65 61 / 24%);
+  border-color: color-mix(in srgb, var(--ckqa-danger) 24%, transparent);
 }
 
 .sync-warning {
   padding: 10px 12px;
-  border: 1px solid rgb(183 121 31 / 28%);
+  border: 1px solid color-mix(in srgb, var(--ckqa-warning) 28%, transparent);
   border-radius: var(--ckqa-radius-sm);
-  color: #b7791f;
-  background: rgb(183 121 31 / 8%);
+  color: var(--ckqa-warning);
+  background: color-mix(in srgb, var(--ckqa-warning) 8%, transparent);
   font-weight: 800;
 }
 
@@ -2653,7 +2653,7 @@ textarea.text-input {
 
 .inline-error {
   margin-bottom: 14px;
-  color: #c2413d;
+  color: var(--ckqa-danger);
   font-weight: 800;
 }
 
@@ -2662,19 +2662,19 @@ textarea.text-input {
   gap: 8px;
   margin: 12px 0 14px;
   padding: 12px;
-  border: 1px solid rgb(37 99 235 / 22%);
+  border: 1px solid color-mix(in srgb, var(--ckqa-blue) 22%, transparent);
   border-radius: var(--ckqa-radius-sm);
-  background: rgb(37 99 235 / 6%);
+  background: color-mix(in srgb, var(--ckqa-blue) 6%, transparent);
 }
 
 .operation-feedback[data-status='failed'] {
-  border-color: rgb(194 65 61 / 22%);
-  background: rgb(194 65 61 / 6%);
+  border-color: color-mix(in srgb, var(--ckqa-danger) 22%, transparent);
+  background: color-mix(in srgb, var(--ckqa-danger) 6%, transparent);
 }
 
 .operation-feedback[data-status='success'] {
-  border-color: rgb(15 118 110 / 24%);
-  background: rgb(15 118 110 / 8%);
+  border-color: color-mix(in srgb, var(--ckqa-info) 24%, transparent);
+  background: color-mix(in srgb, var(--ckqa-info) 8%, transparent);
 }
 
 .operation-feedback__heading {
@@ -2698,8 +2698,8 @@ textarea.text-input {
   overflow: auto;
   padding: 14px;
   border-radius: var(--ckqa-radius-sm);
-  color: #f8fafc;
-  background: #18212f;
+  color: var(--ckqa-surface-frost);
+  background: var(--ckqa-surface-overlay-tint);
 }
 
 .diagnostic-log-panel {
@@ -2707,10 +2707,10 @@ textarea.text-input {
   gap: 14px;
   margin-top: 18px;
   padding: 18px;
-  background: #020617;
-  border: 1px solid #1e293b;
+  background: var(--ckqa-skip-link-bg);
+  border: 1px solid var(--ckqa-slate-deeper);
   border-radius: var(--ckqa-radius-md);
-  color: #e2e8f0;
+  color: var(--ckqa-border-cool-soft);
   font-family: var(--ckqa-font-mono);
 }
 
@@ -2723,7 +2723,7 @@ textarea.text-input {
 
 .diagnostic-log-panel__heading h2 {
   margin: 0;
-  color: #f8fafc;
+  color: var(--ckqa-surface-frost);
   font-family: var(--ckqa-font-sans);
   font-size: 16px;
 }
@@ -2735,7 +2735,7 @@ textarea.text-input {
 }
 
 .diagnostic-log-panel__action {
-  color: #93c5fd;
+  color: var(--ckqa-blue-soft);
   font-family: var(--ckqa-font-sans);
   font-weight: 800;
 }
@@ -2749,7 +2749,7 @@ textarea.text-input {
 }
 
 .diagnostic-log-panel__lines code {
-  color: #cbd5e1;
+  color: var(--ckqa-border-cool);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -2825,15 +2825,15 @@ textarea.text-input {
 }
 
 .health-service-card__facts dd[data-state="success"] {
-  color: #0f766e;
+  color: var(--ckqa-info);
 }
 
 .health-service-card__facts dd[data-state="warning"] {
-  color: #b7791f;
+  color: var(--ckqa-warning);
 }
 
 .health-service-card__facts dd[data-state="danger"] {
-  color: #c2413d;
+  color: var(--ckqa-danger);
 }
 
 .health-service-card__message {
@@ -3092,8 +3092,8 @@ textarea.text-input {
 }
 
 .ck-glass-card.is-active {
-  border-color: rgb(217 119 87 / 50%);
-  box-shadow: 0 0 0 3px rgb(217 119 87 / 12%), var(--ckqa-shadow-card);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ckqa-accent) 12%, transparent), var(--ckqa-shadow-card);
 }
 
 /* 退化：低端 GPU / 旧浏览器不支持 backdrop-filter 时回落实色 surface */
@@ -3142,14 +3142,14 @@ textarea.text-input {
   line-height: var(--ckqa-text-sm-line);
   color: var(--ckqa-running);
   background: var(--ckqa-running-soft);
-  border: 1px solid rgb(192 138 58 / 25%);
+  border: 1px solid color-mix(in srgb, var(--ckqa-running) 25%, transparent);
   border-radius: 999px;
 }
 
 .ck-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgb(192 138 58 / 30%);
+  border: 2px solid color-mix(in srgb, var(--ckqa-running) 30%, transparent);
   border-top-color: var(--ckqa-running);
   border-radius: 50%;
   animation: ck-spin 800ms linear infinite;
