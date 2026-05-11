@@ -267,7 +267,7 @@
         "Assignment",
         "ToolOrPlatform"
       ],
-      "extraction_hint": "用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类关系；表达算法、方法或知识被用于解释、处理、解决某个知识主题或教学场景。遇到“X 以 Y 为例/使用 Y”时，若 Y 是算法、方法、公式或知识对象，通常应输出 Y applied_in X；若语义是 X 的理解、实现或求解依赖 Y，则输出 X depends_on Y；不能反向输出 X applied_in Y。不要放宽为 Concept->AlgorithmOrMethod，也不要放宽为任意共现或泛泛相关，弱相关仍使用 related_to。",
+      "extraction_hint": "用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应用 X 解决某问题”这类关系；表达算法、方法或知识被用于解释、处理、解决某个知识主题或教学场景。遇到“X 以 Y 为例/使用 Y”时，若 Y 是算法、方法、公式或知识对象，通常应输出 Y applied_in X；若语义是 X 的理解、实现或求解依赖 Y，则输出 X depends_on Y；不能反向输出 X applied_in Y。target 分三类场景：知识解释（KnowledgePoint/Concept）、章节讲解（Section）、实践应用（Experiment/Assignment/ToolOrPlatform）；仅当文本语义明确为“用于解释/支撑/解决该对象的主题”时使用，弱相关用 related_to，纯位置定位用 appears_in。不要放宽为 Concept->AlgorithmOrMethod，也不要放宽为任意共现或泛泛相关。",
       "examples": [
         "银行家算法 applied_in 死锁",
         "地址映射 applied_in 分页存储管理",

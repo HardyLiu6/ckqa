@@ -1,7 +1,7 @@
 {
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
-  "generated_at": "2026-05-10T16:35:33+08:00",
+  "generated_at": "2026-05-10T17:20:54+08:00",
   "language": "zh",
   "output_dir": "prompts/candidates",
   "inputs": {
@@ -16,7 +16,7 @@
     "auto_tuned_prompt_dir": "prompts/candidates/auto_tuned",
     "auto_tuned_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt"
   },
-  "last_updated_at": "2026-05-10T16:35:33+08:00",
+  "last_updated_at": "2026-05-10T17:20:54+08:00",
   "candidates": [
     {
       "candidate_name": "default",
@@ -27,7 +27,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/default/prompt.txt",
         "readme": "prompts/candidates/default/README.md"
@@ -47,7 +47,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/auto_tuned/prompt.txt",
         "readme": "prompts/candidates/auto_tuned/README.md"
@@ -76,7 +76,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_aware/prompt.txt",
         "readme": "prompts/candidates/schema_aware/README.md"
@@ -96,7 +96,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "audit_gold",
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot/README.md"
@@ -161,7 +161,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_aware_directional/prompt.txt",
         "readme": "prompts/candidates/schema_aware_directional/README.md"
@@ -181,7 +181,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "distilled_relation_micro_examples",
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot_distilled/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot_distilled/README.md"
@@ -303,7 +303,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "distilled_negative_direction_rules",
-      "generation_time": "2026-05-10T16:35:33+08:00",
+      "generation_time": "2026-05-10T17:20:54+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot_distilled_v2/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot_distilled_v2/README.md"

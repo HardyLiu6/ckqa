@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "generated_at": "2026-05-09T12:32:38",
+  "generated_at": "2026-05-11T10:41:58",
   "task": "audit_extraction_set",
   "source_input": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/material_7_samples.json",
   "selection_parameters": {
@@ -34,13 +34,13 @@
     "relation_type_names": [
       "contains",
       "belongs_to",
-      "depends_on",
-      "prerequisite_of",
-      "related_to",
       "defined_by",
-      "applied_in",
+      "prerequisite_of",
+      "depends_on",
       "implemented_by",
+      "applied_in",
       "evaluated_by",
+      "related_to",
       "appears_in"
     ]
   },
@@ -138,9 +138,9 @@
         }
       }
     },
-    "preserved_existing_gold_count": 5,
+    "preserved_existing_gold_count": 12,
     "preserved_existing_gold_match_counts": {
-      "stable_source_hash": 5
+      "stable_source_hash": 12
     }
   },
   "audit_samples": [

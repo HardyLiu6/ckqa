@@ -272,10 +272,7 @@
         "PCB",
         "TLB",
         "HRN",
-        "FIFO",
-        "Δ",
-        "FCFS",
-        "SPOOLing"
+        "Δ"
       ]
     },
     "FormulaOrDefinition": {
@@ -283,7 +280,7 @@
       "category": "formal_knowledge",
       "identity_scope": "course",
       "description": "具有稳定名称、可复用或被引用的定义、公式、定理、定律、判定条件或符号化表达，用于支撑定义问答、公式检索和考核对象定位；普通概念解释不提升为该类型。",
-      "canonical_name_rule": "优先使用“X定义”“X公式”“X定理”“X判定条件”这类可复用名称；只有稳定名称、被复用/引用、可计算公式/定理/判定条件，或作为独立考核对象时才抽取；普通概念解释放入 definition_text。",
+      "canonical_name_rule": "优先使用“X公式”“X定理”“X判定条件”这类可复用名称；只有稳定名称且非普通概念解释，或被复用/引用、可计算公式/定理/判定条件，或作为独立考核对象时才抽取；普通概念解释放入 definition_text。",
       "preferred_context_fields": [
         "course_id",
         "chapter",
@@ -315,10 +312,10 @@
         "一次性说明句"
       ],
       "examples": [
-        "进程定义",
         "周转时间公式",
         "响应比公式",
-        "Amdahl 定律"
+        "Amdahl 定律",
+        "死锁判定条件"
       ]
     },
     "AlgorithmOrMethod": {

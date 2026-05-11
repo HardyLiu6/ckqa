@@ -30,8 +30,10 @@ class TestRelationSchemaRules(unittest.TestCase):
         entity_types = payload["entity_types"]
         term_examples = entity_types["Term"]["examples"]
         concept_examples = entity_types["Concept"]["examples"]
-        for example in ("PCB", "TLB", "HRN", "FIFO", "Δ", "FCFS", "SPOOLing"):
+        for example in ("PCB", "TLB", "HRN", "Δ"):
             self.assertIn(example, term_examples)
+        for alias_like_example in ("FIFO", "FCFS", "SPOOLing"):
+            self.assertNotIn(alias_like_example, term_examples)
         self.assertNotIn("周转时间", term_examples)
         self.assertNotIn("时间片", term_examples)
         self.assertIn("周转时间", concept_examples)
@@ -39,7 +41,11 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertEqual(entity_types["Assignment"]["label_zh"], "作业/评测任务")
         self.assertIn("复习题", entity_types["Assignment"]["description"])
         self.assertIn("普通概念解释", entity_types["FormulaOrDefinition"]["description"])
-        self.assertIn("definition_text", entity_types["FormulaOrDefinition"]["canonical_name_rule"])
+        formula_type = entity_types["FormulaOrDefinition"]
+        self.assertIn("稳定名称且非普通概念解释", formula_type["canonical_name_rule"])
+        self.assertIn("definition_text", formula_type["canonical_name_rule"])
+        self.assertNotIn("进程定义", formula_type["examples"])
+        self.assertIn("死锁判定条件", formula_type["examples"])
         self.assertIn(
             "完整判定规则见 extraction_rules.md 第 4.1 节",
             entity_types["KnowledgePoint"]["canonical_name_rule"],
@@ -190,6 +196,11 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("Y applied_in X", applied_in["extraction_hint"])
         self.assertIn("X depends_on Y", applied_in["extraction_hint"])
         self.assertIn("不能反向输出 X applied_in Y", applied_in["extraction_hint"])
+        self.assertIn("target 分三类场景", applied_in["extraction_hint"])
+        self.assertIn("知识解释（KnowledgePoint/Concept）", applied_in["extraction_hint"])
+        self.assertIn("章节讲解（Section）", applied_in["extraction_hint"])
+        self.assertIn("实践应用（Experiment/Assignment/ToolOrPlatform）", applied_in["extraction_hint"])
+        self.assertIn("纯位置定位用 appears_in", applied_in["extraction_hint"])
         self.assertIn(
             "Concept->AlgorithmOrMethod: 死锁以银行家算法为例 applied_in 银行家算法",
             applied_in["negative_examples"],
@@ -271,7 +282,9 @@ class TestRelationSchemaRules(unittest.TestCase):
         self.assertIn("正文解释性段落中出现“X 是/指/表示/定义为”", text)
         self.assertIn("两者均满足时，以 `KnowledgePoint` 为准", text)
         self.assertIn("普通概念解释不提升为 `FormulaOrDefinition`", text)
-        self.assertIn("稳定名称、被复用/引用、可计算公式/定理/判定条件", text)
+        self.assertIn("具有稳定名称，且该名称所指内容不是对某概念的一般性解释", text)
+        self.assertIn("被课程正文复用、引用，或作为独立考核对象", text)
+        self.assertIn("可计算公式、定理、定律、判定条件", text)
         self.assertIn("只有在缩写、符号、变量或标准术语本身是被解释、被比较、被考核或被公式引用的对象时", text)
         self.assertIn("如果缩写只是 `Concept`、`AlgorithmOrMethod`、`ToolOrPlatform` 的别名", text)
         self.assertIn("Section、Experiment 与 Assignment 的双角色处理", text)
