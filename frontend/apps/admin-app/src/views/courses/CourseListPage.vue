@@ -4,11 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 
 import CkPageHero from '../../components/common/CkPageHero.vue'
 import CkResourceCard from '../../components/common/CkResourceCard.vue'
+import CkCourseCoverArt from '../../components/common/CkCourseCoverArt.vue'
 import CkSkeleton from '../../components/common/CkSkeleton.vue'
 import CkEmptyState from '../../components/common/CkEmptyState.vue'
 import CkPager from '../../components/common/CkPager.vue'
 
-import { loadModulePage, DEFAULT_COURSE_COVER_URL } from '../pages/module-loaders.js'
+import { loadModulePage } from '../pages/module-loaders.js'
 import { useScopeStore } from '../../stores/scope.js'
 import { COURSE_PAGE_COPY } from './course-page-copy.js'
 
@@ -77,13 +78,16 @@ const cards = computed(() =>
   state.value.rows.map((row) => {
     const course = row.raw ?? {}
     const status = String(course.status ?? '').toLowerCase()
+    const thumbnail = row.thumbnailUrl || course.coverUrl || ''
     return {
       id: row.id,
       to: row.to,
       title: course.courseName || course.courseId || '未命名课程',
       description: course.description || course.courseDesc || '',
       status: status === 'archived' ? 'archived' : 'active',
-      cover: row.thumbnailUrl || DEFAULT_COURSE_COVER_URL,
+      cover: thumbnail,
+      useDefaultArt: !thumbnail,
+      seed: row.id || course.courseId || course.courseName || '',
       meta: [
         { label: '资料', value: course.materialCount },
         { label: '知识库', value: course.knowledgeBaseCount },
@@ -134,10 +138,21 @@ const total = computed(() => state.value.pagination?.total ?? state.value.rows.l
           :title="card.title"
           :description="card.description"
           :status="card.status"
-          :cover="card.cover"
           :meta="card.meta"
           :to="card.to"
-        />
+          :title-clamp="2"
+          status-floating
+          meta-variant="emphasis"
+        >
+          <template #cover>
+            <CkCourseCoverArt
+              v-if="card.useDefaultArt"
+              :seed="card.seed"
+              :label="card.title"
+            />
+            <img v-else :src="card.cover" :alt="card.title" loading="lazy" />
+          </template>
+        </CkResourceCard>
       </li>
     </ul>
 

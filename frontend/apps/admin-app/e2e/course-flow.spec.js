@@ -58,6 +58,22 @@ test('课程列表 → 课程详情 → 切换到资料 tab', async ({ page }) =
   await expect(page.locator('nav.ck-breadcrumbs')).toContainText('课程列表')
   await expect(page.getByTestId('resource-card').first()).toContainText('操作系统')
 
+  // 默认课程封面（无 thumbnailUrl）走前端内联 SVG，不再渲染 CKQA 英文品牌字
+  const coverSvg = page
+    .getByTestId('resource-card')
+    .first()
+    .locator('.ck-resource-card-cover svg.ck-course-cover-art')
+  await expect(coverSvg).toHaveCount(1)
+  await expect(coverSvg).not.toContainText('CKQA')
+  // 状态徽标浮在封面上
+  await expect(
+    page.getByTestId('resource-card').first().getByTestId('resource-card-status-floating'),
+  ).toBeVisible()
+  // 资料/知识库 meta 走 emphasis（数字字号变大）
+  await expect(
+    page.getByTestId('resource-card').first().locator('ul[data-meta-variant="emphasis"]'),
+  ).toHaveCount(1)
+
   await page.getByTestId('resource-card').first().click()
 
   await expect(page).toHaveURL(new RegExp(`/app/courses/${COURSE.courseId}`))

@@ -264,7 +264,7 @@ function mapCourseRow(course) {
     raw: course,
     to: encodedCourseId ? `/app/courses/${encodedCourseId}` : '',
     subtitle: courseId ? `#${courseId}` : '',
-    thumbnailUrl: resolveCourseCoverUrl(course),
+    thumbnailUrl: course.coverUrl || '',
     actions: encodedCourseId ? createCourseRowActions(course, encodedCourseId) : [],
     cells: [
       course.courseName || course.courseId || '-',
