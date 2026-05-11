@@ -561,7 +561,8 @@ test('课程 live loader 显式归一查询参数并区分空列表状态', asyn
   )
 
   assert.equal(liveResult.rows[0].to, '/app/courses/os')
-  assert.equal(liveResult.rows[0].thumbnailUrl, '/api/v1/course-covers/default-course-cover.svg')
+  // course.coverUrl 缺省时由前端列表自行兜底（CkCourseCoverArt），loader 不再硬塞默认 URL
+  assert.equal(liveResult.rows[0].thumbnailUrl, '')
   assert.deepEqual(liveResult.rows[0].actions.map((action) => action.label), ['查看', '编辑', '成员', '知识库', '删除'])
   assert.equal(liveResult.rows[0].actions.find((action) => action.key === 'edit-course').variant, 'primary')
   assert.equal(liveResult.rows[0].actions.find((action) => action.label === '成员').to, '/app/courses/os/members')
