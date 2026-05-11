@@ -31,14 +31,11 @@ async function openDashboard(page) {
 }
 
 test.describe('Sidebar 折叠态交互', () => {
-  test.beforeEach(async ({ page }) => {
-    // 清理 localStorage 保证每个用例从展开态出发
-    await page.addInitScript(() => {
-      try {
-        window.localStorage.removeItem('ckqa.sidebar.collapsed')
-      } catch {}
-    })
-  })
+  // Playwright 默认每个用例新建 BrowserContext，localStorage 起始即为空，
+  // 因此用例可以直接从"展开态"出发，无需 beforeEach 手动清理。
+  // 之前使用的 addInitScript(removeItem) 会在每次导航都执行——包括
+  // page.reload()，会把刚被 toggle 写入的折叠状态再次抹掉，使"刷新
+  // 后保留折叠状态"用例失败。
 
   test('点 toggle 按钮切换折叠/展开，主区宽度变化', async ({ page }) => {
     await openDashboard(page)

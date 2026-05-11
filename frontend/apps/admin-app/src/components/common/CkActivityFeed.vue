@@ -21,7 +21,7 @@ const groups = computed(() => groupEventsByPeriod(props.events, props.now))
 </script>
 
 <template>
-  <section class="ck-activity-feed ck-glass-card" aria-label="近期动态">
+  <section class="ck-activity-feed ck-glass-card">
     <CkSkeleton v-if="loading" variant="row" :count="4" />
     <CkEmptyState
       v-else-if="!groups.length"

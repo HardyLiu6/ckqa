@@ -38,7 +38,7 @@ test('dashboard 看板渲染完整结构', async ({ page }) => {
   await expect(page.getByRole('region', { name: '生产流水线概览' })).toBeVisible()
   await expect(page.getByRole('region', { name: '近期动态' })).toBeVisible()
   await expect(page.getByRole('region', { name: '进行中任务' })).toBeVisible()
-  await expect(page.getByRole('link', { name: /新建知识库/ })).toBeVisible()
+  await expect(page.locator('.ck-quick-action').filter({ hasText: '构建知识库' })).toBeVisible()
 
   // 点知识库段跳转到列表
   const kbCard = page.locator('.ck-pipeline-hero-card').nth(2)

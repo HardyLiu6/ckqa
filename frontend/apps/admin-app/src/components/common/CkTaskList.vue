@@ -19,7 +19,7 @@ const sorted = computed(() => sortTasks(props.tasks))
 </script>
 
 <template>
-  <section class="ck-task-list ck-glass-card" aria-label="进行中任务">
+  <section class="ck-task-list ck-glass-card">
     <CkSkeleton v-if="loading" variant="row" :count="3" />
     <CkEmptyState
       v-else-if="!sorted.length"
