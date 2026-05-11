@@ -2,8 +2,14 @@
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
   "generated_at": "2026-05-11T11:17:20+08:00",
+  "last_updated_at": "2026-05-11T21:00:00+08:00",
   "language": "zh",
   "output_dir": "prompts/candidates",
+  "notes": [
+    "2026-05-11 归档：手工 JSON 抽取器相关候选（default_guarded、schema_fewshot_distilled_v3）移入 _archive_json_format/；已被 strict_tuple 替代的旧 tuple 候选（schema_aware、schema_aware_directional、schema_fewshot、schema_fewshot_distilled、schema_fewshot_distilled_v2）移入 _archive_superseded_tuple/。",
+    "当前活跃候选面向 GraphRAG 原生 GraphExtractor（tuple 格式 + gleaning）。",
+    "下次运行 scripts/prompt_tuning/generate_candidate_prompts.py 前，需要先把已归档的候选定义从 generator 里删掉，或者接受 generator 会把旧候选再生成一遍。"
+  ],
   "inputs": {
     "schema_dir": "config/schema",
     "entity_schema_path": "config/schema/entity_types.json",
@@ -16,7 +22,6 @@
     "auto_tuned_prompt_dir": "prompts/candidates/auto_tuned",
     "auto_tuned_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt"
   },
-  "last_updated_at": "2026-05-11T11:17:20+08:00",
   "candidates": [
     {
       "candidate_name": "default",
@@ -35,39 +40,8 @@
       "notes": [
         "默认 Prompt 来源：prompts/extract_graph.txt",
         "default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。",
-        "检测到 prompt tuning 样本 80 条，可供后续 few-shot/评测使用。"
+        "作为基线对照，评估其它候选的增量。"
       ]
-    },
-    {
-      "candidate_name": "default_guarded",
-      "source_type": "default_guarded",
-      "base_prompt_source": "prompts/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": false,
-      "fewshot_used": false,
-      "fewshot_example_count": 0,
-      "fewshot_strategy": null,
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/default_guarded/prompt.txt",
-        "readme": "prompts/candidates/default_guarded/README.md"
-      },
-      "notes": [
-        "default_guarded 继承 default，只追加严格 JSON 根对象与端点匹配守卫。",
-        "用于验证强基线在不引入长 few-shot 的情况下能否降低 parse/leak 风险。"
-      ],
-      "output_guard_policy": {
-        "strategy": "strict_json_root_and_endpoint_match",
-        "required_root_keys": [
-          "entities",
-          "relationships"
-        ]
-      },
-      "token_budget_policy": {
-        "relative_to": "default",
-        "max_ratio": 1.1,
-        "audit_text_policy": "omit_full_audit_text"
-      }
     },
     {
       "candidate_name": "auto_tuned",
@@ -86,7 +60,7 @@
       "notes": [
         "auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。",
         "主要 Prompt 文件：extract_graph.txt",
-        "auto-tuned Prompt 来源：prompts/candidates/auto_tuned/extract_graph.txt"
+        "作为 GraphRAG 官方自动调优基线对照。"
       ],
       "generation_method": "graphrag_official_prompt_tune",
       "graphrag_invocation": "python -m graphrag prompt-tune",
@@ -96,111 +70,6 @@
         "extract_graph.txt",
         "prompt.txt",
         "summarize_descriptions.txt"
-      ]
-    },
-    {
-      "candidate_name": "schema_aware",
-      "source_type": "schema_augmented",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": false,
-      "fewshot_used": false,
-      "fewshot_example_count": 0,
-      "fewshot_strategy": null,
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/schema_aware/prompt.txt",
-        "readme": "prompts/candidates/schema_aware/README.md"
-      },
-      "notes": [
-        "schema_aware 优先基于官方 auto_tuned Prompt自动增强；若 auto_tuned 缺失则回退到 default。",
-        "在基底 Prompt 上显式注入实体类型、关系类型和关键抽取规则摘要。",
-        "关系输出仍沿用 GraphRAG tuple 结构，但要求 relationship_description 以 [type=<relation_type>] 开头，便于后续评测解析。"
-      ]
-    },
-    {
-      "candidate_name": "schema_fewshot",
-      "source_type": "schema_fewshot",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": true,
-      "fewshot_used": true,
-      "fewshot_example_count": 3,
-      "fewshot_strategy": "audit_gold",
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/schema_fewshot/prompt.txt",
-        "readme": "prompts/candidates/schema_fewshot/README.md"
-      },
-      "notes": [
-        "schema_fewshot 继承 schema_aware，并继续沿用 官方 auto_tuned Prompt 作为底稿。",
-        "few-shot 示例按关系类型覆盖优先贪心选择；同等覆盖下再比较实体类型覆盖和原有样本优先级。",
-        "few-shot 来源样本：pts-0049-bd80db3cdf, pts-0046-a99abcf7ae, pts-0031-a008da8a10",
-        "few-shot 覆盖摘要：关系 3/10，实体 7/11；缺失关系：contains, belongs_to, prerequisite_of, depends_on, applied_in ...。",
-        "few-shot 示例已压缩：限制输入长度、实体数量和关系数量，避免候选 Prompt 过长。",
-        "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
-      ],
-      "fewshot_compression": {
-        "input_max_chars": 450,
-        "max_entities": 3,
-        "max_relations": 1
-      },
-      "fewshot_coverage": {
-        "selected_example_ids": [
-          "audit-ext-0003-4163630cd6",
-          "audit-ext-0004-7396d8021d",
-          "audit-ext-0010-84c282a5ee"
-        ],
-        "covered_relation_types": [
-          "defined_by",
-          "implemented_by",
-          "evaluated_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "covered_entity_types": [
-          "Chapter",
-          "KnowledgePoint",
-          "Concept",
-          "Term",
-          "FormulaOrDefinition",
-          "AlgorithmOrMethod",
-          "Assignment"
-        ],
-        "missing_entity_types": [
-          "Course",
-          "Section",
-          "Experiment",
-          "ToolOrPlatform"
-        ],
-        "selection_strategy": "greedy_relation_entity_coverage"
-      }
-    },
-    {
-      "candidate_name": "schema_aware_directional",
-      "source_type": "schema_directional",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": false,
-      "fewshot_used": false,
-      "fewshot_example_count": 0,
-      "fewshot_strategy": null,
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/schema_aware_directional/prompt.txt",
-        "readme": "prompts/candidates/schema_aware_directional/README.md"
-      },
-      "notes": [
-        "schema_aware_directional 继承 schema_aware，并额外加入短关系方向卡片。",
-        "方向卡片覆盖 applied_in / appears_in / defined_by / evaluated_by / related_to 等高风险关系，不嵌入完整 audit 样本文本。",
-        "用于降低关系反向、related_to 滥用和缺失端点占位风险。"
       ]
     },
     {
@@ -220,7 +89,8 @@
       "notes": [
         "schema_aware_directional_v2 继承 schema_aware_directional，并追加 material_7 高频失败族守卫。",
         "v2 聚焦 appears_in 反向位置、belongs_to 概念分类误用、defined_by 术语符号线索和端点逐字匹配。",
-        "不嵌入完整 audit 样本文本，作为低成本 prompt-only 对照。"
+        "2026-05-11 back-port 严格 tuple 输出格式约束（见 _shared/strict_tuple_format_block.md）。",
+        "tuple 格式，可直接喂给 GraphRAG 原生 GraphExtractor。"
       ],
       "failure_family_policy": {
         "strategy": "material_7_failure_family_guard",
@@ -236,414 +106,98 @@
         "relative_to": "default",
         "max_ratio": 1.1,
         "audit_text_policy": "omit_full_audit_text"
+      },
+      "strict_tuple_format_guard": {
+        "applied_at": "2026-05-11",
+        "source": "prompts/candidates/_shared/strict_tuple_format_block.md"
       }
     },
     {
-      "candidate_name": "schema_fewshot_distilled",
-      "source_type": "schema_fewshot_distilled",
+      "candidate_name": "schema_fewshot_distilled_v2_strict_tuple",
+      "source_type": "schema_fewshot_distilled_v2_strict_tuple",
       "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
       "schema_used": true,
       "audit_used": true,
       "fewshot_used": true,
       "fewshot_example_count": 3,
-      "fewshot_strategy": "distilled_relation_micro_examples",
-      "generation_time": "2026-05-11T11:17:20+08:00",
+      "fewshot_strategy": "distilled_negative_direction_rules_with_strict_tuple_guard",
+      "generation_time": "2026-05-11T19:00:00+08:00",
       "files": {
-        "prompt": "prompts/candidates/schema_fewshot_distilled/prompt.txt",
-        "readme": "prompts/candidates/schema_fewshot_distilled/README.md"
+        "prompt": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt",
+        "readme": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/README.md"
       },
       "notes": [
-        "schema_fewshot_distilled 继承 schema_aware_directional，只保留关系方向 micro-examples。",
-        "distilled micro-examples 来源于已选 audit gold，但省略完整输入文本，降低 overlap/holdout 泄漏风险。",
-        "长度目标接近 schema_aware，避免回到长 few-shot Prompt。",
-        "few-shot 覆盖摘要：关系 3/10，实体 7/11；缺失关系：contains, belongs_to, prerequisite_of, depends_on, applied_in ...。",
-        "distilled 渲染覆盖摘要：关系 3/10，micro-example 3 条",
-        "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
+        "schema_fewshot_distilled_v2_strict_tuple 继承 schema_fewshot_distilled_v2，并合入严格 tuple 输出格式约束（见 _shared/strict_tuple_format_block.md）。",
+        "2026-05-11 桥接验证显示：v2 原版在原生 tuple 抽取器下有 21/101 引号污染、3/7 样本解析级联失败，加上严格格式约束后全部清零。",
+        "2026-05-11 晚间追加「-精度向抑制规则-」章节，硬性拒绝 9 类非抽取对象（页眉页脚、过渡短语、辅助说明等），目标提升 audit_entity_precision。",
+        "当前最佳候选，audit_relation_recall(holdout) 已达 0.347（配合 metadata-closure 后处理）。"
       ],
       "source_sample_ids": [
         "pts-0049-bd80db3cdf",
         "pts-0046-a99abcf7ae",
         "pts-0031-a008da8a10"
       ],
-      "coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
+      "strict_tuple_format_guard": {
+        "applied_at": "2026-05-11",
+        "source": "prompts/candidates/_shared/strict_tuple_format_block.md"
       },
-      "selected_audit_coverage": {
-        "selected_example_ids": [
-          "audit-ext-0003-4163630cd6",
-          "audit-ext-0004-7396d8021d",
-          "audit-ext-0010-84c282a5ee"
-        ],
-        "covered_relation_types": [
-          "defined_by",
-          "implemented_by",
-          "evaluated_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "covered_entity_types": [
-          "Chapter",
-          "KnowledgePoint",
-          "Concept",
-          "Term",
-          "FormulaOrDefinition",
-          "AlgorithmOrMethod",
-          "Assignment"
-        ],
-        "missing_entity_types": [
-          "Course",
-          "Section",
-          "Experiment",
-          "ToolOrPlatform"
-        ],
-        "selection_strategy": "greedy_relation_entity_coverage"
-      },
-      "rendered_micro_example_coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
-      },
-      "compression": {
-        "strategy": "micro_examples_without_full_audit_text",
-        "input_text_policy": "omit_full_audit_text",
-        "max_micro_example_chars": 96,
-        "max_micro_examples": 8
-      },
-      "length_policy": {
-        "target": "near_schema_aware",
-        "max_schema_aware_ratio": 1.35,
-        "base_prompt": "schema_aware_directional"
-      }
-    },
-    {
-      "candidate_name": "schema_fewshot_distilled_v2",
-      "source_type": "schema_fewshot_distilled_v2",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": true,
-      "fewshot_used": true,
-      "fewshot_example_count": 3,
-      "fewshot_strategy": "distilled_negative_direction_rules",
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/schema_fewshot_distilled_v2/prompt.txt",
-        "readme": "prompts/candidates/schema_fewshot_distilled_v2/README.md"
-      },
-      "notes": [
-        "schema_fewshot_distilled_v2 继承 schema_fewshot_distilled，并追加短反向负例和缺端点跳过规则。",
-        "v2 不嵌入完整 audit 样本文本，重点压制 evaluated_by / appears_in / defined_by / applied_in / related_to 的高频残留错误。",
-        "长度目标仍接近 schema_aware_directional，避免回到 full schema_fewshot 的高成本形态。",
-        "distilled 渲染覆盖摘要：关系 3/10，micro-example 3 条",
-        "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
-      ],
-      "source_sample_ids": [
-        "pts-0049-bd80db3cdf",
-        "pts-0046-a99abcf7ae",
-        "pts-0031-a008da8a10"
-      ],
-      "coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
-      },
-      "selected_audit_coverage": {
-        "selected_example_ids": [
-          "audit-ext-0003-4163630cd6",
-          "audit-ext-0004-7396d8021d",
-          "audit-ext-0010-84c282a5ee"
-        ],
-        "covered_relation_types": [
-          "defined_by",
-          "implemented_by",
-          "evaluated_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "covered_entity_types": [
-          "Chapter",
-          "KnowledgePoint",
-          "Concept",
-          "Term",
-          "FormulaOrDefinition",
-          "AlgorithmOrMethod",
-          "Assignment"
-        ],
-        "missing_entity_types": [
-          "Course",
-          "Section",
-          "Experiment",
-          "ToolOrPlatform"
-        ],
-        "selection_strategy": "greedy_relation_entity_coverage"
-      },
-      "rendered_micro_example_coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
-      },
-      "compression": {
-        "strategy": "micro_examples_without_full_audit_text",
-        "input_text_policy": "omit_full_audit_text",
-        "max_micro_example_chars": 96,
-        "max_micro_examples": 8
-      },
-      "length_policy": {
-        "target": "near_schema_aware_directional",
-        "max_schema_aware_ratio": 1.35,
-        "base_prompt": "schema_fewshot_distilled"
-      },
-      "negative_rule_policy": {
-        "strategy": "short_directional_negative_rules",
-        "audit_text_policy": "omit_full_audit_text",
-        "covered_relation_types": [
-          "evaluated_by",
-          "appears_in",
-          "defined_by",
-          "applied_in",
-          "related_to"
-        ]
-      }
-    },
-    {
-      "candidate_name": "schema_fewshot_distilled_v3",
-      "source_type": "schema_fewshot_distilled_v3",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
-      "schema_used": true,
-      "audit_used": true,
-      "fewshot_used": true,
-      "fewshot_example_count": 3,
-      "fewshot_strategy": "failure_family_micro_examples",
-      "generation_time": "2026-05-11T11:17:20+08:00",
-      "files": {
-        "prompt": "prompts/candidates/schema_fewshot_distilled_v3/prompt.txt",
-        "readme": "prompts/candidates/schema_fewshot_distilled_v3/README.md"
-      },
-      "notes": [
-        "schema_fewshot_distilled_v3 采用低成本失败族守卫，不再继承长 schema/few-shot 正文。",
-        "v3 继续只使用 1 条 micro-example，不嵌入完整 audit text，目标成本不超过 default 的 1.10 倍。",
-        "重点压制 appears_in 反向、belongs_to 概念分类、defined_by 非符号术语和缺失端点。",
-        "distilled 渲染覆盖摘要：关系 3/10，micro-example 3 条",
-        "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
-      ],
-      "source_sample_ids": [
-        "pts-0049-bd80db3cdf",
-        "pts-0046-a99abcf7ae",
-        "pts-0031-a008da8a10"
-      ],
-      "coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
-      },
-      "selected_audit_coverage": {
-        "selected_example_ids": [
-          "audit-ext-0003-4163630cd6",
-          "audit-ext-0004-7396d8021d",
-          "audit-ext-0010-84c282a5ee"
-        ],
-        "covered_relation_types": [
-          "defined_by",
-          "implemented_by",
-          "evaluated_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "covered_entity_types": [
-          "Chapter",
-          "KnowledgePoint",
-          "Concept",
-          "Term",
-          "FormulaOrDefinition",
-          "AlgorithmOrMethod",
-          "Assignment"
-        ],
-        "missing_entity_types": [
-          "Course",
-          "Section",
-          "Experiment",
-          "ToolOrPlatform"
-        ],
-        "selection_strategy": "greedy_relation_entity_coverage"
-      },
-      "rendered_micro_example_coverage": {
-        "selection_strategy": "first_distilled_micro_example_per_relation",
-        "rendered_micro_example_count": 3,
-        "covered_relation_types": [
-          "defined_by",
-          "evaluated_by",
-          "implemented_by"
-        ],
-        "missing_relation_types": [
-          "contains",
-          "belongs_to",
-          "prerequisite_of",
-          "depends_on",
-          "applied_in",
-          "related_to",
-          "appears_in"
-        ],
-        "source_sample_ids": [
-          "pts-0049-bd80db3cdf",
-          "pts-0046-a99abcf7ae",
-          "pts-0031-a008da8a10"
-        ]
-      },
-      "compression": {
-        "strategy": "micro_examples_without_full_audit_text",
-        "input_text_policy": "omit_full_audit_text",
-        "max_micro_example_chars": 96,
-        "max_micro_examples": 8
-      },
-      "length_policy": {
-        "target": "near_schema_aware_directional",
-        "max_schema_aware_ratio": 1.35,
-        "base_prompt": "schema_fewshot_distilled"
-      },
-      "negative_rule_policy": {
-        "strategy": "short_directional_negative_rules",
-        "audit_text_policy": "omit_full_audit_text",
-        "covered_relation_types": [
-          "evaluated_by",
-          "appears_in",
-          "defined_by",
-          "applied_in",
-          "related_to"
-        ]
-      },
-      "failure_family_policy": {
-        "strategy": "material_7_failure_family_guard",
-        "audit_text_policy": "omit_full_audit_text",
-        "families": [
-          "appears_in_reverse_location",
-          "belongs_to_concept_taxonomy",
-          "defined_by_term_without_symbol_cue",
-          "missing_or_unmatched_endpoint"
+      "precision_suppression_rules": {
+        "applied_at": "2026-05-11",
+        "target": "audit_entity_precision",
+        "suppressed_categories": [
+          "页眉页脚与页码",
+          "章节通用前言/结语短语",
+          "过渡性短语",
+          "辅助说明性短语",
+          "单独出现的动词、形容词或连接词",
+          "无命名指向的代词、数字、符号",
+          "无属性描述的一次性引用项",
+          "已作 alias 的简称或缩写",
+          "课程结构外的通用名词"
         ]
       },
       "token_budget_policy": {
         "relative_to": "default",
-        "max_ratio": 1.1,
+        "max_ratio": 1.35,
         "audit_text_policy": "omit_full_audit_text"
-      },
-      "micro_example_policy": {
-        "strategy": "failure_family_micro_examples",
-        "source": "selected_audit_gold_relation_micro_examples",
-        "max_micro_example_chars": 96,
-        "max_micro_examples": 8
       }
+    }
+  ],
+  "archived_candidates": [
+    {
+      "name": "default_guarded",
+      "archived_to": "prompts/candidates/_archive_json_format/",
+      "reason": "JSON 输出格式，与原生 GraphExtractor 的 tuple 格式不兼容"
+    },
+    {
+      "name": "schema_fewshot_distilled_v3",
+      "archived_to": "prompts/candidates/_archive_json_format/",
+      "reason": "JSON 输出格式，与原生 GraphExtractor 的 tuple 格式不兼容"
+    },
+    {
+      "name": "schema_aware",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_aware_directional_v2 替代（后者含方向卡片、失败族守卫和 strict_tuple 约束）"
+    },
+    {
+      "name": "schema_aware_directional",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_aware_directional_v2 替代"
+    },
+    {
+      "name": "schema_fewshot",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "完整 audit few-shot 过长，已被 distilled 变体替代"
+    },
+    {
+      "name": "schema_fewshot_distilled",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_fewshot_distilled_v2_strict_tuple 替代"
+    },
+    {
+      "name": "schema_fewshot_distilled_v2",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_fewshot_distilled_v2_strict_tuple 替代（后者根治了 tuple 格式缺陷）"
     }
   ]
 }
