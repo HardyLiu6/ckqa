@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
-  <title id="title">CKQA默认课程封面</title>
-  <desc id="desc">带有课程资料、知识图谱和问答节点的默认封面</desc>
+  <title id="title">默认课程封面</title>
+  <desc id="desc">带有资料卡片与图谱节点的默认封面</desc>
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
       <stop offset="0" stop-color="#f8fafc"/>
@@ -34,6 +34,4 @@
     <circle cx="724" cy="206" r="34" fill="#ffffff" stroke="#7c3aed" stroke-width="5"/>
     <circle cx="640" cy="290" r="40" fill="#ffffff" stroke="url(#accent)" stroke-width="6"/>
   </g>
-  <text x="188" y="430" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="48" font-weight="800">CKQA Course</text>
-  <text x="190" y="470" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="600">资料解析 · 知识图谱 · 智能问答</text>
 </svg>
