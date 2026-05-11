@@ -51,17 +51,27 @@ def _iter_success(results: Sequence[StructuredExtractionResult]):
     return (item for item in results if item.status == "success")
 
 
+def _normalize_type_name(value: str) -> str:
+    """把 entity/relation type 统一成 casefold 形态，用于大小写不敏感匹配。
+
+    GraphRAG 原生 `GraphExtractor._process_result` 会对 entity_name/entity_type
+    做 `.upper()`，而 schema 通常以 PascalCase 定义（如 `Course`）。做评分时
+    应该做大小写不敏感比对，避免因为解析器内部的规范化步骤误判为 schema 越界。
+    """
+    return (value or "").strip().casefold()
+
+
 def compute_entity_type_valid_rate(
     results: Sequence[StructuredExtractionResult],
     entity_type_names: Iterable[str],
 ) -> float:
-    allowed = set(entity_type_names)
+    allowed = {_normalize_type_name(name) for name in entity_type_names}
     total = 0
     valid = 0
     for item in _iter_success(results):
         for ent in item.entities:
             total += 1
-            if ent.type in allowed:
+            if _normalize_type_name(ent.type) in allowed:
                 valid += 1
     return valid / total if total else 0.0
 
@@ -70,13 +80,13 @@ def compute_relation_type_valid_rate(
     results: Sequence[StructuredExtractionResult],
     relation_type_names: Iterable[str],
 ) -> float:
-    allowed = set(relation_type_names)
+    allowed = {_normalize_type_name(name) for name in relation_type_names}
     total = 0
     valid = 0
     for item in _iter_success(results):
         for rel in item.relationships:
             total += 1
-            if rel.type in allowed:
+            if _normalize_type_name(rel.type) in allowed:
                 valid += 1
     return valid / total if total else 0.0
 
@@ -86,15 +96,19 @@ def compute_schema_hit_rate(
     entity_type_names: Iterable[str],
     relation_type_names: Iterable[str],
 ) -> float:
-    entity_allowed = set(entity_type_names)
-    relation_allowed = set(relation_type_names)
+    entity_allowed = {_normalize_type_name(name) for name in entity_type_names}
+    relation_allowed = {_normalize_type_name(name) for name in relation_type_names}
     success_items = list(_iter_success(results))
     if not success_items:
         return 0.0
     hits = 0
     for item in success_items:
-        entities_ok = all(ent.type in entity_allowed for ent in item.entities)
-        relations_ok = all(rel.type in relation_allowed for rel in item.relationships)
+        entities_ok = all(
+            _normalize_type_name(ent.type) in entity_allowed for ent in item.entities
+        )
+        relations_ok = all(
+            _normalize_type_name(rel.type) in relation_allowed for rel in item.relationships
+        )
         if entities_ok and relations_ok:
             hits += 1
     return hits / len(success_items)
@@ -205,7 +219,25 @@ def analyze_endpoint_validity(
 
     分母沿用历史规则：只统计 schema 中存在的关系类型；未知关系类型交给
     relation_type_valid_rate 负责。
+
+    type 校验使用大小写不敏感匹配，吸收 GraphRAG 原生 `GraphExtractor._process_result`
+    对 entity_name/entity_type 的 `.upper()` 规范化；schema 本身保留 PascalCase。
     """
+
+    # 构建 casefold 索引：把 relation_schema 和 source/target 约束都规范化一遍，
+    # 这样 rel.type 不论是 `contains` 还是 `CONTAINS` 都能命中。
+    canonical_relation_schema: dict[str, tuple[str, dict]] = {
+        _normalize_type_name(rel_type): (rel_type, constraints)
+        for rel_type, constraints in relation_schema.items()
+    }
+
+    def _canonicalize_type(value: str, *, allowed_names: Iterable[str]) -> str:
+        """把 entity type 映射到 schema 里的 canonical 命名；找不到时返回原值。"""
+        folded = _normalize_type_name(value)
+        for name in allowed_names:
+            if _normalize_type_name(name) == folded:
+                return name
+        return value
 
     total = 0
     valid = 0
@@ -215,12 +247,25 @@ def analyze_endpoint_validity(
             _normalize_title(ent.title): ent.type for ent in item.entities
         }
         for rel in item.relationships:
-            constraints = relation_schema.get(rel.type)
-            if not constraints:
+            canonical = canonical_relation_schema.get(_normalize_type_name(rel.type))
+            if canonical is None:
                 continue
+            canonical_rel_type, constraints = canonical
             total += 1
-            src_type = title_to_type.get(_normalize_title(rel.source))
-            tgt_type = title_to_type.get(_normalize_title(rel.target))
+            src_type_raw = title_to_type.get(_normalize_title(rel.source))
+            tgt_type_raw = title_to_type.get(_normalize_title(rel.target))
+            source_types = list(constraints.get("source_types") or [])
+            target_types = list(constraints.get("target_types") or [])
+            src_type = (
+                _canonicalize_type(src_type_raw, allowed_names=source_types)
+                if src_type_raw is not None
+                else None
+            )
+            tgt_type = (
+                _canonicalize_type(tgt_type_raw, allowed_names=target_types)
+                if tgt_type_raw is not None
+                else None
+            )
             if src_type is None or tgt_type is None:
                 if src_type is None and tgt_type is None:
                     reason = "missing_endpoint"
@@ -228,17 +273,17 @@ def analyze_endpoint_validity(
                     reason = "missing_source"
                 else:
                     reason = "missing_target"
-                key = (rel.type, src_type, tgt_type, reason)
+                key = (canonical_rel_type, src_type, tgt_type, reason)
                 group = invalid_groups.setdefault(
                     key,
                     {
-                        "relation_type": rel.type,
+                        "relation_type": canonical_rel_type,
                         "source_type": src_type,
                         "target_type": tgt_type,
                         "reason": reason,
                         "count": 0,
                         "suggested_action": _suggest_endpoint_action(
-                            relation_type=rel.type,
+                            relation_type=canonical_rel_type,
                             reason=reason,
                             source_type=src_type,
                             target_type=tgt_type,
@@ -250,9 +295,12 @@ def analyze_endpoint_validity(
                 if len(group["examples"]) < max_examples_per_combination:
                     group["examples"].append(_endpoint_example(item, rel, src_type, tgt_type))
                 continue
-            source_types = set(constraints.get("source_types") or [])
-            target_types = set(constraints.get("target_types") or [])
-            type_valid = src_type in source_types and tgt_type in target_types
+            source_type_set = {_normalize_type_name(t) for t in source_types}
+            target_type_set = {_normalize_type_name(t) for t in target_types}
+            type_valid = (
+                _normalize_type_name(src_type) in source_type_set
+                and _normalize_type_name(tgt_type) in target_type_set
+            )
             semantic_error = (
                 _relation_semantic_error(rel, source_type=src_type, target_type=tgt_type)
                 if type_valid
@@ -263,18 +311,18 @@ def analyze_endpoint_validity(
                 continue
 
             reason, action = semantic_error if semantic_error else ("endpoint_type_mismatch", "")
-            key = (rel.type, src_type, tgt_type, reason)
+            key = (canonical_rel_type, src_type, tgt_type, reason)
             group = invalid_groups.setdefault(
                 key,
                 {
-                    "relation_type": rel.type,
+                    "relation_type": canonical_rel_type,
                     "source_type": src_type,
                     "target_type": tgt_type,
                     "reason": reason,
                     "count": 0,
                     "suggested_action": action
                     or _suggest_endpoint_action(
-                        relation_type=rel.type,
+                        relation_type=canonical_rel_type,
                         reason=reason,
                         source_type=src_type,
                         target_type=tgt_type,

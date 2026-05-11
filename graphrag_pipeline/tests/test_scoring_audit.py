@@ -531,8 +531,9 @@ class TestBuildAdapters(unittest.TestCase):
         self.assertEqual([c.idx for c in cands], [0, 1, 2])
         self.assertEqual([c.title_norm for c in cands],
                          ["操作系统", "第一章引论", "进程"])
+        # 2026-05-11: type 统一 casefold，吸收原生 GraphExtractor 的 .upper()。
         self.assertEqual([c.type for c in cands],
-                         ["Course", "Chapter", "Concept"])
+                         ["course", "chapter", "concept"])
 
     def test_build_ext_candidates_skips_empty_titles(self):
         from scoring_audit import _build_ext_candidates
@@ -565,10 +566,12 @@ class TestBuildAdapters(unittest.TestCase):
         self.assertEqual(golds[0].gold_id, "ent-1")
         self.assertEqual(golds[0].name_norm, "wimp技术")
         self.assertEqual(golds[0].alias_norms, ("wimp",))
-        self.assertEqual(golds[0].type, "Concept")
+        # 2026-05-11: gold type 也统一 casefold，保持与 ext candidate 一致。
+        self.assertEqual(golds[0].type, "concept")
         self.assertEqual(golds[1].gold_id, "ent-2")
         self.assertEqual(golds[1].name_norm, "第九章操作系统接口习题")
         self.assertEqual(golds[1].alias_norms, ("习题",))
+        self.assertEqual(golds[1].type, "assignment")
 
     def test_build_gold_entities_missing_alias_key(self):
         """部分 audit 条目没有 alias 字段，应视为空别名。"""

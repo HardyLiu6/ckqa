@@ -206,6 +206,15 @@ def align_sample(
     return result
 
 
+def _normalize_entity_type(value: str) -> str:
+    """实体类型规范化：casefold 后用于比对。
+
+    吸收 GraphRAG 原生 `GraphExtractor._process_result` 对 entity_type 的
+    `.upper()`，让 audit gold 和抽取结果在不同大小写下都能对齐。
+    """
+    return (value or "").strip().casefold()
+
+
 def _build_ext_candidates(
     item: StructuredExtractionResult,
 ) -> list[ExtCandidate]:
@@ -219,7 +228,7 @@ def _build_ext_candidates(
         tn = _normalize_title(ent.title)
         if not tn:
             continue
-        out.append(ExtCandidate(idx=idx, title_norm=tn, type=ent.type))
+        out.append(ExtCandidate(idx=idx, title_norm=tn, type=_normalize_entity_type(ent.type)))
     return out
 
 
@@ -228,6 +237,7 @@ def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
 
     跳过 name 归一化后为空的条目；alias 缺失时视为空；alias 经
     canonicalize_gold_aliases 过滤空串并规范化。
+    type 做 casefold 规范化，用于大小写不敏感的对齐。
     """
     out: list[GoldEntity] = []
     for g in entry.gold_entities:
@@ -238,7 +248,7 @@ def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
             gold_id=str(g.get("entity_id", "") or ""),
             name_norm=name_norm,
             alias_norms=canonicalize_gold_aliases(g.get("alias") or ()),
-            type=str(g.get("type", "") or ""),
+            type=_normalize_entity_type(g.get("type", "")),
         ))
     return out
 
@@ -343,15 +353,18 @@ def compute_audit_relation_recall(
         for rel in item.relationships:
             src_norm = _normalize_title(rel.source)
             tgt_norm = _normalize_title(rel.target)
+            rel_type_norm = _normalize_entity_type(rel.type)
+            if not rel_type_norm:
+                continue
             for s in title_to_idxs.get(src_norm, ()):
                 for t in title_to_idxs.get(tgt_norm, ()):
-                    extracted_triples.add((s, rel.type, t))
+                    extracted_triples.add((s, rel_type_norm, t))
 
         hits = 0
         for g in entry.gold_relations:
             src_id = str(g.get("source_entity_id", "") or "")
             tgt_id = str(g.get("target_entity_id", "") or "")
-            rtype = g.get("type", "")
+            rtype = _normalize_entity_type(g.get("type", ""))
             if not rtype:
                 continue
             src_align = aligned.get(src_id)

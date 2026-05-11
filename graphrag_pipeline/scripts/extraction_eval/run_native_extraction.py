@@ -87,22 +87,59 @@ def _dataframes_to_structured_result(
     raw_output: str = "",
     usage: dict[str, Any] | None = None,
     entity_type_map: dict[str, str] | None = None,
+    strict: bool = False,
 ) -> StructuredExtractionResult:
     """把 GraphExtractor 返回的 DataFrame 转成 StructuredExtractionResult。
 
-    entity_type_map 用于把大写化的 type（如 CONCEPT）映射回 schema 定义的
-    case（如 Concept）。
+    entity_type_map 用于把 GraphRAG 原生 `_process_result` 强制大写化后的 type
+    （如 `COURSE`）映射回 schema 定义的 PascalCase（如 `Course`）。这是 GraphRAG
+    解析器的确定性行为，映射规则单调（每个 upper 值只对应一个 schema 命名），
+    不掩盖任何 prompt 缺陷，因此在任何 mode 下默认开启。
+
+    strict=True 时禁用**引号剥离**等可能掩盖 prompt 格式缺陷的容错，让输出原样
+    参与评分；strict=False（默认）则剥去成对引号以便诊断轻微抖动。
     """
 
     type_map = entity_type_map or {}
 
+    def _maybe_strip_quotes(text: str) -> str:
+        if strict:
+            return text
+        stripped = text.strip()
+        for quote in ('"', "'", "“", "”", "‘", "’"):
+            if stripped.startswith(quote) and stripped.endswith(quote) and len(stripped) > 1:
+                stripped = stripped[1:-1].strip()
+                break
+        return stripped
+
+    def _canonicalize_entity_type(raw_type: str) -> str:
+        """把 entity_type 从 GraphRAG 原生大写化后映射回 schema 命名。
+
+        规则：
+        1. 先剥去 type 字段两端的引号（模型可能输出 `"CONCEPT"`）。
+           这一步和 strict 模式无关，因为 schema 永远不会把引号当作合法
+           type 字符，剥引号是纯粹的规范化。
+        2. 用 upper 作为 map key 查表；命中则取 schema canonical 命名。
+        3. 未命中（比如模型给了同义词 `TOPIC`）时保留原值，交由
+           entity_type_valid_rate / schema_hit_rate 如实反映 schema 越界。
+        """
+        stripped = raw_type.strip()
+        for quote in ('"', "'", "“", "”", "‘", "’"):
+            if stripped.startswith(quote) and stripped.endswith(quote) and len(stripped) > 1:
+                stripped = stripped[1:-1].strip()
+                break
+        upper = stripped.upper()
+        return type_map.get(upper, stripped)
+
     entities: list[ExtractionEntity] = []
     for idx, row in entities_df.iterrows():
+        raw_title = str(row.get("title") or "")
         raw_type = str(row.get("type") or "")
-        normalized_type = type_map.get(raw_type.upper(), raw_type)
+        title = _maybe_strip_quotes(raw_title)
+        normalized_type = _canonicalize_entity_type(raw_type)
         entities.append(ExtractionEntity(
             id=f"native-{idx}",
-            title=str(row.get("title") or ""),
+            title=title,
             type=normalized_type,
             alias=[],
             definition_text="",
@@ -114,9 +151,11 @@ def _dataframes_to_structured_result(
     for _, row in relationships_df.iterrows():
         description = str(row.get("description") or "")
         rel_type = _extract_relation_type_from_description(description)
+        source = _maybe_strip_quotes(str(row.get("source") or ""))
+        target = _maybe_strip_quotes(str(row.get("target") or ""))
         relationships.append(ExtractionRelationship(
-            source=str(row.get("source") or ""),
-            target=str(row.get("target") or ""),
+            source=source,
+            target=target,
             type=rel_type,
             description=description,
             evidence="",
@@ -141,6 +180,7 @@ async def _extract_one_sample(
     sample_id: str,
     candidate: str,
     entity_type_map: dict[str, str],
+    strict: bool = False,
 ) -> StructuredExtractionResult:
     """对单个样本执行原生抽取。"""
     try:
@@ -155,6 +195,7 @@ async def _extract_one_sample(
             sample_id=sample_id,
             candidate=candidate,
             entity_type_map=entity_type_map,
+            strict=strict,
         )
     except Exception as e:
         logger.error("抽取失败 sample_id=%s: %s", sample_id, e)
@@ -180,6 +221,7 @@ async def run_native_extraction(
     limit: int | None = None,
     run_id: str | None = None,
     overwrite: bool = False,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """执行原生 GraphExtractor 抽取实验。"""
 
@@ -209,10 +251,11 @@ async def run_native_extraction(
     entity_type_map: dict[str, str] = {t.upper(): t for t in entity_types}
 
     logger.info(
-        "开始原生抽取：candidate=%s samples=%d max_gleanings=%d",
+        "开始原生抽取：candidate=%s samples=%d max_gleanings=%d strict=%s",
         candidate_name,
         len(samples),
         max_gleanings,
+        strict,
     )
 
     results: list[StructuredExtractionResult] = []
@@ -239,6 +282,7 @@ async def run_native_extraction(
             sample_id=sample_id,
             candidate=candidate_name,
             entity_type_map=entity_type_map,
+            strict=strict,
         )
         results.append(result)
 
@@ -307,6 +351,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=None, help="限制样本数")
     parser.add_argument("--run-id", default=None, help="自定义 run_id")
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有输出")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="严格模式：不做引号剥离、不做 type 容错映射，暴露 prompt 真实缺陷（用于评估 prompt 格式稳定性）",
+    )
     return parser
 
 
@@ -324,6 +373,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         limit=args.limit,
         run_id=args.run_id,
         overwrite=args.overwrite,
+        strict=args.strict,
     ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
