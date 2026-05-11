@@ -8,9 +8,9 @@
 
 职责边界：
 1. 读取默认 Prompt、schema、样本与 audit 数据。
-2. 生成 default / auto_tuned / schema_aware / schema_fewshot /
+2. 生成 default / default_guarded / auto_tuned / schema_aware / schema_fewshot /
    schema_aware_directional / schema_fewshot_distilled /
-   schema_fewshot_distilled_v2 七类候选 Prompt。
+   schema_fewshot_distilled_v2 等候选 Prompt。
 3. 把候选 Prompt、说明文件、manifest 与报告写入标准目录。
 
 非职责：
@@ -89,6 +89,21 @@ DISTILLED_V2_NEGATIVE_RULE_POLICY = {
         "applied_in",
         "related_to",
     ],
+}
+V3_FAILURE_FAMILY_POLICY = {
+    "strategy": "material_7_failure_family_guard",
+    "audit_text_policy": "omit_full_audit_text",
+    "families": [
+        "appears_in_reverse_location",
+        "belongs_to_concept_taxonomy",
+        "defined_by_term_without_symbol_cue",
+        "missing_or_unmatched_endpoint",
+    ],
+}
+V3_TOKEN_BUDGET_POLICY = {
+    "relative_to": "default",
+    "max_ratio": 1.1,
+    "audit_text_policy": "omit_full_audit_text",
 }
 TUPLE_DELIMITER = "<|>"
 RECORD_DELIMITER = "##"
@@ -786,6 +801,51 @@ def build_schema_aware_directional_prompt(schema_catalog: SchemaCatalog, schema_
     if not direction_block:
         return schema_aware_prompt.rstrip() + "\n"
     return _insert_before_real_data(schema_aware_prompt, direction_block).rstrip() + "\n"
+
+
+def _strict_json_output_guard_block() -> str:
+    return """-Strict JSON Output Guard-
+- 最终只返回一个 JSON 对象，根对象只包含 `entities` 与 `relationships` 两个数组。
+- 不输出额外说明、指标、指令、延迟字段、Markdown code fence 或前后缀文本。
+- 如果没有足够证据，返回空数组；不要编造实体、关系或临时占位端点。
+- 每条 relationship 的 source 和 target 必须逐字匹配 entities[].title。
+"""
+
+
+def _material_7_v3_failure_family_guard_block() -> str:
+    return """-Material 7 v3 Failure-family Guard-
+- `appears_in`：不要输出 Section/Assignment -> Concept 的 appears_in；位置关系只能是知识实体 -> Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform。
+- `belongs_to`：不要输出 Concept -> Concept 的 belongs_to；概念分类若原文明确父子/组成，优先用 parent Concept contains child Concept，否则跳过。
+- `defined_by`：target 为 Term 时，只有符号、变量、公式名或明确判定条件才保留；PCB/TCB/FCFS/SPOOLing 等简称优先放 alias，不作为 defined_by 关系。
+- `endpoint`：source 和 target 必须逐字匹配 entities；无法补齐实体时跳过关系，不输出 missing/unknown/N/A/空字符串。
+"""
+
+
+def build_default_guarded_prompt(default_prompt: str) -> str:
+    return _insert_before_real_data(default_prompt, _strict_json_output_guard_block()).rstrip() + "\n"
+
+
+def build_schema_aware_directional_v2_prompt(schema_aware_directional_prompt: str) -> str:
+    return _insert_before_real_data(
+        schema_aware_directional_prompt,
+        _material_7_v3_failure_family_guard_block(),
+    ).rstrip() + "\n"
+
+
+def build_schema_fewshot_distilled_v3_prompt(micro_example_lines: Sequence[str]) -> str:
+    compact_examples = list(micro_example_lines[:1])
+    prompt = (
+        "-Material 7 v3 Failure-family Guard-\n"
+        "- 只返回一个 JSON 对象；source 和 target 必须逐字匹配 entities。\n"
+        "- 不要输出 Section/Assignment -> Concept 的 appears_in；Concept -> Concept 的 belongs_to 跳过或改显式 contains。\n"
+        "- defined_by -> Term 只有符号、变量、公式名或明确判定条件才保留；简称放 alias。\n"
+        "-Micro-examples-\n"
+    )
+    if compact_examples:
+        prompt += "\n".join(compact_examples) + "\n"
+    else:
+        prompt += "- 按失败族规则保留端点和类型，不嵌完整 audit text。\n"
+    return prompt
 
 
 def _compact_assignment_text(text: str, *, max_items: int = 6) -> str:
@@ -1596,6 +1656,7 @@ def generate_candidate_prompts(
         default_prompt_text = build_minimal_default_prompt(schema_catalog, language)
     else:
         default_notes.append("default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。")
+    default_guarded_prompt_text = build_default_guarded_prompt(default_prompt_text)
 
     schema_aware_base_source = auto_tuned_prompt_source.path or default_prompt_source.path
     schema_aware_base_text = _strip_legacy_examples(auto_tuned_prompt_source.text or default_prompt_source.text)
@@ -1609,6 +1670,9 @@ def generate_candidate_prompts(
     schema_aware_directional_prompt_text = build_schema_aware_directional_prompt(
         schema_catalog=schema_catalog,
         schema_aware_prompt=schema_aware_prompt_text,
+    )
+    schema_aware_directional_v2_prompt_text = build_schema_aware_directional_v2_prompt(
+        schema_aware_directional_prompt_text
     )
 
     fewshot_examples, fewshot_strategy, fewshot_source_ids, fewshot_notes, fewshot_selected_records = _select_fewshot_examples(
@@ -1652,6 +1716,9 @@ def generate_candidate_prompts(
     schema_fewshot_distilled_v2_prompt_text = build_schema_fewshot_distilled_v2_prompt(
         schema_fewshot_distilled_prompt_text
     )
+    schema_fewshot_distilled_v3_prompt_text = build_schema_fewshot_distilled_v3_prompt(
+        [item["line"] for item in distilled_micro_example_items]
+    )
 
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
@@ -1662,12 +1729,15 @@ def generate_candidate_prompts(
         auto_tuned_notes.append("由于未发现实际 auto-tuned Prompt，当前候选内容回退为 default 候选 Prompt，以保证目录结构和后续切换流程可运行。")
 
     default_prompt_text = _render_delimiter_placeholders(default_prompt_text)
+    default_guarded_prompt_text = _render_delimiter_placeholders(default_guarded_prompt_text)
     auto_tuned_prompt_text = _render_delimiter_placeholders(auto_tuned_prompt_text)
     schema_aware_prompt_text = _render_delimiter_placeholders(schema_aware_prompt_text)
     schema_fewshot_prompt_text = _render_delimiter_placeholders(schema_fewshot_prompt_text)
     schema_aware_directional_prompt_text = _render_delimiter_placeholders(schema_aware_directional_prompt_text)
+    schema_aware_directional_v2_prompt_text = _render_delimiter_placeholders(schema_aware_directional_v2_prompt_text)
     schema_fewshot_distilled_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_prompt_text)
     schema_fewshot_distilled_v2_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_v2_prompt_text)
+    schema_fewshot_distilled_v3_prompt_text = _render_delimiter_placeholders(schema_fewshot_distilled_v3_prompt_text)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1692,6 +1762,12 @@ def generate_candidate_prompts(
     if sample_records:
         default_candidate_notes.append(f"检测到 prompt tuning 样本 {len(sample_records)} 条，可供后续 few-shot/评测使用。")
     default_candidate_notes = _dedupe_preserve_order(default_candidate_notes)
+    default_guarded_notes = _dedupe_preserve_order(
+        [
+            "default_guarded 继承 default，只追加严格 JSON 根对象与端点匹配守卫。",
+            "用于验证强基线在不引入长 few-shot 的情况下能否降低 parse/leak 风险。",
+        ]
+    )
 
     schema_aware_notes = [
         f"schema_aware 优先基于{schema_aware_base_label}自动增强；若 auto_tuned 缺失则回退到 default。",
@@ -1704,6 +1780,13 @@ def generate_candidate_prompts(
             "schema_aware_directional 继承 schema_aware，并额外加入短关系方向卡片。",
             "方向卡片覆盖 applied_in / appears_in / defined_by / evaluated_by / related_to 等高风险关系，不嵌入完整 audit 样本文本。",
             "用于降低关系反向、related_to 滥用和缺失端点占位风险。",
+        ]
+    )
+    schema_aware_directional_v2_notes = _dedupe_preserve_order(
+        [
+            "schema_aware_directional_v2 继承 schema_aware_directional，并追加 material_7 高频失败族守卫。",
+            "v2 聚焦 appears_in 反向位置、belongs_to 概念分类误用、defined_by 术语符号线索和端点逐字匹配。",
+            "不嵌入完整 audit 样本文本，作为低成本 prompt-only 对照。",
         ]
     )
     schema_fewshot_notes = list(fewshot_notes)
@@ -1733,6 +1816,15 @@ def generate_candidate_prompts(
             "schema_fewshot_distilled_v2 继承 schema_fewshot_distilled，并追加短反向负例和缺端点跳过规则。",
             "v2 不嵌入完整 audit 样本文本，重点压制 evaluated_by / appears_in / defined_by / applied_in / related_to 的高频残留错误。",
             "长度目标仍接近 schema_aware_directional，避免回到 full schema_fewshot 的高成本形态。",
+            rendered_micro_example_coverage_summary,
+            FEWSHOT_COMPRESSION_CAVEAT,
+        ]
+    )
+    schema_fewshot_distilled_v3_notes = _dedupe_preserve_order(
+        [
+            "schema_fewshot_distilled_v3 采用低成本失败族守卫，不再继承长 schema/few-shot 正文。",
+            "v3 继续只使用 1 条 micro-example，不嵌入完整 audit text，目标成本不超过 default 的 1.10 倍。",
+            "重点压制 appears_in 反向、belongs_to 概念分类、defined_by 非符号术语和缺失端点。",
             rendered_micro_example_coverage_summary,
             FEWSHOT_COMPRESSION_CAVEAT,
         ]
@@ -1770,6 +1862,17 @@ def generate_candidate_prompts(
             "base_prompt": "schema_fewshot_distilled",
         },
     }
+    v3_extra_fields = {
+        **distilled_v2_extra_fields,
+        "failure_family_policy": dict(V3_FAILURE_FAMILY_POLICY),
+        "token_budget_policy": dict(V3_TOKEN_BUDGET_POLICY),
+        "micro_example_policy": {
+            "strategy": "failure_family_micro_examples",
+            "source": "selected_audit_gold_relation_micro_examples",
+            "max_micro_example_chars": DISTILLED_MICRO_EXAMPLE_MAX_CHARS,
+            "max_micro_examples": DISTILLED_MAX_MICRO_EXAMPLES,
+        },
+    }
 
     candidates = [
         {
@@ -1783,6 +1886,25 @@ def generate_candidate_prompts(
             "fewshot_example_count": 0,
             "fewshot_strategy": None,
             "notes": default_candidate_notes,
+        },
+        {
+            "name": "default_guarded",
+            "prompt_text": default_guarded_prompt_text,
+            "source_type": "default_guarded",
+            "base_prompt_source": _safe_relpath(default_prompt_source.path),
+            "schema_used": True,
+            "audit_used": False,
+            "fewshot_used": False,
+            "fewshot_example_count": 0,
+            "fewshot_strategy": None,
+            "notes": default_guarded_notes,
+            "extra_manifest_fields": {
+                "output_guard_policy": {
+                    "strategy": "strict_json_root_and_endpoint_match",
+                    "required_root_keys": ["entities", "relationships"],
+                },
+                "token_budget_policy": dict(V3_TOKEN_BUDGET_POLICY),
+            },
         },
         {
             "name": "auto_tuned",
@@ -1835,6 +1957,22 @@ def generate_candidate_prompts(
             "notes": schema_aware_directional_notes,
         },
         {
+            "name": "schema_aware_directional_v2",
+            "prompt_text": schema_aware_directional_v2_prompt_text,
+            "source_type": "schema_directional_v2",
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
+            "schema_used": True,
+            "audit_used": False,
+            "fewshot_used": False,
+            "fewshot_example_count": 0,
+            "fewshot_strategy": None,
+            "notes": schema_aware_directional_v2_notes,
+            "extra_manifest_fields": {
+                "failure_family_policy": dict(V3_FAILURE_FAMILY_POLICY),
+                "token_budget_policy": dict(V3_TOKEN_BUDGET_POLICY),
+            },
+        },
+        {
             "name": "schema_fewshot_distilled",
             "prompt_text": schema_fewshot_distilled_prompt_text,
             "source_type": "schema_fewshot_distilled",
@@ -1859,6 +1997,19 @@ def generate_candidate_prompts(
             "fewshot_strategy": "distilled_negative_direction_rules",
             "notes": schema_fewshot_distilled_v2_notes,
             "extra_manifest_fields": distilled_v2_extra_fields,
+        },
+        {
+            "name": "schema_fewshot_distilled_v3",
+            "prompt_text": schema_fewshot_distilled_v3_prompt_text,
+            "source_type": "schema_fewshot_distilled_v3",
+            "base_prompt_source": _safe_relpath(schema_aware_base_source),
+            "schema_used": True,
+            "audit_used": bool(audit_records),
+            "fewshot_used": bool(fewshot_selected_records),
+            "fewshot_example_count": len(fewshot_selected_records),
+            "fewshot_strategy": "failure_family_micro_examples",
+            "notes": schema_fewshot_distilled_v3_notes,
+            "extra_manifest_fields": v3_extra_fields,
         },
     ]
 
@@ -1956,6 +2107,7 @@ def generate_candidate_prompts(
         },
         "distilled": distilled_extra_fields,
         "distilled_v2": distilled_v2_extra_fields,
+        "distilled_v3": v3_extra_fields,
         "fewshot_coverage": fewshot_coverage,
         "candidate_names": [candidate["candidate_name"] for candidate in manifest_candidates],
         "manifest_path": _safe_relpath(manifest_path),
@@ -1963,6 +2115,7 @@ def generate_candidate_prompts(
             "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
             "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
             "schema_aware_directional / schema_fewshot_distilled / schema_fewshot_distilled_v2 用短方向卡片、micro-examples 和负例规则降低关系方向泄漏风险。",
+            "default_guarded / schema_aware_directional_v2 / schema_fewshot_distilled_v3 用 material_7 高频失败族守卫和严格 JSON 输出守卫作为下一轮实验候选。",
             "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
             FEWSHOT_COMPRESSION_CAVEAT,
         ],
@@ -2074,7 +2227,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     print(
-        f"[完成] 已生成 7 类候选 Prompt，manifest: {result['manifest_path']}，"
+        f"[完成] 已生成 {len(result['manifest']['candidates'])} 类候选 Prompt，manifest: {result['manifest_path']}，"
         f"report: {result['report_path']}"
     )
     return 0

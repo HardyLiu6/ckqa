@@ -28,12 +28,18 @@ CSV_COLUMNS: tuple[str, ...] = (
     "entity_type_valid_rate",
     "relation_type_valid_rate",
     "endpoint_valid_rate",
+    "endpoint_total_count",
+    "endpoint_invalid_count",
     "duplicate_entity_rate",
     "noise_entity_rate",
     "output_stability",
     "audit_entity_recall",
     "audit_entity_precision",
     "audit_relation_recall",
+    "parse_error_count",
+    "llm_error_count",
+    "strict_output_retry_count",
+    "output_leak_flag_count",
     "sample_count",
     "success_count",
 )
@@ -219,20 +225,16 @@ def append_history_csv(
                 writer.writerow(record)
         return
 
-    if existing_header == current_columns:
-        with path.open("a", encoding="utf-8", newline="") as handle:
-            writer = csv.writer(handle)
-            for record in new_rows:
-                writer.writerow(record)
-        return
-
     migrated_rows: list[list[str]] = []
     for row in existing_rows:
-        if len(row) == len(current_columns):
+        if existing_header == current_columns and len(row) == len(current_columns):
             mapping = dict(zip(current_columns, row))
         else:
             mapping = dict(zip(existing_header, row))
-        migrated_rows.append([mapping.get(col, "") for col in current_columns])
+        migrated = [mapping.get(col, "") for col in current_columns]
+        if migrated and migrated[0] == run_id:
+            continue
+        migrated_rows.append(migrated)
 
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)

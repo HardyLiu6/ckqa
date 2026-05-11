@@ -24,6 +24,7 @@ from typing import Any, Sequence
 from .extraction_parser import parse_extraction_output
 from .extraction_schema import StructuredExtractionResult
 from .llm_client import LlmCompletionResult, build_llm_client
+from .output_guard import analyze_output_guard_issue
 from .prompt_loader import (
     default_schema_paths,
     is_fallback_auto_tuned_entry,
@@ -67,6 +68,7 @@ def run_candidate_extraction(
     candidate_view_mode: str = "compact",
     max_prompt_chars: int = 1800,
     include_fallback_auto_tuned: bool = False,
+    strict_output_retry: bool = True,
 ) -> dict[str, Any]:
     root = root.resolve()
     samples_path = resolve_samples_path(samples_file, root=root)
@@ -148,6 +150,7 @@ def run_candidate_extraction(
             concurrency=concurrency,
             sample_timeout_seconds=sample_timeout_seconds,
             logger=logger,
+            strict_output_retry=strict_output_retry,
         )
 
         results.sort(key=lambda item: sample_order.get(item.sample_id, 10**9))
@@ -194,6 +197,7 @@ def run_candidate_extraction(
             "fallback_auto_tuned_skipped": bool(skipped_candidates),
             "candidate_view_mode": candidate_view_mode,
             "max_prompt_chars": max_prompt_chars,
+            "strict_output_retry": strict_output_retry,
         },
         "total_candidates": len(candidates),
         "total_samples": len(samples),
@@ -263,6 +267,7 @@ def _run_candidate_samples(
     concurrency: int,
     sample_timeout_seconds: float | None,
     logger: logging.Logger,
+    strict_output_retry: bool,
 ) -> list[StructuredExtractionResult]:
     results: list[StructuredExtractionResult] = []
     executor = ThreadPoolExecutor(max_workers=max(1, concurrency))
@@ -296,6 +301,7 @@ def _run_candidate_samples(
                 max_relationships=max_relationships,
                 candidate_view_mode=candidate_view_mode,
                 max_prompt_chars=max_prompt_chars,
+                strict_output_retry=strict_output_retry,
             )
             pending.add(future)
             future_map[future] = sample
@@ -408,6 +414,7 @@ def _run_single_extraction(
     max_relationships: int | None,
     candidate_view_mode: str,
     max_prompt_chars: int,
+    strict_output_retry: bool,
 ) -> StructuredExtractionResult:
     sample_id = str(sample.get("sample_id") or "").strip()
     messages = render_extraction_messages(
@@ -419,25 +426,28 @@ def _run_single_extraction(
         candidate_view_mode=candidate_view_mode,
         max_prompt_chars=max_prompt_chars,
     )
-    attempt_settings = [(max_tokens, timeout_seconds)]
-    if retry_on_truncation:
-        attempt_settings.append((retry_max_tokens or max_tokens, high_risk_timeout))
-
+    current_messages = list(messages)
+    current_max_tokens = max_tokens
+    current_timeout = timeout_seconds
     first_failure_result: StructuredExtractionResult | None = None
+    strict_retry_used = False
+    truncation_retry_used = False
+    attempt_index = 0
 
-    for attempt_index, (attempt_max_tokens, attempt_timeout) in enumerate(attempt_settings, start=1):
+    while True:
+        attempt_index += 1
         try:
             raw_result = client.create_chat_completion(
-                messages=messages,
+                messages=current_messages,
                 model=model_name,
                 temperature=temperature,
-                max_tokens=attempt_max_tokens,
+                max_tokens=current_max_tokens,
                 metadata={
                     "candidate": candidate.name,
                     "sample_id": sample_id,
                     "prompt_path": str(candidate.prompt_path),
                 },
-                timeout_seconds=attempt_timeout,
+                timeout_seconds=current_timeout,
             )
         except Exception as exc:
             if first_failure_result is not None:
@@ -445,8 +455,8 @@ def _run_single_extraction(
                     first_failure_result,
                     retry_error=str(exc),
                     attempt_index=attempt_index,
-                    timeout_seconds=attempt_timeout,
-                    max_tokens=attempt_max_tokens,
+                    timeout_seconds=current_timeout,
+                    max_tokens=current_max_tokens,
                 )
             return StructuredExtractionResult(
                 sample_id=sample_id,
@@ -458,8 +468,8 @@ def _run_single_extraction(
                 error=str(exc),
                 llm_debug={
                     "attempt_index": attempt_index,
-                    "timeout_seconds": attempt_timeout,
-                    "max_tokens": attempt_max_tokens,
+                    "timeout_seconds": current_timeout,
+                    "max_tokens": current_max_tokens,
                 },
             )
 
@@ -479,31 +489,66 @@ def _run_single_extraction(
                     "reasoning_seen": llm_result.reasoning_seen,
                     "raw_chunks": llm_result.raw_chunks,
                     "attempt_index": attempt_index,
-                    "timeout_seconds": attempt_timeout,
-                    "max_tokens": attempt_max_tokens,
+                    "timeout_seconds": current_timeout,
+                    "max_tokens": current_max_tokens,
+                    "strict_output_retry_used": strict_retry_used,
                 }
             }
         )
 
+        guard_issue = analyze_output_guard_issue(
+            llm_result.content,
+            parsed_result=enriched_result,
+        )
         if (
             attempt_index == 1
-            and retry_on_truncation
+            and strict_output_retry
+            and guard_issue is not None
+            and not strict_retry_used
+        ):
+            first_failure_result = enriched_result
+            current_messages = _build_strict_output_retry_messages(messages, guard_issue)
+            current_max_tokens = max_tokens
+            current_timeout = timeout_seconds
+            strict_retry_used = True
+            continue
+
+        if (
+            retry_on_truncation
+            and not truncation_retry_used
             and _should_retry_truncation(enriched_result, llm_result)
         ):
             first_failure_result = enriched_result
+            current_messages = list(messages)
+            current_max_tokens = retry_max_tokens or max_tokens
+            current_timeout = high_risk_timeout
+            truncation_retry_used = True
             continue
+
+        if first_failure_result is not None and strict_retry_used:
+            debug = dict(enriched_result.llm_debug or {})
+            debug["strict_output_retry_used"] = True
+            debug["strict_output_issue"] = analyze_output_guard_issue(
+                first_failure_result.raw_output,
+                parsed_result=first_failure_result,
+            )
+            debug["previous_parser_error_code"] = first_failure_result.parser_error_code
+            return enriched_result.model_copy(update={"llm_debug": debug})
 
         return enriched_result
 
-    return first_failure_result or StructuredExtractionResult(
-        sample_id=sample_id,
-        candidate=candidate.name,
-        status="parse_error",
-        entities=[],
-        relationships=[],
-        raw_output="",
-        error="抽取执行失败，但未返回可用结果",
+
+def _build_strict_output_retry_messages(
+    messages: list[dict[str, str]],
+    issue: dict[str, Any],
+) -> list[dict[str, str]]:
+    retry_instruction = (
+        "上一次输出不符合抽取接口约束："
+        f"{issue.get('reason') or issue.get('code') or '未知原因'}。\n"
+        "请重新输出，只返回一个 JSON 对象，根对象只能包含 entities 和 relationships 两个数组。\n"
+        "不要输出 Markdown、解释、指标、指令、延迟字段或任何前后缀文本。"
     )
+    return [*messages, {"role": "user", "content": retry_instruction}]
 
 
 def _build_candidate_logger(
@@ -569,6 +614,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=True,
         help="遇到 length/truncated_json 时自动重试一次；默认开启，可用 --no-retry-on-truncation 关闭",
     )
+    parser.add_argument(
+        "--strict-output-retry",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="遇到缺少 JSON 根对象或可疑非领域输出时自动重试一次；默认开启",
+    )
     parser.add_argument("--retry-max-tokens", type=int, default=4000, help="自动重试时使用的 max_tokens")
     parser.add_argument("--high-risk-timeout", type=int, default=240, help="高风险样本自动重试时使用的超时")
     parser.add_argument("--sample-timeout", type=float, default=300, help="单个样本最大执行秒数，超时写入 llm_error")
@@ -618,6 +669,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         candidate_view_mode=args.candidate_view,
         max_prompt_chars=args.max_prompt_chars,
         include_fallback_auto_tuned=args.include_fallback_auto_tuned,
+        strict_output_retry=args.strict_output_retry,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

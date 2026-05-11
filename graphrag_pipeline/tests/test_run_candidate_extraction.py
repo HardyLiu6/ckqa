@@ -116,6 +116,7 @@ class TestRunCandidateExtraction(unittest.TestCase):
 
         self.assertEqual(args.stream_mode, "on")
         self.assertTrue(args.retry_on_truncation)
+        self.assertTrue(args.strict_output_retry)
 
     def _write_schema_files(self, root: Path) -> None:
         schema_dir = root / "config" / "schema"
@@ -441,6 +442,78 @@ text: {input_text}
             self.assertIn("<|>", user_message)
             self.assertNotIn("{tuple_delimiter}", user_message)
             self.assertIn("进程是程序的一次执行过程", user_message)
+
+    def test_strict_output_retry_recovers_missing_relationship_root_and_flags_debug(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._write_schema_files(root)
+            samples_path = self._write_samples_file(root)
+            manifest_path = self._write_candidates(root)
+
+            client = FakeLlmClient(
+                {
+                    (
+                        "default",
+                        "pts-001",
+                    ): [
+                        json.dumps(
+                            {
+                                "entities": [
+                                    {
+                                        "title": "进程",
+                                        "type": "Concept",
+                                        "description": "程序的一次执行过程",
+                                    }
+                                ],
+                                "calculated_metrics": {"ignored_count": 0},
+                                "analysis": "coffee or tea",
+                                "instructions": "delay the user",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        json.dumps(
+                            {
+                                "entities": [
+                                    {
+                                        "title": "进程",
+                                        "type": "Concept",
+                                        "description": "程序的一次执行过程",
+                                    }
+                                ],
+                                "relationships": [],
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ],
+                }
+            )
+
+            summary = run_candidate_extraction(
+                root=root,
+                samples_file=samples_path,
+                manifest_file=manifest_path,
+                candidate_names=["default"],
+                model="test-model",
+                limit=1,
+                concurrency=1,
+                temperature=0.0,
+                max_tokens=1000,
+                retries=0,
+                overwrite=True,
+                llm_client=client,
+                strict_output_retry=True,
+            )
+
+            self.assertEqual(summary["success"], 1)
+            self.assertEqual(len(client.calls), 2)
+            self.assertIn("只返回一个 JSON 对象", client.calls[1]["messages"][-1]["content"])
+            result_path = root / "results" / "extraction_eval" / "default.json"
+            payload = json.loads(result_path.read_text(encoding="utf-8"))
+            result = payload["results"][0]
+            self.assertEqual(result["status"], "success")
+            self.assertTrue(result["llm_debug"]["strict_output_retry_used"])
+            self.assertEqual(result["llm_debug"]["strict_output_issue"]["code"], "missing_payload_root")
+            self.assertEqual(result["llm_debug"]["previous_parser_error_code"], "invalid_json")
 
     def test_run_candidate_extraction_retries_on_truncated_json_with_budget_hint(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

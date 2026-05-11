@@ -1,0 +1,155 @@
+{
+  "task": "relationship_postprocess",
+  "mode": "strict-closure",
+  "source_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_schema_v1_final_full_20260510",
+  "output_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2",
+  "output_run_id": "material_7_v3_full_20260510_structured_closure_v2",
+  "candidate_summaries": {
+    "auto_tuned": {
+      "mode": "strict-closure",
+      "original_relationship_count": 174,
+      "kept_relationship_count": 164,
+      "dropped_relationship_count": 10,
+      "repaired_relationship_count": 13,
+      "created_entity_count": 0,
+      "actions": {
+        "drop_invalid_relationship": 10,
+        "swap_reversed_endpoints": 2,
+        "retype_container_appears_in_to_contains": 10,
+        "convert_belongs_to_taxonomy_to_contains": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 6,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "default": {
+      "mode": "strict-closure",
+      "original_relationship_count": 191,
+      "kept_relationship_count": 183,
+      "dropped_relationship_count": 8,
+      "repaired_relationship_count": 15,
+      "created_entity_count": 0,
+      "actions": {
+        "swap_reversed_endpoints": 2,
+        "drop_invalid_relationship": 8,
+        "convert_belongs_to_taxonomy_to_contains": 3,
+        "retype_container_appears_in_to_contains": 10
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 5,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_aware": {
+      "mode": "strict-closure",
+      "original_relationship_count": 180,
+      "kept_relationship_count": 168,
+      "dropped_relationship_count": 12,
+      "repaired_relationship_count": 15,
+      "created_entity_count": 2,
+      "actions": {
+        "convert_belongs_to_taxonomy_to_contains": 9,
+        "drop_invalid_relationship": 12,
+        "swap_reversed_endpoints": 5,
+        "add_missing_target_entity": 2
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 7,
+        "missing_target": 1,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "schema_aware_directional": {
+      "mode": "strict-closure",
+      "original_relationship_count": 190,
+      "kept_relationship_count": 176,
+      "dropped_relationship_count": 14,
+      "repaired_relationship_count": 8,
+      "created_entity_count": 0,
+      "actions": {
+        "convert_belongs_to_taxonomy_to_contains": 7,
+        "drop_invalid_relationship": 14,
+        "swap_reversed_endpoints": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 11,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_fewshot": {
+      "mode": "strict-closure",
+      "original_relationship_count": 188,
+      "kept_relationship_count": 177,
+      "dropped_relationship_count": 11,
+      "repaired_relationship_count": 12,
+      "created_entity_count": 0,
+      "actions": {
+        "convert_belongs_to_taxonomy_to_contains": 8,
+        "drop_invalid_relationship": 11,
+        "swap_reversed_endpoints": 6
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 7,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "schema_fewshot_distilled": {
+      "mode": "strict-closure",
+      "original_relationship_count": 189,
+      "kept_relationship_count": 180,
+      "dropped_relationship_count": 9,
+      "repaired_relationship_count": 26,
+      "created_entity_count": 6,
+      "actions": {
+        "add_missing_target_entity": 6,
+        "drop_invalid_relationship": 9,
+        "retype_container_appears_in_to_contains": 10,
+        "convert_belongs_to_taxonomy_to_contains": 2,
+        "swap_reversed_endpoints": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 5,
+        "missing_target": 1,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_fewshot_distilled_v2": {
+      "mode": "strict-closure",
+      "original_relationship_count": 196,
+      "kept_relationship_count": 179,
+      "dropped_relationship_count": 17,
+      "repaired_relationship_count": 23,
+      "created_entity_count": 4,
+      "actions": {
+        "add_missing_target_entity": 4,
+        "convert_belongs_to_taxonomy_to_contains": 7,
+        "swap_reversed_endpoints": 5,
+        "drop_invalid_relationship": 17,
+        "retype_container_appears_in_to_contains": 8
+      },
+      "dropped_by_reason": {
+        "semantic_defined_by_term_needs_symbol_cue": 7,
+        "endpoint_type_mismatch": 10
+      }
+    }
+  },
+  "totals": {
+    "original_relationship_count": 1308,
+    "kept_relationship_count": 1227,
+    "dropped_relationship_count": 81,
+    "repaired_relationship_count": 112,
+    "actions": {
+      "drop_invalid_relationship": 81,
+      "swap_reversed_endpoints": 22,
+      "retype_container_appears_in_to_contains": 38,
+      "convert_belongs_to_taxonomy_to_contains": 37,
+      "add_missing_target_entity": 12
+    },
+    "dropped_by_reason": {
+      "endpoint_type_mismatch": 51,
+      "semantic_defined_by_term_needs_symbol_cue": 28,
+      "missing_target": 2
+    }
+  }
+}

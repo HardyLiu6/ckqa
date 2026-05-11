@@ -1,0 +1,187 @@
+{
+  "task": "relationship_postprocess",
+  "mode": "strict-metadata-closure",
+  "source_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_schema_v1_final_full_20260510",
+  "output_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_metadata_closure",
+  "output_run_id": "material_7_v3_full_20260510_metadata_closure",
+  "candidate_summaries": {
+    "auto_tuned": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 383,
+      "kept_relationship_count": 373,
+      "dropped_relationship_count": 10,
+      "repaired_relationship_count": 222,
+      "created_entity_count": 0,
+      "metadata_injected_entity_count": 53,
+      "metadata_derived_relationship_count": 209,
+      "actions": {
+        "metadata_inject_container_entity": 53,
+        "metadata_derive_contains_relationship": 209,
+        "drop_invalid_relationship": 10,
+        "swap_reversed_endpoints": 2,
+        "retype_container_appears_in_to_contains": 10,
+        "convert_belongs_to_taxonomy_to_contains": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 6,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "default": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 403,
+      "kept_relationship_count": 395,
+      "dropped_relationship_count": 8,
+      "repaired_relationship_count": 227,
+      "created_entity_count": 0,
+      "metadata_injected_entity_count": 50,
+      "metadata_derived_relationship_count": 212,
+      "actions": {
+        "metadata_inject_container_entity": 50,
+        "metadata_derive_contains_relationship": 212,
+        "swap_reversed_endpoints": 2,
+        "drop_invalid_relationship": 8,
+        "convert_belongs_to_taxonomy_to_contains": 3,
+        "retype_container_appears_in_to_contains": 10
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 5,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_aware": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 364,
+      "kept_relationship_count": 352,
+      "dropped_relationship_count": 12,
+      "repaired_relationship_count": 199,
+      "created_entity_count": 2,
+      "metadata_injected_entity_count": 48,
+      "metadata_derived_relationship_count": 184,
+      "actions": {
+        "metadata_inject_container_entity": 48,
+        "metadata_derive_contains_relationship": 184,
+        "convert_belongs_to_taxonomy_to_contains": 9,
+        "drop_invalid_relationship": 12,
+        "swap_reversed_endpoints": 5,
+        "add_missing_target_entity": 2
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 7,
+        "missing_target": 1,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "schema_aware_directional": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 384,
+      "kept_relationship_count": 370,
+      "dropped_relationship_count": 14,
+      "repaired_relationship_count": 202,
+      "created_entity_count": 0,
+      "metadata_injected_entity_count": 51,
+      "metadata_derived_relationship_count": 194,
+      "actions": {
+        "metadata_inject_container_entity": 51,
+        "metadata_derive_contains_relationship": 194,
+        "convert_belongs_to_taxonomy_to_contains": 7,
+        "drop_invalid_relationship": 14,
+        "swap_reversed_endpoints": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 11,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_fewshot": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 386,
+      "kept_relationship_count": 375,
+      "dropped_relationship_count": 11,
+      "repaired_relationship_count": 210,
+      "created_entity_count": 0,
+      "metadata_injected_entity_count": 49,
+      "metadata_derived_relationship_count": 198,
+      "actions": {
+        "metadata_inject_container_entity": 49,
+        "metadata_derive_contains_relationship": 198,
+        "convert_belongs_to_taxonomy_to_contains": 8,
+        "drop_invalid_relationship": 11,
+        "swap_reversed_endpoints": 6
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 7,
+        "semantic_defined_by_term_needs_symbol_cue": 4
+      }
+    },
+    "schema_fewshot_distilled": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 396,
+      "kept_relationship_count": 387,
+      "dropped_relationship_count": 9,
+      "repaired_relationship_count": 233,
+      "created_entity_count": 6,
+      "metadata_injected_entity_count": 50,
+      "metadata_derived_relationship_count": 207,
+      "actions": {
+        "metadata_inject_container_entity": 50,
+        "metadata_derive_contains_relationship": 207,
+        "add_missing_target_entity": 6,
+        "drop_invalid_relationship": 9,
+        "retype_container_appears_in_to_contains": 10,
+        "convert_belongs_to_taxonomy_to_contains": 2,
+        "swap_reversed_endpoints": 1
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 5,
+        "missing_target": 1,
+        "semantic_defined_by_term_needs_symbol_cue": 3
+      }
+    },
+    "schema_fewshot_distilled_v2": {
+      "mode": "strict-metadata-closure",
+      "original_relationship_count": 411,
+      "kept_relationship_count": 394,
+      "dropped_relationship_count": 17,
+      "repaired_relationship_count": 238,
+      "created_entity_count": 4,
+      "metadata_injected_entity_count": 52,
+      "metadata_derived_relationship_count": 215,
+      "actions": {
+        "metadata_inject_container_entity": 52,
+        "metadata_derive_contains_relationship": 215,
+        "add_missing_target_entity": 4,
+        "convert_belongs_to_taxonomy_to_contains": 7,
+        "swap_reversed_endpoints": 5,
+        "drop_invalid_relationship": 17,
+        "retype_container_appears_in_to_contains": 8
+      },
+      "dropped_by_reason": {
+        "semantic_defined_by_term_needs_symbol_cue": 7,
+        "endpoint_type_mismatch": 10
+      }
+    }
+  },
+  "totals": {
+    "original_relationship_count": 2727,
+    "kept_relationship_count": 2646,
+    "dropped_relationship_count": 81,
+    "repaired_relationship_count": 1531,
+    "metadata_injected_entity_count": 353,
+    "metadata_derived_relationship_count": 1419,
+    "actions": {
+      "metadata_inject_container_entity": 353,
+      "metadata_derive_contains_relationship": 1419,
+      "drop_invalid_relationship": 81,
+      "swap_reversed_endpoints": 22,
+      "retype_container_appears_in_to_contains": 38,
+      "convert_belongs_to_taxonomy_to_contains": 37,
+      "add_missing_target_entity": 12
+    },
+    "dropped_by_reason": {
+      "endpoint_type_mismatch": 51,
+      "semantic_defined_by_term_needs_symbol_cue": 28,
+      "missing_target": 2
+    }
+  }
+}

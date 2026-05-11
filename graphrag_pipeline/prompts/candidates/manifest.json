@@ -1,7 +1,7 @@
 {
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
-  "generated_at": "2026-05-10T17:20:54+08:00",
+  "generated_at": "2026-05-11T11:17:20+08:00",
   "language": "zh",
   "output_dir": "prompts/candidates",
   "inputs": {
@@ -16,7 +16,7 @@
     "auto_tuned_prompt_dir": "prompts/candidates/auto_tuned",
     "auto_tuned_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt"
   },
-  "last_updated_at": "2026-05-10T17:20:54+08:00",
+  "last_updated_at": "2026-05-11T11:17:20+08:00",
   "candidates": [
     {
       "candidate_name": "default",
@@ -27,7 +27,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/default/prompt.txt",
         "readme": "prompts/candidates/default/README.md"
@@ -39,6 +39,37 @@
       ]
     },
     {
+      "candidate_name": "default_guarded",
+      "source_type": "default_guarded",
+      "base_prompt_source": "prompts/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/default_guarded/prompt.txt",
+        "readme": "prompts/candidates/default_guarded/README.md"
+      },
+      "notes": [
+        "default_guarded 继承 default，只追加严格 JSON 根对象与端点匹配守卫。",
+        "用于验证强基线在不引入长 few-shot 的情况下能否降低 parse/leak 风险。"
+      ],
+      "output_guard_policy": {
+        "strategy": "strict_json_root_and_endpoint_match",
+        "required_root_keys": [
+          "entities",
+          "relationships"
+        ]
+      },
+      "token_budget_policy": {
+        "relative_to": "default",
+        "max_ratio": 1.1,
+        "audit_text_policy": "omit_full_audit_text"
+      }
+    },
+    {
       "candidate_name": "auto_tuned",
       "source_type": "graphrag_prompt_tune",
       "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
@@ -47,7 +78,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/auto_tuned/prompt.txt",
         "readme": "prompts/candidates/auto_tuned/README.md"
@@ -76,7 +107,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_aware/prompt.txt",
         "readme": "prompts/candidates/schema_aware/README.md"
@@ -96,7 +127,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "audit_gold",
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot/README.md"
@@ -161,7 +192,7 @@
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_aware_directional/prompt.txt",
         "readme": "prompts/candidates/schema_aware_directional/README.md"
@@ -173,6 +204,41 @@
       ]
     },
     {
+      "candidate_name": "schema_aware_directional_v2",
+      "source_type": "schema_directional_v2",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_aware_directional_v2/prompt.txt",
+        "readme": "prompts/candidates/schema_aware_directional_v2/README.md"
+      },
+      "notes": [
+        "schema_aware_directional_v2 继承 schema_aware_directional，并追加 material_7 高频失败族守卫。",
+        "v2 聚焦 appears_in 反向位置、belongs_to 概念分类误用、defined_by 术语符号线索和端点逐字匹配。",
+        "不嵌入完整 audit 样本文本，作为低成本 prompt-only 对照。"
+      ],
+      "failure_family_policy": {
+        "strategy": "material_7_failure_family_guard",
+        "audit_text_policy": "omit_full_audit_text",
+        "families": [
+          "appears_in_reverse_location",
+          "belongs_to_concept_taxonomy",
+          "defined_by_term_without_symbol_cue",
+          "missing_or_unmatched_endpoint"
+        ]
+      },
+      "token_budget_policy": {
+        "relative_to": "default",
+        "max_ratio": 1.1,
+        "audit_text_policy": "omit_full_audit_text"
+      }
+    },
+    {
       "candidate_name": "schema_fewshot_distilled",
       "source_type": "schema_fewshot_distilled",
       "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
@@ -181,7 +247,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "distilled_relation_micro_examples",
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot_distilled/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot_distilled/README.md"
@@ -303,7 +369,7 @@
       "fewshot_used": true,
       "fewshot_example_count": 3,
       "fewshot_strategy": "distilled_negative_direction_rules",
-      "generation_time": "2026-05-10T17:20:54+08:00",
+      "generation_time": "2026-05-11T11:17:20+08:00",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot_distilled_v2/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot_distilled_v2/README.md"
@@ -424,6 +490,159 @@
           "applied_in",
           "related_to"
         ]
+      }
+    },
+    {
+      "candidate_name": "schema_fewshot_distilled_v3",
+      "source_type": "schema_fewshot_distilled_v3",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": true,
+      "fewshot_used": true,
+      "fewshot_example_count": 3,
+      "fewshot_strategy": "failure_family_micro_examples",
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_fewshot_distilled_v3/prompt.txt",
+        "readme": "prompts/candidates/schema_fewshot_distilled_v3/README.md"
+      },
+      "notes": [
+        "schema_fewshot_distilled_v3 采用低成本失败族守卫，不再继承长 schema/few-shot 正文。",
+        "v3 继续只使用 1 条 micro-example，不嵌入完整 audit text，目标成本不超过 default 的 1.10 倍。",
+        "重点压制 appears_in 反向、belongs_to 概念分类、defined_by 非符号术语和缺失端点。",
+        "distilled 渲染覆盖摘要：关系 3/10，micro-example 3 条",
+        "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ],
+      "coverage": {
+        "selection_strategy": "first_distilled_micro_example_per_relation",
+        "rendered_micro_example_count": 3,
+        "covered_relation_types": [
+          "defined_by",
+          "evaluated_by",
+          "implemented_by"
+        ],
+        "missing_relation_types": [
+          "contains",
+          "belongs_to",
+          "prerequisite_of",
+          "depends_on",
+          "applied_in",
+          "related_to",
+          "appears_in"
+        ],
+        "source_sample_ids": [
+          "pts-0049-bd80db3cdf",
+          "pts-0046-a99abcf7ae",
+          "pts-0031-a008da8a10"
+        ]
+      },
+      "selected_audit_coverage": {
+        "selected_example_ids": [
+          "audit-ext-0003-4163630cd6",
+          "audit-ext-0004-7396d8021d",
+          "audit-ext-0010-84c282a5ee"
+        ],
+        "covered_relation_types": [
+          "defined_by",
+          "implemented_by",
+          "evaluated_by"
+        ],
+        "missing_relation_types": [
+          "contains",
+          "belongs_to",
+          "prerequisite_of",
+          "depends_on",
+          "applied_in",
+          "related_to",
+          "appears_in"
+        ],
+        "covered_entity_types": [
+          "Chapter",
+          "KnowledgePoint",
+          "Concept",
+          "Term",
+          "FormulaOrDefinition",
+          "AlgorithmOrMethod",
+          "Assignment"
+        ],
+        "missing_entity_types": [
+          "Course",
+          "Section",
+          "Experiment",
+          "ToolOrPlatform"
+        ],
+        "selection_strategy": "greedy_relation_entity_coverage"
+      },
+      "rendered_micro_example_coverage": {
+        "selection_strategy": "first_distilled_micro_example_per_relation",
+        "rendered_micro_example_count": 3,
+        "covered_relation_types": [
+          "defined_by",
+          "evaluated_by",
+          "implemented_by"
+        ],
+        "missing_relation_types": [
+          "contains",
+          "belongs_to",
+          "prerequisite_of",
+          "depends_on",
+          "applied_in",
+          "related_to",
+          "appears_in"
+        ],
+        "source_sample_ids": [
+          "pts-0049-bd80db3cdf",
+          "pts-0046-a99abcf7ae",
+          "pts-0031-a008da8a10"
+        ]
+      },
+      "compression": {
+        "strategy": "micro_examples_without_full_audit_text",
+        "input_text_policy": "omit_full_audit_text",
+        "max_micro_example_chars": 96,
+        "max_micro_examples": 8
+      },
+      "length_policy": {
+        "target": "near_schema_aware_directional",
+        "max_schema_aware_ratio": 1.35,
+        "base_prompt": "schema_fewshot_distilled"
+      },
+      "negative_rule_policy": {
+        "strategy": "short_directional_negative_rules",
+        "audit_text_policy": "omit_full_audit_text",
+        "covered_relation_types": [
+          "evaluated_by",
+          "appears_in",
+          "defined_by",
+          "applied_in",
+          "related_to"
+        ]
+      },
+      "failure_family_policy": {
+        "strategy": "material_7_failure_family_guard",
+        "audit_text_policy": "omit_full_audit_text",
+        "families": [
+          "appears_in_reverse_location",
+          "belongs_to_concept_taxonomy",
+          "defined_by_term_without_symbol_cue",
+          "missing_or_unmatched_endpoint"
+        ]
+      },
+      "token_budget_policy": {
+        "relative_to": "default",
+        "max_ratio": 1.1,
+        "audit_text_policy": "omit_full_audit_text"
+      },
+      "micro_example_policy": {
+        "strategy": "failure_family_micro_examples",
+        "source": "selected_audit_gold_relation_micro_examples",
+        "max_micro_example_chars": 96,
+        "max_micro_examples": 8
       }
     }
   ]

@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import hashlib
 import json
@@ -49,6 +50,7 @@ from .scoring_metrics import (
     analyze_endpoint_validity,
     compute_composite_score,
     compute_output_stability,
+    drop_invalid_endpoint_relationships,
     rank_candidates,
     select_top_k,
 )
@@ -291,10 +293,12 @@ def _load_fewshot_source_sample_ids(manifest_path: Path | None) -> list[str]:
             "schema_fewshot",
             "schema_fewshot_distilled",
             "schema_fewshot_distilled_v2",
+            "schema_fewshot_distilled_v3",
         } or source_type in {
             "schema_fewshot",
             "schema_fewshot_distilled",
             "schema_fewshot_distilled_v2",
+            "schema_fewshot_distilled_v3",
         }
         if not is_fewshot_candidate:
             continue
@@ -443,6 +447,196 @@ def _append_leakage_diagnostics_links_to_compare(
         handle.write("\n## 泄漏感知诊断产物\n\n")
         handle.write(f"- JSON：`{leakage_diagnostics_paths['json']}`\n")
         handle.write(f"- Markdown：`{leakage_diagnostics_paths['markdown']}`\n")
+
+
+def _append_pipeline_failure_diagnostics_links_to_compare(
+    path: Path,
+    *,
+    diagnostics_paths: dict[str, str],
+) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n## 流水线失败诊断产物\n\n")
+        handle.write(f"- JSON：`{diagnostics_paths['json']}`\n")
+        handle.write(f"- Markdown：`{diagnostics_paths['markdown']}`\n")
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_history_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    with path.open(encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _best_history_row(rows: Sequence[dict[str, str]], *, candidate: str | None = None) -> dict[str, Any] | None:
+    scoped = [
+        row for row in rows
+        if candidate is None or str(row.get("candidate") or "") == candidate
+    ]
+    if not scoped:
+        return None
+
+    def sort_key(row: dict[str, str]) -> tuple[float, float, str]:
+        return (
+            _safe_float(row.get("composite_score")) or 0.0,
+            _safe_float(row.get("endpoint_valid_rate")) or 0.0,
+            str(row.get("run_id") or ""),
+        )
+
+    best = max(scoped, key=sort_key)
+    return {
+        "run_id": best.get("run_id"),
+        "candidate": best.get("candidate"),
+        "composite_score": _safe_float(best.get("composite_score")),
+        "endpoint_valid_rate": _safe_float(best.get("endpoint_valid_rate")),
+        "audit_entity_recall": _safe_float(best.get("audit_entity_recall")),
+        "audit_entity_precision": _safe_float(best.get("audit_entity_precision")),
+        "audit_relation_recall": _safe_float(best.get("audit_relation_recall")),
+    }
+
+
+def _build_history_regression_summary(
+    *,
+    history_path: Path,
+    ranked: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    history_rows = _load_history_rows(history_path)
+    current_best = ranked[0] if ranked else {}
+    global_best = _best_history_row(history_rows)
+    per_candidate_best = {
+        str(row.get("candidate")): _best_history_row(history_rows, candidate=str(row.get("candidate")))
+        for row in ranked
+    }
+    current_score = _safe_float(current_best.get("composite_score"))
+    previous_score = _safe_float(global_best.get("composite_score") if global_best else None)
+    return {
+        "history_available": bool(history_rows),
+        "history_path": str(history_path),
+        "current_best": {
+            "candidate": current_best.get("candidate"),
+            "composite_score": current_score,
+            "endpoint_valid_rate": _safe_float(current_best.get("endpoint_valid_rate")),
+            "audit_relation_recall": _safe_float(current_best.get("audit_relation_recall")),
+            "gate_passed": bool(current_best.get("gate_passed", False)),
+        },
+        "previous_global_best": global_best,
+        "current_vs_previous_global_best_delta": (
+            current_score - previous_score
+            if current_score is not None and previous_score is not None
+            else None
+        ),
+        "previous_best_by_current_candidate": per_candidate_best,
+    }
+
+
+def _build_pipeline_failure_diagnostics(
+    *,
+    run_id: str,
+    ranked: Sequence[dict[str, Any]],
+    endpoint_error_rows: Sequence[dict[str, Any]],
+    history_path: Path,
+    relation_validation_mode: str,
+    relation_validation_summary: dict[str, Any],
+) -> dict[str, Any]:
+    parse_and_leak_flags = {
+        str(row.get("candidate")): {
+            "parse_error_count": int(row.get("parse_error_count") or 0),
+            "llm_error_count": int(row.get("llm_error_count") or 0),
+            "strict_output_retry_count": int(row.get("strict_output_retry_count") or 0),
+            "output_leak_flag_count": int(row.get("output_leak_flag_count") or 0),
+        }
+        for row in ranked
+    }
+    current_candidates = [
+        {
+            "rank": row.get("rank"),
+            "candidate": row.get("candidate"),
+            "gate_passed": row.get("gate_passed"),
+            "composite_score": row.get("composite_score"),
+            "endpoint_valid_rate": row.get("endpoint_valid_rate"),
+            "endpoint_total_count": row.get("endpoint_total_count"),
+            "endpoint_invalid_count": row.get("endpoint_invalid_count"),
+            "audit_entity_recall": row.get("audit_entity_recall"),
+            "audit_entity_precision": row.get("audit_entity_precision"),
+            "audit_relation_recall": row.get("audit_relation_recall"),
+        }
+        for row in ranked
+    ]
+    return {
+        "task": "prompt_tuning_pipeline_failure_diagnostics",
+        "run_id": run_id,
+        "relation_validation_mode": relation_validation_mode,
+        "relation_validation_summary": relation_validation_summary,
+        "current_candidates": current_candidates,
+        "top_endpoint_error_families": list(endpoint_error_rows[:20]),
+        "parse_and_leak_flags": parse_and_leak_flags,
+        "history_regression_summary": _build_history_regression_summary(
+            history_path=history_path,
+            ranked=ranked,
+        ),
+    }
+
+
+def _write_pipeline_failure_diagnostics_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _write_pipeline_failure_diagnostics_markdown(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# 提示词调优流水线失败诊断",
+        "",
+        f"- `run_id`：{payload['run_id']}",
+        f"- `relation_validation_mode`：{payload['relation_validation_mode']}",
+        "",
+        "## 当前候选摘要",
+        "",
+        "| rank | candidate | gate_passed | endpoint_valid_rate | endpoint_invalid_count | audit_relation_recall |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in payload["current_candidates"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                _format_endpoint_markdown_cell(
+                    _format_value_for_markdown(row.get(key))
+                )
+                for key in (
+                    "rank",
+                    "candidate",
+                    "gate_passed",
+                    "endpoint_valid_rate",
+                    "endpoint_invalid_count",
+                    "audit_relation_recall",
+                )
+            )
+            + " |"
+        )
+    lines.extend(["", "## Parse / Leak Flags", ""])
+    lines.append("| candidate | parse_error_count | llm_error_count | strict_output_retry_count | output_leak_flag_count |")
+    lines.append("|---|---|---|---|---|")
+    for candidate, flags in sorted(payload["parse_and_leak_flags"].items()):
+        lines.append(
+            f"| {candidate} | {flags['parse_error_count']} | {flags['llm_error_count']} | "
+            f"{flags['strict_output_retry_count']} | {flags['output_leak_flag_count']} |"
+        )
+    history = payload["history_regression_summary"]
+    lines.extend(["", "## History Regression", ""])
+    lines.append(f"- `history_available`：{history['history_available']}")
+    lines.append(f"- `current_best`：`{history['current_best'].get('candidate')}`")
+    previous = history.get("previous_global_best") or {}
+    lines.append(f"- `previous_global_best`：`{previous.get('candidate') or ''}` / `{previous.get('run_id') or ''}`")
+    lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _mean_success_count(results: Sequence[StructuredExtractionResult], attr: str) -> float:
@@ -683,8 +877,11 @@ def score_extraction_results(
     overwrite: bool,
     run_id: str | None = None,
     include_fallback_auto_tuned: bool = False,
+    relation_validation_mode: str = "raw",
 ) -> dict[str, Any]:
     root = Path(root).resolve()
+    if relation_validation_mode not in {"raw", "drop-invalid"}:
+        raise ValueError("relation_validation_mode 只能是 raw 或 drop-invalid")
     eval_root = _resolve(eval_dir, root=root, default=DEFAULT_EVAL_DIR)
     entity_schema_file = _resolve(
         entity_schema_path, root=root, default=DEFAULT_ENTITY_SCHEMA
@@ -732,6 +929,7 @@ def score_extraction_results(
 
     metrics_by_candidate: dict[str, dict[str, Any]] = {}
     results_by_candidate: dict[str, list[StructuredExtractionResult]] = {}
+    relation_validation_summary: dict[str, Any] = {}
     skipped_candidates: list[str] = []
     for eval_file in eval_files:
         skipped_candidate = _candidate_should_be_skipped(
@@ -742,7 +940,26 @@ def score_extraction_results(
         if skipped_candidate:
             skipped_candidates.append(skipped_candidate)
             continue
-        candidate, results = _load_eval_file(eval_file)
+        candidate, raw_results = _load_eval_file(eval_file)
+        if relation_validation_mode == "drop-invalid":
+            results, validation_summary = drop_invalid_endpoint_relationships(
+                raw_results,
+                relation_type_block,
+            )
+        else:
+            original_count = sum(
+                len(item.relationships)
+                for item in raw_results
+                if item.status == "success"
+            )
+            results = raw_results
+            validation_summary = {
+                "mode": "raw",
+                "original_relationship_count": original_count,
+                "kept_relationship_count": original_count,
+                "dropped_relationship_count": 0,
+            }
+        relation_validation_summary[candidate] = validation_summary
         audit_ent = (
             compute_audit_entity_recall(results, audit_index) if audit_metrics_enabled else None
         )
@@ -788,6 +1005,8 @@ def score_extraction_results(
     run_endpoint_md = run_dir / "endpoint_error_summary.md"
     run_leakage_json = run_dir / "leakage_diagnostics.json"
     run_leakage_md = run_dir / "leakage_diagnostics.md"
+    run_pipeline_diag_json = run_dir / "pipeline_failure_diagnostics.json"
+    run_pipeline_diag_md = run_dir / "pipeline_failure_diagnostics.md"
     endpoint_summary_paths = {
         "json": str(run_endpoint_json),
         "markdown": str(run_endpoint_md),
@@ -796,8 +1015,13 @@ def score_extraction_results(
         "json": str(run_leakage_json),
         "markdown": str(run_leakage_md),
     }
+    pipeline_failure_diagnostics_paths = {
+        "json": str(run_pipeline_diag_json),
+        "markdown": str(run_pipeline_diag_md),
+    }
     manifest_path = _resolve_manifest_from_eval_files(root=root, eval_files=eval_files)
     fewshot_source_sample_ids = _load_fewshot_source_sample_ids(manifest_path)
+    history_path = scoring_root / "history.csv"
 
     inputs = {
         "eval_dir": str(eval_root),
@@ -810,7 +1034,10 @@ def score_extraction_results(
         "audit_metrics_enabled": audit_metrics_enabled,
         "endpoint_error_summary_paths": endpoint_summary_paths,
         "leakage_diagnostics_paths": leakage_diagnostics_paths,
+        "pipeline_failure_diagnostics_paths": pipeline_failure_diagnostics_paths,
         "fewshot_source_sample_ids": fewshot_source_sample_ids,
+        "relation_validation_mode": relation_validation_mode,
+        "relation_validation_summary": relation_validation_summary,
         **gold_seed_summary,
     }
     artifact_binding = _build_artifact_binding(
@@ -828,6 +1055,14 @@ def score_extraction_results(
         audit_index=audit_index,
         audit_metrics_enabled=audit_metrics_enabled,
     )
+    pipeline_failure_diagnostics = _build_pipeline_failure_diagnostics(
+        run_id=effective_run_id,
+        ranked=ranked,
+        endpoint_error_rows=endpoint_error_rows,
+        history_path=history_path,
+        relation_validation_mode=relation_validation_mode,
+        relation_validation_summary=relation_validation_summary,
+    )
 
     write_extraction_compare_csv(run_csv, ranked)
     write_extraction_compare_markdown(
@@ -840,6 +1075,10 @@ def score_extraction_results(
     _append_leakage_diagnostics_links_to_compare(
         run_md,
         leakage_diagnostics_paths=leakage_diagnostics_paths,
+    )
+    _append_pipeline_failure_diagnostics_links_to_compare(
+        run_md,
+        diagnostics_paths=pipeline_failure_diagnostics_paths,
     )
     _write_endpoint_error_summary_json(
         run_endpoint_json,
@@ -854,6 +1093,8 @@ def score_extraction_results(
     )
     _write_leakage_diagnostics_json(run_leakage_json, leakage_diagnostics)
     _write_leakage_diagnostics_markdown(run_leakage_md, leakage_diagnostics)
+    _write_pipeline_failure_diagnostics_json(run_pipeline_diag_json, pipeline_failure_diagnostics)
+    _write_pipeline_failure_diagnostics_markdown(run_pipeline_diag_md, pipeline_failure_diagnostics)
     write_top_candidates_json(
         run_top, ranked=ranked, k=top_k,
         weights=effective_weights, inputs=inputs,
@@ -874,16 +1115,16 @@ def score_extraction_results(
         artifact_binding=artifact_binding,
     )
 
-    history_path = scoring_root / "history.csv"
     append_history_csv(
         history_path, run_id=effective_run_id, timestamp=timestamp, ranked=ranked
     )
     latest_path = scoring_root / "latest.json"
-    write_latest_pointer(
-        latest_path,
-        run_id=effective_run_id,
-        run_dir=str(run_dir.relative_to(scoring_root)),
-    )
+    if relation_validation_mode == "raw":
+        write_latest_pointer(
+            latest_path,
+            run_id=effective_run_id,
+            run_dir=str(run_dir.relative_to(scoring_root)),
+        )
 
     return {
         "status": "success",
@@ -906,6 +1147,8 @@ def score_extraction_results(
             "endpoint_error_summary_md": str(run_endpoint_md),
             "leakage_diagnostics_json": str(run_leakage_json),
             "leakage_diagnostics_md": str(run_leakage_md),
+            "pipeline_failure_diagnostics_json": str(run_pipeline_diag_json),
+            "pipeline_failure_diagnostics_md": str(run_pipeline_diag_md),
         },
         "artifact_binding": artifact_binding,
     }
@@ -927,15 +1170,38 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="默认跳过 fallback_default_copy 的 auto_tuned；传入后才参与评分",
     )
+    parser.add_argument(
+        "--relation-validation-mode",
+        choices=["raw", "drop-invalid"],
+        default="raw",
+        help="关系端点验证视图：raw 保留原始关系，drop-invalid 仅用于诊断过滤非法端点关系",
+    )
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有报告产物")
     return parser
+
+
+def _load_weights_from_path(path: Path) -> dict[str, float]:
+    """从文件加载权重表，自动裁掉 schema_version / profile / notes 这类元数据字段。"""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"权重文件必须是 JSON 对象：{path}")
+    weights: dict[str, float] = {}
+    for key, value in payload.items():
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            weights[str(key)] = float(value)
+    if not weights:
+        raise ValueError(f"权重文件缺少任何数值字段：{path}")
+    return weights
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     weights = None
     if args.weights:
-        weights = json.loads(Path(args.weights).read_text(encoding="utf-8"))
+        weights = _load_weights_from_path(Path(args.weights))
     summary = score_extraction_results(
         root=PROJECT_ROOT,
         eval_dir=args.eval_dir,
@@ -947,6 +1213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         overwrite=args.overwrite,
         run_id=args.run_id,
         include_fallback_auto_tuned=args.include_fallback_auto_tuned,
+        relation_validation_mode=args.relation_validation_mode,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

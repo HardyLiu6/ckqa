@@ -1,0 +1,6 @@
+-Material 7 v3 Failure-family Guard-
+- 只返回一个 JSON 对象；source 和 target 必须逐字匹配 entities。
+- 不要输出 Section/Assignment -> Concept 的 appears_in；Concept -> Concept 的 belongs_to 跳过或改显式 contains。
+- defined_by -> Term 只有符号、变量、公式名或明确判定条件才保留；简称放 alias。
+-Micro-examples-
+- pts-0049-bd80db3cdf: 页号P -> 页号和页内地址计算公式: [type=defined_by] 被定义对象 -> 定义/公式

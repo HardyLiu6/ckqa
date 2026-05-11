@@ -4,7 +4,7 @@
 
 - `prompt_tuning/`：Prompt 调优样本、audit 集、候选 Prompt 生成、官方 `prompt-tune` 封装，以及 material 级 smoke/full 编排与 QA smoke 入口。
 - `prompt_tuning/` 还包含候选 Prompt 最终固化脚本，用于把选中的候选写入 `prompts/final/` 并更新 `.env`；material 编排入口会在 full gate 通过后用 scoring artifact hash 绑定本次固化。
-- `extraction_eval/`：候选 Prompt 抽取执行、结构化解析、规则化评测、endpoint 诊断与 top-k scoring artifact 生成。
+- `extraction_eval/`：候选 Prompt 抽取执行、结构化解析、规则化评测、endpoint 诊断、关系结构化后处理诊断与 top-k scoring artifact 生成。
 
 兼容性约定：
 

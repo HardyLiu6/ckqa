@@ -11,9 +11,10 @@ from __future__ import annotations
 import re
 import statistics
 import unicodedata
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from .extraction_schema import StructuredExtractionResult
+from .output_guard import has_output_leak_flag
 
 
 _PUNCT_RE = re.compile(r"[\s\.,;:!?，。；：！？'\"\(\)\[\]\{\}（）【】《》]+")
@@ -367,6 +368,63 @@ def compute_output_stability(results: Sequence[StructuredExtractionResult]) -> f
     return max(0.0, 1.0 - min(1.0, cv))
 
 
+def count_strict_output_retries(results: Sequence[StructuredExtractionResult]) -> int:
+    count = 0
+    for item in results:
+        debug = item.llm_debug if isinstance(item.llm_debug, dict) else {}
+        if debug.get("strict_output_retry_used"):
+            count += 1
+    return count
+
+
+def count_output_leak_flags(results: Sequence[StructuredExtractionResult]) -> int:
+    return sum(1 for item in results if has_output_leak_flag(item.raw_output))
+
+
+def drop_invalid_endpoint_relationships(
+    results: Sequence[StructuredExtractionResult],
+    relation_schema: dict,
+) -> tuple[list[StructuredExtractionResult], dict[str, int | str]]:
+    """返回过滤非法 endpoint 后的诊断视图。
+
+    该函数只用于评分诊断，不改写原始抽取产物；未知关系类型继续保留，
+    交给 relation_type_valid_rate 负责。
+    """
+
+    original_count = 0
+    kept_count = 0
+    filtered: list[StructuredExtractionResult] = []
+    for item in results:
+        if item.status != "success":
+            filtered.append(item)
+            continue
+        kept_relationships = []
+        for relationship in item.relationships:
+            original_count += 1
+            if _endpoint_relationship_is_valid(item, relationship, relation_schema):
+                kept_count += 1
+                kept_relationships.append(relationship)
+        filtered.append(item.model_copy(update={"relationships": kept_relationships}))
+    return filtered, {
+        "mode": "drop-invalid",
+        "original_relationship_count": original_count,
+        "kept_relationship_count": kept_count,
+        "dropped_relationship_count": original_count - kept_count,
+    }
+
+
+def _endpoint_relationship_is_valid(
+    item: StructuredExtractionResult,
+    relationship: Any,
+    relation_schema: dict,
+) -> bool:
+    if relationship.type not in relation_schema:
+        return True
+    single = item.model_copy(update={"relationships": [relationship]})
+    analysis = analyze_endpoint_validity([single], relation_schema)
+    return int(analysis["invalid_count"]) == 0
+
+
 DEFAULT_WEIGHTS: dict[str, float] = {
     "parse_success_rate": 0.20,
     "schema_hit_rate": 0.10,
@@ -471,6 +529,10 @@ def aggregate_candidate_metrics(
     base: dict[str, float | int | None] = {
         "sample_count": len(results),
         "success_count": sum(1 for r in results if r.status == "success"),
+        "parse_error_count": sum(1 for r in results if r.status == "parse_error"),
+        "llm_error_count": sum(1 for r in results if r.status == "llm_error"),
+        "strict_output_retry_count": count_strict_output_retries(results),
+        "output_leak_flag_count": count_output_leak_flags(results),
         "parse_success_rate": compute_parse_success_rate(results),
         "schema_hit_rate": compute_schema_hit_rate(
             results, entity_type_names, relation_type_names

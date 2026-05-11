@@ -1,0 +1,97 @@
+-Goal-
+Given a text document that is potentially relevant to this activity, first identify all entities needed from the text in order to capture the information and ideas in the text.
+Next, report all relationships among the identified entities.
+
+-Steps-
+1. Identify all entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, capitalized
+- entity_type: Suggest several labels or categories for the entity. The categories should not be specific, but should be as general as possible.
+- entity_description: Comprehensive description of the entity's attributes and activities
+Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
+
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
+- source_entity: name of the source entity, as identified in step 1
+- target_entity: name of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_strength>)
+
+3. Return output in Chinese as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
+
+4. If you have to translate into Chinese, just translate the descriptions, nothing else!
+
+5. When finished, output <|COMPLETE|>.
+
+-Course Baseline Constraints-
+当前任务聚焦“课程知识图谱抽取”，不是通用信息抽取。
+请优先抽取课程结构、概念/术语、方法/算法、实验、作业等稳定对象。
+当前课程实体类型基线：[Course, Chapter, Section, KnowledgePoint, Concept, Term, FormulaOrDefinition, AlgorithmOrMethod, Experiment, Assignment, ToolOrPlatform]
+当前课程关系类型基线：[contains, belongs_to, defined_by, prerequisite_of, depends_on, implemented_by, applied_in, evaluated_by, related_to, appears_in]
+避免抽取课程通知、图表残片、页码、无关行政信息和重复实体。
+
+
+-Schema Constraints-
+实体类型必须来自以下课程 Schema：
+- `Course`（课程）：完整课程或稳定课程实例，是后续章节、知识点、实验和作业的顶层教学对象。；命名规则：优先使用课程正式名称；若文本中缺失课程正式名称，可退化为 cour…
+- `Chapter`（章节）：课程中的章、单元、模块级结构化标题，通常对应 heading_level=1 的稳定教…；命名规则：保留原始章节编号和标题语义，例如“第二章 进程的描述与控制”；不要…
+- `Section`（节）：章以下的结构化教学单元，统一覆盖节、小节、专题、实验步骤、项目阶段等非章级标题；三级及…；命名规则：保留原始编号和标题；若同名节在不同章出现，必须结合 heading…
+- `KnowledgePoint`（知识点）：课程中需要掌握、理解、记忆或考核的稳定知识单元，通常能直接成为问答或考核对象。；命名规则：完整判定规则见 extraction_rules.md 第 4.1…
+- `Concept`（概念）：可被独立解释、比较和问答的理论概念、机制或对象。；命名规则：完整判定规则见 extraction_rules.md 第 4.1…
+- `Term`（术语）：主要承担命名、缩写、符号或标准术语作用的实体，适合支撑术语检索、别名映射和缩写归一化。；命名规则：优先使用正文中的全称；若课程内更常用缩写，可用全称作为 canon…
+- `FormulaOrDefinition`（公式或定义）：具有稳定名称、可复用或被引用的定义、公式、定理、定律、判定条件或符号化表达，用于支撑定…；命名规则：优先使用“X公式”“X定理”“X判定条件”这类可复用名称；只有稳定…
+- `AlgorithmOrMethod`（算法或方法）：具有明确步骤、策略或机制的算法、方法、协议、处理流程或实现策略。；命名规则：保留课程中通用的算法/方法名称；若存在中英文或全称/简称，使用课程…
+- `Experiment`（实验）：课程中的实验、上机、课程项目、综合实践或验证任务。；命名规则：优先使用实验正式标题；若只有编号，保留“实验x + 标题”组合，不…
+- `Assignment`（作业/评测任务）：作业、习题、报告、测验、考试题组、复习题或其它用于评估学习结果的任务集合。；命名规则：优先使用任务正式标题；如果只有编号，至少保留“作业x”“实验报告x…
+- `ToolOrPlatform`（工具或平台）：用于教学、实验、实现或演示的软件、平台、开发环境、框架、硬件平台或数据处理工具。；命名规则：保留课程中稳定使用的工具/平台名称；版本号仅在确有区分意义时并入名…
+
+关系类型必须来自以下课程 Schema：
+- `contains`（包含）：表示结构化容器包含下级单元，或知识对象在原文明确表达分类、组成、步骤分解时包含子对…；抽取提示：用于“课程包含章节”“本章包括若干节”“本节介绍某知识点/实验/作业”等明…；正例：Course -> Chapter、Chapter -> Section
+- `belongs_to`（属于）：表示实体从属于某个课程结构单元或教学容器，是结构性 contains 的条件反向表…；抽取提示：当原文更自然地表达为“属于/隶属于/归入/位于某章某节”时使用；目标只能是…；正例：Section -> Chapter、KnowledgePoint -> Section；禁例：Concept->Concept: 死锁 belongs_to 资源分…、Concept->KnowledgePoint: 进程 belongs…
+- `defined_by`（由…定义）：表示概念、术语、知识点或算法方法由某一定义、公式、定律或判定条件来界定。；抽取提示：用于正式定义、公式、定律或判定条件。禁止 Concept->Concept…；正例：周转时间 defined_by 周转时间公式、高响应比优先调度算法 defined_by 响应比公式；禁例：Concept->Concept: 进程 defined_by 线程、Term->Concept: PCB defined_by 进程控制块
+- `prerequisite_of`（先修于）：表示学习顺序、教学先修或实验前置要求，强调“先学/先做什么，再学/再做什么”。；抽取提示：用于课程安排、教学目标、实验说明中的先修关系；只有文本明确表达先修、前置、…；正例：进程概念 prerequisite_of 进程同步、环境配置 prerequisite_of 进程调度实验
+- `depends_on`（依赖于）：表示技术实现、理解过程或求解过程上的依赖关系，不专门强调教学先后。；抽取提示：用于“X 的理解/实现/推导依赖 Y”“完成该实验需要先掌握 Y”这类依赖…；正例：页面置换算法 depends_on 页面访问局部性、进程同步 depends_on 临界区概念
+- `implemented_by`（由…实现）：表示概念、知识点、方法、实验或作业被某算法、工具或平台具体实现。；抽取提示：用于“X 通过 Y 实现”“实验用某平台完成”“某概念用某算法/工具落地”…；正例：进程同步 implemented_by PV 同步方法、页面置换实验 implemented_by Python 模拟器；禁例：AlgorithmOrMethod->Concept: 高响应比优先调…、Concept->Term: 进程同步 implemented_by…
+- `applied_in`（应用于）：表示知识、方法、公式或算法被应用到某知识主题、实验、作业、章节讲解或平台操作场景。；抽取提示：用于“X 应用于某知识主题/概念”“X 在实验/作业/平台中使用”“本节应…；正例：银行家算法 applied_in 死锁、地址映射 applied_in 分页存储管理；禁例：Concept->AlgorithmOrMethod: 死锁以银行家算…、Section->AlgorithmOrMethod: 本节使用银行家…
+- `evaluated_by`（由…评估）：表示课程目标、章节、知识点、概念、术语、方法或实验由作业或评测任务进行评估与验证。；抽取提示：用于“通过作业/测验/评测任务检验 X”“X 是某题组或作业报告的考核对象…；正例：死锁处理 evaluated_by 作业 3、文件系统实验 evaluated_by 实验报告作业；禁例：Assignment->Concept: 习题 evaluated_b…、Assignment->Term: 习题 evaluated_by P…
+- `related_to`（相关）：表示稳定但较弱的语义关联，当无法判断更精确关系时作为保底关系。；抽取提示：只有在 contains、defined_by、depends_on、ap…；正例：死锁处理 related_to 资源分配图、虚拟内存 related_to 页面置换算法；禁例：Concept->missing: 磁盘高速缓存 related_to…、Term->missing: RAID related_to 系统容错
+- `appears_in`（出现于）：表示实体在某章、某节、某实验、某作业或平台上下文中出现，是弱定位关系。；抽取提示：优先由标准化文档元数据生成；LLM 仅在文本明确表达出现位置或平台上下文，…；正例：TLB appears_in 第三章 存储器管理、银行家算法 appears_in 作业 2；禁例：Section->Concept: 第三章 存储器管理 appears…、Assignment->ToolOrPlatform: 习题 1 ap…
+
+关键抽取规则摘要：
+- 只抽取对课程问答、知识建图和教学评测有稳定价值的实体与关系。
+- 关系优先级参考：`contains` / `belongs_to` > `defined_by` > `prerequisite_of` > `depends_on` > `implemented_by` > `applied_in`
+- 仅在文本显式陈述或同一结构单元内可稳定推断时建立关系，不因简单共现连边。
+- 课程通知、无意义短语、图表残片、页眉页脚和无关行政信息默认不抽。
+- 结构实体要保留有效章节编号；实体默认按课程内边界去重，不做跨课程自动合并。
+- 关系端点完整性：所有关系的 source 和 target 必须能在 entities 中找到；如果无法补齐端点实体，应跳过该关系。
+- related_to 是保底关系；不能用 related_to 代替缺失端点或更具体关系。
+
+必要输出约束：
+- 关系说明必须以 [type=<relation_type>] 开头，并且 <relation_type> 必须来自课程 Schema。
+- 同一课程内相同实体应合并，不要重复输出同义或缩写碎片。
+- 只有在无法判断更具体关系时才使用 `related_to`。
+- 不能用 `related_to` 代替缺失端点或更具体关系；如果端点无法补齐，应跳过关系。
+- 如果文本仅提供位置出现信息，优先考虑是否存在更强的结构/应用/考核关系。
+- 若输入文本中带有 course_id、document_type、chapter、section、heading_path、page_start、page_end 等字段，应将其作为判断上下文，而不是原样重复输出。
+-Base Prompt Note-
+- 当前候选版本以 官方 auto_tuned Prompt 为底稿自动增强，尽量保留原始 Prompt 的结构、示例和 tuple 输出风格。
+
+-关系方向卡片-
+只补充高风险关系的方向判断，不嵌入完整 audit 样本文本。
+- `applied_in`：source 是被应用的知识/方法/公式，target 是知识主题、实验、作业或平台操作场景；反例：不要写成“实验/作业 -> 算法”；弱共现仍用 related_to 或跳过。
+- `appears_in`：source 是出现的实体，target 是 Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform 上下文；反例：不要写成“章节 -> 知识点”；结构包含优先用 contains。
+- `defined_by`：source 是被定义对象，target 是定义、公式、判定条件或符号；反例：不要写成“定义/公式 -> 概念”，也不要用 Concept->Concept 承接背景解释。
+- `evaluated_by`：source 是被考核或评估的知识、概念、术语或方法，target 是 Assignment/Experiment 等考核载体；反例：不要写成“作业/实验 -> 知识点”；普通出现位置优先用 appears_in。
+- `related_to`：source 与 target 都必须是已抽取且端点完整的实体，target 不是 missing、unknown 或临时占位；反例：不能承接 missing 端点，也不能替代 defined_by / applied_in / appears_in 等更具体关系。
+
+-Material 7 v3 Failure-family Guard-
+- `appears_in`：不要输出 Section/Assignment -> Concept 的 appears_in；位置关系只能是知识实体 -> Course/Chapter/Section/Experiment/Assignment/ToolOrPlatform。
+- `belongs_to`：不要输出 Concept -> Concept 的 belongs_to；概念分类若原文明确父子/组成，优先用 parent Concept contains child Concept，否则跳过。
+- `defined_by`：target 为 Term 时，只有符号、变量、公式名或明确判定条件才保留；PCB/TCB/FCFS/SPOOLing 等简称优先放 alias，不作为 defined_by 关系。
+- `endpoint`：source 和 target 必须逐字匹配 entities；无法补齐实体时跳过关系，不输出 missing/unknown/N/A/空字符串。
+
+-Real Data-
+######################
+text: {input_text}
+######################
+output:

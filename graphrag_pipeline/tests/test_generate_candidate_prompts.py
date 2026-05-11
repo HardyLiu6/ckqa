@@ -535,12 +535,15 @@ output:
                 set(candidates.keys()),
                 {
                     "default",
+                    "default_guarded",
                     "auto_tuned",
                     "schema_aware",
                     "schema_fewshot",
                     "schema_aware_directional",
+                    "schema_aware_directional_v2",
                     "schema_fewshot_distilled",
                     "schema_fewshot_distilled_v2",
+                    "schema_fewshot_distilled_v3",
                 },
             )
             self.assertTrue((output_dir / "manifest.json").exists())
@@ -553,9 +556,12 @@ output:
             self.assertEqual(candidates["default"]["source_type"], "default_adapted")
             self.assertEqual(candidates["auto_tuned"]["source_type"], "fallback_default_copy")
             self.assertTrue(candidates["schema_aware"]["schema_used"])
+            self.assertTrue(candidates["default_guarded"]["schema_used"])
             self.assertTrue(candidates["schema_aware_directional"]["schema_used"])
+            self.assertTrue(candidates["schema_aware_directional_v2"]["schema_used"])
             self.assertTrue(candidates["schema_fewshot"]["schema_used"])
             self.assertTrue(candidates["schema_fewshot_distilled"]["schema_used"])
+            self.assertTrue(candidates["schema_fewshot_distilled_v3"]["schema_used"])
             self.assertTrue(candidates["schema_fewshot"]["audit_used"])
             self.assertTrue(candidates["schema_fewshot"]["fewshot_used"])
             self.assertEqual(candidates["schema_fewshot"]["fewshot_example_count"], 2)
@@ -587,6 +593,13 @@ output:
             self.assertNotIn("MPEG", schema_aware_text)
             self.assertNotIn("file format", schema_aware_text)
 
+            guarded_text = (output_dir / "default_guarded" / "prompt.txt").read_text(encoding="utf-8")
+            self.assertIn("-Strict JSON Output Guard-", guarded_text)
+            self.assertIn("只返回一个 JSON 对象", guarded_text)
+            self.assertIn("entities", guarded_text)
+            self.assertIn("relationships", guarded_text)
+            self.assertNotIn("analysis", guarded_text.lower())
+
             fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
             self.assertIn("Few-shot 示例", fewshot_text)
             self.assertIn("进程是程序的一次执行过程", fewshot_text)
@@ -616,12 +629,15 @@ output:
                 set(report_payload["candidate_names"]),
                 {
                     "default",
+                    "default_guarded",
                     "auto_tuned",
                     "schema_aware",
                     "schema_fewshot",
                     "schema_aware_directional",
+                    "schema_aware_directional_v2",
                     "schema_fewshot_distilled",
                     "schema_fewshot_distilled_v2",
+                    "schema_fewshot_distilled_v3",
                 },
             )
 
@@ -657,11 +673,14 @@ output:
             )
 
             candidates = {item["candidate_name"]: item for item in result["manifest"]["candidates"]}
+            default_text = (output_dir / "default" / "prompt.txt").read_text(encoding="utf-8")
             schema_aware_text = (output_dir / "schema_aware" / "prompt.txt").read_text(encoding="utf-8")
             fewshot_text = (output_dir / "schema_fewshot" / "prompt.txt").read_text(encoding="utf-8")
             directional_text = (output_dir / "schema_aware_directional" / "prompt.txt").read_text(encoding="utf-8")
+            directional_v2_text = (output_dir / "schema_aware_directional_v2" / "prompt.txt").read_text(encoding="utf-8")
             distilled_text = (output_dir / "schema_fewshot_distilled" / "prompt.txt").read_text(encoding="utf-8")
             distilled_v2_text = (output_dir / "schema_fewshot_distilled_v2" / "prompt.txt").read_text(encoding="utf-8")
+            distilled_v3_text = (output_dir / "schema_fewshot_distilled_v3" / "prompt.txt").read_text(encoding="utf-8")
 
             self.assertIn("-关系方向卡片-", directional_text)
             self.assertIn("`applied_in`", directional_text)
@@ -730,6 +749,21 @@ output:
             self.assertNotIn("实验步骤：实现时间片轮转调度算法", distilled_v2_text)
             self.assertLessEqual(len(distilled_v2_text), int(len(directional_text) * 1.35))
 
+            self.assertIn("-Material 7 v3 Failure-family Guard-", directional_v2_text)
+            self.assertIn("不要输出 Section/Assignment -> Concept 的 appears_in", directional_v2_text)
+            self.assertIn("Concept -> Concept 的 belongs_to", directional_v2_text)
+            self.assertIn("只有符号、变量、公式名或明确判定条件", directional_v2_text)
+            self.assertIn("source 和 target 必须逐字匹配 entities", directional_v2_text)
+            self.assertNotIn("进程是程序的一次执行过程", directional_v2_text)
+
+            self.assertIn("-Material 7 v3 Failure-family Guard-", distilled_v3_text)
+            self.assertIn("-Micro-examples-", distilled_v3_text)
+            self.assertIn("只返回一个 JSON 对象", distilled_v3_text)
+            self.assertIn("不要输出 Section/Assignment -> Concept 的 appears_in", distilled_v3_text)
+            self.assertNotIn("进程是程序的一次执行过程", distilled_v3_text)
+            self.assertNotIn("实验步骤：实现时间片轮转调度算法", distilled_v3_text)
+            self.assertLessEqual(len(distilled_v3_text), int(len(default_text) * 1.10))
+
             distilled_v2_entry = candidates["schema_fewshot_distilled_v2"]
             self.assertEqual(distilled_v2_entry["source_type"], "schema_fewshot_distilled_v2")
             self.assertEqual(distilled_v2_entry["fewshot_strategy"], "distilled_negative_direction_rules")
@@ -745,6 +779,26 @@ output:
                         "applied_in",
                         "related_to",
                     ],
+                },
+            )
+            distilled_v3_entry = candidates["schema_fewshot_distilled_v3"]
+            self.assertEqual(distilled_v3_entry["source_type"], "schema_fewshot_distilled_v3")
+            self.assertEqual(distilled_v3_entry["fewshot_strategy"], "failure_family_micro_examples")
+            self.assertEqual(
+                distilled_v3_entry["failure_family_policy"]["families"],
+                [
+                    "appears_in_reverse_location",
+                    "belongs_to_concept_taxonomy",
+                    "defined_by_term_without_symbol_cue",
+                    "missing_or_unmatched_endpoint",
+                ],
+            )
+            self.assertEqual(
+                distilled_v3_entry["token_budget_policy"],
+                {
+                    "relative_to": "default",
+                    "max_ratio": 1.1,
+                    "audit_text_policy": "omit_full_audit_text",
                 },
             )
 

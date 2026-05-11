@@ -12,7 +12,11 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from score_extraction_results import _load_fewshot_source_sample_ids, score_extraction_results
+from score_extraction_results import (
+    _load_fewshot_source_sample_ids,
+    _load_weights_from_path,
+    score_extraction_results,
+)
 
 
 ENTITY_SCHEMA = {
@@ -775,6 +779,155 @@ class TestEndToEnd(unittest.TestCase):
             compare_markdown = Path(summary["reports"]["markdown"]).read_text(encoding="utf-8")
             self.assertIn("endpoint_error_summary.json", compare_markdown)
 
+    def test_drop_invalid_relation_validation_mode_filters_endpoint_failures_for_diagnostics(self):
+        entity_schema = {
+            "schema_version": "v1",
+            "entity_types": {
+                "Course": {"label_zh": "课程", "description": "课程"},
+                "Chapter": {"label_zh": "章节", "description": "章节"},
+                "Section": {"label_zh": "小节", "description": "小节"},
+                "Concept": {"label_zh": "概念", "description": "概念"},
+                "Term": {"label_zh": "术语", "description": "术语"},
+            },
+        }
+        relation_schema = {
+            "schema_version": "v1",
+            "relation_types": {
+                "contains": {
+                    "label_zh": "包含",
+                    "description": "包含",
+                    "source_types": ["Course"],
+                    "target_types": ["Chapter"],
+                },
+                "appears_in": {
+                    "label_zh": "出现于",
+                    "description": "弱定位",
+                    "source_types": ["Concept", "Term"],
+                    "target_types": ["Course", "Chapter", "Section"],
+                },
+                "belongs_to": {
+                    "label_zh": "属于",
+                    "description": "结构归属",
+                    "source_types": ["Concept", "Term"],
+                    "target_types": ["Course", "Chapter", "Section"],
+                },
+                "defined_by": {
+                    "label_zh": "由...定义",
+                    "description": "定义",
+                    "source_types": ["Concept"],
+                    "target_types": ["Term"],
+                },
+            },
+        }
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "default",
+            "results": [
+                {
+                    "sample_id": "s1",
+                    "candidate": "default",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "第一章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                        {"id": "e3", "title": "习题", "type": "Section",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "进程", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e5", "title": "线程", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e6", "title": "PCB", "type": "Term",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第一章", "type": "contains",
+                         "description": "有效结构关系", "evidence": ""},
+                        {"source": "习题", "target": "进程", "type": "appears_in",
+                         "description": "反向位置关系", "evidence": ""},
+                        {"source": "进程", "target": "线程", "type": "belongs_to",
+                         "description": "概念分类误用 belongs_to", "evidence": ""},
+                        {"source": "进程", "target": "PCB", "type": "defined_by",
+                         "description": "PCB 是进程控制块简称，不是符号公式", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": None,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "validation-mode"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(entity_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(relation_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            raw_summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="validation-raw",
+                relation_validation_mode="raw",
+            )
+            drop_summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="validation-drop",
+                relation_validation_mode="drop-invalid",
+            )
+
+            raw_top = json.loads(Path(raw_summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            raw_best = raw_top["top_candidates"][0]
+            self.assertEqual(raw_best["endpoint_total_count"], 4)
+            self.assertEqual(raw_best["endpoint_invalid_count"], 3)
+            self.assertAlmostEqual(raw_best["endpoint_valid_rate"], 0.25)
+
+            drop_top = json.loads(Path(drop_summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            drop_best = drop_top["top_candidates"][0]
+            self.assertEqual(drop_top["inputs"]["relation_validation_mode"], "drop-invalid")
+            self.assertEqual(drop_best["endpoint_total_count"], 1)
+            self.assertEqual(drop_best["endpoint_invalid_count"], 0)
+            self.assertAlmostEqual(drop_best["endpoint_valid_rate"], 1.0)
+            self.assertEqual(
+                drop_top["inputs"]["relation_validation_summary"]["default"],
+                {
+                    "mode": "drop-invalid",
+                    "original_relationship_count": 4,
+                    "kept_relationship_count": 1,
+                    "dropped_relationship_count": 3,
+                },
+            )
+
+            diagnostics_path = Path(drop_summary["reports"]["pipeline_failure_diagnostics_json"])
+            self.assertTrue(diagnostics_path.exists())
+            diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+            self.assertEqual(diagnostics["relation_validation_mode"], "drop-invalid")
+            self.assertEqual(diagnostics["parse_and_leak_flags"]["default"]["output_leak_flag_count"], 0)
+
     def test_leakage_diagnostics_split_overlap_and_holdout_from_manifest_notes(self):
         eval_payload = {
             "task": "candidate_extraction",
@@ -997,6 +1150,11 @@ class TestEndToEnd(unittest.TestCase):
                                 "source_type": "schema_fewshot_distilled_v2",
                                 "source_sample_ids": ["s3", "s4"],
                             },
+                            {
+                                "candidate_name": "schema_fewshot_distilled_v3",
+                                "source_type": "schema_fewshot_distilled_v3",
+                                "source_sample_ids": ["s4", "s5"],
+                            },
                         ]
                     },
                     ensure_ascii=False,
@@ -1006,8 +1164,52 @@ class TestEndToEnd(unittest.TestCase):
 
             self.assertEqual(
                 _load_fewshot_source_sample_ids(manifest_path),
-                ["s1", "s2", "s3", "s4"],
+                ["s1", "s2", "s3", "s4", "s5"],
             )
+
+
+class TestLoadWeightsFromPath(unittest.TestCase):
+    def test_numeric_fields_are_loaded_and_metadata_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "profile": "audit_heavy_v1",
+                        "notes": ["metadata should be stripped"],
+                        "parse_success_rate": 0.2,
+                        "audit_relation_recall": 0.3,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            weights = _load_weights_from_path(path)
+
+            self.assertEqual(weights, {"parse_success_rate": 0.2, "audit_relation_recall": 0.3})
+            self.assertNotIn("schema_version", weights)
+            self.assertNotIn("notes", weights)
+
+    def test_raises_when_no_numeric_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(
+                json.dumps({"schema_version": "v1", "profile": "empty"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                _load_weights_from_path(path)
+
+    def test_raises_when_payload_is_not_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                _load_weights_from_path(path)
 
 
 if __name__ == "__main__":
