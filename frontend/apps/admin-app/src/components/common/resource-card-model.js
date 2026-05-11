@@ -35,3 +35,10 @@ export function truncate(text, max) {
   if (safe.length <= max) return safe
   return `${safe.slice(0, max)}…`
 }
+
+// 元信息视觉变体：inline = 一行 label + value；emphasis = 数字大号 + label 小字
+export const META_VARIANTS = Object.freeze(new Set(['inline', 'emphasis']))
+
+export function normalizeMetaVariant(variant) {
+  return META_VARIANTS.has(variant) ? variant : 'inline'
+}

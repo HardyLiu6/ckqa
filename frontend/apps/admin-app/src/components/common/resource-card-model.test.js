@@ -5,6 +5,8 @@ import {
   resolveCardStatus,
   formatMetaEntries,
   truncate,
+  META_VARIANTS,
+  normalizeMetaVariant,
 } from './resource-card-model.js'
 
 test('resolveCardStatus 返回 { tone, label }', () => {
@@ -46,4 +48,16 @@ test('truncate 超长截断 + …', () => {
   assert.equal(truncate('短', 5), '短')
   assert.equal(truncate(null, 5), '')
   assert.equal(truncate(undefined, 5), '')
+})
+
+test('META_VARIANTS 暴露 inline / emphasis 两种取值', () => {
+  assert.deepEqual([...META_VARIANTS].sort(), ['emphasis', 'inline'])
+})
+
+test('normalizeMetaVariant 非法值回退到 inline', () => {
+  assert.equal(normalizeMetaVariant('inline'), 'inline')
+  assert.equal(normalizeMetaVariant('emphasis'), 'emphasis')
+  assert.equal(normalizeMetaVariant('weird'), 'inline')
+  assert.equal(normalizeMetaVariant(null), 'inline')
+  assert.equal(normalizeMetaVariant(undefined), 'inline')
 })
