@@ -1,0 +1,202 @@
+{
+  "task": "native_extraction_run_comparison",
+  "run_id": "exp4_vs_exp5_precision_rule_20260512",
+  "rows": [
+    {
+      "label": "exp4 strict_tuple（无精度规则）",
+      "eval_run_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/native_exp4_strict_tuple_full20_20260511",
+      "scoring_run_id": "native_exp4_strict_tuple_full20_score",
+      "metrics": {
+        "rank": "1",
+        "candidate": "native_v2_strict_tuple",
+        "composite_score": "0.8794",
+        "composite_hard": "0.9996",
+        "composite_soft": "0.1983",
+        "gate_passed": "True",
+        "parse_success_rate": "1.0000",
+        "schema_hit_rate": "1.0000",
+        "entity_type_valid_rate": "1.0000",
+        "relation_type_valid_rate": "1.0000",
+        "endpoint_valid_rate": "1.0000",
+        "endpoint_total_count": "562",
+        "endpoint_invalid_count": "0",
+        "duplicate_entity_rate": "0.0000",
+        "noise_entity_rate": "0.0073",
+        "output_stability": "0.0000",
+        "audit_entity_recall": "0.4518",
+        "audit_entity_precision": "0.2649",
+        "audit_relation_recall": "0.2080",
+        "parse_error_count": "0",
+        "llm_error_count": "0",
+        "strict_output_retry_count": "0",
+        "output_leak_flag_count": "0",
+        "sample_count": "20",
+        "success_count": "20"
+      },
+      "defects": {
+        "total_samples": 20,
+        "total_entities": 409,
+        "total_relationships": 633,
+        "low_parse_samples": 1,
+        "quote_wrapped_titles": 0,
+        "quote_wrapped_types": 0,
+        "description_boundary_chars": 0,
+        "trailing_paren_descriptions": 0
+      },
+      "eval_artifacts": [
+        {
+          "file": "native_v2_strict_tuple.json",
+          "sha256": "26fd6a30671f760d8fb3706f4f347a3737d1bf4178b2abab964c1d44f03c1574",
+          "size_bytes": 295454
+        }
+      ]
+    },
+    {
+      "label": "exp4 + metadata-closure",
+      "eval_run_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/native_exp4_strict_tuple_full20_metadata_closure",
+      "scoring_run_id": "native_exp4_strict_tuple_full20_metadata_closure_score",
+      "metrics": {
+        "rank": "1",
+        "candidate": "native_v2_strict_tuple",
+        "composite_score": "0.8872",
+        "composite_hard": "0.9996",
+        "composite_soft": "0.2503",
+        "gate_passed": "True",
+        "parse_success_rate": "1.0000",
+        "schema_hit_rate": "1.0000",
+        "entity_type_valid_rate": "1.0000",
+        "relation_type_valid_rate": "1.0000",
+        "endpoint_valid_rate": "1.0000",
+        "endpoint_total_count": "883",
+        "endpoint_invalid_count": "0",
+        "duplicate_entity_rate": "0.0000",
+        "noise_entity_rate": "0.0063",
+        "output_stability": "0.0182",
+        "audit_entity_recall": "0.5873",
+        "audit_entity_precision": "0.2781",
+        "audit_relation_recall": "0.3217",
+        "parse_error_count": "0",
+        "llm_error_count": "0",
+        "strict_output_retry_count": "0",
+        "output_leak_flag_count": "0",
+        "sample_count": "20",
+        "success_count": "20"
+      },
+      "defects": {
+        "total_samples": 20,
+        "total_entities": 474,
+        "total_relationships": 883,
+        "low_parse_samples": 0,
+        "quote_wrapped_titles": 0,
+        "quote_wrapped_types": 0,
+        "description_boundary_chars": 0,
+        "trailing_paren_descriptions": 0
+      },
+      "eval_artifacts": [
+        {
+          "file": "native_v2_strict_tuple.json",
+          "sha256": "1855713e31c173ea6cef5d94e5e6575b584fdba4877791c2dffdd3c5e757ee81",
+          "size_bytes": 398111
+        }
+      ]
+    },
+    {
+      "label": "exp5 strict_tuple + 精度规则（裸）",
+      "eval_run_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/native_exp5_precision_suppression_full20_20260511",
+      "scoring_run_id": "native_exp5_precision_full20_score",
+      "metrics": {
+        "rank": "1",
+        "candidate": "native_v2_strict_tuple_precision",
+        "composite_score": "0.8658",
+        "composite_hard": "0.9987",
+        "composite_soft": "0.1126",
+        "gate_passed": "True",
+        "parse_success_rate": "1.0000",
+        "schema_hit_rate": "1.0000",
+        "entity_type_valid_rate": "1.0000",
+        "relation_type_valid_rate": "1.0000",
+        "endpoint_valid_rate": "1.0000",
+        "endpoint_total_count": "325",
+        "endpoint_invalid_count": "0",
+        "duplicate_entity_rate": "0.0218",
+        "noise_entity_rate": "0.0000",
+        "output_stability": "0.0000",
+        "audit_entity_recall": "0.2468",
+        "audit_entity_precision": "0.1563",
+        "audit_relation_recall": "0.1164",
+        "parse_error_count": "0",
+        "llm_error_count": "0",
+        "strict_output_retry_count": "0",
+        "output_leak_flag_count": "0",
+        "sample_count": "20",
+        "success_count": "20"
+      },
+      "defects": {
+        "total_samples": 20,
+        "total_entities": 229,
+        "total_relationships": 371,
+        "low_parse_samples": 8,
+        "quote_wrapped_titles": 0,
+        "quote_wrapped_types": 0,
+        "description_boundary_chars": 0,
+        "trailing_paren_descriptions": 0
+      },
+      "eval_artifacts": [
+        {
+          "file": "native_v2_strict_tuple_precision.json",
+          "sha256": "2d51a94c2a6e1aeb447926486a7f82040be01d7abd9ce3dac54b8dbf88e3156d",
+          "size_bytes": 173841
+        }
+      ]
+    },
+    {
+      "label": "exp5 + metadata-closure",
+      "eval_run_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/native_exp5_precision_full20_metadata_closure",
+      "scoring_run_id": "native_exp5_precision_full20_metadata_closure_score",
+      "metrics": {
+        "rank": "1",
+        "candidate": "native_v2_strict_tuple_precision",
+        "composite_score": "0.8779",
+        "composite_hard": "0.9990",
+        "composite_soft": "0.1916",
+        "gate_passed": "True",
+        "parse_success_rate": "1.0000",
+        "schema_hit_rate": "1.0000",
+        "entity_type_valid_rate": "1.0000",
+        "relation_type_valid_rate": "1.0000",
+        "endpoint_valid_rate": "1.0000",
+        "endpoint_total_count": "539",
+        "endpoint_invalid_count": "0",
+        "duplicate_entity_rate": "0.0172",
+        "noise_entity_rate": "0.0000",
+        "output_stability": "0.0000",
+        "audit_entity_recall": "0.3703",
+        "audit_entity_precision": "0.2866",
+        "audit_relation_recall": "0.2063",
+        "parse_error_count": "0",
+        "llm_error_count": "0",
+        "strict_output_retry_count": "0",
+        "output_leak_flag_count": "0",
+        "sample_count": "20",
+        "success_count": "20"
+      },
+      "defects": {
+        "total_samples": 20,
+        "total_entities": 290,
+        "total_relationships": 539,
+        "low_parse_samples": 0,
+        "quote_wrapped_titles": 0,
+        "quote_wrapped_types": 0,
+        "description_boundary_chars": 0,
+        "trailing_paren_descriptions": 0
+      },
+      "eval_artifacts": [
+        {
+          "file": "native_v2_strict_tuple_precision.json",
+          "sha256": "33f832e37021d1a89f8b049f88ad7ab79c7ad1d51ec76a15fed47091f8464d0c",
+          "size_bytes": 252024
+        }
+      ]
+    }
+  ]
+}

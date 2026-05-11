@@ -156,3 +156,50 @@ python scripts/compare_native_extraction_runs.py \
 - 把 `strict_tuple` 的硬格式约束 back-port 到 `default_guarded` / `schema_aware_directional_v2` 等其它候选，形成统一的格式约束基线。
 - 修 Gate A 的精度定义：从 metadata-closure 前的裸抽取输出评估 precision（当前裸 20 full 是 0.265，仍未达 0.45，说明还有抽取噪声空间）。
 - Finalize 前的最后一步：确认 strict_tuple 变体在 holdout 分组上仍达标（当前 scoring 的 leakage_diagnostics 因为原生抽取器不读 manifest fewshot 来源信息所以分组为空，需要修 scoring 对无 manifest 场景的处理，或者手动给原生 run 标注 fewshot 源样本）。
+
+## exp5 结果：精度向抑制规则的失败验证（2026-05-12）
+
+### 动机
+
+exp4 的 20 样本 full 显示 `audit_entity_precision(holdout)=0.303 < 0.45`，Gate A 未达。假设：LLM 仍抽出大量 gold 未覆盖的过渡性短语、页眉页脚、辅助说明类"实体"，这些是抽取层噪声。解决方案：在 prompt 里加「-精度向抑制规则-」章节，硬性拒绝 9 类非抽取对象。
+
+### 实验
+
+| 配置 | entity_recall (holdout) | entity_precision (holdout) | relation_recall (holdout) | avg entity / sample |
+|---|---:|---:|---:|---:|
+| exp4 strict_tuple（无精度规则）+ metadata-closure | 0.614 | **0.303** | 0.347 | 20.45 |
+| **exp5 strict_tuple + 精度规则 + metadata-closure** | **0.395** | **0.298** | **0.226** | **11.45** |
+
+### 结论
+
+**精度向抑制规则是失败的优化**：
+
+- **precision 几乎不变**（0.303 → 0.298）——规则未能命中主要噪声
+- **recall 大幅下降**（0.614 → 0.395，-36%）——模型把正经 gold 实体也一并跳过
+- **抽取量腰斩**（20.45 → 11.45 个/样本，-44%）但没带来精度收益
+- **结构化 contains 也被误伤**：relation_recall 从 0.347 掉到 0.226，metadata-closure 的增益被抵消了一半
+
+### 根因
+
+9 类抑制对象里有 3 类需要 LLM 做复杂上下文推理才能判定：
+- "无命名实体指向的代词" — 需要指代消解
+- "无属性描述的一次性引用项" — 需要跨段计数
+- "课程结构外的通用词" — 需要领域知识判断
+
+LLM 对这类负向约束无法精准执行，**只能一刀切把所有不确定的都跳过**。这符合"负向约束难以让 LLM 精准执行"的经验——strict_tuple 的格式约束起作用，是因为判定是**确定性**的（有没有引号/括号是否匹配），而精度向抑制需要**语义不确定性判断**。
+
+### 行动
+
+- 已从 `prompt.txt` 删除「-精度向抑制规则-」章节
+- Generator 的 `PRECISION_SUPPRESSION_BLOCK` 常量保留（失败实验记录），但不再被拼入 prompt
+- `build_schema_fewshot_distilled_v2_strict_tuple_prompt()` 只追加 `STRICT_TUPLE_FORMAT_BLOCK`
+- 对比报告见 `results/reports/native_extraction_comparisons/runs/exp4_vs_exp5_precision_rule_20260512/summary.md`
+
+### 对 Gate A 精度问题的新判断
+
+Gate A precision 0.30 < 0.45 仍是未达标，但从 exp5 看，prompt 层**无法**通过负向规则继续压降噪声。真正的出路只有两条：
+
+1. **扩容审计 gold**：让每个样本的 gold 实体从 ~10 个扩到 ~20 个，分母上去后 precision 会自然改善（当前 LLM 抽的 20 个里有很多是 audit 没覆盖但实际合理的实体）。
+2. **改 Gate A 精度定义**：从 "LLM 抽的所有实体 vs gold" 改成 "LLM 抽的 audit 视野内实体 vs gold"，排除审计集之外的合理实体。
+
+这两条之前都在"下一步"列表里，exp5 的失败进一步证实了**问题不在 prompt，而在审计集规模/评分口径**。

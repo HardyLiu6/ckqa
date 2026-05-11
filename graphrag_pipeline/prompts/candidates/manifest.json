@@ -129,7 +129,7 @@
       "notes": [
         "schema_fewshot_distilled_v2_strict_tuple 继承 schema_fewshot_distilled_v2，并合入严格 tuple 输出格式约束（见 _shared/strict_tuple_format_block.md）。",
         "2026-05-11 桥接验证显示：v2 原版在原生 tuple 抽取器下有 21/101 引号污染、3/7 样本解析级联失败，加上严格格式约束后全部清零。",
-        "2026-05-11 晚间追加「-精度向抑制规则-」章节，硬性拒绝 9 类非抽取对象（页眉页脚、过渡短语、辅助说明等），目标提升 audit_entity_precision。",
+        "2026-05-12 凌晨：精度向抑制规则（exp5 验证）被回滚——该规则让 recall 从 0.61 掉到 0.39，precision 几乎不变，净效果负。",
         "当前最佳候选，audit_relation_recall(holdout) 已达 0.347（配合 metadata-closure 后处理）。"
       ],
       "source_sample_ids": [
@@ -142,19 +142,10 @@
         "source": "prompts/candidates/_shared/strict_tuple_format_block.md"
       },
       "precision_suppression_rules": {
-        "applied_at": "2026-05-11",
-        "target": "audit_entity_precision",
-        "suppressed_categories": [
-          "页眉页脚与页码",
-          "章节通用前言/结语短语",
-          "过渡性短语",
-          "辅助说明性短语",
-          "单独出现的动词、形容词或连接词",
-          "无命名指向的代词、数字、符号",
-          "无属性描述的一次性引用项",
-          "已作 alias 的简称或缩写",
-          "课程结构外的通用名词"
-        ]
+        "status": "rolled_back",
+        "rolled_back_at": "2026-05-12",
+        "reason": "exp5 验证：recall 从 0.61 掉到 0.39（-36%），precision 几乎不变（-2%），净效果为负。",
+        "experiment_run_id": "native_exp5_precision_suppression_full20_20260511"
       },
       "token_budget_policy": {
         "relative_to": "default",
