@@ -878,6 +878,7 @@ def score_extraction_results(
     run_id: str | None = None,
     include_fallback_auto_tuned: bool = False,
     relation_validation_mode: str = "raw",
+    fewshot_source_sample_ids_override: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     root = Path(root).resolve()
     if relation_validation_mode not in {"raw", "drop-invalid"}:
@@ -1021,6 +1022,13 @@ def score_extraction_results(
     }
     manifest_path = _resolve_manifest_from_eval_files(root=root, eval_files=eval_files)
     fewshot_source_sample_ids = _load_fewshot_source_sample_ids(manifest_path)
+    if fewshot_source_sample_ids_override:
+        # CLI 显式指定时直接覆盖 manifest 派生值；用于原生抽取器 run
+        # 这类没有 manifest 的产物，人工告知 fewshot 源样本列表以便做
+        # holdout / overlap 分组。
+        fewshot_source_sample_ids = _dedupe_preserve_order(
+            list(fewshot_source_sample_ids_override)
+        )
     history_path = scoring_root / "history.csv"
 
     inputs = {
@@ -1176,6 +1184,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default="raw",
         help="关系端点验证视图：raw 保留原始关系，drop-invalid 仅用于诊断过滤非法端点关系",
     )
+    parser.add_argument(
+        "--fewshot-source-sample-ids",
+        default=None,
+        help=(
+            "手工指定 fewshot 源样本 id 列表（逗号分隔），用于原生抽取器 run "
+            "等无 manifest 场景下打通 leakage_diagnostics 的 holdout / overlap 分组。"
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true", help="覆盖已有报告产物")
     return parser
 
@@ -1214,6 +1230,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         run_id=args.run_id,
         include_fallback_auto_tuned=args.include_fallback_auto_tuned,
         relation_validation_mode=args.relation_validation_mode,
+        fewshot_source_sample_ids_override=(
+            [s.strip() for s in args.fewshot_source_sample_ids.split(",") if s.strip()]
+            if args.fewshot_source_sample_ids
+            else None
+        ),
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0

@@ -35,3 +35,17 @@
 - 降低 parse 失败率（实体数 ≥ 2 的样本占比）
 - 降低引号污染率（`quote=0` 为目标）
 - 不降低 `audit_entity_recall`（格式约束不应让模型漏掉真实实体）
+
+## 2026-05-11 晚间变更：新增精度向抑制规则
+
+exp4 的 20 样本 full 显示裸抽取 `audit_entity_precision=0.265`，Gate A 未达标。分析发现 LLM 仍抽出大量 gold 未覆盖的过渡性短语、页眉页脚、辅助说明类"实体"，这些是抽取层噪声。
+
+因此在 `-Course Baseline Constraints-` 之后追加 `-精度向抑制规则-` 章节，硬性拒绝 9 类非抽取对象（详见 prompt.txt）。此改动**不替换 strict_tuple 7 条格式约束，两套约束并行生效**。
+
+预期效果：
+
+- `audit_entity_precision` 提升（减少非 gold 实体被抽出）
+- `audit_entity_recall` 不明显下降（因为被排除的是噪声，不是真 gold）
+- 单样本实体数从 15+ 降到 10-12（更接近 gold 规模）
+
+验证方法：重跑 20 样本 full 原生抽取 + 打分，对比 exp4 的 `native_exp4_strict_tuple_full20_score`。
