@@ -3,7 +3,6 @@ export const COURSE_PAGE_COPY = Object.freeze({
   list: {
     title: '课程',
     subtitle: '管理已有课程，进入详情后可以维护成员、资料和知识库。',
-    eyebrow: '生产 · 课程',
     emptyTitle: '还没有课程',
     emptyDescription: '点击右上角"新建课程"开始第一门课的搭建。',
     createCta: '新建课程',

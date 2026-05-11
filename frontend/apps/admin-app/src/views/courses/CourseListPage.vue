@@ -100,7 +100,6 @@ const total = computed(() => state.value.pagination?.total ?? state.value.rows.l
     <CkPageHero
       :title="COURSE_PAGE_COPY.list.title"
       :subtitle="COURSE_PAGE_COPY.list.subtitle"
-      :eyebrow="COURSE_PAGE_COPY.list.eyebrow"
     >
       <template #actions>
         <RouterLink

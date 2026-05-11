@@ -51,6 +51,11 @@ test('课程列表 → 课程详情 → 切换到资料 tab', async ({ page }) =
 
   await page.goto('/app/courses')
   await expect(page.getByTestId('course-list-page')).toBeVisible()
+  // 课程 hero 不再有 eyebrow（避免与顶部面包屑「生产 / 课程列表」重复）
+  await expect(page.locator('.ck-page-hero-eyebrow')).toHaveCount(0)
+  // 顶部面包屑仍存在并包含 section + leaf
+  await expect(page.locator('nav.ck-breadcrumbs')).toContainText('生产')
+  await expect(page.locator('nav.ck-breadcrumbs')).toContainText('课程列表')
   await expect(page.getByTestId('resource-card').first()).toContainText('操作系统')
 
   await page.getByTestId('resource-card').first().click()
