@@ -134,10 +134,10 @@ class TestRunMaterialPromptPipeline(unittest.TestCase):
             )
 
             steps = {step["name"]: " ".join(step["command"]) for step in summary["steps"]}
-            self.assertIn("--samples data/prompt_tuning_samples/material_7_samples.json", steps["extract_smoke"])
-            self.assertIn("--samples data/eval/material_7_audit_extraction_set.json", steps["extract_full"])
+            self.assertIn("--samples-file data/prompt_tuning_samples/material_7_samples.json", steps["extract_smoke"])
+            self.assertIn("--samples-file data/eval/material_7_audit_extraction_set.json", steps["extract_full"])
 
-    def test_dry_run_passes_candidate_view_to_extraction_commands(self):
+    def test_dry_run_uses_native_extractor_with_max_gleanings_one(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
 
@@ -154,8 +154,12 @@ class TestRunMaterialPromptPipeline(unittest.TestCase):
             )
 
             steps = {step["name"]: " ".join(step["command"]) for step in summary["steps"]}
-            self.assertIn("--candidate-view full", steps["extract_smoke"])
-            self.assertIn("--candidate-view full", steps["extract_full"])
+            # 2026-05-11 切换到 GraphRAG 原生抽取器后，CLI 固定使用 gleaning=1
+            # 并通过 --manifest 批量跑所有活跃候选。
+            self.assertIn("run_native_extraction.py", steps["extract_smoke"])
+            self.assertIn("run_native_extraction.py", steps["extract_full"])
+            self.assertIn("--max-gleanings 1", steps["extract_smoke"])
+            self.assertIn("--manifest prompts/candidates/manifest.json", steps["extract_smoke"])
 
     def test_dry_run_can_disable_prompt_tune_entity_type_discovery(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -436,7 +440,7 @@ class TestRunMaterialPromptPipeline(unittest.TestCase):
             )
 
             self.assertEqual(summary["status"], "success")
-            self.assertTrue(any("--samples data/eval/material_7_audit_extraction_set.json" in command for command in executed))
+            self.assertTrue(any("--samples-file data/eval/material_7_audit_extraction_set.json" in command for command in executed))
 
     def test_finalize_best_passes_scoring_binding_and_runs_qa_after_index(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1513,6 +1513,57 @@ def build_schema_fewshot_distilled_v2_prompt(schema_fewshot_distilled_prompt: st
     return schema_fewshot_distilled_prompt.rstrip() + "\n\n" + _format_distilled_v2_negative_rules()
 
 
+STRICT_TUPLE_FORMAT_BLOCK = """-严格 tuple 输出格式约束（关键）-
+以下是 GraphRAG 原生 tuple 解析器的严格要求，适配层不会帮你修正，这些规则必须在你的输出中满足：
+1. 每条 record 必须是完整的一行，形如 `("entity"<|>NAME<|>TYPE<|>DESC)` 或 `("relationship"<|>SRC<|>TGT<|>DESC<|>STRENGTH)`；record 之间只用 `##` 分隔。
+2. **不要**在 entity_name、entity_type、source_entity、target_entity 外面加任何双引号或单引号，也不要加中文引号“”‘’；这几个字段必须是裸文本。解析器不会剥引号。
+3. 每条 record 必须以 `(` 开头、以 `)` 结尾，确保括号严格成对；description 或 evidence 内部不得出现独立的 `)`、`##` 或 `<|>`，否则会被误判为 record 边界。
+4. 如需在 description 中引用原文，不要使用引号包裹；若必须引用，改为用顿号或破折号分隔，避免字符串歧义。
+5. 整段输出结束时只输出一次 `<|COMPLETE|>`，前后不要加任何额外文字、解释或 markdown。
+6. 如果某个 record 内容不确定或格式不完整，**不要输出这条 record**；宁可漏抽也不要输出破损的 tuple。
+7. entity_type 从给定类型列表里取；大小写会被解析器规范化，但请尽量保持列表字面（PascalCase），不要用同义词、不要加空格。
+"""
+
+
+PRECISION_SUPPRESSION_BLOCK = """-精度向抑制规则（关键，避免过度抽取）-
+以下内容**必须**跳过，不抽取为实体或关系端点。它们不是 audit gold 的覆盖对象，也不服务于课程问答目标：
+- 页眉页脚、页码、目录索引号（如“第 156 页”“Contents”）；
+- 章节通用前言/结语性短语（如“本章小结”“习题与思考”之类的非稳定知识容器）；
+- 模型用来连接话题的过渡性短语（如“接下来介绍”“需要注意的是”）；
+- 辅助说明性短语（如“如图所示”“如下表”“见下文”）；
+- 单独出现的动词、形容词或连接词；
+- 无命名实体指向的代词、数字、符号；
+- 看似实体但在当前样本中没有被实际讨论的引用项（例如样本里只出现一次名字、没有任何属性描述的对象）；
+- 已作为某实体 alias 出现的简称或缩写（应并入主实体，不单独成实体）；
+- 课程结构外的通用词（如“方法”“算法”“概念”等不带具体语义的通用名词）。
+
+只保留：原文**正在讨论、解释、应用或考核**的课程结构、知识点、概念、术语、公式、方法、实验、作业、工具平台。
+"""
+
+
+def build_schema_fewshot_distilled_v2_strict_tuple_prompt(
+    schema_fewshot_distilled_v2_prompt: str,
+) -> str:
+    """在 schema_fewshot_distilled_v2 末尾追加严格 tuple 格式约束和精度向抑制规则。
+
+    两段约束的来源：
+    - STRICT_TUPLE_FORMAT_BLOCK：见 `prompts/candidates/_shared/strict_tuple_format_block.md`
+    - PRECISION_SUPPRESSION_BLOCK：2026-05-11 引入，针对 exp4 precision=0.27 的优化
+
+    注意：这个候选**不经过** `_render_delimiter_placeholders`，因为 strict_tuple 块
+    里故意保留了 `<|>` / `{` 等字面符号，作为对模型的格式演示，不是模板占位。
+    """
+
+    return (
+        schema_fewshot_distilled_v2_prompt.rstrip()
+        + "\n\n"
+        + PRECISION_SUPPRESSION_BLOCK.rstrip()
+        + "\n\n"
+        + STRICT_TUPLE_FORMAT_BLOCK.rstrip()
+        + "\n"
+    )
+
+
 def _candidate_readme(
     name: str,
     generated_at: str,
@@ -1720,6 +1771,15 @@ def generate_candidate_prompts(
         [item["line"] for item in distilled_micro_example_items]
     )
 
+    # 2026-05-11：在 v2 基础上追加严格 tuple 格式约束和精度向抑制规则；
+    # 注意：v2 已经过 delimiter 渲染后才追加格式块，避免 strict_tuple 块里
+    # 故意保留的 `<|>` 字面被 _render_delimiter_placeholders 再次替换。
+    schema_fewshot_distilled_v2_strict_tuple_prompt_text = (
+        build_schema_fewshot_distilled_v2_strict_tuple_prompt(
+            _render_delimiter_placeholders(schema_fewshot_distilled_v2_prompt_text)
+        )
+    )
+
     auto_tuned_prompt_text = auto_tuned_prompt_source.text
     auto_tuned_source_type = auto_tuned_prompt_source.source_type
     auto_tuned_notes = list(auto_tuned_prompt_source.notes)
@@ -1874,6 +1934,41 @@ def generate_candidate_prompts(
         },
     }
 
+    # 2026-05-11 归档后只保留 4 个活跃候选；已归档候选的 prompt_text 仍由
+    # 上面的构造链生成（schema_aware / schema_aware_directional /
+    # schema_fewshot_distilled / schema_fewshot_distilled_v2 作为中间变量
+    # 被依赖），只是不再落盘到 prompts/candidates/。
+    # 归档清单见 prompts/candidates/_archive_json_format/ 和
+    # _archive_superseded_tuple/。
+    strict_tuple_format_guard_meta = {
+        "applied_at": "2026-05-11",
+        "source": "prompts/candidates/_shared/strict_tuple_format_block.md",
+    }
+    precision_suppression_rules_meta = {
+        "applied_at": "2026-05-11",
+        "target": "audit_entity_precision",
+        "suppressed_categories": [
+            "页眉页脚与页码",
+            "章节通用前言/结语短语",
+            "过渡性短语",
+            "辅助说明性短语",
+            "单独出现的动词、形容词或连接词",
+            "无命名指向的代词、数字、符号",
+            "无属性描述的一次性引用项",
+            "已作 alias 的简称或缩写",
+            "课程结构外的通用名词",
+        ],
+    }
+    schema_fewshot_distilled_v2_strict_tuple_notes = _dedupe_preserve_order(
+        [
+            "schema_fewshot_distilled_v2_strict_tuple 继承 schema_fewshot_distilled_v2，并合入严格 tuple 输出格式约束（见 prompts/candidates/_shared/strict_tuple_format_block.md）。",
+            "2026-05-11 桥接验证显示：v2 原版在原生 tuple 抽取器下有 21/101 引号污染、3/7 样本解析级联失败，加上严格格式约束后全部清零。",
+            "2026-05-11 晚间追加「-精度向抑制规则-」章节，硬性拒绝 9 类非抽取对象（页眉页脚、过渡短语、辅助说明等），目标提升 audit_entity_precision。",
+            "当前最佳候选，audit_relation_recall(holdout) 已达 0.347（配合 metadata-closure 后处理）。",
+            FEWSHOT_COMPRESSION_CAVEAT,
+        ]
+    )
+
     candidates = [
         {
             "name": "default",
@@ -1888,25 +1983,6 @@ def generate_candidate_prompts(
             "notes": default_candidate_notes,
         },
         {
-            "name": "default_guarded",
-            "prompt_text": default_guarded_prompt_text,
-            "source_type": "default_guarded",
-            "base_prompt_source": _safe_relpath(default_prompt_source.path),
-            "schema_used": True,
-            "audit_used": False,
-            "fewshot_used": False,
-            "fewshot_example_count": 0,
-            "fewshot_strategy": None,
-            "notes": default_guarded_notes,
-            "extra_manifest_fields": {
-                "output_guard_policy": {
-                    "strategy": "strict_json_root_and_endpoint_match",
-                    "required_root_keys": ["entities", "relationships"],
-                },
-                "token_budget_policy": dict(V3_TOKEN_BUDGET_POLICY),
-            },
-        },
-        {
             "name": "auto_tuned",
             "prompt_text": auto_tuned_prompt_text,
             "source_type": auto_tuned_source_type,
@@ -1917,44 +1993,6 @@ def generate_candidate_prompts(
             "fewshot_example_count": 0,
             "fewshot_strategy": None,
             "notes": auto_tuned_notes,
-        },
-        {
-            "name": "schema_aware",
-            "prompt_text": schema_aware_prompt_text,
-            "source_type": "schema_augmented",
-            "base_prompt_source": _safe_relpath(schema_aware_base_source),
-            "schema_used": True,
-            "audit_used": False,
-            "fewshot_used": False,
-            "fewshot_example_count": 0,
-            "fewshot_strategy": None,
-            "notes": schema_aware_notes,
-        },
-        {
-            "name": "schema_fewshot",
-            "prompt_text": schema_fewshot_prompt_text,
-            "source_type": "schema_fewshot",
-            "base_prompt_source": _safe_relpath(schema_aware_base_source),
-            "schema_used": True,
-            "audit_used": bool(audit_records),
-            "fewshot_used": bool(fewshot_examples),
-            "fewshot_example_count": len(fewshot_examples),
-            "fewshot_strategy": "audit_gold" if fewshot_strategy == "audit_gold" else "minimal_manual_examples",
-            "fewshot_compression": fewshot_compression,
-            "fewshot_coverage": fewshot_coverage,
-            "notes": schema_fewshot_notes,
-        },
-        {
-            "name": "schema_aware_directional",
-            "prompt_text": schema_aware_directional_prompt_text,
-            "source_type": "schema_directional",
-            "base_prompt_source": _safe_relpath(schema_aware_base_source),
-            "schema_used": True,
-            "audit_used": False,
-            "fewshot_used": False,
-            "fewshot_example_count": 0,
-            "fewshot_strategy": None,
-            "notes": schema_aware_directional_notes,
         },
         {
             "name": "schema_aware_directional_v2",
@@ -1970,46 +2008,25 @@ def generate_candidate_prompts(
             "extra_manifest_fields": {
                 "failure_family_policy": dict(V3_FAILURE_FAMILY_POLICY),
                 "token_budget_policy": dict(V3_TOKEN_BUDGET_POLICY),
+                "strict_tuple_format_guard": dict(strict_tuple_format_guard_meta),
             },
         },
         {
-            "name": "schema_fewshot_distilled",
-            "prompt_text": schema_fewshot_distilled_prompt_text,
-            "source_type": "schema_fewshot_distilled",
+            "name": "schema_fewshot_distilled_v2_strict_tuple",
+            "prompt_text": schema_fewshot_distilled_v2_strict_tuple_prompt_text,
+            "source_type": "schema_fewshot_distilled_v2_strict_tuple",
             "base_prompt_source": _safe_relpath(schema_aware_base_source),
             "schema_used": True,
             "audit_used": bool(audit_records),
             "fewshot_used": bool(fewshot_selected_records),
             "fewshot_example_count": len(fewshot_selected_records),
-            "fewshot_strategy": "distilled_relation_micro_examples",
-            "notes": schema_fewshot_distilled_notes,
-            "extra_manifest_fields": distilled_extra_fields,
-        },
-        {
-            "name": "schema_fewshot_distilled_v2",
-            "prompt_text": schema_fewshot_distilled_v2_prompt_text,
-            "source_type": "schema_fewshot_distilled_v2",
-            "base_prompt_source": _safe_relpath(schema_aware_base_source),
-            "schema_used": True,
-            "audit_used": bool(audit_records),
-            "fewshot_used": bool(fewshot_selected_records),
-            "fewshot_example_count": len(fewshot_selected_records),
-            "fewshot_strategy": "distilled_negative_direction_rules",
-            "notes": schema_fewshot_distilled_v2_notes,
-            "extra_manifest_fields": distilled_v2_extra_fields,
-        },
-        {
-            "name": "schema_fewshot_distilled_v3",
-            "prompt_text": schema_fewshot_distilled_v3_prompt_text,
-            "source_type": "schema_fewshot_distilled_v3",
-            "base_prompt_source": _safe_relpath(schema_aware_base_source),
-            "schema_used": True,
-            "audit_used": bool(audit_records),
-            "fewshot_used": bool(fewshot_selected_records),
-            "fewshot_example_count": len(fewshot_selected_records),
-            "fewshot_strategy": "failure_family_micro_examples",
-            "notes": schema_fewshot_distilled_v3_notes,
-            "extra_manifest_fields": v3_extra_fields,
+            "fewshot_strategy": "distilled_negative_direction_rules_with_strict_tuple_guard",
+            "notes": schema_fewshot_distilled_v2_strict_tuple_notes,
+            "extra_manifest_fields": {
+                **distilled_v2_extra_fields,
+                "strict_tuple_format_guard": dict(strict_tuple_format_guard_meta),
+                "precision_suppression_rules": dict(precision_suppression_rules_meta),
+            },
         },
     ]
 

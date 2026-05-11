@@ -44,7 +44,12 @@ from .extraction_schema import (
     ExtractionRelationship,
     StructuredExtractionResult,
 )
-from .prompt_loader import load_samples, resolve_samples_path
+from .prompt_loader import (
+    load_candidate_prompts,
+    load_samples,
+    resolve_manifest_path,
+    resolve_samples_path,
+)
 from .result_writer import write_candidate_outputs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -313,6 +318,69 @@ async def run_native_extraction(
     }
 
 
+async def run_native_extraction_from_manifest(
+    *,
+    root: Path,
+    manifest_file: str | Path | None,
+    samples_file: str | Path | None,
+    entity_types: list[str],
+    candidate_names: list[str] | None = None,
+    max_gleanings: int = 1,
+    limit: int | None = None,
+    run_id: str | None = None,
+    overwrite: bool = False,
+    strict: bool = False,
+) -> dict[str, Any]:
+    """按 manifest 批量跑所有活跃候选，每个候选写一份 eval JSON。
+
+    用途：替代历史上 `scripts/run_candidate_extraction.py --manifest` 的批量
+    抽取模式，供 `run_material_prompt_pipeline.py` 等编排脚本调用。
+
+    每个候选共用同一个 `run_id` 目录，但文件名按候选区分。
+    """
+
+    root = root.resolve()
+    _load_env(root)
+
+    manifest_path = resolve_manifest_path(manifest_file, root=root)
+    candidates = load_candidate_prompts(
+        manifest_path,
+        root=root,
+        candidate_names=candidate_names,
+    )
+
+    logger.info(
+        "开始 manifest 批量原生抽取：manifest=%s candidates=%d",
+        manifest_path,
+        len(candidates),
+    )
+
+    per_candidate_summaries: list[dict[str, Any]] = []
+    for candidate in candidates:
+        logger.info("=== candidate: %s ===", candidate.name)
+        summary = await run_native_extraction(
+            root=root,
+            samples_file=samples_file,
+            prompt_path=candidate.prompt_path,
+            entity_types=entity_types,
+            candidate_name=candidate.name,
+            max_gleanings=max_gleanings,
+            limit=limit,
+            run_id=run_id,
+            overwrite=overwrite,
+            strict=strict,
+        )
+        per_candidate_summaries.append(summary)
+
+    return {
+        "status": "success",
+        "manifest_path": str(manifest_path),
+        "run_id": run_id,
+        "candidate_count": len(candidates),
+        "per_candidate": per_candidate_summaries,
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="使用 GraphRAG 原生 GraphExtractor 执行候选 Prompt 抽取实验"
@@ -329,8 +397,25 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--prompt",
-        required=True,
-        help="Prompt 文件路径（如 prompts/extract_graph.txt 或 prompts/candidates/default/prompt.txt）",
+        default=None,
+        help=(
+            "单候选模式：Prompt 文件路径（如 prompts/candidates/default/prompt.txt）。"
+            "与 --manifest 二选一，两者都指定时优先用 --manifest。"
+        ),
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help=(
+            "manifest 批量模式：候选 manifest JSON 路径（默认 "
+            "prompts/candidates/manifest.json）。启用后会对 manifest 中每个活跃"
+            "候选各跑一次抽取。"
+        ),
+    )
+    parser.add_argument(
+        "--candidate-names",
+        default=None,
+        help="manifest 批量模式下的候选名过滤（逗号分隔），默认跑所有候选。",
     )
     parser.add_argument(
         "--entity-types",
@@ -339,8 +424,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--candidate-name",
-        required=True,
-        help="候选名称（用于输出文件命名）",
+        default=None,
+        help="单候选模式：候选名称（用于输出文件命名）。manifest 模式下忽略。",
     )
     parser.add_argument(
         "--max-gleanings",
@@ -363,18 +448,44 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = _build_parser().parse_args(argv)
     entity_types = [t.strip() for t in args.entity_types.split(",") if t.strip()]
-    summary = asyncio.run(run_native_extraction(
-        root=Path(args.root),
-        samples_file=args.samples_file,
-        prompt_path=args.prompt,
-        entity_types=entity_types,
-        candidate_name=args.candidate_name,
-        max_gleanings=args.max_gleanings,
-        limit=args.limit,
-        run_id=args.run_id,
-        overwrite=args.overwrite,
-        strict=args.strict,
-    ))
+
+    if args.manifest or (not args.prompt and not args.manifest):
+        # manifest 批量模式（显式 --manifest 或者两个都没传时走默认 manifest）
+        candidate_names = None
+        if args.candidate_names:
+            candidate_names = [
+                s.strip()
+                for s in args.candidate_names.split(",")
+                if s.strip()
+            ]
+        summary = asyncio.run(run_native_extraction_from_manifest(
+            root=Path(args.root),
+            manifest_file=args.manifest,
+            samples_file=args.samples_file,
+            entity_types=entity_types,
+            candidate_names=candidate_names,
+            max_gleanings=args.max_gleanings,
+            limit=args.limit,
+            run_id=args.run_id,
+            overwrite=args.overwrite,
+            strict=args.strict,
+        ))
+    else:
+        # 单候选模式
+        if not args.candidate_name:
+            raise ValueError("--prompt 模式必须提供 --candidate-name")
+        summary = asyncio.run(run_native_extraction(
+            root=Path(args.root),
+            samples_file=args.samples_file,
+            prompt_path=args.prompt,
+            entity_types=entity_types,
+            candidate_name=args.candidate_name,
+            max_gleanings=args.max_gleanings,
+            limit=args.limit,
+            run_id=args.run_id,
+            overwrite=args.overwrite,
+            strict=args.strict,
+        ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

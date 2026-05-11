@@ -113,17 +113,13 @@ def build_material_prompt_pipeline_steps(
 
     extract_base = [
         python,
-        "scripts/run_candidate_extraction.py",
+        "scripts/run_native_extraction.py",
         "--manifest",
         _as_posix(DEFAULT_CANDIDATE_MANIFEST),
-        "--concurrency",
-        str(concurrency),
-        "--sample-timeout",
-        f"{sample_timeout_seconds:g}",
-        "--stream-mode",
-        stream_mode,
-        "--candidate-view",
-        candidate_view,
+        "--entity-types",
+        "Course,Chapter,Section,KnowledgePoint,Concept,Term,FormulaOrDefinition,AlgorithmOrMethod,Experiment,Assignment,ToolOrPlatform",
+        "--max-gleanings",
+        "1",
     ]
     if overwrite:
         extract_base.append("--overwrite")
@@ -252,7 +248,7 @@ def build_material_prompt_pipeline_steps(
             "extract_smoke",
             [
                 *extract_base,
-                "--samples",
+                "--samples-file",
                 _as_posix(samples_file),
                 "--run-id",
                 smoke_run_id,
@@ -287,7 +283,7 @@ def build_material_prompt_pipeline_steps(
                     "extract_full",
                     [
                         *extract_base,
-                        "--samples",
+                        "--samples-file",
                         _as_posix(audit_file),
                         "--run-id",
                         run_id,
