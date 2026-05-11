@@ -32,7 +32,11 @@ function selectStep(step) {
         <strong>{{ progress.summary }}</strong>
         <small>{{ progress.detail || '暂无阻塞项' }}</small>
       </div>
-      <el-progress :percentage="progress.percent" :show-text="false" />
+      <el-progress
+        :percentage="progress.percent"
+        :show-text="false"
+        :aria-label="`构建整体进度 ${progress.percent}%`"
+      />
     </header>
 
     <ol class="workflow-progress-rail__steps" aria-label="构建步骤">

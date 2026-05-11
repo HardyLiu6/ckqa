@@ -57,7 +57,7 @@ defineProps({
 }
 .ck-empty-state-cta {
   padding: 7px 16px;
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
   border: none;
   border-radius: var(--ckqa-radius-md);

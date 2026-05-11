@@ -22,8 +22,8 @@
 
   /* accent — default mapped to rust */
   --ckqa-accent: #d97757;
-  --ckqa-accent-strong: #c4633a;
-  --ckqa-accent-deepest: #a85530;
+  --ckqa-accent-strong: #a85530;       /* M8 Task 5: 提暗到 5.24:1 on white，覆盖 CTA 实心背景与活动 Tab 文本 */
+  --ckqa-accent-deepest: #8a3f1f;      /* M8 Task 5: 同步加深，作为 hover/active 的更深一档 */
   --ckqa-accent-soft: #fdf3ee;
   --ckqa-accent-contrast: #ffffff;
 
@@ -31,14 +31,14 @@
   --ckqa-success: #2f6342;
   --ckqa-success-strong: #1f4a30;
   --ckqa-success-soft: #eef5ee;
-  --ckqa-running: #c08a3a;
+  --ckqa-running: #8c5d1c;             /* M8 Task 5: on running-soft 提到 5.07:1 */
   --ckqa-running-soft: #faf1e1;
   --ckqa-warning: #b8860b;
   --ckqa-warning-strong: #8a6a0a;
   --ckqa-warning-soft: #fef5d7;
   --ckqa-blocked: #8a847a;
   --ckqa-blocked-soft: #ece8df;
-  --ckqa-danger: #c4413a;
+  --ckqa-danger: #b8362f;              /* M8 Task 5: on danger-soft 提到 5.15:1 */
   --ckqa-danger-strong: #a43a34;
   --ckqa-danger-soft: #fceeec;
 
@@ -173,7 +173,7 @@
   --ckqa-warning-soft: #382a1d;
   --ckqa-blocked: #6e6a62;
   --ckqa-blocked-soft: #2a2724;
-  --ckqa-danger: #d96860;
+  --ckqa-danger: #e07a72;              /* M8 Task 5: on danger-soft 提到 5.16:1 */
   --ckqa-danger-strong: #b94c46;
   --ckqa-danger-soft: #38201e;
 
@@ -273,7 +273,7 @@
 
 [data-accent='rust'] {
   --ckqa-accent: #d97757;
-  --ckqa-accent-strong: #c4633a;
+  --ckqa-accent-strong: #a85530;
   --ckqa-accent-soft: #fdf3ee;
   --ckqa-accent-contrast: #ffffff;
 }

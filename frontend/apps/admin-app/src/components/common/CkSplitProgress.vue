@@ -55,8 +55,6 @@ function stageLabel(stage) {
   <div
     class="ck-split-progress"
     :data-orientation="orientation"
-    role="list"
-    aria-label="阶段进度"
     data-testid="split-progress"
   >
     <div v-if="showSummary" class="ck-split-progress-summary">
@@ -64,14 +62,13 @@ function stageLabel(stage) {
       <strong class="ck-split-progress-value">{{ overall }}%</strong>
     </div>
 
-    <ol class="ck-split-progress-stages">
+    <ol class="ck-split-progress-stages" aria-label="阶段进度">
       <li
         v-for="stage in normalized"
         :key="stage.key"
         class="ck-split-progress-stage"
         :data-state="stage.state"
         :data-testid="`stage-${stage.key}`"
-        role="listitem"
       >
         <div
           class="ck-split-progress-stage-dot"

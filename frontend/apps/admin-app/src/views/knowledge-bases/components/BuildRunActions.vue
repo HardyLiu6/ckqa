@@ -71,9 +71,9 @@ function handleClick(key) {
   cursor: pointer;
 }
 .build-run-actions button.is-primary {
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
-  border-color: var(--ckqa-accent);
+  border-color: var(--ckqa-accent-strong);
 }
 .build-run-actions button.is-primary:hover {
   background: var(--ckqa-accent-strong);

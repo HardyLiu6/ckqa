@@ -163,7 +163,7 @@ function resolveDuration(run = {}) {
   font-size: var(--ckqa-text-xs-size);
 }
 .kb-index-runs-tab__activate:hover {
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
 }
 </style>

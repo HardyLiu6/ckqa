@@ -210,7 +210,7 @@ const total = computed(() => state.value.pagination?.total ?? state.value.rows.l
   display: inline-flex;
   align-items: center;
   padding: 7px 14px;
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
   border-radius: var(--ckqa-radius-md);
   font-size: var(--ckqa-text-sm-size);

@@ -38,7 +38,14 @@ const sorted = computed(() => sortTasks(props.tasks))
           {{ task.title }}
         </RouterLink>
         <span v-else class="ck-task-list-item-title">{{ task.title }}</span>
-        <div class="ck-task-list-item-progress" :aria-label="`${task.title} 进度`">
+        <div
+          class="ck-task-list-item-progress"
+          role="progressbar"
+          :aria-label="`${task.title} 进度`"
+          :aria-valuenow="Math.round((Number(task.progress) || 0) * 100)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
           <span
             class="ck-task-list-item-progress-fill"
             :style="{ width: formatTaskProgress(task.progress) }"

@@ -196,9 +196,9 @@ const canActivate = computed(() => {
 .index-run-detail-page__activate {
   padding: 7px 14px;
   border-radius: var(--ckqa-radius-md);
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
-  border: 1px solid var(--ckqa-accent);
+  border: 1px solid var(--ckqa-accent-strong);
   cursor: pointer;
 }
 .index-run-detail-page__activate:hover {

@@ -129,7 +129,7 @@ function updatedAt(row) {
 }
 .course-members-tab-add {
   padding: 6px 14px;
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
   border: none;
   border-radius: var(--ckqa-radius-md);

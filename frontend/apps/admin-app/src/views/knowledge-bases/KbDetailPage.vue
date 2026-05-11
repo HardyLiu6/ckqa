@@ -245,9 +245,9 @@ const tabProps = computed(() => {
   border: 1px solid transparent;
 }
 .kb-detail-page__build {
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
-  border-color: var(--ckqa-accent);
+  border-color: var(--ckqa-accent-strong);
 }
 .kb-detail-page__build:hover {
   background: var(--ckqa-accent-strong);

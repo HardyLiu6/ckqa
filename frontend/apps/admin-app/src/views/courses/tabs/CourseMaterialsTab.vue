@@ -77,7 +77,7 @@ const isArchived = computed(() => String(props.course?.status ?? '').toLowerCase
 }
 .course-materials-tab-upload {
   padding: 6px 14px;
-  background: var(--ckqa-accent);
+  background: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
   border: none;
   border-radius: var(--ckqa-radius-md);
