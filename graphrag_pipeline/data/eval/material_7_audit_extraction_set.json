@@ -138,7 +138,7 @@
         }
       }
     },
-    "preserved_existing_gold_count": 12,
+    "preserved_existing_gold_count": 17,
     "preserved_existing_gold_match_counts": {
       "stable_source_hash": 12
     }
@@ -1149,11 +1149,113 @@
       "page_end": 388,
       "audit_priority": "medium",
       "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：short；结构层级：heading_level=2；覆盖章节/标题边界：第十二章 保护和安全；命中高价值信号：定义信号、方法/步骤信号、含公式或数学表达、存在步骤或列表结构",
-      "gold_entities": [],
-      "gold_relations": [],
-      "annotation_notes": "",
-      "reviewer_decision": "",
-      "reviewer_confidence": ""
+      "gold_entities": [
+        {
+          "entity_id": "m14-e01",
+          "name": "第十二章 保护和安全",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "第十二章 保护和安全",
+          "normalized_name": "第十二章 保护和安全",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e02",
+          "name": "12.1 安全环境",
+          "type": "Section",
+          "alias": [],
+          "span_text": "12.1 安全环境",
+          "normalized_name": "12.1 安全环境",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e03",
+          "name": "保护",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "保护",
+          "normalized_name": "保护",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e04",
+          "name": "安全",
+          "type": "Concept",
+          "alias": [
+            "安全环境"
+          ],
+          "span_text": "安全",
+          "normalized_name": "安全",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e05",
+          "name": "保护定义",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "对攻击、入侵和损害系统等的行为进行防御或监视",
+          "normalized_name": "保护定义",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e06",
+          "name": "机密性",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "机密性",
+          "normalized_name": "机密性",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e07",
+          "name": "完整性",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "完整性",
+          "normalized_name": "完整性",
+          "notes": ""
+        },
+        {
+          "entity_id": "m14-e08",
+          "name": "可用性",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "可用性",
+          "normalized_name": "可用性",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "m14-r01",
+          "source_entity_id": "m14-e01",
+          "target_entity_id": "m14-e02",
+          "type": "contains",
+          "evidence_text": "第十二章 / 12.1 安全环境。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m14-r02",
+          "source_entity_id": "m14-e03",
+          "target_entity_id": "m14-e05",
+          "type": "defined_by",
+          "evidence_text": "可以把保护定义为：对攻击、入侵和损害系统等的行为进行防御或监视。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m14-r03",
+          "source_entity_id": "m14-e03",
+          "target_entity_id": "m14-e04",
+          "type": "related_to",
+          "evidence_text": "保护和安全是有不同含意的两个术语。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "manual_gold_补充_v1：覆盖定义型 defined_by 和概念比较 related_to。",
+      "reviewer_decision": "accepted_with_notes",
+      "reviewer_confidence": "high",
+      "gold_seed": true,
+      "gold_seed_version": "manual_gold_补充_v1"
     },
     {
       "id": "audit-ext-0008-6fca6fd160",
@@ -1687,11 +1789,140 @@
       "page_end": 185,
       "audit_priority": "high",
       "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=2；覆盖章节/标题边界：第五章 虚拟存储器；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集",
-      "gold_entities": [],
-      "gold_relations": [],
-      "annotation_notes": "",
-      "reviewer_decision": "",
-      "reviewer_confidence": ""
+      "gold_entities": [
+        {
+          "entity_id": "m36-e01",
+          "name": "第五章 虚拟存储器",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "第五章 虚拟存储器",
+          "normalized_name": "第五章 虚拟存储器",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e02",
+          "name": "第五章习题",
+          "type": "Assignment",
+          "alias": [],
+          "span_text": "习题",
+          "normalized_name": "第五章习题",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e03",
+          "name": "虚拟存储器",
+          "type": "KnowledgePoint",
+          "alias": [],
+          "span_text": "虚拟存储器",
+          "normalized_name": "虚拟存储器",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e04",
+          "name": "请求分页系统",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "请求分页系统",
+          "normalized_name": "请求分页系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e05",
+          "name": "FIFO页面置换算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "FIFO"
+          ],
+          "span_text": "FIFO 页面置换算法",
+          "normalized_name": "FIFO页面置换算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e06",
+          "name": "LRU算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [],
+          "span_text": "LRU算法",
+          "normalized_name": "LRU算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e07",
+          "name": "Clock置换算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "改进型Clock置换算法"
+          ],
+          "span_text": "改进型Clock置换算法",
+          "normalized_name": "Clock置换算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e08",
+          "name": "工作集",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "工作集",
+          "normalized_name": "工作集",
+          "notes": ""
+        },
+        {
+          "entity_id": "m36-e09",
+          "name": "抖动",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "抖动",
+          "normalized_name": "抖动",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "m36-r01",
+          "source_entity_id": "m36-e01",
+          "target_entity_id": "m36-e02",
+          "type": "evaluated_by",
+          "evidence_text": "第五章习题考核虚拟存储器内容。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m36-r02",
+          "source_entity_id": "m36-e03",
+          "target_entity_id": "m36-e02",
+          "type": "evaluated_by",
+          "evidence_text": "习题询问虚拟存储器的特征和实现。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m36-r03",
+          "source_entity_id": "m36-e04",
+          "target_entity_id": "m36-e02",
+          "type": "evaluated_by",
+          "evidence_text": "习题多次考核请求分页系统相关问题。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m36-r04",
+          "source_entity_id": "m36-e05",
+          "target_entity_id": "m36-e02",
+          "type": "appears_in",
+          "evidence_text": "FIFO 页面置换算法出现在第 13 题。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m36-r05",
+          "source_entity_id": "m36-e08",
+          "target_entity_id": "m36-e09",
+          "type": "related_to",
+          "evidence_text": "习题连续询问工作集和抖动的关系。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "manual_gold_补充_v1：覆盖习题型 evaluated_by、appears_in 和虚拟存储器知识点。",
+      "reviewer_decision": "accepted_with_notes",
+      "reviewer_confidence": "high",
+      "gold_seed": true,
+      "gold_seed_version": "manual_gold_补充_v1"
     },
     {
       "id": "audit-ext-0012-c1a2c36da9",
@@ -2037,11 +2268,145 @@
       "page_end": 99,
       "audit_priority": "high",
       "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第三章 处理机调度与死锁；命中高价值信号：公式信号、方法/步骤信号、作业/题组信号、关系表达较密集",
-      "gold_entities": [],
-      "gold_relations": [],
-      "annotation_notes": "",
-      "reviewer_decision": "",
-      "reviewer_confidence": ""
+      "gold_entities": [
+        {
+          "entity_id": "m45-e01",
+          "name": "第三章 处理机调度与死锁",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "第三章 处理机调度与死锁",
+          "normalized_name": "第三章 处理机调度与死锁",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e02",
+          "name": "3.2 作业与作业调度",
+          "type": "Section",
+          "alias": [],
+          "span_text": "3.2 作业与作业调度",
+          "normalized_name": "3.2 作业与作业调度",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e03",
+          "name": "优先级调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "PSA",
+            "priority-scheduling algorithm"
+          ],
+          "span_text": "优先级调度算法(priority-scheduling algorithm, PSA)",
+          "normalized_name": "优先级调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e04",
+          "name": "高响应比优先调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "HRRN",
+            "Highest Response Ratio Next"
+          ],
+          "span_text": "高响应比优先调度算法(Highest Response Ratio Next, HRRN)",
+          "normalized_name": "高响应比优先调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e05",
+          "name": "响应比公式",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "响应比公式",
+          "normalized_name": "响应比公式",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e06",
+          "name": "先来先服务调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "FCFS"
+          ],
+          "span_text": "FCFS算法",
+          "normalized_name": "先来先服务调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e07",
+          "name": "短作业优先调度算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "SJF"
+          ],
+          "span_text": "SJF算法",
+          "normalized_name": "短作业优先调度算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m45-e08",
+          "name": "动态优先级",
+          "type": "Concept",
+          "alias": [],
+          "span_text": "动态优先级",
+          "normalized_name": "动态优先级",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "m45-r01",
+          "source_entity_id": "m45-e01",
+          "target_entity_id": "m45-e02",
+          "type": "contains",
+          "evidence_text": "第三章 / 3.2 作业与作业调度。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m45-r02",
+          "source_entity_id": "m45-e02",
+          "target_entity_id": "m45-e03",
+          "type": "contains",
+          "evidence_text": "3.2.4 介绍优先级调度算法。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m45-r03",
+          "source_entity_id": "m45-e02",
+          "target_entity_id": "m45-e04",
+          "type": "contains",
+          "evidence_text": "3.2.4 介绍高响应比优先调度算法。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m45-r04",
+          "source_entity_id": "m45-e04",
+          "target_entity_id": "m45-e05",
+          "type": "defined_by",
+          "evidence_text": "优先级变化规律可描述为响应比公式。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m45-r05",
+          "source_entity_id": "m45-e04",
+          "target_entity_id": "m45-e08",
+          "type": "depends_on",
+          "evidence_text": "高响应比优先算法为每个作业引入动态优先级。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m45-r06",
+          "source_entity_id": "m45-e06",
+          "target_entity_id": "m45-e04",
+          "type": "related_to",
+          "evidence_text": "文本比较 FCFS 和高响应比优先调度算法的差异。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "manual_gold_补充_v1：覆盖公式型 defined_by、算法比较 related_to、动态优先级 depends_on。",
+      "reviewer_decision": "accepted_with_notes",
+      "reviewer_confidence": "high",
+      "gold_seed": true,
+      "gold_seed_version": "manual_gold_补充_v1"
     },
     {
       "id": "audit-ext-0016-e9d60c321c",
@@ -2067,11 +2432,97 @@
       "page_end": 383,
       "audit_priority": "high",
       "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第十一章 多媒体操作系统；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、含公式或数学表达",
-      "gold_entities": [],
-      "gold_relations": [],
-      "annotation_notes": "",
-      "reviewer_decision": "",
-      "reviewer_confidence": ""
+      "gold_entities": [
+        {
+          "entity_id": "m52-e01",
+          "name": "第十一章 多媒体操作系统",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "第十一章 多媒体操作系统",
+          "normalized_name": "第十一章 多媒体操作系统",
+          "notes": ""
+        },
+        {
+          "entity_id": "m52-e02",
+          "name": "11.6 多媒体存储器的分配方法",
+          "type": "Section",
+          "alias": [],
+          "span_text": "11.6 多媒体存储器的分配方法",
+          "normalized_name": "11.6 多媒体存储器的分配方法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m52-e03",
+          "name": "Zipf定律",
+          "type": "FormulaOrDefinition",
+          "alias": [],
+          "span_text": "Zipf定律",
+          "normalized_name": "Zipf定律",
+          "notes": ""
+        },
+        {
+          "entity_id": "m52-e04",
+          "name": "管风琴算法",
+          "type": "AlgorithmOrMethod",
+          "alias": [
+            "organ-pipe algorithm"
+          ],
+          "span_text": "管风琴算法(organ-pipe algorithm)",
+          "normalized_name": "管风琴算法",
+          "notes": ""
+        },
+        {
+          "entity_id": "m52-e05",
+          "name": "RAID",
+          "type": "Term",
+          "alias": [
+            "磁盘阵列"
+          ],
+          "span_text": "RAID 磁盘阵列",
+          "normalized_name": "RAID",
+          "notes": ""
+        },
+        {
+          "entity_id": "m52-e06",
+          "name": "视频服务器",
+          "type": "ToolOrPlatform",
+          "alias": [],
+          "span_text": "视频服务器",
+          "normalized_name": "视频服务器",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "m52-r01",
+          "source_entity_id": "m52-e01",
+          "target_entity_id": "m52-e02",
+          "type": "contains",
+          "evidence_text": "第十一章 / 11.6 多媒体存储器的分配方法。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m52-r02",
+          "source_entity_id": "m52-e04",
+          "target_entity_id": "m52-e03",
+          "type": "depends_on",
+          "evidence_text": "管风琴算法基于 Zipf 定律产生。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m52-r03",
+          "source_entity_id": "m52-e04",
+          "target_entity_id": "m52-e06",
+          "type": "applied_in",
+          "evidence_text": "管风琴算法用于视频服务器上多部电影的存储。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "manual_gold_补充_v1：覆盖 Zipf 定律 depends_on、管风琴算法 applied_in 视频服务器。",
+      "reviewer_decision": "accepted_with_notes",
+      "reviewer_confidence": "high",
+      "gold_seed": true,
+      "gold_seed_version": "manual_gold_补充_v1"
     },
     {
       "id": "audit-ext-0017-aba43112ef",
@@ -2470,11 +2921,120 @@
       "page_end": 396,
       "audit_priority": "medium",
       "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：第十二章 保护和安全；命中高价值信号：关系表达较密集、术语/别名信号、存在步骤或列表结构、跨页样本",
-      "gold_entities": [],
-      "gold_relations": [],
-      "annotation_notes": "",
-      "reviewer_decision": "",
-      "reviewer_confidence": ""
+      "gold_entities": [
+        {
+          "entity_id": "m27-e01",
+          "name": "第十二章 保护和安全",
+          "type": "Chapter",
+          "alias": [],
+          "span_text": "第十二章 保护和安全",
+          "normalized_name": "第十二章 保护和安全",
+          "notes": ""
+        },
+        {
+          "entity_id": "m27-e02",
+          "name": "12.3 用户验证",
+          "type": "Section",
+          "alias": [],
+          "span_text": "12.3 用户验证",
+          "normalized_name": "12.3 用户验证",
+          "notes": ""
+        },
+        {
+          "entity_id": "m27-e03",
+          "name": "用户验证",
+          "type": "Concept",
+          "alias": [
+            "验证",
+            "识别",
+            "认证",
+            "Authentication"
+          ],
+          "span_text": "用户验证",
+          "normalized_name": "用户验证",
+          "notes": ""
+        },
+        {
+          "entity_id": "m27-e04",
+          "name": "所知",
+          "type": "Concept",
+          "alias": [
+            "knowledge"
+          ],
+          "span_text": "所知(knowledge)",
+          "normalized_name": "所知",
+          "notes": ""
+        },
+        {
+          "entity_id": "m27-e05",
+          "name": "所有",
+          "type": "Concept",
+          "alias": [
+            "possesses"
+          ],
+          "span_text": "所有(possesses)",
+          "normalized_name": "所有",
+          "notes": ""
+        },
+        {
+          "entity_id": "m27-e06",
+          "name": "用户特征",
+          "type": "Concept",
+          "alias": [
+            "characteristics"
+          ],
+          "span_text": "用户特征(characteristics)",
+          "normalized_name": "用户特征",
+          "notes": ""
+        }
+      ],
+      "gold_relations": [
+        {
+          "relation_id": "m27-r01",
+          "source_entity_id": "m27-e01",
+          "target_entity_id": "m27-e02",
+          "type": "contains",
+          "evidence_text": "第十二章 / 12.3 用户验证。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m27-r02",
+          "source_entity_id": "m27-e02",
+          "target_entity_id": "m27-e03",
+          "type": "contains",
+          "evidence_text": "12.3 节介绍用户验证概念。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m27-r03",
+          "source_entity_id": "m27-e03",
+          "target_entity_id": "m27-e04",
+          "type": "contains",
+          "evidence_text": "身份验证依据所知信息。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m27-r04",
+          "source_entity_id": "m27-e03",
+          "target_entity_id": "m27-e05",
+          "type": "contains",
+          "evidence_text": "身份验证依据所有物品。",
+          "notes": ""
+        },
+        {
+          "relation_id": "m27-r05",
+          "source_entity_id": "m27-e03",
+          "target_entity_id": "m27-e06",
+          "type": "contains",
+          "evidence_text": "身份验证依据用户特征。",
+          "notes": ""
+        }
+      ],
+      "annotation_notes": "manual_gold_补充_v1：覆盖概念分类 contains 和术语别名。",
+      "reviewer_decision": "accepted_with_notes",
+      "reviewer_confidence": "high",
+      "gold_seed": true,
+      "gold_seed_version": "manual_gold_补充_v1"
     }
   ]
 }
