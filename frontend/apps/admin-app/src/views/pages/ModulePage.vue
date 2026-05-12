@@ -2534,6 +2534,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="module-page">
   <section class="module-hero">
     <div>
       <p v-if="config.eyebrow" class="eyebrow">{{ config.eyebrow }}</p>
@@ -4041,4 +4042,5 @@ onBeforeUnmount(() => {
       </ol>
     </article>
   </section>
+  </div>
 </template>
