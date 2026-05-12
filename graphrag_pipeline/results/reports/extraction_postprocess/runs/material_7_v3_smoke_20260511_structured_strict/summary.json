@@ -1,0 +1,85 @@
+{
+  "task": "relationship_postprocess",
+  "mode": "strict",
+  "source_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_smoke_20260511",
+  "output_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_smoke_20260511_structured_strict",
+  "output_run_id": "material_7_v3_smoke_20260511_structured_strict",
+  "candidate_summaries": {
+    "default": {
+      "mode": "strict",
+      "original_relationship_count": 52,
+      "kept_relationship_count": 48,
+      "dropped_relationship_count": 4,
+      "repaired_relationship_count": 3,
+      "actions": {
+        "drop_invalid_relationship": 4,
+        "convert_belongs_to_taxonomy_to_contains": 3
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 3,
+        "semantic_defined_by_term_needs_symbol_cue": 1
+      }
+    },
+    "default_guarded": {
+      "mode": "strict",
+      "original_relationship_count": 56,
+      "kept_relationship_count": 45,
+      "dropped_relationship_count": 11,
+      "repaired_relationship_count": 2,
+      "actions": {
+        "drop_invalid_relationship": 11,
+        "convert_belongs_to_taxonomy_to_contains": 2
+      },
+      "dropped_by_reason": {
+        "endpoint_type_mismatch": 1,
+        "missing_target": 9,
+        "semantic_defined_by_term_needs_symbol_cue": 1
+      }
+    },
+    "schema_aware_directional_v2": {
+      "mode": "strict",
+      "original_relationship_count": 48,
+      "kept_relationship_count": 41,
+      "dropped_relationship_count": 7,
+      "repaired_relationship_count": 3,
+      "actions": {
+        "convert_belongs_to_taxonomy_to_contains": 3,
+        "drop_invalid_relationship": 7
+      },
+      "dropped_by_reason": {
+        "missing_target": 5,
+        "endpoint_type_mismatch": 2
+      }
+    },
+    "schema_fewshot_distilled_v3": {
+      "mode": "strict",
+      "original_relationship_count": 47,
+      "kept_relationship_count": 41,
+      "dropped_relationship_count": 6,
+      "repaired_relationship_count": 4,
+      "actions": {
+        "convert_belongs_to_taxonomy_to_contains": 4,
+        "drop_invalid_relationship": 6
+      },
+      "dropped_by_reason": {
+        "missing_target": 4,
+        "endpoint_type_mismatch": 2
+      }
+    }
+  },
+  "totals": {
+    "original_relationship_count": 203,
+    "kept_relationship_count": 175,
+    "dropped_relationship_count": 28,
+    "repaired_relationship_count": 12,
+    "actions": {
+      "drop_invalid_relationship": 28,
+      "convert_belongs_to_taxonomy_to_contains": 12
+    },
+    "dropped_by_reason": {
+      "endpoint_type_mismatch": 8,
+      "semantic_defined_by_term_needs_symbol_cue": 2,
+      "missing_target": 18
+    }
+  }
+}

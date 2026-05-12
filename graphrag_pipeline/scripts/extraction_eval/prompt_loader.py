@@ -35,6 +35,15 @@ class CandidatePrompt:
     manifest_entry: dict[str, Any]
 
 
+def is_fallback_auto_tuned_entry(entry: dict[str, Any]) -> bool:
+    """判断候选是否只是 auto_tuned 占位回退，避免默认实验误评伪候选。"""
+
+    return (
+        str(entry.get("candidate_name") or "").strip() == "auto_tuned"
+        and str(entry.get("source_type") or "").strip() == "fallback_default_copy"
+    )
+
+
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -75,18 +84,33 @@ def resolve_manifest_path(path: str | Path | None, *, root: Path) -> Path:
 def load_samples(samples_path: Path, *, limit: int | None = None) -> list[dict[str, Any]]:
     payload = _read_json(samples_path)
     if isinstance(payload, list):
-        records = [item for item in payload if isinstance(item, dict)]
+        records = [_normalize_sample_record(item) for item in payload if isinstance(item, dict)]
     elif isinstance(payload, dict):
-        raw_records = payload.get("samples") or payload.get("records") or payload.get("items") or []
+        raw_records = (
+            payload.get("samples")
+            or payload.get("audit_samples")
+            or payload.get("records")
+            or payload.get("items")
+            or []
+        )
         if not isinstance(raw_records, list):
             raise ValueError(f"无法从样本文件识别样本列表：{samples_path}")
-        records = [item for item in raw_records if isinstance(item, dict)]
+        records = [_normalize_sample_record(item) for item in raw_records if isinstance(item, dict)]
     else:
         raise ValueError(f"样本文件格式不支持：{samples_path}")
 
     if limit is not None:
         return records[: max(0, limit)]
     return records
+
+
+def _normalize_sample_record(record: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(record)
+    if not str(normalized.get("sample_id") or "").strip():
+        sample_id = str(normalized.get("source_sample_id") or normalized.get("id") or "").strip()
+        if sample_id:
+            normalized["sample_id"] = sample_id
+    return normalized
 
 
 def load_schema_catalog(
@@ -128,6 +152,9 @@ def _build_schema_types(order: Sequence[str], items: dict[str, Any]) -> list[Sch
                 name=name,
                 label_zh=str(payload.get("label_zh") or name),
                 description=str(payload.get("description") or payload.get("extraction_hint") or "").strip(),
+                source_types=[str(item) for item in payload.get("source_types") or []],
+                target_types=[str(item) for item in payload.get("target_types") or []],
+                extraction_hint=str(payload.get("extraction_hint") or "").strip(),
             )
         )
     return result

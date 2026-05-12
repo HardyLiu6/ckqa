@@ -29,6 +29,9 @@ class SchemaTypeInfo(BaseModel):
     name: str
     label_zh: str = ""
     description: str = ""
+    source_types: list[str] = Field(default_factory=list)
+    target_types: list[str] = Field(default_factory=list)
+    extraction_hint: str = ""
 
 
 class SchemaCatalog(BaseModel):
@@ -57,10 +60,17 @@ class SchemaCatalog(BaseModel):
         )
 
     def render_relation_type_summary(self) -> str:
-        return "\n".join(
-            f'- `{item.name}`（{item.label_zh or item.name}）：{item.description or "未提供描述"}'
-            for item in self.relation_types
-        )
+        lines: list[str] = []
+        for item in self.relation_types:
+            parts = [item.description or "未提供描述"]
+            if item.source_types:
+                parts.append(f"source_types: {', '.join(item.source_types)}")
+            if item.target_types:
+                parts.append(f"target_types: {', '.join(item.target_types)}")
+            if item.extraction_hint and item.extraction_hint not in parts[0]:
+                parts.append(f"抽取提示: {item.extraction_hint}")
+            lines.append(f'- `{item.name}`（{item.label_zh or item.name}）：{"；".join(parts)}')
+        return "\n".join(lines)
 
 
 class ExtractionEntity(BaseModel):
@@ -71,13 +81,23 @@ class ExtractionEntity(BaseModel):
     id: str
     title: str
     type: str
+    alias: list[str] = Field(default_factory=list)
+    definition_text: str = ""
     description: str = ""
     evidence: str = ""
 
-    @field_validator("id", "title", "type", "description", "evidence", mode="before")
+    @field_validator("id", "title", "type", "definition_text", "description", "evidence", mode="before")
     @classmethod
     def _normalize_fields(cls, value: object) -> str:
         return _clean_text(value)
+
+    @field_validator("alias", mode="before")
+    @classmethod
+    def _normalize_alias(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        values = value if isinstance(value, list) else [value]
+        return [cleaned for item in values if (cleaned := _clean_text(item))]
 
 
 class ExtractionRelationship(BaseModel):

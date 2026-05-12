@@ -23,7 +23,13 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from finalize_candidate_prompt import PromptFinalizationError, finalize_candidate_prompt
+from finalize_candidate_prompt import (
+    PromptFinalizationError,
+    build_parser,
+    compute_file_sha256,
+    compute_scoring_report_sha256,
+    finalize_candidate_prompt,
+)
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -128,6 +134,19 @@ class TestFinalizeCandidatePrompt(unittest.TestCase):
                 active_payload["active_prompt_paths"]["extract_graph.txt"],
                 "prompts/final/auto_tuned/extract_graph.txt",
             )
+            self.assertEqual(active_payload["activation_policy"], "experimental_unbound")
+            self.assertFalse(active_payload["formal_activation_ready"])
+            self.assertTrue(active_payload["experimental"])
+            self.assertIn("scoring binding", active_payload["experimental_reason"])
+
+    def test_parser_keeps_scoring_binding_requirement_opt_in(self) -> None:
+        parser = build_parser()
+
+        default_args = parser.parse_args(["--candidate", "default"])
+        required_args = parser.parse_args(["--candidate", "default", "--require-scoring-binding"])
+
+        self.assertFalse(default_args.require_scoring_binding)
+        self.assertTrue(required_args.require_scoring_binding)
 
     def test_finalize_falls_back_to_default_paths_for_missing_optional_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -182,6 +201,245 @@ class TestFinalizeCandidatePrompt(unittest.TestCase):
                 finalize_candidate_prompt(root=root, candidate_name="missing")
 
             self.assertIn("missing", str(ctx.exception))
+
+    def test_finalize_requires_scoring_binding_before_any_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._make_workspace(root)
+            candidate_dir = root / "prompts" / "candidates" / "default"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "prompt.txt").write_text("candidate prompt\n", encoding="utf-8")
+            self._make_manifest(
+                root,
+                [
+                    {
+                        "candidate_name": "default",
+                        "files": {"prompt": str((candidate_dir / "prompt.txt").resolve())},
+                    }
+                ],
+            )
+            original_env = (root / ".env").read_text(encoding="utf-8")
+
+            with self.assertRaises(PromptFinalizationError) as ctx:
+                finalize_candidate_prompt(
+                    root=root,
+                    candidate_name="default",
+                    require_scoring_binding=True,
+                )
+
+            self.assertIn("scoring binding", str(ctx.exception))
+            self.assertEqual((root / ".env").read_text(encoding="utf-8"), original_env)
+            self.assertFalse((root / "prompts" / "final" / "default").exists())
+            self.assertFalse((root / "prompts" / "final" / "active_prompt.json").exists())
+
+    def test_finalize_validates_scoring_artifact_binding_before_mutating_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._make_workspace(root)
+            candidate_dir = root / "prompts" / "candidates" / "default"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "prompt.txt").write_text("bound candidate prompt\n", encoding="utf-8")
+            self._make_manifest(
+                root,
+                [
+                    {
+                        "candidate_name": "default",
+                        "files": {"prompt": str((candidate_dir / "prompt.txt").resolve())},
+                    }
+                ],
+            )
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_hash = compute_file_sha256(manifest_path)
+            scoring_report = root / "results" / "reports" / "extraction_scoring" / "runs" / "run-a" / "top_candidates.json"
+            binding = {
+                "run_id": "run-a",
+                "manifest_path": str(manifest_path.resolve()),
+                "manifest_sha256": manifest_hash,
+                "eval_file_sha256s": [],
+            }
+            _write_json(
+                scoring_report,
+                {
+                    "task": "extraction_score_top_candidates",
+                    "artifact_binding": dict(binding),
+                    "top_candidates": [
+                        {
+                            "candidate": "default",
+                            "parse_success_rate": 1.0,
+                            "gate_passed": True,
+                            "artifact_binding": {**binding, "candidate_id": "default"},
+                        }
+                    ],
+                    "all_candidates_ranked": [],
+                },
+            )
+            scoring_hash = compute_scoring_report_sha256(scoring_report)
+            payload = json.loads(scoring_report.read_text(encoding="utf-8"))
+            payload["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+            payload["top_candidates"][0]["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+            _write_json(scoring_report, payload)
+
+            report = finalize_candidate_prompt(
+                root=root,
+                candidate_name="default",
+                scoring_run_id="run-a",
+                scoring_report=scoring_report,
+                expected_manifest_sha256=manifest_hash,
+                expected_scoring_result_sha256=scoring_hash,
+                require_scoring_binding=True,
+            )
+
+            self.assertEqual(report["scoring_binding"]["run_id"], "run-a")
+            self.assertEqual(report["scoring_binding"]["scoring_result_sha256"], scoring_hash)
+            self.assertEqual(report["activation_policy"], "formal_scoring_bound")
+            self.assertTrue(report["formal_activation_ready"])
+            self.assertFalse(report["experimental"])
+            self.assertIsNone(report["experimental_reason"])
+            self.assertTrue(report["gate_passed"])
+            self.assertEqual(report["scoring_run_id"], "run-a")
+            self.assertEqual(report["manifest_sha256"], manifest_hash)
+            self.assertEqual(report["scoring_result_sha256"], scoring_hash)
+            env_text = (root / ".env").read_text(encoding="utf-8")
+            self.assertIn("GRAPHRAG_ACTIVE_PROMPT_CANDIDATE=default", env_text)
+
+    def test_finalize_requires_explicit_allow_when_scoring_gate_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._make_workspace(root)
+            candidate_dir = root / "prompts" / "candidates" / "default"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "prompt.txt").write_text("bound candidate prompt\n", encoding="utf-8")
+            self._make_manifest(
+                root,
+                [
+                    {
+                        "candidate_name": "default",
+                        "files": {"prompt": str((candidate_dir / "prompt.txt").resolve())},
+                    }
+                ],
+            )
+            original_env = (root / ".env").read_text(encoding="utf-8")
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_hash = compute_file_sha256(manifest_path)
+            scoring_report = root / "results" / "reports" / "extraction_scoring" / "runs" / "run-a" / "top_candidates.json"
+            binding = {
+                "run_id": "run-a",
+                "manifest_path": str(manifest_path.resolve()),
+                "manifest_sha256": manifest_hash,
+                "eval_file_sha256s": [],
+            }
+            _write_json(
+                scoring_report,
+                {
+                    "task": "extraction_score_top_candidates",
+                    "artifact_binding": dict(binding),
+                    "top_candidates": [
+                        {
+                            "candidate": "default",
+                            "parse_success_rate": 1.0,
+                            "gate_passed": False,
+                            "artifact_binding": {**binding, "candidate_id": "default"},
+                        }
+                    ],
+                    "all_candidates_ranked": [],
+                },
+            )
+            scoring_hash = compute_scoring_report_sha256(scoring_report)
+            payload = json.loads(scoring_report.read_text(encoding="utf-8"))
+            payload["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+            payload["top_candidates"][0]["artifact_binding"]["scoring_result_sha256"] = scoring_hash
+            _write_json(scoring_report, payload)
+
+            with self.assertRaises(PromptFinalizationError) as ctx:
+                finalize_candidate_prompt(
+                    root=root,
+                    candidate_name="default",
+                    scoring_run_id="run-a",
+                    scoring_report=scoring_report,
+                    expected_manifest_sha256=manifest_hash,
+                    expected_scoring_result_sha256=scoring_hash,
+                )
+
+            self.assertIn("gate_passed=False", str(ctx.exception))
+            self.assertEqual((root / ".env").read_text(encoding="utf-8"), original_env)
+
+            report = finalize_candidate_prompt(
+                root=root,
+                candidate_name="default",
+                scoring_run_id="run-a",
+                scoring_report=scoring_report,
+                expected_manifest_sha256=manifest_hash,
+                expected_scoring_result_sha256=scoring_hash,
+                allow_failed_scoring_gate=True,
+            )
+
+            self.assertFalse(report["scoring_binding"]["gate_passed"])
+            self.assertTrue(report["scoring_binding"]["allow_failed_scoring_gate"])
+            self.assertEqual(report["activation_policy"], "experimental_scoring_gate_failed")
+            self.assertFalse(report["formal_activation_ready"])
+            self.assertTrue(report["experimental"])
+            self.assertIn("gate", report["experimental_reason"])
+            env_text = (root / ".env").read_text(encoding="utf-8")
+            self.assertIn("GRAPHRAG_ACTIVE_PROMPT_CANDIDATE=default", env_text)
+
+    def test_finalize_rejects_stale_manifest_binding_without_env_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self._make_workspace(root)
+            candidate_dir = root / "prompts" / "candidates" / "default"
+            candidate_dir.mkdir(parents=True, exist_ok=True)
+            (candidate_dir / "prompt.txt").write_text("bound candidate prompt\n", encoding="utf-8")
+            self._make_manifest(
+                root,
+                [
+                    {
+                        "candidate_name": "default",
+                        "files": {"prompt": str((candidate_dir / "prompt.txt").resolve())},
+                    }
+                ],
+            )
+            original_env = (root / ".env").read_text(encoding="utf-8")
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            scoring_report = root / "results" / "reports" / "extraction_scoring" / "runs" / "run-a" / "top_candidates.json"
+            _write_json(
+                scoring_report,
+                {
+                    "artifact_binding": {
+                        "run_id": "run-a",
+                        "manifest_path": str(manifest_path.resolve()),
+                        "manifest_sha256": "0" * 64,
+                        "scoring_result_sha256": "1" * 64,
+                        "eval_file_sha256s": [],
+                    },
+                    "top_candidates": [
+                        {
+                            "candidate": "default",
+                            "parse_success_rate": 1.0,
+                            "gate_passed": True,
+                            "artifact_binding": {
+                                "run_id": "run-a",
+                                "candidate_id": "default",
+                                "manifest_sha256": "0" * 64,
+                                "scoring_result_sha256": "1" * 64,
+                            },
+                        }
+                    ],
+                },
+            )
+
+            with self.assertRaises(PromptFinalizationError) as ctx:
+                finalize_candidate_prompt(
+                    root=root,
+                    candidate_name="default",
+                    scoring_run_id="run-a",
+                    scoring_report=scoring_report,
+                    expected_manifest_sha256="0" * 64,
+                    expected_scoring_result_sha256="1" * 64,
+                )
+
+            self.assertIn("manifest hash", str(ctx.exception))
+            self.assertEqual((root / ".env").read_text(encoding="utf-8"), original_env)
+            self.assertFalse((root / "prompts" / "final" / "default" / "prompt.txt").exists())
 
 
 if __name__ == "__main__":

@@ -12,7 +12,11 @@ _SCRIPTS_DIR = _PROJECT_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from score_extraction_results import score_extraction_results
+from score_extraction_results import (
+    _load_fewshot_source_sample_ids,
+    _load_weights_from_path,
+    score_extraction_results,
+)
 
 
 ENTITY_SCHEMA = {
@@ -26,12 +30,24 @@ ENTITY_SCHEMA = {
 
 RELATION_SCHEMA = {
     "schema_version": "v1",
-    "relation_type_order": ["contains"],
+    "relation_type_order": ["contains", "defined_by", "applied_in", "depends_on"],
     "relation_types": {
         "contains": {
             "label_zh": "包含", "description": "包含",
             "source_types": ["Course"], "target_types": ["Chapter"],
-        }
+        },
+        "defined_by": {
+            "label_zh": "由…定义", "description": "定义",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
+        "applied_in": {
+            "label_zh": "应用于", "description": "应用",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
+        "depends_on": {
+            "label_zh": "依赖于", "description": "依赖",
+            "source_types": ["Course"], "target_types": ["Chapter"],
+        },
     },
 }
 
@@ -216,6 +232,984 @@ class TestEndToEnd(unittest.TestCase):
             # 非 git 根，git_sha 应为 None
             self.assertIn("git_sha", meta)
             self.assertIsNone(meta["git_sha"])
+
+    def test_fallback_auto_tuned_eval_is_skipped_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_dir = root / "prompts" / "candidates"
+            manifest_dir.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path = manifest_dir / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {"candidate_name": "default", "source_type": "default_adapted"},
+                            {"candidate_name": "auto_tuned", "source_type": "fallback_default_copy"},
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            default_eval = _make_eval("default", 1)
+            default_eval["manifest_file"] = str(manifest_path)
+            auto_eval = _make_eval("auto_tuned", 3)
+            auto_eval["manifest_file"] = str(manifest_path)
+            (eval_dir / "default.json").write_text(json.dumps(default_eval, ensure_ascii=False), encoding="utf-8")
+            (eval_dir / "auto_tuned.json").write_text(json.dumps(auto_eval, ensure_ascii=False), encoding="utf-8")
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=None,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=2,
+                overwrite=True,
+                run_id="skip-fallback",
+            )
+
+            self.assertEqual(summary["total_candidates"], 1)
+            self.assertEqual(summary["top_candidates"], ["default"])
+            self.assertEqual(summary["skipped_candidates"], ["auto_tuned"])
+            meta = json.loads(Path(summary["reports"]["run_meta"]).read_text(encoding="utf-8"))
+            self.assertEqual(meta["inputs"]["skipped_candidates"], ["auto_tuned"])
+
+    def test_empty_audit_gold_is_reported_as_unavailable_not_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "empty-gold"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(_make_eval("default", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "s1",
+                                "gold_entities": [],
+                                "gold_relations": [],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="empty-gold",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            best = top["top_candidates"][0]
+            self.assertFalse(top["inputs"]["audit_gold_available"])
+            self.assertIsNone(best["audit_entity_recall"])
+            self.assertIsNone(best["audit_entity_precision"])
+            self.assertIsNone(best["audit_relation_recall"])
+
+    def test_manual_gold_seed_coverage_required_before_audit_metrics_enabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "seed-coverage"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(_make_eval("default", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "s1",
+                                "gold_seed": True,
+                                "gold_seed_version": "manual_gold_seed_v1",
+                                "gold_entities": [
+                                    {
+                                        "entity_id": "g1",
+                                        "name": "操作系统",
+                                        "type": "Course",
+                                        "alias": [],
+                                    },
+                                    {
+                                        "entity_id": "g2",
+                                        "name": "第一章",
+                                        "type": "Chapter",
+                                        "alias": [],
+                                    },
+                                ],
+                                "gold_relations": [
+                                    {
+                                        "relation_id": "r1",
+                                        "source_entity_id": "g1",
+                                        "target_entity_id": "g2",
+                                        "type": "defined_by",
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="seed-coverage",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            best = top["top_candidates"][0]
+            self.assertTrue(top["inputs"]["audit_gold_available"])
+            self.assertFalse(top["inputs"]["gold_seed_coverage_passed"])
+            self.assertEqual(
+                sorted(top["inputs"]["gold_seed_missing_relation_types"]),
+                ["applied_in", "depends_on"],
+            )
+            self.assertIsNone(best["audit_entity_recall"])
+            self.assertIsNone(best["audit_entity_precision"])
+            self.assertIsNone(best["audit_relation_recall"])
+
+    def test_manual_gold_seed_coverage_accepts_newer_seed_versions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "seed-coverage-v2"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "material_7_audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(_make_eval("default", 1), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(
+                    {
+                        "audit_samples": [
+                            {
+                                "source_sample_id": "s1",
+                                "gold_seed": True,
+                                "gold_seed_version": "manual_gold_seed_v1",
+                                "gold_entities": [],
+                                "gold_relations": [
+                                    {"type": "defined_by"},
+                                ],
+                            },
+                            {
+                                "source_sample_id": "s2",
+                                "gold_seed": True,
+                                "gold_seed_version": "manual_gold_seed_v2",
+                                "gold_entities": [],
+                                "gold_relations": [
+                                    {"type": "applied_in"},
+                                    {"type": "depends_on"},
+                                ],
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="seed-coverage-v2",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(top["inputs"]["gold_seed_version"], "manual_gold_seed_*")
+            self.assertEqual(top["inputs"]["gold_seed_count"], 2)
+            self.assertEqual(
+                sorted(top["inputs"]["gold_seed_relation_types"]),
+                ["applied_in", "defined_by", "depends_on"],
+            )
+            self.assertTrue(top["inputs"]["gold_seed_coverage_passed"])
+
+    def test_scoring_report_contains_artifact_binding_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "binding"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path.write_text(
+                json.dumps({"candidates": [{"candidate_name": "default"}]}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            eval_payload = _make_eval("default", 1)
+            eval_payload["manifest_file"] = str(manifest_path)
+            (eval_dir / "default.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="binding",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            binding = top["artifact_binding"]
+            self.assertEqual(binding["run_id"], "binding")
+            self.assertEqual(binding["manifest_path"], str(manifest_path.resolve()))
+            self.assertRegex(binding["manifest_sha256"], r"^[0-9a-f]{64}$")
+            self.assertRegex(binding["scoring_result_sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(top["top_candidates"][0]["artifact_binding"]["candidate_id"], "default")
+            self.assertEqual(
+                top["top_candidates"][0]["artifact_binding"]["scoring_result_sha256"],
+                binding["scoring_result_sha256"],
+            )
+            self.assertEqual(len(binding["eval_file_sha256s"]), 1)
+
+    def test_schema_domain_relations_do_not_count_as_endpoint_invalid(self):
+        entity_schema = {
+            "schema_version": "v1",
+            "entity_types": {
+                "AlgorithmOrMethod": {"label_zh": "算法或方法", "description": "算法或方法"},
+                "KnowledgePoint": {"label_zh": "知识点", "description": "知识点"},
+                "Concept": {"label_zh": "概念", "description": "概念"},
+                "FormulaOrDefinition": {"label_zh": "公式或定义", "description": "公式或定义"},
+            },
+        }
+        relation_schema = {
+            "schema_version": "v1",
+            "relation_types": {
+                "applied_in": {
+                    "label_zh": "应用于",
+                    "description": "算法/方法/知识应用到知识主题或教学场景",
+                    "source_types": [
+                        "KnowledgePoint",
+                        "Concept",
+                        "Term",
+                        "FormulaOrDefinition",
+                        "AlgorithmOrMethod",
+                    ],
+                    "target_types": [
+                        "KnowledgePoint",
+                        "Concept",
+                        "Section",
+                        "Experiment",
+                        "Assignment",
+                        "ToolOrPlatform",
+                    ],
+                },
+                "defined_by": {
+                    "label_zh": "由…定义",
+                    "description": "由公式或定义界定",
+                    "source_types": [
+                        "KnowledgePoint",
+                        "Concept",
+                        "Term",
+                        "AlgorithmOrMethod",
+                    ],
+                    "target_types": ["FormulaOrDefinition", "Term"],
+                },
+            },
+        }
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "schema_aware",
+            "results": [
+                {
+                    "sample_id": "s1",
+                    "candidate": "schema_aware",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "银行家算法", "type": "AlgorithmOrMethod",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "死锁", "type": "KnowledgePoint",
+                         "description": "", "evidence": ""},
+                        {"id": "e3", "title": "高响应比优先调度算法", "type": "AlgorithmOrMethod",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "响应比公式", "type": "FormulaOrDefinition",
+                         "description": "", "evidence": ""},
+                        {"id": "e5", "title": "普通概念", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e6", "title": "弱相关概念解释", "type": "Concept",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "银行家算法", "target": "死锁", "type": "applied_in",
+                         "description": "银行家算法用于死锁避免", "evidence": ""},
+                        {"source": "高响应比优先调度算法", "target": "响应比公式", "type": "defined_by",
+                         "description": "由响应比公式界定优先级", "evidence": ""},
+                        {"source": "普通概念", "target": "弱相关概念解释", "type": "defined_by",
+                         "description": "普通概念解释不能作为正式定义关系", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": None,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "schema-domain"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(entity_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(relation_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "schema_aware.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False), encoding="utf-8"
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="schema-domain",
+            )
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            best = top["top_candidates"][0]
+            self.assertEqual(best["endpoint_total_count"], 3)
+            self.assertEqual(best["endpoint_invalid_count"], 1)
+            self.assertAlmostEqual(best["endpoint_valid_rate"], 2 / 3)
+            self.assertEqual(best["invalid_endpoint_combinations"][0]["relation_type"], "defined_by")
+            self.assertEqual(best["invalid_endpoint_combinations"][0]["source_type"], "Concept")
+            self.assertEqual(best["invalid_endpoint_combinations"][0]["target_type"], "Concept")
+
+    def test_endpoint_error_summary_artifacts_are_written_and_linked(self):
+        entity_schema = {
+            "schema_version": "v1",
+            "entity_types": {
+                "Course": {"label_zh": "课程", "description": "课程"},
+                "Chapter": {"label_zh": "章节", "description": "章节"},
+                "Concept": {"label_zh": "概念", "description": "概念"},
+            },
+        }
+        relation_schema = {
+            "schema_version": "v1",
+            "relation_types": {
+                "contains": {
+                    "label_zh": "包含",
+                    "description": "包含",
+                    "source_types": ["Course"],
+                    "target_types": ["Chapter"],
+                },
+                "defined_by": {
+                    "label_zh": "由...定义",
+                    "description": "定义",
+                    "source_types": ["Course"],
+                    "target_types": ["Chapter"],
+                },
+            },
+        }
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "alpha",
+            "results": [
+                {
+                    "sample_id": "s1",
+                    "candidate": "alpha",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "第一章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                        {"id": "e3", "title": "普通概念", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "概念解释", "type": "Concept",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "普通概念", "target": "概念解释", "type": "defined_by",
+                         "description": "", "evidence": ""},
+                        {"source": "普通概念", "target": "概念解释", "type": "defined_by",
+                         "description": "重复端点错误", "evidence": ""},
+                        {"source": "第一章", "target": "操作系统", "type": "contains",
+                         "description": "章节不能包含课程", "evidence": ""},
+                        {"source": "操作系统", "target": "第一章", "type": "contains",
+                         "description": "有效端点", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": None,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "endpoint-summary"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(entity_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(relation_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "alpha.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="endpoint-summary",
+            )
+
+            json_path = Path(summary["reports"]["endpoint_error_summary_json"])
+            md_path = Path(summary["reports"]["endpoint_error_summary_md"])
+            self.assertTrue(json_path.exists())
+            self.assertTrue(md_path.exists())
+
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["task"], "endpoint_error_summary")
+            self.assertEqual(payload["run_id"], "endpoint-summary")
+            self.assertEqual([row["count"] for row in payload["rows"]], [2, 1])
+            self.assertEqual(payload["rows"][0]["candidate"], "alpha")
+            self.assertEqual(payload["rows"][0]["relation_type"], "defined_by")
+            self.assertEqual(payload["rows"][0]["source_type"], "Concept")
+            self.assertEqual(payload["rows"][0]["target_type"], "Concept")
+            self.assertIn("suggested_action", payload["rows"][0])
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                top["inputs"]["endpoint_error_summary_paths"]["json"],
+                str(json_path),
+            )
+            meta = json.loads(Path(summary["reports"]["run_meta"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                meta["inputs"]["endpoint_error_summary_paths"]["markdown"],
+                str(md_path),
+            )
+            compare_markdown = Path(summary["reports"]["markdown"]).read_text(encoding="utf-8")
+            self.assertIn("endpoint_error_summary.json", compare_markdown)
+
+    def test_drop_invalid_relation_validation_mode_filters_endpoint_failures_for_diagnostics(self):
+        entity_schema = {
+            "schema_version": "v1",
+            "entity_types": {
+                "Course": {"label_zh": "课程", "description": "课程"},
+                "Chapter": {"label_zh": "章节", "description": "章节"},
+                "Section": {"label_zh": "小节", "description": "小节"},
+                "Concept": {"label_zh": "概念", "description": "概念"},
+                "Term": {"label_zh": "术语", "description": "术语"},
+            },
+        }
+        relation_schema = {
+            "schema_version": "v1",
+            "relation_types": {
+                "contains": {
+                    "label_zh": "包含",
+                    "description": "包含",
+                    "source_types": ["Course"],
+                    "target_types": ["Chapter"],
+                },
+                "appears_in": {
+                    "label_zh": "出现于",
+                    "description": "弱定位",
+                    "source_types": ["Concept", "Term"],
+                    "target_types": ["Course", "Chapter", "Section"],
+                },
+                "belongs_to": {
+                    "label_zh": "属于",
+                    "description": "结构归属",
+                    "source_types": ["Concept", "Term"],
+                    "target_types": ["Course", "Chapter", "Section"],
+                },
+                "defined_by": {
+                    "label_zh": "由...定义",
+                    "description": "定义",
+                    "source_types": ["Concept"],
+                    "target_types": ["Term"],
+                },
+            },
+        }
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "default",
+            "results": [
+                {
+                    "sample_id": "s1",
+                    "candidate": "default",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "第一章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                        {"id": "e3", "title": "习题", "type": "Section",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "进程", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e5", "title": "线程", "type": "Concept",
+                         "description": "", "evidence": ""},
+                        {"id": "e6", "title": "PCB", "type": "Term",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第一章", "type": "contains",
+                         "description": "有效结构关系", "evidence": ""},
+                        {"source": "习题", "target": "进程", "type": "appears_in",
+                         "description": "反向位置关系", "evidence": ""},
+                        {"source": "进程", "target": "线程", "type": "belongs_to",
+                         "description": "概念分类误用 belongs_to", "evidence": ""},
+                        {"source": "进程", "target": "PCB", "type": "defined_by",
+                         "description": "PCB 是进程控制块简称，不是符号公式", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": None,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "validation-mode"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(entity_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(relation_schema, ensure_ascii=False), encoding="utf-8"
+            )
+            (eval_dir / "default.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            raw_summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="validation-raw",
+                relation_validation_mode="raw",
+            )
+            drop_summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=None,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="validation-drop",
+                relation_validation_mode="drop-invalid",
+            )
+
+            raw_top = json.loads(Path(raw_summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            raw_best = raw_top["top_candidates"][0]
+            self.assertEqual(raw_best["endpoint_total_count"], 4)
+            self.assertEqual(raw_best["endpoint_invalid_count"], 3)
+            self.assertAlmostEqual(raw_best["endpoint_valid_rate"], 0.25)
+
+            drop_top = json.loads(Path(drop_summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            drop_best = drop_top["top_candidates"][0]
+            self.assertEqual(drop_top["inputs"]["relation_validation_mode"], "drop-invalid")
+            self.assertEqual(drop_best["endpoint_total_count"], 1)
+            self.assertEqual(drop_best["endpoint_invalid_count"], 0)
+            self.assertAlmostEqual(drop_best["endpoint_valid_rate"], 1.0)
+            self.assertEqual(
+                drop_top["inputs"]["relation_validation_summary"]["default"],
+                {
+                    "mode": "drop-invalid",
+                    "original_relationship_count": 4,
+                    "kept_relationship_count": 1,
+                    "dropped_relationship_count": 3,
+                },
+            )
+
+            diagnostics_path = Path(drop_summary["reports"]["pipeline_failure_diagnostics_json"])
+            self.assertTrue(diagnostics_path.exists())
+            diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+            self.assertEqual(diagnostics["relation_validation_mode"], "drop-invalid")
+            self.assertEqual(diagnostics["parse_and_leak_flags"]["default"]["output_leak_flag_count"], 0)
+
+    def test_leakage_diagnostics_split_overlap_and_holdout_from_manifest_notes(self):
+        eval_payload = {
+            "task": "candidate_extraction",
+            "candidate": "schema_fewshot",
+            "manifest_file": "prompts/candidates/manifest.json",
+            "results": [
+                {
+                    "sample_id": "s_overlap",
+                    "candidate": "schema_fewshot",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e1", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e2", "title": "第一章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第一章", "type": "contains",
+                         "description": "", "evidence": ""},
+                        {"source": "操作系统", "target": "第一章", "type": "defined_by",
+                         "description": "", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": {
+                        "usage": {
+                            "prompt_tokens": 10,
+                            "completion_tokens": 5,
+                            "total_tokens": 15,
+                        }
+                    },
+                },
+                {
+                    "sample_id": "s_holdout",
+                    "candidate": "schema_fewshot",
+                    "status": "success",
+                    "entities": [
+                        {"id": "e3", "title": "操作系统", "type": "Course",
+                         "description": "", "evidence": ""},
+                        {"id": "e4", "title": "第二章", "type": "Chapter",
+                         "description": "", "evidence": ""},
+                    ],
+                    "relationships": [
+                        {"source": "操作系统", "target": "第二章", "type": "applied_in",
+                         "description": "", "evidence": ""},
+                        {"source": "第二章", "target": "操作系统", "type": "contains",
+                         "description": "反向端点错误", "evidence": ""},
+                    ],
+                    "raw_output": "",
+                    "error": None,
+                    "parser_error_code": None,
+                    "llm_debug": {
+                        "usage": {
+                            "prompt_tokens": 20,
+                            "completion_tokens": 6,
+                            "total_tokens": 26,
+                        }
+                    },
+                },
+            ],
+        }
+
+        audit_payload = {
+            "audit_samples": [
+                {
+                    "source_sample_id": "s_overlap",
+                    "gold_seed": True,
+                    "gold_seed_version": "manual_gold_seed_v1",
+                    "gold_entities": [
+                        {"entity_id": "g1", "name": "操作系统", "type": "Course", "alias": []},
+                        {"entity_id": "g2", "name": "第一章", "type": "Chapter", "alias": []},
+                    ],
+                    "gold_relations": [
+                        {
+                            "relation_id": "r1",
+                            "source_entity_id": "g1",
+                            "target_entity_id": "g2",
+                            "type": "defined_by",
+                        }
+                    ],
+                },
+                {
+                    "source_sample_id": "s_holdout",
+                    "gold_seed": True,
+                    "gold_seed_version": "manual_gold_seed_v1",
+                    "gold_entities": [
+                        {"entity_id": "g3", "name": "操作系统", "type": "Course", "alias": []},
+                        {"entity_id": "g4", "name": "第二章", "type": "Chapter", "alias": []},
+                    ],
+                    "gold_relations": [
+                        {
+                            "relation_id": "r2",
+                            "source_entity_id": "g3",
+                            "target_entity_id": "g4",
+                            "type": "applied_in",
+                        },
+                        {
+                            "relation_id": "r3",
+                            "source_entity_id": "g3",
+                            "target_entity_id": "g4",
+                            "type": "depends_on",
+                        },
+                    ],
+                },
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            eval_dir = root / "results" / "extraction_eval" / "runs" / "leakage"
+            eval_dir.mkdir(parents=True)
+            (root / "config" / "schema").mkdir(parents=True)
+            manifest_path = root / "prompts" / "candidates" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+            audit_path = root / "data" / "eval" / "audit_extraction_set.json"
+            audit_path.parent.mkdir(parents=True)
+
+            (root / "config" / "schema" / "entity_types.json").write_text(
+                json.dumps(ENTITY_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            (root / "config" / "schema" / "relation_types.json").write_text(
+                json.dumps(RELATION_SCHEMA, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "candidate_name": "schema_fewshot",
+                                "source_type": "schema_fewshot",
+                                "fewshot_used": True,
+                                "notes": ["few-shot 来源样本：s_overlap"],
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (eval_dir / "schema_fewshot.json").write_text(
+                json.dumps(eval_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            audit_path.write_text(
+                json.dumps(audit_payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            summary = score_extraction_results(
+                root=root,
+                eval_dir=eval_dir,
+                entity_schema_path=None,
+                relation_schema_path=None,
+                audit_path=audit_path,
+                weights=None,
+                top_k=1,
+                overwrite=True,
+                run_id="leakage",
+            )
+
+            json_path = Path(summary["reports"]["leakage_diagnostics_json"])
+            md_path = Path(summary["reports"]["leakage_diagnostics_md"])
+            self.assertTrue(json_path.exists())
+            self.assertTrue(md_path.exists())
+
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["fewshot_source_sample_ids"], ["s_overlap"])
+            groups = payload["candidates"]["schema_fewshot"]["groups"]
+            self.assertEqual(groups["all"]["sample_count"], 2)
+            self.assertEqual(groups["fewshot_overlap"]["sample_count"], 1)
+            self.assertEqual(groups["holdout"]["sample_count"], 1)
+            self.assertEqual(groups["fewshot_overlap"]["endpoint_total_count"], 2)
+            self.assertEqual(groups["fewshot_overlap"]["endpoint_invalid_count"], 0)
+            self.assertEqual(groups["holdout"]["endpoint_total_count"], 2)
+            self.assertEqual(groups["holdout"]["endpoint_invalid_count"], 1)
+            self.assertAlmostEqual(groups["holdout"]["endpoint_valid_rate"], 0.5)
+            self.assertAlmostEqual(groups["all"]["average_entity_count"], 2.0)
+            self.assertAlmostEqual(groups["all"]["average_relation_count"], 2.0)
+            self.assertEqual(groups["all"]["token_usage"]["total"]["total_tokens"], 41)
+            self.assertAlmostEqual(groups["all"]["token_usage"]["mean"]["prompt_tokens"], 15.0)
+            self.assertAlmostEqual(groups["fewshot_overlap"]["audit_entity_recall"], 1.0)
+            self.assertAlmostEqual(groups["holdout"]["audit_relation_recall"], 0.5)
+
+            top = json.loads(Path(summary["reports"]["top_candidates_json"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                top["inputs"]["leakage_diagnostics_paths"]["json"],
+                str(json_path),
+            )
+            meta = json.loads(Path(summary["reports"]["run_meta"]).read_text(encoding="utf-8"))
+            self.assertEqual(
+                meta["inputs"]["leakage_diagnostics_paths"]["markdown"],
+                str(md_path),
+            )
+            compare_markdown = Path(summary["reports"]["markdown"]).read_text(encoding="utf-8")
+            self.assertIn("leakage_diagnostics.json", compare_markdown)
+
+    def test_loads_distilled_fewshot_source_ids_from_structured_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "candidates": [
+                            {
+                                "candidate_name": "schema_aware_directional",
+                                "source_type": "schema_aware_directional",
+                                "source_sample_ids": ["ignored"],
+                            },
+                            {
+                                "candidate_name": "schema_fewshot_distilled",
+                                "source_type": "schema_fewshot_distilled",
+                                "source_sample_ids": ["s1", "s2"],
+                                "fewshot_coverage": {
+                                    "selected_source_sample_ids": ["s2", "s3"]
+                                },
+                            },
+                            {
+                                "candidate_name": "schema_fewshot_distilled_v2",
+                                "source_type": "schema_fewshot_distilled_v2",
+                                "source_sample_ids": ["s3", "s4"],
+                            },
+                            {
+                                "candidate_name": "schema_fewshot_distilled_v3",
+                                "source_type": "schema_fewshot_distilled_v3",
+                                "source_sample_ids": ["s4", "s5"],
+                            },
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                _load_fewshot_source_sample_ids(manifest_path),
+                ["s1", "s2", "s3", "s4", "s5"],
+            )
+
+
+class TestLoadWeightsFromPath(unittest.TestCase):
+    def test_numeric_fields_are_loaded_and_metadata_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "profile": "audit_heavy_v1",
+                        "notes": ["metadata should be stripped"],
+                        "parse_success_rate": 0.2,
+                        "audit_relation_recall": 0.3,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            weights = _load_weights_from_path(path)
+
+            self.assertEqual(weights, {"parse_success_rate": 0.2, "audit_relation_recall": 0.3})
+            self.assertNotIn("schema_version", weights)
+            self.assertNotIn("notes", weights)
+
+    def test_raises_when_no_numeric_field(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(
+                json.dumps({"schema_version": "v1", "profile": "empty"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError):
+                _load_weights_from_path(path)
+
+    def test_raises_when_payload_is_not_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "weights.json"
+            path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                _load_weights_from_path(path)
 
 
 if __name__ == "__main__":

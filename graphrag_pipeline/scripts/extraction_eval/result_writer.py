@@ -14,18 +14,28 @@ from typing import Any, Iterable
 from .extraction_schema import StructuredExtractionResult
 
 
-def ensure_candidate_output_paths(*, root: Path, candidate_name: str, overwrite: bool) -> dict[str, Path]:
+def _run_subdir(base: Path, run_id: str | None) -> Path:
+    return base / "runs" / run_id if run_id else base
+
+
+def ensure_candidate_output_paths(
+    *,
+    root: Path,
+    candidate_name: str,
+    overwrite: bool,
+    run_id: str | None = None,
+) -> dict[str, Path]:
     paths = {
-        "eval": (root / "results" / "extraction_eval" / f"{candidate_name}.json").resolve(),
-        "raw": (root / "results" / "extraction_raw" / f"{candidate_name}.jsonl").resolve(),
-        "log": (root / "results" / "logs" / f"extraction_{candidate_name}.log").resolve(),
+        "eval": (_run_subdir(root / "results" / "extraction_eval", run_id) / f"{candidate_name}.json").resolve(),
+        "raw": (_run_subdir(root / "results" / "extraction_raw", run_id) / f"{candidate_name}.jsonl").resolve(),
+        "log": (_run_subdir(root / "results" / "logs", run_id) / f"extraction_{candidate_name}.log").resolve(),
     }
     _ensure_writable((paths["eval"], paths["raw"]), overwrite=overwrite)
     return paths
 
 
-def ensure_parse_error_path(*, root: Path, overwrite: bool) -> Path:
-    path = (root / "results" / "errors" / "extraction_parse_errors.jsonl").resolve()
+def ensure_parse_error_path(*, root: Path, overwrite: bool, run_id: str | None = None) -> Path:
+    path = (_run_subdir(root / "results" / "errors", run_id) / "extraction_parse_errors.jsonl").resolve()
     _ensure_writable([path], overwrite=overwrite)
     return path
 
@@ -39,8 +49,14 @@ def write_candidate_outputs(
     manifest_file: Path,
     model: str,
     overwrite: bool,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
-    paths = ensure_candidate_output_paths(root=root, candidate_name=candidate_name, overwrite=overwrite)
+    paths = ensure_candidate_output_paths(
+        root=root,
+        candidate_name=candidate_name,
+        overwrite=overwrite,
+        run_id=run_id,
+    )
 
     summary = _summarize_results(results)
     eval_payload = {
@@ -49,6 +65,7 @@ def write_candidate_outputs(
         "model": model,
         "samples_file": str(samples_file.resolve()),
         "manifest_file": str(manifest_file.resolve()),
+        "run_id": run_id,
         "summary": summary,
         "results": [result.model_dump(mode="json") for result in results],
     }

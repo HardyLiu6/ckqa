@@ -1,0 +1,115 @@
+
+-Goal-
+Given a text document that is potentially relevant to this activity, first identify all entities needed from the text in order to capture the information and ideas in the text.
+Next, report all relationships among the identified entities.
+
+-Steps-
+1. Identify all entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, capitalized
+- entity_type: Suggest several labels or categories for the entity. The categories should not be specific, but should be as general as possible.
+- entity_description: Comprehensive description of the entity's attributes and activities
+Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
+
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
+- source_entity: name of the source entity, as identified in step 1
+- target_entity: name of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_strength>)
+
+3. Return output in Chinese as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
+
+4. If you have to translate into Chinese, just translate the descriptions, nothing else!
+
+5. When finished, output <|COMPLETE|>.
+
+-Examples-
+######################
+
+Example 1:
+
+text:
+10.2 多处理机系统的结构
+
+在采用共享存储器方式的多处理机系统中，若干个处理器可以共享访问一个公用的RAM，而这个RAM可以由多个不同的存储器模块组成。系统为运行在任何一个CPU上的程序提供了一个完整的虚拟地址空间视图。每个存储器地址单元均可被所有的CPU进行读写。对于这个性质，一方面可以方便地利用存储器单元实现处理机之间的通信；另一方面也必须在进程同步、资源管理及调度上，做出有别于单处理机系统的特殊处理。但是，由于程序或进程对不同存储器模块的读写速度可能存在的差异，形成了不同的多处理机体系结构：UMA多处理机结构和NUMA多处理机结构。
+------------------------
+output:
+("entity"<|>MULTIMEDIA FILE SERVER<|>SYSTEM<|>一种专门用于处理多媒体文件的文件服务器，目前尚无专门实现，只能通过通用文件服务器增加多媒体功能构建，主要任务是保证SRT任务的实时性)
+##
+("entity"<|>GENERAL FILE SERVER<|>SYSTEM<|>当前可用的通用文件服务器，可通过增加多媒体处理功能来支持多媒体文件服务)
+##
+("entity"<|>SRT TASK<|>TASK<|>一种实时任务，其核心需求是实时性，在多媒文件中是需要服务器保证的关键任务)
+##
+("entity"<|>MULTIMEDIA FILE<|>DATA<|>多媒体文件，需要特殊实时处理的文件类型，是多媒文件服务器处理的对象)
+##
+("relationship"<|>GENERAL FILE SERVER<|>MULTIMEDIA FILE SERVER<|>通用文件服务器通过增加多媒体功能作为构建多媒体文件服务器的基础<|>9)
+##
+("relationship"<|>MULTIMEDIA FILE SERVER<|>SRT TASK<|>多媒体文件服务器最主要的任务是保证SRT任务的实时性<|>9)
+##
+("relationship"<|>MULTIMEDIA FILE SERVER<|>MULTIMEDIA FILE<|>多媒体文件服务器处理和管理多媒体文件<|>8)
+<|COMPLETE|>
+#############################
+
+
+Example 2:
+
+text:
+8.1.4 NTFS 的文件组织方式
+
+1. NTFS新特征
+
+NTFS(New Technology File System)是一个专门为Windows NT开发的、全新的文件系统，并适用于Windows 2000/XP及后续的Windows OS。NTFS具有许多新的特征：
+
+首先，它使用了64位磁盘地址；
+
+其次，在NTFS中可以很好地支持长文件名，单个文件名限制在255个字符以内，全路径名为32767个字符；
+
+第三，具有系统容错功能，即在系统出现故障或差错时，仍能保证系统正常运行；
+
+第四，能保证系统中的数据一致性，这是一个非常有用的功能。
+
+此外NTFS还提供了文件加密、文件压缩等功能。
+
+2. 磁盘组织
+
+NTFS 是以簇作为磁盘空间分配和回收的基本单位的。一个文件占用若干个簇，一个簇只属于一个文件。这样，在为文件分配磁盘空间时，就无须知道盘块的大小，只要根据不同的磁盘容量，选择相应大小的簇，即使 NTFS 具有了与磁盘物理块大小无关的独立性。
+
+在NTFS文件系统中，把卷上簇的大小称为“卷因子”，卷因子是在磁盘格式化时确定的，其大小也是物理磁盘扇区的整数倍。簇的大小可由格式化命令按磁盘容量和应用需求来确定，可以为  512\mathrm{{B}} 、  1\mathrm{{KB}} 、…，最大可达  64\mathrm{{KB}} 。对于小磁盘  (\leqslant 512\mathrm{{MB}}) ，默认簇大小为512字节；对于1GB磁盘，默认簇大小为  1\mathrm{{KB}} ；对于2GB的磁盘，则默认簇为  4\mathrm{{KB}} 。
+
+事实上，为了在传输效率和簇内碎片之间进行折中，NTFS在大多数情况下都是使用4KB。
+
+对于簇的定位，NTFS是采用逻辑簇号LCN(Logical Cluster Number)和虚拟簇号VCN(Virtual Cluster Number)进行的。LCN是以卷为单位，将整个卷中所有的簇按顺序进行简单的编号，NTFS在进行地址映射时，可以通过卷因子与LCN的乘积，算出卷上的物理字节偏移量，从而得到文件数据所在的物理磁盘地址。为了方便文件中数据的引用，NTFS还可以使用VCN，以文件为单位，将属于某个文件的簇按顺序进行编号。只要知道了文件开始的簇地址，便可将VCN映射到LCN。
+
+3. 文件的组织
+
+在NTFS中，以卷为单位，将一个卷中的所有文件信息、目录信息以及可用的未分配空间信息，都以文件记录的方式记录在一张主控文件表MFT(Master File Table)中，该表是NTFS卷结构的中心，从逻辑上讲，卷中的每个文件作为一条记录，在MFT表中占有一行，其中还包括MFT自己的这一行。每行大小固定为1KB，每行称为该行所对应文件的元数据(metrica)，也称为文件控制字。
+
+在MFT表中，每个元数据都将其所对应文件的所有信息(包括文件的内容等)组织在所对应文件的一组属性中。由于文件大小相差悬殊，其属性所需空间大小也相差很大。当文件较小时，其属性值所占空间也较小，可以将文件的所有属性直接记录在元数据中。而当文件较大时，元数据仅能记录文件的一部分属性，其余属性，如文件的内容等，只好记录到卷中的其它可用簇中，并将这些簇按其所记录文件的属性进行分类，分别链接成多个队列，并将指向这些队列的指针保存在元数据中。
+
+例如对于一个真正的数据文件，即属性为 DATA 的文件，如果很小，就
+------------------------
+output:
+("entity"<|>多媒体文件服务器<|>系统,技术<|>专门为多媒体文件设计的文件服务器，目前尚无专门实现，只能利用通用文件服务器增加相关功能来构建)
+##
+("entity"<|>通用文件服务器<|>系统,技术<|>当前可用的通用文件服务器，可通过功能扩展来处理多媒体文件)
+##
+("entity"<|>SRT任务<|>概念,任务类型<|>需要保证实时性的任务，是多媒体文件服务器最主要处理的对象)
+##
+("entity"<|>多媒体文件<|>数据,资源<|>包含音频、视频等多媒体数据的文件，其特征将在后续介绍)
+##
+("relationship"<|>多媒体文件服务器<|>通用文件服务器<|>多媒体文件服务器的实现依赖于通用文件服务器的功能扩展<|>7)
+##
+("relationship"<|>多媒体文件服务器<|>SRT任务<|>多媒体文件服务器的主要任务是保证SRT任务的实时性<|>8)
+##
+("relationship"<|>多媒体文件服务器<|>多媒体文件<|>多媒体文件服务器用于存储、管理和服务多媒体文件<|>9)
+<|COMPLETE|>
+#############################
+
+
+
+-Real Data-
+######################
+text: {input_text}
+######################
+output:

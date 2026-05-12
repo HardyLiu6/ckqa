@@ -20,6 +20,8 @@ from scoring_metrics import (
     HARD_METRIC_KEYS,
     SOFT_METRIC_KEYS,
     aggregate_candidate_metrics,
+    analyze_endpoint_validity,
+    can_derive_inverse_relation,
     compute_composite_hard,
     compute_composite_score,
     compute_composite_soft,
@@ -151,6 +153,7 @@ class TestTypeValidity(unittest.TestCase):
 RELATION_SCHEMA = {
     "contains": {"source_types": ["Course", "Chapter"], "target_types": ["Chapter", "Concept"]},
     "related_to": {"source_types": ["Concept"], "target_types": ["Concept"]},
+    "defined_by": {"source_types": ["Concept"], "target_types": ["FormulaOrDefinition", "Term"]},
 }
 
 
@@ -188,6 +191,72 @@ class TestEndpointValidRate(unittest.TestCase):
         ]
         self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 0.0)
 
+    def test_missing_endpoint_reasons_take_priority_over_schema_candidate(self):
+        schema = {
+            "contains": {
+                "source_types": [
+                    "Course",
+                    "Chapter",
+                    "KnowledgePoint",
+                    "Concept",
+                    "AlgorithmOrMethod",
+                ],
+                "target_types": [
+                    "Chapter",
+                    "KnowledgePoint",
+                    "Concept",
+                    "AlgorithmOrMethod",
+                ],
+            }
+        }
+        results = [
+            _success_result(
+                [{"id": "e1", "title": "LRU页面置换算法", "type": "AlgorithmOrMethod"}],
+                [
+                    {
+                        "source": "LRU页面置换算法",
+                        "target": "最近最少使用原则",
+                        "type": "contains",
+                        "description": "算法包含最近最少使用原则。",
+                        "evidence": "LRU页面置换算法依据最近最少使用原则。",
+                    },
+                    {
+                        "source": "缺失的算法实体",
+                        "target": "LRU页面置换算法",
+                        "type": "contains",
+                        "description": "缺失源实体的关系。",
+                        "evidence": "示例证据。",
+                    },
+                    {
+                        "source": "缺失的源实体",
+                        "target": "缺失的目标实体",
+                        "type": "contains",
+                        "description": "两端都缺失的关系。",
+                        "evidence": "示例证据。",
+                    },
+                ],
+            )
+        ]
+
+        analysis = analyze_endpoint_validity(results, schema)
+
+        self.assertEqual(analysis["invalid_count"], 3)
+        combos_by_reason = {
+            combo["reason"]: combo for combo in analysis["invalid_combinations"]
+        }
+        self.assertEqual(
+            set(combos_by_reason),
+            {"missing_source", "missing_target", "missing_endpoint"},
+        )
+        self.assertEqual(
+            combos_by_reason["missing_target"]["source_type"], "AlgorithmOrMethod"
+        )
+        self.assertIsNone(combos_by_reason["missing_target"]["target_type"])
+        for combo in combos_by_reason.values():
+            self.assertEqual(
+                combo["suggested_action"], "complete_entity_or_skip_relation"
+            )
+
     def test_invalid_relation_type_excluded_from_denominator(self):
         results = [
             _success_result(
@@ -208,6 +277,151 @@ class TestEndpointValidRate(unittest.TestCase):
             )
         ]
         self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+    def test_defined_by_term_symbol_endpoint_is_valid(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "工作集", "type": "Concept"},
+                    {"id": "e2", "title": "Δ", "type": "Term"},
+                ],
+                [
+                    {
+                        "source": "工作集",
+                        "target": "Δ",
+                        "type": "defined_by",
+                        "description": "工作集由窗口尺寸符号 Δ 参数化定义。",
+                        "evidence": "变量 Δ 称为工作集的窗口尺寸。",
+                    }
+                ],
+            )
+        ]
+        self.assertEqual(compute_endpoint_valid_rate(results, RELATION_SCHEMA), 1.0)
+
+    def test_defined_by_term_alias_endpoint_is_invalid(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "TLB", "type": "Concept"},
+                    {"id": "e2", "title": "Translation Lookaside Buffer", "type": "Term"},
+                ],
+                [
+                    {
+                        "source": "TLB",
+                        "target": "Translation Lookaside Buffer",
+                        "type": "defined_by",
+                        "description": "TLB 是 Translation Lookaside Buffer 的缩写。",
+                        "evidence": "Translation Lookaside Buffer，TLB",
+                    }
+                ],
+            )
+        ]
+        analysis = analyze_endpoint_validity(results, RELATION_SCHEMA)
+        self.assertEqual(analysis["valid_rate"], 0.0)
+        self.assertEqual(analysis["invalid_count"], 1)
+        self.assertEqual(
+            analysis["invalid_combinations"][0]["suggested_action"],
+            "alias_not_relation",
+        )
+
+    def test_endpoint_analysis_groups_invalid_combinations_with_suggested_action(self):
+        results = [
+            _success_result(
+                [
+                    {"id": "e1", "title": "关键字", "type": "Concept"},
+                    {"id": "e2", "title": "记录", "type": "Concept"},
+                ],
+                [
+                    {
+                        "source": "关键字",
+                        "target": "记录",
+                        "type": "contains",
+                        "description": "关键字和记录在同一段出现。",
+                        "evidence": "关键字是唯一能标识一个记录的数据项。",
+                    }
+                ],
+            )
+        ]
+        analysis = analyze_endpoint_validity(results, RELATION_SCHEMA)
+        self.assertEqual(analysis["total"], 1)
+        self.assertEqual(analysis["valid"], 0)
+        self.assertEqual(analysis["invalid_combinations"][0]["relation_type"], "contains")
+        self.assertIn("suggested_action", analysis["invalid_combinations"][0])
+
+    def test_contains_inverse_derivation_is_limited_to_structural_sources(self):
+        schema = {
+            "contains": {
+                "inverse_of": None,
+                "derivable_inverse": {
+                    "relation": "belongs_to",
+                    "only_when_source_types": ["Course", "Chapter", "Section"],
+                },
+            }
+        }
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_legacy_inverse_derivation_constraints_remain_supported(self):
+        schema = {
+            "contains": {
+                "inverse_of": "belongs_to",
+                "derivation_constraints": {
+                    "derive_inverse_only_when_source_types": [
+                        "Course",
+                        "Chapter",
+                        "Section",
+                    ]
+                },
+            }
+        }
+
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_derivable_inverse_takes_priority_over_legacy_constraints(self):
+        schema = {
+            "contains": {
+                "inverse_of": "belongs_to",
+                "can_be_derived": True,
+                "derivable_inverse": {
+                    "relation": "belongs_to",
+                    "only_when_source_types": ["Course"],
+                },
+                "derivation_constraints": {
+                    "derive_inverse_only_when_source_types": ["Concept"]
+                },
+            }
+        }
+
+        self.assertTrue(can_derive_inverse_relation("contains", "Course", schema))
+        self.assertFalse(can_derive_inverse_relation("contains", "Concept", schema))
+
+    def test_dependency_relations_do_not_derive_inverse_edges(self):
+        schema = {
+            "depends_on": {
+                "inverse_of": None,
+                "can_be_derived": False,
+            },
+            "prerequisite_of": {
+                "inverse_of": None,
+                "can_be_derived": False,
+            },
+        }
+
+        self.assertFalse(can_derive_inverse_relation("depends_on", "Concept", schema))
+        self.assertFalse(can_derive_inverse_relation("prerequisite_of", "Concept", schema))
+
+    def test_belongs_to_derivation_source_does_not_trigger_inverse_generation(self):
+        schema = {
+            "belongs_to": {
+                "inverse_of": None,
+                "can_be_derived": True,
+                "derivation_source": "contains.derivable_inverse",
+            }
+        }
+
+        self.assertFalse(can_derive_inverse_relation("belongs_to", "Concept", schema))
+        self.assertFalse(can_derive_inverse_relation("belongs_to", "Section", schema))
 
 
 class TestDuplicateAndNoise(unittest.TestCase):

@@ -1,0 +1,177 @@
+{
+  "task": "graphrag_index",
+  "run_id": "index_20260508T2115_concurrent10",
+  "generated_at": "2026-05-09T11:24:56+08:00",
+  "root": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+  "dry_run": true,
+  "command": [
+    "graphrag",
+    "index",
+    "--root",
+    "/home/sunlight/Projects/ckqa/graphrag_pipeline"
+  ],
+  "returncode": 0,
+  "preflight": {
+    "root": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "cache_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/cache",
+    "extract_graph_cache_count": 1066,
+    "output_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output",
+    "existing_output_files": [
+      "communities.parquet",
+      "community_reports.parquet",
+      "context.json",
+      "documents.parquet",
+      "entities.parquet",
+      "lancedb",
+      "relationships.parquet",
+      "stats.json",
+      "text_units.parquet"
+    ],
+    "command": [
+      "graphrag",
+      "index",
+      "--root",
+      "/home/sunlight/Projects/ckqa/graphrag_pipeline"
+    ]
+  },
+  "active_prompt_snapshot": {
+    "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/final/active_prompt.json",
+    "exists": true,
+    "payload": {
+      "task": "prompt_candidate_finalization",
+      "status": "success",
+      "finalized_at": "2026-05-09T11:06:45+08:00",
+      "candidate_name": "schema_aware",
+      "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+      "candidate_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/schema_aware",
+      "final_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/final/schema_aware",
+      "env_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/.env",
+      "copied_files": [
+        "README.md",
+        "extract_graph.txt",
+        "prompt.txt"
+      ],
+      "active_prompt_paths": {
+        "extract_graph.txt": "prompts/final/schema_aware/extract_graph.txt",
+        "summarize_descriptions.txt": "prompts/summarize_descriptions.txt",
+        "extract_claims.txt": "prompts/extract_claims.txt",
+        "community_report_graph.txt": "prompts/community_report_graph.txt",
+        "community_report_text.txt": "prompts/community_report_text.txt"
+      },
+      "gate_passed": false,
+      "scoring_run_id": "material_7_real_20260508_rescore_schema_fix",
+      "manifest_sha256": "ed53740fa366a5b0a9090419dee946a1fd1e3a47520fb0e12e772b70a7b11174",
+      "scoring_result_sha256": "7bc3b2553dcefd9aef16b0adafc110ba9e7919a847fdc506a64cfc5b369ac82a",
+      "activation_policy": "experimental_scoring_gate_failed",
+      "formal_activation_ready": false,
+      "experimental": true,
+      "experimental_reason": "scoring gate 未通过，已通过 --allow-failed-scoring-gate 实验性放行。",
+      "scoring_binding": {
+        "run_id": "material_7_real_20260508_rescore_schema_fix",
+        "manifest_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json",
+        "manifest_sha256": "ed53740fa366a5b0a9090419dee946a1fd1e3a47520fb0e12e772b70a7b11174",
+        "eval_file_sha256s": [
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/auto_tuned.json",
+            "sha256": "d9bd831a2c6855b43faacdde2b260e164b5ba3d5409f35f40a3c63812dc5ec97"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/default.json",
+            "sha256": "2e5cafd2f0af6f155d08042dbbbfb77fe1d692d10962a656a8f68a7c69ad3f8f"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/schema_aware.json",
+            "sha256": "7c6f9000555f1fb7a9c756d958ef018a7f543e3dd806bfea7ad07e7763c42549"
+          },
+          {
+            "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_real_20260508/schema_fewshot.json",
+            "sha256": "ad66d7eeb42f3c530008a58e2573b570c934c5429fe8534dcaa1f71830ae7bbc"
+          }
+        ],
+        "candidate_id": "schema_aware",
+        "scoring_result_sha256": "7bc3b2553dcefd9aef16b0adafc110ba9e7919a847fdc506a64cfc5b369ac82a",
+        "scoring_report": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/extraction_scoring/runs/material_7_real_20260508_rescore_schema_fix/top_candidates.json",
+        "parse_success_rate": 1.0,
+        "gate_passed": false,
+        "allow_failed_scoring_gate": true
+      }
+    }
+  },
+  "output_stats": {
+    "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/stats.json",
+    "exists": true,
+    "summary": {
+      "num_documents": 393,
+      "update_documents": 0,
+      "total_runtime": 7718.892306804657,
+      "input_load_time": 0,
+      "workflow_count": 10,
+      "workflow_names": [
+        "create_base_text_units",
+        "create_communities",
+        "create_community_reports",
+        "create_final_documents",
+        "create_final_text_units",
+        "extract_covariates",
+        "extract_graph",
+        "finalize_graph",
+        "generate_text_embeddings",
+        "load_input_documents"
+      ],
+      "workflow_runtime_seconds": {
+        "load_input_documents": 0.3478820323944092,
+        "create_base_text_units": 2.0188426971435547,
+        "create_final_documents": 0.14996910095214844,
+        "extract_graph": 1248.776511669159,
+        "finalize_graph": 2.041511297225952,
+        "extract_covariates": 0.00015664100646972656,
+        "create_communities": 0.8113775253295898,
+        "create_final_text_units": 0.882068395614624,
+        "create_community_reports": 6322.617804050446,
+        "generate_text_embeddings": 141.08573150634766
+      }
+    }
+  },
+  "output_artifacts": {
+    "stats.json": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/stats.json",
+      "exists": true,
+      "type": "file"
+    },
+    "documents.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/documents.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "text_units.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/text_units.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "entities.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/entities.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "relationships.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/relationships.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "communities.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/communities.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "community_reports.parquet": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/community_reports.parquet",
+      "exists": true,
+      "type": "file"
+    },
+    "lancedb": {
+      "path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb",
+      "exists": true,
+      "type": "directory"
+    }
+  }
+}

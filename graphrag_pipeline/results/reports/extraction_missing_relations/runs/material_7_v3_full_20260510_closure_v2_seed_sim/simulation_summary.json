@@ -1,0 +1,53 @@
+{
+  "task": "simulate_container_seed_injection",
+  "run_id": "material_7_v3_full_20260510_closure_v2_seed_sim",
+  "source_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2",
+  "audit_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/eval/material_7_audit_extraction_set.json",
+  "output_eval_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_closure_v2_seed_sim",
+  "container_types": [
+    "Assignment",
+    "Chapter",
+    "Course",
+    "Experiment",
+    "Section"
+  ],
+  "candidate_count": 7,
+  "total_injected_entity_count": 148,
+  "per_candidate": {
+    "auto_tuned": {
+      "injected_entity_count": 23,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/auto_tuned.json"
+    },
+    "default": {
+      "injected_entity_count": 21,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/default.json"
+    },
+    "schema_aware": {
+      "injected_entity_count": 19,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/schema_aware.json"
+    },
+    "schema_aware_directional": {
+      "injected_entity_count": 21,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/schema_aware_directional.json"
+    },
+    "schema_fewshot": {
+      "injected_entity_count": 23,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/schema_fewshot.json"
+    },
+    "schema_fewshot_distilled": {
+      "injected_entity_count": 20,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/schema_fewshot_distilled.json"
+    },
+    "schema_fewshot_distilled_v2": {
+      "injected_entity_count": 21,
+      "original_sample_count": 20,
+      "source_eval_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/extraction_eval/runs/material_7_v3_full_20260510_structured_closure_v2/schema_fewshot_distilled_v2.json"
+    }
+  }
+}

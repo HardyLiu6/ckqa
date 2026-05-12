@@ -1,0 +1,198 @@
+{
+  "task": "candidate_prompt_generation",
+  "schema_version": "v1",
+  "generated_at": "2026-05-11T11:17:20+08:00",
+  "last_updated_at": "2026-05-11T21:00:00+08:00",
+  "language": "zh",
+  "output_dir": "prompts/candidates",
+  "notes": [
+    "2026-05-11 归档：手工 JSON 抽取器相关候选（default_guarded、schema_fewshot_distilled_v3）移入 _archive_json_format/；已被 strict_tuple 替代的旧 tuple 候选（schema_aware、schema_aware_directional、schema_fewshot、schema_fewshot_distilled、schema_fewshot_distilled_v2）移入 _archive_superseded_tuple/。",
+    "当前活跃候选面向 GraphRAG 原生 GraphExtractor（tuple 格式 + gleaning）。",
+    "下次运行 scripts/prompt_tuning/generate_candidate_prompts.py 前，需要先把已归档的候选定义从 generator 里删掉，或者接受 generator 会把旧候选再生成一遍。"
+  ],
+  "inputs": {
+    "schema_dir": "config/schema",
+    "entity_schema_path": "config/schema/entity_types.json",
+    "relation_schema_path": "config/schema/relation_types.json",
+    "extraction_rules_path": "config/schema/extraction_rules.md",
+    "samples_file": "data/prompt_tuning_samples/material_7_samples.json",
+    "audit_file": "data/eval/material_7_audit_extraction_set.json",
+    "default_prompt_dir": "prompts",
+    "default_prompt_source": "prompts/extract_graph.txt",
+    "auto_tuned_prompt_dir": "prompts/candidates/auto_tuned",
+    "auto_tuned_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt"
+  },
+  "candidates": [
+    {
+      "candidate_name": "default",
+      "source_type": "default_adapted",
+      "base_prompt_source": "prompts/extract_graph.txt",
+      "schema_used": false,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/default/prompt.txt",
+        "readme": "prompts/candidates/default/README.md"
+      },
+      "notes": [
+        "默认 Prompt 来源：prompts/extract_graph.txt",
+        "default 候选直接基于当前 GraphRAG 默认 extract_graph Prompt 做轻量课程域微调，并保留原始结构与输出格式。",
+        "作为基线对照，评估其它候选的增量。"
+      ]
+    },
+    {
+      "candidate_name": "auto_tuned",
+      "source_type": "graphrag_prompt_tune",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": false,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/auto_tuned/prompt.txt",
+        "readme": "prompts/candidates/auto_tuned/README.md"
+      },
+      "notes": [
+        "auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。",
+        "主要 Prompt 文件：extract_graph.txt",
+        "作为 GraphRAG 官方自动调优基线对照。"
+      ],
+      "generation_method": "graphrag_official_prompt_tune",
+      "graphrag_invocation": "python -m graphrag prompt-tune",
+      "status": "success",
+      "collected_files": [
+        "community_report_graph.txt",
+        "extract_graph.txt",
+        "prompt.txt",
+        "summarize_descriptions.txt"
+      ]
+    },
+    {
+      "candidate_name": "schema_aware_directional_v2",
+      "source_type": "schema_directional_v2",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": false,
+      "fewshot_used": false,
+      "fewshot_example_count": 0,
+      "fewshot_strategy": null,
+      "generation_time": "2026-05-11T11:17:20+08:00",
+      "files": {
+        "prompt": "prompts/candidates/schema_aware_directional_v2/prompt.txt",
+        "readme": "prompts/candidates/schema_aware_directional_v2/README.md"
+      },
+      "notes": [
+        "schema_aware_directional_v2 继承 schema_aware_directional，并追加 material_7 高频失败族守卫。",
+        "v2 聚焦 appears_in 反向位置、belongs_to 概念分类误用、defined_by 术语符号线索和端点逐字匹配。",
+        "2026-05-11 back-port 严格 tuple 输出格式约束（见 _shared/strict_tuple_format_block.md）。",
+        "tuple 格式，可直接喂给 GraphRAG 原生 GraphExtractor。"
+      ],
+      "failure_family_policy": {
+        "strategy": "material_7_failure_family_guard",
+        "audit_text_policy": "omit_full_audit_text",
+        "families": [
+          "appears_in_reverse_location",
+          "belongs_to_concept_taxonomy",
+          "defined_by_term_without_symbol_cue",
+          "missing_or_unmatched_endpoint"
+        ]
+      },
+      "token_budget_policy": {
+        "relative_to": "default",
+        "max_ratio": 1.1,
+        "audit_text_policy": "omit_full_audit_text"
+      },
+      "strict_tuple_format_guard": {
+        "applied_at": "2026-05-11",
+        "source": "prompts/candidates/_shared/strict_tuple_format_block.md"
+      }
+    },
+    {
+      "candidate_name": "schema_fewshot_distilled_v2_strict_tuple",
+      "source_type": "schema_fewshot_distilled_v2_strict_tuple",
+      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "schema_used": true,
+      "audit_used": true,
+      "fewshot_used": true,
+      "fewshot_example_count": 3,
+      "fewshot_strategy": "distilled_negative_direction_rules_with_strict_tuple_guard",
+      "generation_time": "2026-05-11T19:00:00+08:00",
+      "production_status": "frozen_v1",
+      "production_frozen_at": "2026-05-12",
+      "production_frozen_reason": "exp4 验证通过，1 期生产最终配置。prompt 文件为静态冻结，不随 gold 扩容或脚本变更自动重新生成。",
+      "production_prompt_md5": "14ab82b37aa379f6026287a491888a44",
+      "files": {
+        "prompt": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt",
+        "readme": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/README.md"
+      },
+      "notes": [
+        "schema_fewshot_distilled_v2_strict_tuple 继承 schema_fewshot_distilled_v2，并合入严格 tuple 输出格式约束（见 _shared/strict_tuple_format_block.md）。",
+        "2026-05-11 桥接验证显示：v2 原版在原生 tuple 抽取器下有 21/101 引号污染、3/7 样本解析级联失败，加上严格格式约束后全部清零。",
+        "2026-05-12 凌晨：精度向抑制规则（exp5 验证）被回滚——该规则让 recall 从 0.61 掉到 0.39，precision 几乎不变，净效果负。",
+        "当前最佳候选，audit_relation_recall(holdout) 已达 0.347（配合 metadata-closure 后处理）。"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ],
+      "strict_tuple_format_guard": {
+        "applied_at": "2026-05-11",
+        "source": "prompts/candidates/_shared/strict_tuple_format_block.md"
+      },
+      "precision_suppression_rules": {
+        "status": "rolled_back",
+        "rolled_back_at": "2026-05-12",
+        "reason": "exp5 验证：recall 从 0.61 掉到 0.39（-36%），precision 几乎不变（-2%），净效果为负。",
+        "experiment_run_id": "native_exp5_precision_suppression_full20_20260511"
+      },
+      "token_budget_policy": {
+        "relative_to": "default",
+        "max_ratio": 1.35,
+        "audit_text_policy": "omit_full_audit_text"
+      }
+    }
+  ],
+  "archived_candidates": [
+    {
+      "name": "default_guarded",
+      "archived_to": "prompts/candidates/_archive_json_format/",
+      "reason": "JSON 输出格式，与原生 GraphExtractor 的 tuple 格式不兼容"
+    },
+    {
+      "name": "schema_fewshot_distilled_v3",
+      "archived_to": "prompts/candidates/_archive_json_format/",
+      "reason": "JSON 输出格式，与原生 GraphExtractor 的 tuple 格式不兼容"
+    },
+    {
+      "name": "schema_aware",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_aware_directional_v2 替代（后者含方向卡片、失败族守卫和 strict_tuple 约束）"
+    },
+    {
+      "name": "schema_aware_directional",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_aware_directional_v2 替代"
+    },
+    {
+      "name": "schema_fewshot",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "完整 audit few-shot 过长，已被 distilled 变体替代"
+    },
+    {
+      "name": "schema_fewshot_distilled",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_fewshot_distilled_v2_strict_tuple 替代"
+    },
+    {
+      "name": "schema_fewshot_distilled_v2",
+      "archived_to": "prompts/candidates/_archive_superseded_tuple/",
+      "reason": "已被 schema_fewshot_distilled_v2_strict_tuple 替代（后者根治了 tuple 格式缺陷）"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "task": "graphrag_prompt_tune",
+  "status": "success",
+  "generated_at": "2026-05-08T18:57:10+08:00",
+  "chosen_invocation": {
+    "name": "python_module",
+    "display_name": "python -m graphrag prompt-tune"
+  },
+  "detection_attempts": [
+    {
+      "name": "python_module",
+      "display_name": "python -m graphrag prompt-tune",
+      "command": [
+        "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python",
+        "-m",
+        "graphrag",
+        "prompt-tune",
+        "--help"
+      ],
+      "available": true,
+      "exit_code": 0,
+      "stdout_preview": "Usage: graphrag prompt-tune [OPTIONS] Generate custom graphrag prompts with your own data (i.e. auto templating). ╭─ Options ────────────────────────────────────────────────────────────────────╮ │ --root -r DIRECTORY The project root │ │ d…",
+      "stderr_preview": ""
+    }
+  ],
+  "resolved_paths": {
+    "root_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "config_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/settings.yaml",
+    "invocation_root": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "output_dir": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned",
+    "log_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/material_7_prompt_tune_run.log",
+    "report_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/results/reports/material_7_prompt_tune_report.json",
+    "manifest_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/manifest.json"
+  },
+  "parameters": {
+    "domain": null,
+    "language": null,
+    "chunk_size": null,
+    "no_entity_types": true,
+    "extra_args": []
+  },
+  "final_command": [
+    "/home/sunlight/miniconda3/envs/graphrag-oneapi/bin/python",
+    "-m",
+    "graphrag",
+    "prompt-tune",
+    "--root",
+    "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+    "--output",
+    "results/prompt_tune_runs/20260508T185405/raw_output",
+    "--no-discover-entity-types"
+  ],
+  "warnings": [],
+  "start_time": "2026-05-08T18:54:05+08:00",
+  "end_time": "2026-05-08T18:57:10+08:00",
+  "duration_seconds": 178.4449378390018,
+  "exit_code": 0,
+  "primary_prompt_file": "extract_graph.txt",
+  "primary_prompt_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/prompts/candidates/auto_tuned/extract_graph.txt",
+  "collected_files": [
+    "community_report_graph.txt",
+    "extract_graph.txt",
+    "prompt.txt",
+    "summarize_descriptions.txt"
+  ],
+  "manifest_candidate_count": 4
+}

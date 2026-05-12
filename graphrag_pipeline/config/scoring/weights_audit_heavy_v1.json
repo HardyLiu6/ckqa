@@ -1,0 +1,20 @@
+{
+  "schema_version": "v1",
+  "profile": "audit_heavy_v1",
+  "notes": [
+    "针对 closure 已经把 endpoint_valid_rate 拉到 1.0 的现实，把评分重心从结构卫生移回审计对齐。",
+    "用法：python scripts/score_extraction_results.py --weights config/scoring/weights_audit_heavy_v1.json ...",
+    "依赖 audit_metrics_enabled == true；若 audit gold seed 未达覆盖，评分器会把 audit 指标置 None，此权重档位无意义。"
+  ],
+  "parse_success_rate": 0.15,
+  "schema_hit_rate": 0.05,
+  "entity_type_valid_rate": 0.1,
+  "relation_type_valid_rate": 0.1,
+  "endpoint_valid_rate": 0.05,
+  "duplicate_complement": 0.025,
+  "noise_complement": 0.025,
+  "output_stability": 0.05,
+  "audit_entity_recall": 0.1,
+  "audit_entity_precision": 0.15,
+  "audit_relation_recall": 0.2
+}

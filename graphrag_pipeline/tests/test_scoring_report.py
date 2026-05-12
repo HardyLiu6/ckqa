@@ -30,11 +30,14 @@ RANKED = [
         "parse_success_rate": 1.0,
         "schema_hit_rate": 0.8, "entity_type_valid_rate": 0.9,
         "relation_type_valid_rate": 0.9, "endpoint_valid_rate": 0.85,
+        "endpoint_total_count": 20, "endpoint_invalid_count": 3,
         "duplicate_entity_rate": 0.05, "noise_entity_rate": 0.02,
         "duplicate_complement": 0.95, "noise_complement": 0.98,
         "output_stability": 0.9,
         "audit_entity_recall": 0.7, "audit_entity_precision": 0.65,
         "audit_relation_recall": 0.6,
+        "parse_error_count": 0, "llm_error_count": 0,
+        "strict_output_retry_count": 1, "output_leak_flag_count": 0,
         "sample_count": 5, "success_count": 5,
     },
     {
@@ -44,11 +47,14 @@ RANKED = [
         "parse_success_rate": 0.8,
         "schema_hit_rate": 0.6, "entity_type_valid_rate": 0.7,
         "relation_type_valid_rate": 0.7, "endpoint_valid_rate": 0.5,
+        "endpoint_total_count": 16, "endpoint_invalid_count": 8,
         "duplicate_entity_rate": 0.1, "noise_entity_rate": 0.1,
         "duplicate_complement": 0.9, "noise_complement": 0.9,
         "output_stability": 0.7,
         "audit_entity_recall": 0.4, "audit_entity_precision": 0.35,
         "audit_relation_recall": 0.3,
+        "parse_error_count": 1, "llm_error_count": 0,
+        "strict_output_retry_count": 0, "output_leak_flag_count": 1,
         "sample_count": 5, "success_count": 4,
     },
 ]
@@ -158,6 +164,27 @@ class TestRunMetaAndHistory(unittest.TestCase):
         # 只有一个表头行
         self.assertEqual(len(rows), 1 + 2 * len(RANKED))
 
+    def test_append_history_csv_replaces_existing_rows_for_same_run_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "history.csv"
+            append_history_csv(
+                path,
+                run_id="run-A",
+                timestamp="2026-04-18T12:00:00",
+                ranked=RANKED,
+            )
+            append_history_csv(
+                path,
+                run_id="run-A",
+                timestamp="2026-04-18T13:00:00",
+                ranked=[RANKED[0]],
+            )
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+
+        self.assertEqual(len([row for row in rows[1:] if row[0] == "run-A"]), 1)
+        self.assertEqual(rows[1][1], "2026-04-18T13:00:00")
+
     def test_write_latest_pointer(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "latest.json"
@@ -200,6 +227,25 @@ class TestNewColumnsInReport(unittest.TestCase):
                 rows = list(csv.reader(fp))
         header = rows[0]
         self.assertIn("audit_entity_precision", header)
+
+    def test_csv_contains_endpoint_counts_and_parse_leak_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "compare.csv"
+            write_extraction_compare_csv(path, RANKED)
+            with path.open(encoding="utf-8") as fp:
+                rows = list(csv.reader(fp))
+        header = rows[0]
+        for column in (
+            "endpoint_total_count",
+            "endpoint_invalid_count",
+            "parse_error_count",
+            "llm_error_count",
+            "strict_output_retry_count",
+            "output_leak_flag_count",
+        ):
+            self.assertIn(column, header)
+        self.assertEqual(rows[1][header.index("endpoint_total_count")], "20")
+        self.assertEqual(rows[2][header.index("output_leak_flag_count")], "1")
 
 
 class TestHistoryCsvMigration(unittest.TestCase):

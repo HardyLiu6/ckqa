@@ -1,0 +1,200 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-05-11T10:41:58",
+  "input_file": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/material_7_samples.json",
+  "selection_strategy": "balanced_stratified",
+  "fallback_to_random": false,
+  "selection_parameters": {
+    "sample_size": 20,
+    "random_seed": 42,
+    "prefer_balanced_sampling": true,
+    "priority_fields": [
+      "guessed_sample_type",
+      "document_type",
+      "chapter",
+      "heading_level",
+      "source_file"
+    ]
+  },
+  "stats": {
+    "input_sample_count": 80,
+    "valid_candidate_count": 80,
+    "selected_count": 20,
+    "skipped_count": 0,
+    "skipped_reasons": {},
+    "selection_strategy": "balanced_stratified",
+    "fallback_to_random": false,
+    "priority_distribution": {
+      "medium": 6,
+      "high": 12,
+      "low": 2
+    },
+    "guessed_sample_type_distribution": {
+      "algorithm_or_method": 5,
+      "chapter_concept_explanation": 2,
+      "definition_or_formula": 8,
+      "assignment_requirement": 5
+    },
+    "document_type_distribution": {
+      "textbook": 20
+    },
+    "source_file_distribution": {
+      "计算机操作系统教材": 20
+    },
+    "heading_level_distribution": {
+      "3": 9,
+      "2": 9,
+      "1": 2
+    },
+    "length_bucket_distribution": {
+      "long": 13,
+      "medium": 4,
+      "short": 1,
+      "xlong": 2
+    },
+    "stratification_summary": {
+      "guessed_sample_type": {
+        "distinct_count": 4,
+        "distribution": {
+          "algorithm_or_method": 24,
+          "chapter_concept_explanation": 23,
+          "definition_or_formula": 21,
+          "assignment_requirement": 12
+        }
+      },
+      "document_type": {
+        "distinct_count": 1,
+        "distribution": {
+          "textbook": 80
+        }
+      },
+      "chapter": {
+        "distinct_count": 13,
+        "distribution": {
+          "第三章 处理机调度与死锁": 8,
+          "第四章 存储器管理": 7,
+          "第二章 进程的描述与控制": 7,
+          "第九章 操作系统接口": 7,
+          "第七章 文件管理": 7,
+          "第八章 磁盘存储器的管理": 7,
+          "第六章 输入输出系统": 6,
+          "第十一章 多媒体操作系统": 6,
+          "第五章 虚拟存储器": 6,
+          "第十二章 保护和安全": 6,
+          "第一章 操作系统引论": 6,
+          "第十章 多处理机操作系统": 6,
+          "前言": 1
+        }
+      },
+      "heading_level": {
+        "distinct_count": 3,
+        "distribution": {
+          "3": 36,
+          "2": 32,
+          "1": 12
+        }
+      },
+      "source_file": {
+        "distinct_count": 1,
+        "distribution": {
+          "计算机操作系统教材": 80
+        }
+      },
+      "length_bucket": {
+        "distinct_count": 4,
+        "distribution": {
+          "long": 47,
+          "medium": 20,
+          "short": 11,
+          "xlong": 2
+        }
+      }
+    },
+    "preserved_existing_gold_count": 12,
+    "preserved_existing_gold_match_counts": {
+      "stable_source_hash": 12
+    }
+  },
+  "selected_examples": [
+    {
+      "id": "audit-ext-0001-5b98665559",
+      "source_sample_id": "pts-0054-eaa3d01814",
+      "guessed_sample_type": "algorithm_or_method",
+      "audit_priority": "medium",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第十一章 多媒体操作系统；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
+    },
+    {
+      "id": "audit-ext-0002-8a9722265d",
+      "source_sample_id": "pts-0075-016a0e9b7c",
+      "guessed_sample_type": "chapter_concept_explanation",
+      "audit_priority": "medium",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：章节/概念讲解；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第七章 文件管理；命中高价值信号：定义信号、关系表达较密集、术语/别名信号、存在步骤或列表结构"
+    },
+    {
+      "id": "audit-ext-0003-4163630cd6",
+      "source_sample_id": "pts-0049-bd80db3cdf",
+      "guessed_sample_type": "definition_or_formula",
+      "audit_priority": "high",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第四章 存储器管理；命中高价值信号：公式信号、方法/步骤信号、关系表达较密集、术语/别名信号"
+    },
+    {
+      "id": "audit-ext-0004-7396d8021d",
+      "source_sample_id": "pts-0046-a99abcf7ae",
+      "guessed_sample_type": "assignment_requirement",
+      "audit_priority": "high",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：long；结构层级：heading_level=2；覆盖章节/标题边界：第三章 处理机调度与死锁；命中高价值信号：定义信号、方法/步骤信号、作业/题组信号、问答/考核信号"
+    },
+    {
+      "id": "audit-ext-0005-7c810e4c30",
+      "source_sample_id": "pts-0066-4bacda7c7a",
+      "guessed_sample_type": "definition_or_formula",
+      "audit_priority": "high",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第二章 进程的描述与控制；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、术语/别名信号"
+    },
+    {
+      "id": "audit-ext-0006-5b81b6324a",
+      "source_sample_id": "pts-0050-27101278b6",
+      "guessed_sample_type": "algorithm_or_method",
+      "audit_priority": "medium",
+      "length_bucket": "medium",
+      "audit_reason": "覆盖样本类型：方法/算法；覆盖长度区间：medium；结构层级：heading_level=2；覆盖章节/标题边界：第二章 进程的描述与控制；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
+    },
+    {
+      "id": "audit-ext-0007-363f1db730",
+      "source_sample_id": "pts-0014-ee740687c7",
+      "guessed_sample_type": "definition_or_formula",
+      "audit_priority": "medium",
+      "length_bucket": "short",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：short；结构层级：heading_level=2；覆盖章节/标题边界：第十二章 保护和安全；命中高价值信号：定义信号、方法/步骤信号、含公式或数学表达、存在步骤或列表结构"
+    },
+    {
+      "id": "audit-ext-0008-6fca6fd160",
+      "source_sample_id": "pts-0053-0ef8d5ec69",
+      "guessed_sample_type": "assignment_requirement",
+      "audit_priority": "high",
+      "length_bucket": "xlong",
+      "audit_reason": "覆盖样本类型：作业/习题要求；覆盖长度区间：xlong；结构层级：heading_level=2；覆盖章节/标题边界：第八章 磁盘存储器的管理；命中高价值信号：方法/步骤信号、作业/题组信号、问答/考核信号、关系表达较密集"
+    },
+    {
+      "id": "audit-ext-0009-c91f702519",
+      "source_sample_id": "pts-0073-6ac17ffc34",
+      "guessed_sample_type": "definition_or_formula",
+      "audit_priority": "high",
+      "length_bucket": "xlong",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：xlong；结构层级：heading_level=3；覆盖章节/标题边界：第十章 多处理机操作系统；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、含公式或数学表达"
+    },
+    {
+      "id": "audit-ext-0010-84c282a5ee",
+      "source_sample_id": "pts-0031-a008da8a10",
+      "guessed_sample_type": "definition_or_formula",
+      "audit_priority": "high",
+      "length_bucket": "long",
+      "audit_reason": "覆盖样本类型：定义/公式；覆盖长度区间：long；结构层级：heading_level=3；覆盖章节/标题边界：第九章 操作系统接口；命中高价值信号：定义信号、方法/步骤信号、关系表达较密集、存在步骤或列表结构"
+    }
+  ]
+}

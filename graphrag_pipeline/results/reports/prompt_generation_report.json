@@ -1,0 +1,439 @@
+{
+  "task": "candidate_prompt_generation_report",
+  "generated_at": "2026-05-11T11:17:20+08:00",
+  "schema_version": "v1",
+  "counts": {
+    "entity_type_count": 11,
+    "relation_type_count": 10,
+    "sample_count": 80,
+    "audit_sample_count": 20,
+    "fewshot_example_count": 3
+  },
+  "fallbacks": {
+    "default_prompt_missing": false,
+    "auto_tuned_missing": false,
+    "audit_gold_missing": false
+  },
+  "fewshot": {
+    "strategy": "audit_gold",
+    "source_sample_ids": [
+      "pts-0049-bd80db3cdf",
+      "pts-0046-a99abcf7ae",
+      "pts-0031-a008da8a10"
+    ],
+    "example_ids": [
+      "audit-ext-0003-4163630cd6",
+      "audit-ext-0004-7396d8021d",
+      "audit-ext-0010-84c282a5ee"
+    ],
+    "compression": {
+      "input_max_chars": 450,
+      "max_entities": 3,
+      "max_relations": 1
+    }
+  },
+  "distilled": {
+    "source_sample_ids": [
+      "pts-0049-bd80db3cdf",
+      "pts-0046-a99abcf7ae",
+      "pts-0031-a008da8a10"
+    ],
+    "coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "selected_audit_coverage": {
+      "selected_example_ids": [
+        "audit-ext-0003-4163630cd6",
+        "audit-ext-0004-7396d8021d",
+        "audit-ext-0010-84c282a5ee"
+      ],
+      "covered_relation_types": [
+        "defined_by",
+        "implemented_by",
+        "evaluated_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "covered_entity_types": [
+        "Chapter",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Assignment"
+      ],
+      "missing_entity_types": [
+        "Course",
+        "Section",
+        "Experiment",
+        "ToolOrPlatform"
+      ],
+      "selection_strategy": "greedy_relation_entity_coverage"
+    },
+    "rendered_micro_example_coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "compression": {
+      "strategy": "micro_examples_without_full_audit_text",
+      "input_text_policy": "omit_full_audit_text",
+      "max_micro_example_chars": 96,
+      "max_micro_examples": 8
+    },
+    "length_policy": {
+      "target": "near_schema_aware",
+      "max_schema_aware_ratio": 1.35,
+      "base_prompt": "schema_aware_directional"
+    }
+  },
+  "distilled_v2": {
+    "source_sample_ids": [
+      "pts-0049-bd80db3cdf",
+      "pts-0046-a99abcf7ae",
+      "pts-0031-a008da8a10"
+    ],
+    "coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "selected_audit_coverage": {
+      "selected_example_ids": [
+        "audit-ext-0003-4163630cd6",
+        "audit-ext-0004-7396d8021d",
+        "audit-ext-0010-84c282a5ee"
+      ],
+      "covered_relation_types": [
+        "defined_by",
+        "implemented_by",
+        "evaluated_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "covered_entity_types": [
+        "Chapter",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Assignment"
+      ],
+      "missing_entity_types": [
+        "Course",
+        "Section",
+        "Experiment",
+        "ToolOrPlatform"
+      ],
+      "selection_strategy": "greedy_relation_entity_coverage"
+    },
+    "rendered_micro_example_coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "compression": {
+      "strategy": "micro_examples_without_full_audit_text",
+      "input_text_policy": "omit_full_audit_text",
+      "max_micro_example_chars": 96,
+      "max_micro_examples": 8
+    },
+    "length_policy": {
+      "target": "near_schema_aware_directional",
+      "max_schema_aware_ratio": 1.35,
+      "base_prompt": "schema_fewshot_distilled"
+    },
+    "negative_rule_policy": {
+      "strategy": "short_directional_negative_rules",
+      "audit_text_policy": "omit_full_audit_text",
+      "covered_relation_types": [
+        "evaluated_by",
+        "appears_in",
+        "defined_by",
+        "applied_in",
+        "related_to"
+      ]
+    }
+  },
+  "distilled_v3": {
+    "source_sample_ids": [
+      "pts-0049-bd80db3cdf",
+      "pts-0046-a99abcf7ae",
+      "pts-0031-a008da8a10"
+    ],
+    "coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "selected_audit_coverage": {
+      "selected_example_ids": [
+        "audit-ext-0003-4163630cd6",
+        "audit-ext-0004-7396d8021d",
+        "audit-ext-0010-84c282a5ee"
+      ],
+      "covered_relation_types": [
+        "defined_by",
+        "implemented_by",
+        "evaluated_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "covered_entity_types": [
+        "Chapter",
+        "KnowledgePoint",
+        "Concept",
+        "Term",
+        "FormulaOrDefinition",
+        "AlgorithmOrMethod",
+        "Assignment"
+      ],
+      "missing_entity_types": [
+        "Course",
+        "Section",
+        "Experiment",
+        "ToolOrPlatform"
+      ],
+      "selection_strategy": "greedy_relation_entity_coverage"
+    },
+    "rendered_micro_example_coverage": {
+      "selection_strategy": "first_distilled_micro_example_per_relation",
+      "rendered_micro_example_count": 3,
+      "covered_relation_types": [
+        "defined_by",
+        "evaluated_by",
+        "implemented_by"
+      ],
+      "missing_relation_types": [
+        "contains",
+        "belongs_to",
+        "prerequisite_of",
+        "depends_on",
+        "applied_in",
+        "related_to",
+        "appears_in"
+      ],
+      "source_sample_ids": [
+        "pts-0049-bd80db3cdf",
+        "pts-0046-a99abcf7ae",
+        "pts-0031-a008da8a10"
+      ]
+    },
+    "compression": {
+      "strategy": "micro_examples_without_full_audit_text",
+      "input_text_policy": "omit_full_audit_text",
+      "max_micro_example_chars": 96,
+      "max_micro_examples": 8
+    },
+    "length_policy": {
+      "target": "near_schema_aware_directional",
+      "max_schema_aware_ratio": 1.35,
+      "base_prompt": "schema_fewshot_distilled"
+    },
+    "negative_rule_policy": {
+      "strategy": "short_directional_negative_rules",
+      "audit_text_policy": "omit_full_audit_text",
+      "covered_relation_types": [
+        "evaluated_by",
+        "appears_in",
+        "defined_by",
+        "applied_in",
+        "related_to"
+      ]
+    },
+    "failure_family_policy": {
+      "strategy": "material_7_failure_family_guard",
+      "audit_text_policy": "omit_full_audit_text",
+      "families": [
+        "appears_in_reverse_location",
+        "belongs_to_concept_taxonomy",
+        "defined_by_term_without_symbol_cue",
+        "missing_or_unmatched_endpoint"
+      ]
+    },
+    "token_budget_policy": {
+      "relative_to": "default",
+      "max_ratio": 1.1,
+      "audit_text_policy": "omit_full_audit_text"
+    },
+    "micro_example_policy": {
+      "strategy": "failure_family_micro_examples",
+      "source": "selected_audit_gold_relation_micro_examples",
+      "max_micro_example_chars": 96,
+      "max_micro_examples": 8
+    }
+  },
+  "fewshot_coverage": {
+    "selected_example_ids": [
+      "audit-ext-0003-4163630cd6",
+      "audit-ext-0004-7396d8021d",
+      "audit-ext-0010-84c282a5ee"
+    ],
+    "covered_relation_types": [
+      "defined_by",
+      "implemented_by",
+      "evaluated_by"
+    ],
+    "missing_relation_types": [
+      "contains",
+      "belongs_to",
+      "prerequisite_of",
+      "depends_on",
+      "applied_in",
+      "related_to",
+      "appears_in"
+    ],
+    "covered_entity_types": [
+      "Chapter",
+      "KnowledgePoint",
+      "Concept",
+      "Term",
+      "FormulaOrDefinition",
+      "AlgorithmOrMethod",
+      "Assignment"
+    ],
+    "missing_entity_types": [
+      "Course",
+      "Section",
+      "Experiment",
+      "ToolOrPlatform"
+    ],
+    "selection_strategy": "greedy_relation_entity_coverage"
+  },
+  "candidate_names": [
+    "default",
+    "default_guarded",
+    "auto_tuned",
+    "schema_aware",
+    "schema_fewshot",
+    "schema_aware_directional",
+    "schema_aware_directional_v2",
+    "schema_fewshot_distilled",
+    "schema_fewshot_distilled_v2",
+    "schema_fewshot_distilled_v3"
+  ],
+  "manifest_path": "prompts/candidates/manifest.json",
+  "notes": [
+    "default 候选 Prompt 会优先沿用默认 GraphRAG extract_graph Prompt 文本，再做轻量课程域微调。",
+    "schema_aware / schema_fewshot 会优先以 auto_tuned Prompt 为底稿自动增强；若 auto_tuned 缺失则回退到 default。",
+    "schema_aware_directional / schema_fewshot_distilled / schema_fewshot_distilled_v2 用短方向卡片、micro-examples 和负例规则降低关系方向泄漏风险。",
+    "default_guarded / schema_aware_directional_v2 / schema_fewshot_distilled_v3 用 material_7 高频失败族守卫和严格 JSON 输出守卫作为下一轮实验候选。",
+    "schema 增强仍通过 relationship_description 的 [type=<relation_type>] 前缀表达关系类型，避免改坏现有 tuple 结构。",
+    "本轮压缩参数优先控制 Prompt 长度；few-shot 关系覆盖不足需要后续真实抽取/评分验证，不能解读为抽取质量提升。"
+  ]
+}
