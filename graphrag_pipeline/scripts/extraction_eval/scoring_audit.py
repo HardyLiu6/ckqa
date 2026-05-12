@@ -25,6 +25,40 @@ from .extraction_schema import StructuredExtractionResult
 from .scoring_metrics import _normalize_title
 
 
+# ---------------------------------------------------------------------------
+# Faithfulness 匹配模式配置
+# ---------------------------------------------------------------------------
+# strict: 只用 Level 1-4（确定性子串匹配，无外部依赖）
+# lenient: 启用 Level 5 jieba 分词匹配（更宽松，减少误判）
+FaithfulnessMode = Literal["strict", "lenient"]
+_DEFAULT_FAITHFULNESS_MODE: FaithfulnessMode = "lenient"
+
+# jieba 延迟加载（避免未安装时 import 失败）
+_jieba_module = None
+_JIEBA_STOPWORDS: frozenset[str] = frozenset(
+    "的 与 和 之 或 是 等 及 以 为 在 中 个 了 地 得 把 被 从 到 "
+    "对 而 但 也 都 就 又 所 这 那 它 他 她 我 你 其 此 该 每 各 "
+    "有 无 不 没 很 更 最 已 将 可 能 会 要 应 该 让 使".split()
+)
+
+
+def _get_jieba():
+    """延迟加载 jieba，避免 import 时报错。"""
+    global _jieba_module
+    if _jieba_module is None:
+        try:
+            import jieba
+            import logging
+            jieba.setLogLevel(logging.CRITICAL)
+            _jieba_module = jieba
+        except ImportError:
+            raise ImportError(
+                "faithfulness lenient 模式需要 jieba 库。"
+                "请运行: pip install jieba"
+            )
+    return _jieba_module
+
+
 MatchMode = Literal[
     "exact",
     "alias",
@@ -496,6 +530,40 @@ _ENTITY_NAME_SUFFIXES: tuple[str, ...] = (
 )
 
 
+def _entity_has_text_grounding_jieba(entity_title: str, source_text: str) -> bool:
+    """Level 5: 基于 jieba 精准分词的文本依据判定。
+
+    将实体名分词后，要求所有非停用词 token（长度 >= 2 或纯英文数字）
+    都在源文本中出现。这比 Level 1-4 更宽松，能正确处理：
+      - "设备控制器组成" → ['设备', '控制器', '组成'] 全部在源文本中
+      - "OS的特征" → ['OS', '特征'] 全部在源文本中
+      - "第二章 进程与线程" → ['第二章', '进程', '线程'] 全部在源文本中
+    """
+    if not entity_title or not source_text:
+        return False
+
+    jieba = _get_jieba()
+    text_lower = re.sub(r"\s+", "", source_text).casefold()
+
+    # 分词并过滤停用词
+    tokens = list(jieba.cut(entity_title, cut_all=False))
+    meaningful_tokens = [
+        t.strip() for t in tokens
+        if t.strip()
+        and t.strip() not in _JIEBA_STOPWORDS
+        and (len(t.strip()) >= 2 or t.strip().isalnum())
+    ]
+
+    if not meaningful_tokens:
+        return False
+
+    # 要求所有 meaningful token 都在源文本中出现
+    for token in meaningful_tokens:
+        if token.casefold() not in text_lower:
+            return False
+    return True
+
+
 def _split_morphemes(text: str) -> list[str]:
     """将实体名拆分为有意义的词素。
 
@@ -515,13 +583,18 @@ def judge_entity_faithfulness(
     source_text: str,
     *,
     metadata_context: dict[str, str] | None = None,
+    mode: FaithfulnessMode = _DEFAULT_FAITHFULNESS_MODE,
 ) -> FaithfulnessVerdict:
     """对单个抽取实体进行忠实度判定。
 
     判定规则（确定性，不依赖语义推理）：
       1. 名称碎片检测：过短、纯标点、纯数字 → unfaithful
       2. 类型合规检测：类型不在 schema 中 → unfaithful
-      3. 文本依据检测：实体名在源文本或文档元数据中无 span 对应 → unfaithful
+      3. 文本依据检测：实体名在源文本或文档元数据中无依据 → unfaithful
+
+    mode 控制文本依据检测的宽松程度：
+      - strict: 只用 Level 1-4（子串匹配 + 后缀拆分 + 前后半拆分）
+      - lenient: 额外启用 Level 5 jieba 分词匹配
 
     metadata_context 用于豁免 metadata-closure 注入的实体（如 course_id、
     章节标题、节标题），这些实体来自文档结构元数据而非正文。
@@ -538,11 +611,12 @@ def judge_entity_faithfulness(
     if _normalize_entity_type(etype) not in _VALID_ENTITY_TYPES:
         reasons.append("invalid_type")
 
-    # 规则 3：文本依据（含 metadata 豁免）
+    # 规则 3：文本依据（含 metadata 豁免 + 可选 jieba Level 5）
     has_grounding = _entity_has_text_grounding(title, source_text)
     if not has_grounding and metadata_context:
-        # 检查是否在文档元数据中有依据
         has_grounding = _entity_in_metadata_context(title, etype, metadata_context)
+    if not has_grounding and mode == "lenient":
+        has_grounding = _entity_has_text_grounding_jieba(title, source_text)
     if not has_grounding:
         reasons.append("no_text_grounding")
 
@@ -620,6 +694,7 @@ def compute_sample_faithfulness(
     item: StructuredExtractionResult,
     source_text: str,
     metadata_context: dict[str, str] | None = None,
+    mode: FaithfulnessMode = _DEFAULT_FAITHFULNESS_MODE,
 ) -> FaithfulnessSampleResult:
     """对单个样本的所有抽取实体进行忠实度评估。"""
     verdicts: list[FaithfulnessVerdict] = []
@@ -629,6 +704,7 @@ def compute_sample_faithfulness(
         verdict = judge_entity_faithfulness(
             ent.title, ent.type, source_text,
             metadata_context=metadata_context,
+            mode=mode,
         )
         verdicts.append(verdict)
 
@@ -650,6 +726,7 @@ def compute_sample_faithfulness(
 def compute_faithfulness_error_rate(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
+    mode: FaithfulnessMode = _DEFAULT_FAITHFULNESS_MODE,
 ) -> float:
     """计算所有成功样本的平均忠实度错误率。
 
@@ -657,6 +734,10 @@ def compute_faithfulness_error_rate(
 
     不依赖 gold 标注密度，只依赖源文本和文档元数据。
     当样本无源文本或无抽取实体时跳过。
+
+    mode:
+      - strict: 只用 Level 1-4 匹配
+      - lenient: 额外启用 Level 5 jieba 分词匹配（默认）
 
     返回值范围 [0.0, 1.0]，越低越好。
     """
@@ -667,7 +748,7 @@ def compute_faithfulness_error_rate(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.source_text:
             continue
-        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context)
+        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context, mode=mode)
         if result.total_entities == 0:
             continue
         rates.append(result.error_rate)
@@ -679,6 +760,7 @@ def compute_faithfulness_error_rate(
 def compute_faithfulness_details(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
+    mode: FaithfulnessMode = _DEFAULT_FAITHFULNESS_MODE,
 ) -> dict:
     """计算忠实度评估的详细报告，包含分类统计和样本级明细。"""
     sample_results: list[FaithfulnessSampleResult] = []
@@ -690,7 +772,7 @@ def compute_faithfulness_details(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.source_text:
             continue
-        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context)
+        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context, mode=mode)
         if result.total_entities == 0:
             continue
         sample_results.append(result)
