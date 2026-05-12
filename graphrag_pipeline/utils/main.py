@@ -430,6 +430,13 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             "health": "/health",
         }
 
+    # 注册提示词调优路由
+    try:
+        from .prompt_tuning_service import register_prompt_tuning_routes
+    except ImportError:
+        from prompt_tuning_service import register_prompt_tuning_routes
+    register_prompt_tuning_routes(app)
+
     return app
 
 
