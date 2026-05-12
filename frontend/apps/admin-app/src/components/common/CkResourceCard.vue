@@ -127,7 +127,7 @@ const titleMultiline = computed(() => titleClampValue.value > 1)
   position: absolute;
   top: var(--ckqa-space-2);
   right: var(--ckqa-space-2);
-  background: rgba(255, 255, 255, 0.82);
+  background: color-mix(in srgb, var(--ckqa-surface) 82%, transparent);
   backdrop-filter: blur(6px);
   border-radius: var(--ckqa-radius-pill, 999px);
   padding: 2px 8px;

@@ -195,6 +195,32 @@ export function useBuildRunStream(options = {}) {
   let eventSource = null
   let pollTimer = null
   let currentWorkflowSteps = options.workflowSteps ?? null
+  let refreshRequestSeq = 0
+  let sseConnectionSeq = 0
+
+  function invalidatePendingRefreshes() {
+    refreshRequestSeq += 1
+  }
+
+  function invalidateSseConnections() {
+    sseConnectionSeq += 1
+  }
+
+  function isActiveSseConnection(source, connectionSeq) {
+    return source === eventSource && connectionSeq === sseConnectionSeq
+  }
+
+  function resetState(nextBuildRunId = null) {
+    state.buildRunId = nextBuildRunId
+    state.mode = 'idle'
+    state.status = 'idle'
+    state.currentStage = ''
+    state.stages = []
+    state.logs = []
+    state.failureReason = ''
+    state.updatedAt = ''
+    state.error = null
+  }
 
   function applySnapshot(snapshot) {
     const next = normalizeBuildRunSnapshot(snapshot, { workflowSteps: currentWorkflowSteps, logCap })
@@ -229,16 +255,23 @@ export function useBuildRunStream(options = {}) {
   }
 
   async function refresh() {
-    if (!state.buildRunId) return null
+    const requestSeq = ++refreshRequestSeq
+    const requestedBuildRunId = state.buildRunId
+
+    if (!requestedBuildRunId) return null
     try {
-      const snapshot = await getBuildRunImpl(state.buildRunId)
-      applySnapshot(snapshot)
-      if (isTerminalStatus(state.status)) {
-        clearPoll()
+      const snapshot = await getBuildRunImpl(requestedBuildRunId)
+      if (requestSeq === refreshRequestSeq && state.buildRunId === requestedBuildRunId) {
+        applySnapshot(snapshot)
+        if (isTerminalStatus(state.status)) {
+          clearPoll()
+        }
       }
       return snapshot
     } catch (error) {
-      state.error = error
+      if (requestSeq === refreshRequestSeq && state.buildRunId === requestedBuildRunId) {
+        state.error = error
+      }
       return null
     }
   }
@@ -247,19 +280,32 @@ export function useBuildRunStream(options = {}) {
     if (typeof window === 'undefined' || typeof window.EventSource !== 'function') {
       return false
     }
+    let source = null
     try {
-      eventSource = new window.EventSource(buildStreamUrl(state.buildRunId))
+      source = new window.EventSource(buildStreamUrl(state.buildRunId))
+      const connectionSeq = ++sseConnectionSeq
+      eventSource = source
       state.mode = 'sse'
-      eventSource.addEventListener('message', (rawEvent) => {
+      source.addEventListener('message', (rawEvent) => {
+        if (!isActiveSseConnection(source, connectionSeq)) return
         const event = parseStreamEvent(rawEvent)
         if (event) applyEvent(event)
       })
-      eventSource.addEventListener('error', () => {
+      source.addEventListener('error', () => {
+        if (!isActiveSseConnection(source, connectionSeq)) return
+        invalidateSseConnections()
         closeSse()
         startPolling()
       })
       return true
     } catch {
+      if (source) {
+        invalidateSseConnections()
+        if (eventSource === source) {
+          eventSource = null
+        }
+        try { source.close() } catch { /* ignore */ }
+      }
       return false
     }
   }
@@ -278,7 +324,14 @@ export function useBuildRunStream(options = {}) {
   }
 
   function start({ buildRunId: nextId, workflowSteps } = {}) {
-    if (nextId != null) state.buildRunId = nextId
+    if (nextId != null && nextId !== state.buildRunId) {
+      invalidatePendingRefreshes()
+      closeSse()
+      clearPoll()
+      resetState(nextId)
+    } else if (nextId != null) {
+      state.buildRunId = nextId
+    }
     if (workflowSteps !== undefined) currentWorkflowSteps = workflowSteps
     if (!state.buildRunId) return
 
@@ -296,8 +349,10 @@ export function useBuildRunStream(options = {}) {
 
   function closeSse() {
     if (eventSource) {
-      try { eventSource.close() } catch { /* ignore */ }
+      const source = eventSource
+      invalidateSseConnections()
       eventSource = null
+      try { source.close() } catch { /* ignore */ }
     }
   }
 
@@ -309,12 +364,18 @@ export function useBuildRunStream(options = {}) {
   }
 
   function stop() {
+    invalidatePendingRefreshes()
     closeSse()
     clearPoll()
     state.mode = 'idle'
   }
 
+  function reset() {
+    stop()
+    resetState()
+  }
+
   onBeforeUnmount(stop)
 
-  return { state, start, stop, refresh, updateWorkflowSteps }
+  return { state, start, stop, reset, refresh, updateWorkflowSteps }
 }

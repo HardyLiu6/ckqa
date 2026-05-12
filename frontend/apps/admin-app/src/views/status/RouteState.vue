@@ -10,11 +10,31 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  variant: {
+    type: String,
+    default: '',
+  },
+  title: {
+    type: String,
+    default: '',
+  },
+  message: {
+    type: String,
+    default: '',
+  },
 })
 
 const route = useRoute()
 
-const currentState = computed(() => props.state || route.meta.routeState || 'coming-soon')
+function resolveRouteStateVariant(variant) {
+  const normalized = String(variant ?? '').trim()
+
+  if (normalized === 'error') return 'server-error'
+
+  return normalized
+}
+
+const currentState = computed(() => resolveRouteStateVariant(props.variant) || props.state || route.meta.routeState || 'coming-soon')
 
 const navGroupLabels = {
   dashboard: '工作台',
@@ -74,31 +94,31 @@ const copy = computed(() => {
   if (currentState.value === 'forbidden') {
     return {
       eyebrow: '403 / Forbidden',
-      title: '当前身份无权访问',
-      message: '路由守卫已拦截本次访问，请切换到具备权限的身份或返回工作台。',
+      title: props.title || '当前身份无权访问',
+      message: props.message || '路由守卫已拦截本次访问，请切换到具备权限的身份或返回工作台。',
     }
   }
 
   if (currentState.value === 'not-found') {
     return {
       eyebrow: '404 / Not Found',
-      title: '页面不存在',
-      message: '目标地址没有匹配到智课问答管理台页面。',
+      title: props.title || '页面不存在',
+      message: props.message || '目标地址没有匹配到智课问答管理台页面。',
     }
   }
 
   if (currentState.value === 'server-error') {
     return {
       eyebrow: '500 / Server Error',
-      title: '页面进入异常状态',
-      message: '可以先刷新当前页面；如果仍然异常，请进入系统健康页查看 Java 编排与下游服务状态。',
+      title: props.title || '页面进入异常状态',
+      message: props.message || '可以先刷新当前页面；如果仍然异常，请进入系统健康页查看 Java 编排与下游服务状态。',
     }
   }
 
   return {
     eyebrow: 'Coming Soon',
-    title: routeTitle.value,
-    message: '该入口已保留在导航和权限结构中，当前阶段暂不开放业务页面。',
+    title: props.title || routeTitle.value,
+    message: props.message || '该入口已保留在导航和权限结构中，当前阶段暂不开放业务页面。',
   }
 })
 

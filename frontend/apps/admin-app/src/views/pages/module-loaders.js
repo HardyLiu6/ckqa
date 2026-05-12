@@ -903,7 +903,7 @@ async function loadIndexRunDetail(route, services) {
   }
 }
 
-async function loadKnowledgeBaseBuild(route, query, services) {
+export async function loadKnowledgeBaseBuild(route, query, services = defaultServices) {
   const kbId = route.params?.kbId
   const buildRunId = resolveBuildRunIdQuery(query)
   const knowledgeBase = await services.getKnowledgeBase(kbId)

@@ -6,7 +6,67 @@ import {
   mergeStageEvent,
   mergeLogEvent,
   normalizeBuildRunSnapshot,
+  useBuildRunStream,
 } from './useBuildRunStream.js'
+
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+function flush() {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+function createFakeEventSourceRegistry(options = {}) {
+  const sources = []
+  const { throwOnAddEventListenerType = null } = options
+
+  class FakeEventSource {
+    constructor(url) {
+      this.url = url
+      this.closed = false
+      this.listeners = {
+        message: [],
+        error: [],
+      }
+      sources.push(this)
+    }
+
+    addEventListener(type, handler) {
+      if (throwOnAddEventListenerType === type) {
+        throw new Error(`addEventListener:${type}`)
+      }
+      if (!this.listeners[type]) {
+        this.listeners[type] = []
+      }
+      this.listeners[type].push(handler)
+    }
+
+    close() {
+      this.closed = true
+    }
+
+    dispatchMessage(event) {
+      for (const handler of this.listeners.message) {
+        handler({ data: JSON.stringify(event) })
+      }
+    }
+
+    dispatchError(event = {}) {
+      for (const handler of this.listeners.error) {
+        handler(event)
+      }
+    }
+  }
+
+  return { sources, FakeEventSource }
+}
 
 test('parseStreamEvent 接受 JSON 字符串并还原结构', () => {
   const event = parseStreamEvent({ data: '{"type":"log","payload":{"level":"info","message":"x"}}' })
@@ -120,4 +180,263 @@ test('normalizeBuildRunSnapshot 展开 { buildRun, logs } 组合输入', () => {
   })
   assert.equal(snap.status, 'running')
   assert.equal(snap.logs[0].message, 'PDF 解析 启动')
+})
+
+test('useBuildRunStream 切换 run 时旧请求晚返回不会污染新 run', async () => {
+  const requests = []
+  const getBuildRun = (buildRunId) => {
+    const deferred = createDeferred()
+    requests.push({ buildRunId, deferred })
+    return deferred.promise
+  }
+  const stream = useBuildRunStream({
+    buildRunId: null,
+    pollIntervalMs: 3600000,
+    getBuildRun,
+  })
+
+  try {
+    stream.start({ buildRunId: 101 })
+    assert.equal(stream.state.buildRunId, 101)
+    assert.equal(stream.state.currentStage, '')
+
+    stream.start({ buildRunId: 202 })
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.currentStage, '')
+    assert.equal(requests.length, 4)
+    assert.deepEqual(requests.map((item) => item.buildRunId), [101, 101, 202, 202])
+
+    requests[3].deferred.resolve({
+      status: 'running',
+      currentStage: 'index',
+      logs: [{ level: 'info', message: 'new-run' }],
+    })
+    await flush()
+
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'index')
+    assert.equal(stream.state.logs.at(-1).message, 'new-run')
+
+    requests[2].deferred.resolve({
+      status: 'done',
+      currentStage: 'qa_check',
+      logs: [{ level: 'info', message: 'new-run-stale' }],
+    })
+    await flush()
+
+    requests[1].deferred.resolve({
+      status: 'running',
+      currentStage: 'parse',
+      logs: [{ level: 'info', message: 'old-run-late-1' }],
+    })
+    await flush()
+
+    requests[0].deferred.resolve({
+      status: 'failed',
+      currentStage: 'material',
+      logs: [{ level: 'error', message: 'old-run-late-0' }],
+    })
+    await flush()
+
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'index')
+    assert.equal(stream.state.logs.at(-1).message, 'new-run')
+  } finally {
+    stream.reset()
+  }
+})
+
+test('useBuildRunStream reset 会清空状态并忽略后续慢请求', async () => {
+  const requests = []
+  const getBuildRun = (buildRunId) => {
+    const deferred = createDeferred()
+    requests.push({ buildRunId, deferred })
+    return deferred.promise
+  }
+  const stream = useBuildRunStream({
+    buildRunId: 303,
+    pollIntervalMs: 3600000,
+    getBuildRun,
+  })
+
+  try {
+    const firstRefresh = stream.refresh()
+    assert.equal(requests.length, 1)
+    requests[0].deferred.resolve({
+      status: 'running',
+      currentStage: 'parse',
+      logs: [{ level: 'info', message: 'snapshot-ready' }],
+    })
+    await firstRefresh
+    await flush()
+
+    assert.equal(stream.state.buildRunId, 303)
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'snapshot-ready')
+
+    const pendingRefresh = stream.refresh()
+    assert.equal(requests.length, 2)
+    stream.reset()
+
+    requests[1].deferred.resolve({
+      status: 'done',
+      currentStage: 'qa_check',
+      logs: [{ level: 'info', message: 'should-not-apply' }],
+    })
+    await pendingRefresh
+    await flush()
+
+    assert.equal(stream.state.buildRunId, null)
+    assert.equal(stream.state.mode, 'idle')
+    assert.equal(stream.state.status, 'idle')
+    assert.equal(stream.state.currentStage, '')
+    assert.deepEqual(stream.state.stages, [])
+    assert.deepEqual(stream.state.logs, [])
+    assert.equal(stream.state.failureReason, '')
+    assert.equal(stream.state.updatedAt, '')
+    assert.equal(stream.state.error, null)
+  } finally {
+    stream.reset()
+  }
+})
+
+test('useBuildRunStream 旧 SSE 连接的晚到事件不会污染新 run', async () => {
+  const originalWindow = globalThis.window
+  const { sources, FakeEventSource } = createFakeEventSourceRegistry()
+  const getBuildRun = async (buildRunId) => ({
+    status: 'running',
+    currentStage: buildRunId === 101 ? 'material' : 'parse',
+    logs: [{ level: 'info', message: `refresh-${buildRunId}` }],
+  })
+  const stream = useBuildRunStream({
+    buildRunId: null,
+    pollIntervalMs: 3600000,
+    getBuildRun,
+  })
+
+  globalThis.window = { EventSource: FakeEventSource }
+
+  try {
+    stream.start({ buildRunId: 101 })
+    await flush()
+
+    assert.equal(sources.length, 1)
+    const oldSource = sources[0]
+    assert.equal(stream.state.buildRunId, 101)
+    assert.equal(stream.state.mode, 'sse')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'material')
+
+    stream.start({ buildRunId: 202 })
+    await flush()
+
+    assert.equal(sources.length, 2)
+    const newSource = sources[1]
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.mode, 'sse')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'refresh-202')
+
+    oldSource.dispatchMessage({
+      type: 'snapshot',
+      payload: {
+        status: 'failed',
+        currentStage: 'qa_check',
+        logs: [{ level: 'error', message: 'old-source-snapshot' }],
+      },
+    })
+    oldSource.dispatchMessage({
+      type: 'log',
+      payload: { level: 'warn', message: 'old-source-log' },
+    })
+    await flush()
+
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.mode, 'sse')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'refresh-202')
+
+    oldSource.dispatchError({ type: 'error' })
+    await flush()
+
+    assert.equal(stream.state.mode, 'sse')
+    assert.equal(newSource.closed, false)
+    assert.equal(stream.state.currentStage, 'parse')
+
+    newSource.dispatchMessage({
+      type: 'log',
+      payload: { level: 'info', message: 'new-source-log' },
+    })
+    await flush()
+
+    assert.equal(stream.state.buildRunId, 202)
+    assert.equal(stream.state.mode, 'sse')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'new-source-log')
+  } finally {
+    stream.reset()
+    if (originalWindow === undefined) {
+      delete globalThis.window
+    } else {
+      globalThis.window = originalWindow
+    }
+  }
+})
+
+test('useBuildRunStream SSE 初始化失败时会关闭 source 并回退 polling', async () => {
+  const originalWindow = globalThis.window
+  const { sources, FakeEventSource } = createFakeEventSourceRegistry({
+    throwOnAddEventListenerType: 'error',
+  })
+  const getBuildRun = async () => ({
+    status: 'running',
+    currentStage: 'parse',
+    logs: [{ level: 'info', message: 'poll-snapshot' }],
+  })
+  const stream = useBuildRunStream({
+    buildRunId: null,
+    pollIntervalMs: 3600000,
+    getBuildRun,
+  })
+
+  globalThis.window = { EventSource: FakeEventSource }
+
+  try {
+    stream.start({ buildRunId: 303 })
+    await flush()
+
+    assert.equal(sources.length, 1)
+    const source = sources[0]
+    assert.equal(source.closed, true)
+    assert.equal(stream.state.buildRunId, 303)
+    assert.equal(stream.state.mode, 'polling')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'poll-snapshot')
+
+    source.dispatchMessage({
+      type: 'log',
+      payload: { level: 'warn', message: 'late-sse-log' },
+    })
+    source.dispatchError({ type: 'error' })
+    await flush()
+
+    assert.equal(stream.state.mode, 'polling')
+    assert.equal(stream.state.status, 'running')
+    assert.equal(stream.state.currentStage, 'parse')
+    assert.equal(stream.state.logs.at(-1).message, 'poll-snapshot')
+  } finally {
+    stream.reset()
+    if (originalWindow === undefined) {
+      delete globalThis.window
+    } else {
+      globalThis.window = originalWindow
+    }
+  }
 })

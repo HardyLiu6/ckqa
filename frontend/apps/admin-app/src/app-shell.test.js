@@ -2735,63 +2735,73 @@ test('构建向导页面模型暴露可执行步骤和问答验证语义', () =>
 
 test('构建页主操作统一走模型 operationKey 分发', () => {
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
-  const parseBlock = modulePage.slice(
-    modulePage.indexOf('async function runBuildParseCheck'),
-    modulePage.indexOf('async function runBuildGraphInput'),
+  const wizardForm = readFileSync(new URL('./composables/useBuildWizardForm.js', import.meta.url), 'utf8')
+  const operations = readFileSync(new URL('./composables/useBuildOperations.js', import.meta.url), 'utf8')
+  const parseBlock = operations.slice(
+    operations.indexOf('async function runParseCheck'),
+    operations.indexOf('async function runGraphInputExport'),
   )
-  const graphInputBlock = modulePage.slice(
-    modulePage.indexOf('async function runBuildGraphInput'),
-    modulePage.indexOf('async function runBuildPromptConfirmation'),
+  const graphInputBlock = operations.slice(
+    operations.indexOf('async function runGraphInputExport'),
+    operations.indexOf('async function runPromptConfirmation'),
   )
 
-  assert.match(modulePage, /async function handleBuildPrimaryAction\(\)/)
-  assert.match(modulePage, /operationKey === 'parse-batch'/)
-  assert.match(modulePage, /operationKey === 'export-missing'/)
-  assert.match(modulePage, /operationKey === 'material-confirm'/)
-  assert.match(modulePage, /operationKey === 'export-confirm'/)
-  assert.match(modulePage, /operationKey === 'prompt-confirm'/)
-  assert.match(modulePage, /operationKey === 'index-build'/)
-  assert.match(modulePage, /operationKey === 'qa-smoke'/)
-  assert.doesNotMatch(modulePage, /if \(route\.name === 'knowledge-base-build'\) \{\n\s+await runKnowledgeBaseIndex\(\)/)
-  assert.match(parseBlock, /checkBuildRunParse\(buildRunId/)
-  assert.match(parseBlock, /startParse/)
-  assert.match(graphInputBlock, /exportGraphRag/)
-  assert.match(graphInputBlock, /syncBuildRunGraphInput\(buildRunId/)
+  assert.doesNotMatch(modulePage, /async function handleBuildPrimaryAction\(\)/)
+  assert.match(wizardForm, /operationKey\.startsWith\('step-'\)/)
+  assert.match(wizardForm, /operationKey === 'parse-batch'/)
+  assert.match(wizardForm, /operationKey === 'export-missing'/)
+  assert.match(wizardForm, /operationKey === 'material-confirm'/)
+  assert.match(wizardForm, /operationKey === 'export-confirm'/)
+  assert.match(wizardForm, /operationKey === 'prompt-confirm'/)
+  assert.match(wizardForm, /operationKey === 'index-build'/)
+  assert.match(wizardForm, /operationKey === 'qa-smoke'/)
+  assert.match(wizardForm, /operations\.confirmMaterialSelection/)
+  assert.match(wizardForm, /operations\.runParseCheck/)
+  assert.match(wizardForm, /operations\.runGraphInputExport/)
+  assert.match(wizardForm, /operations\.runPromptConfirmation/)
+  assert.match(wizardForm, /operations\.runIndexBuild/)
+  assert.match(wizardForm, /operations\.runQaSmoke/)
+  assert.match(parseBlock, /services\.checkBuildRunParse\(buildRunId/)
+  assert.match(parseBlock, /services\.startParse/)
+  assert.match(graphInputBlock, /services\.exportGraphRag/)
+  assert.match(graphInputBlock, /services\.syncBuildRunGraphInput\(buildRunId/)
 })
 
 test('构建页 QA smoke 提交后必须轮询 build-run 终态', () => {
-  const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
-  const qaSmokeBlock = modulePage.slice(
-    modulePage.indexOf('async function runQaSmoke'),
-    modulePage.indexOf('function cancelLongTask'),
+  const operations = readFileSync(new URL('./composables/useBuildOperations.js', import.meta.url), 'utf8')
+  const qaSmokeBlock = operations.slice(
+    operations.indexOf('async function runQaSmoke'),
+    operations.indexOf('function updateSmokeQuestion'),
   )
 
-  assert.match(qaSmokeBlock, /createLongTaskController\(/)
-  assert.match(qaSmokeBlock, /runBuildRunQaSmoke\(buildRunId/)
-  assert.match(qaSmokeBlock, /getBuildRun\(buildRunId/)
+  assert.match(qaSmokeBlock, /await startLongTask\(/)
+  assert.match(qaSmokeBlock, /services\.runBuildRunQaSmoke\(buildRunId/)
+  assert.match(qaSmokeBlock, /services\.getBuildRun\(buildRunId/)
   assert.match(qaSmokeBlock, /isBuildRunQaSmokeSuccess/)
   assert.match(qaSmokeBlock, /isBuildRunQaSmokeFailed/)
-  assert.doesNotMatch(qaSmokeBlock, /const result = await runBuildRunQaSmoke[\s\S]*?actionState\.value = 'success'/)
+  assert.match(qaSmokeBlock, /smokeResult\.value/)
+  assert.doesNotMatch(qaSmokeBlock, /const result = await services\.runBuildRunQaSmoke[\s\S]*?actionState\.value = 'success'/)
 })
 
 test('构建页 loadPage 统一规范化选择集和非法步骤 query', () => {
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
-  const loadPageBlock = modulePage.slice(
-    modulePage.indexOf('async function loadPage'),
-    modulePage.indexOf('function handlePageChange'),
+  const wizardForm = readFileSync(new URL('./composables/useBuildWizardForm.js', import.meta.url), 'utf8')
+  const reloadBlock = wizardForm.slice(
+    wizardForm.indexOf('async function reload'),
+    wizardForm.indexOf('function updateActiveStep'),
   )
 
   assert.doesNotMatch(modulePage, /resolveCleanMaterialQuery/)
-  assert.doesNotMatch(loadPageBlock, /shouldCleanMaterialQuery/)
-  assert.match(loadPageBlock, /resolvedActiveStepKey/)
-  assert.match(loadPageBlock, /activeStepKey\.value !== resolvedActiveStepKey/)
-  assert.match(loadPageBlock, /shouldCleanSelectionQuery/)
-  assert.match(loadPageBlock, /resolveBuildSelectionQuery\(nextQuery, result\.blocks\.selection\.materialIds\)/)
-  assert.match(loadPageBlock, /exportArtifacts\?\.summary\?\.missingCount/)
-  assert.match(loadPageBlock, /resolveBuildConfirmQuery\([\s\S]*'exportConfirmed'[\s\S]*false[\s\S]*'promptConfirmed'[\s\S]*false/)
-  assert.match(loadPageBlock, /resolveCleanBuildStepQuery\(nextQuery, stepKeys\)/)
-  assert.match(loadPageBlock, /!isSameQuery\(route\.query, nextQuery\)/)
-  assert.match(loadPageBlock, /router\.replace\(\{ query: nextQuery \}\)/)
+  assert.doesNotMatch(modulePage, /resolveCleanBuildStepQuery/)
+  assert.doesNotMatch(reloadBlock, /shouldCleanMaterialQuery/)
+  assert.match(reloadBlock, /syncActiveStepKey\(snapshotRoute\.query\?\.step\)/)
+  assert.match(reloadBlock, /shouldCleanSelectionQuery/)
+  assert.match(reloadBlock, /resolveBuildSelectionQuery\(nextQuery, normalizedConfig\.blocks\.selection\.materialIds\)/)
+  assert.match(reloadBlock, /exportArtifacts\?\.summary\?\.missingCount/)
+  assert.match(reloadBlock, /resolveBuildConfirmQuery\([\s\S]*'exportConfirmed'[\s\S]*false[\s\S]*'promptConfirmed'[\s\S]*false/)
+  assert.match(reloadBlock, /resolveCleanBuildStepQuery\(nextQuery, stepKeys\)/)
+  assert.match(reloadBlock, /!isSameQuery\(snapshotRoute\.query, nextQuery\)/)
+  assert.match(reloadBlock, /router\.replace\(\{ query: nextQuery \}\)/)
 })
 
 test('业务页模型显式声明数据来源和主操作', () => {
@@ -3044,6 +3054,7 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
 test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   const workflowStepper = readFileSync(new URL('./components/common/WorkflowStepper.vue', import.meta.url), 'utf8')
   const modulePage = readFileSync(new URL('./views/pages/ModulePage.vue', import.meta.url), 'utf8')
+  const buildWizardForm = readFileSync(new URL('./views/knowledge-bases/components/BuildWizardForm.vue', import.meta.url), 'utf8')
   const materialStep = readFileSync(new URL('./components/build-wizard/BuildStepMaterial.vue', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
   const workflowStepsCss = componentsCss.slice(
@@ -3064,12 +3075,17 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.match(workflowStepper, /:title="step\.detail"/)
   assert.match(workflowStepper, /:data-status="step\.status"/)
   assert.doesNotMatch(workflowStepper, /当前动作/)
-  assert.match(modulePage, /class="build-step-stage"/)
-  assert.match(modulePage, /ChevronLeft/)
-  assert.match(modulePage, /BuildStepMaterial/)
-  assert.match(modulePage, /BuildStepQaCheck/)
-  assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"[\s\S]*:class="primaryHeroButtonClass"/)
+  assert.match(buildWizardForm, /<WorkflowStepper/)
+  assert.match(buildWizardForm, /class="build-step-stage"/)
+  assert.match(buildWizardForm, /ChevronLeft/)
+  assert.match(buildWizardForm, /BuildStepMaterial/)
+  assert.match(buildWizardForm, /BuildStepQaCheck/)
+  assert.doesNotMatch(modulePage, /class="build-step-stage"/)
+  assert.doesNotMatch(modulePage, /BuildStepMaterial/)
+  assert.doesNotMatch(modulePage, /WorkflowStepper/)
+  assert.match(modulePage, /v-if="hasPrimaryAction"[\s\S]*:class="primaryHeroButtonClass"/)
   assert.doesNotMatch(modulePage, /v-if="route\.name === 'knowledge-base-build'"\s+class="content-grid two-columns"/)
+  assert.doesNotMatch(modulePage, /route\.name === 'knowledge-base-build'/)
   assert.doesNotMatch(modulePage, /buildSelectionBlock\?\.selectedMaterialId/)
   assert.match(materialStep, /<el-checkbox[\s\S]*:data-testid="`build-material-checkbox-\$\{row\.id\}`"/)
   assert.doesNotMatch(materialStep, /:data-testid="`build-material-select-\$\{row\.id\}`"[\s\S]*?<el-button/)
@@ -3080,10 +3096,12 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.match(materialStep, /row\.updatedAt \|\| '-'/)
   assert.doesNotMatch(materialStep, /row\.updatedAt \|\| row\.detail/)
   assert.doesNotMatch(materialStep, /未勾选/)
-  assert.match(componentsCss, /\.build-step-stage\s*\{/)
-  assert.match(componentsCss, /\.build-summary-chip\s*\{/)
+  assert.match(buildWizardForm, /\.build-step-stage\s*\{/)
+  assert.match(buildWizardForm, /\.build-summary-chip\s*\{/)
+  assert.doesNotMatch(componentsCss, /\.build-step-stage\s*\{/)
+  assert.doesNotMatch(componentsCss, /\.build-summary-chip\s*\{/)
   assert.match(componentsCss, /grid-template-columns:\s*repeat\(3,\s*minmax\(220px,\s*1fr\)\)/)
-  assert.match(componentsCss, /white-space:\s*normal/)
+  assert.match(buildWizardForm, /white-space:\s*normal/)
   assert.doesNotMatch(workflowStepsCss, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/)
   for (const file of buildStepFiles) {
     assert.equal(existsSync(new URL(file, import.meta.url)), true)
@@ -3123,7 +3141,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table' && route\.name !== 'material-detail'\)/)
   assert.match(modulePage, /const materialParseProgress = computed/)
   assert.match(modulePage, /const hasPrimaryAction = computed/)
-  assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build'"/)
+  assert.match(modulePage, /v-if="hasPrimaryAction"/)
   assert.match(modulePage, /:title="tableTitle"/)
   assert.match(modulePage, /openCourseMaterialsPage/)
   assert.match(modulePage, /class="creation-dialog course-action-dialog material-action-dialog"/)

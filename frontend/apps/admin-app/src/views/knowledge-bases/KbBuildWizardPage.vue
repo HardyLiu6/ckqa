@@ -2,7 +2,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import ModulePage from '../pages/ModulePage.vue'
 import {
   resolveBuildRunIdQuery,
 } from '../pages/module-page-model.js'
@@ -12,6 +11,7 @@ import { useBuildWizardRun } from '../../composables/useBuildWizardRun.js'
 import { authStore } from '../../stores/auth.js'
 import { getBuildRun, getKnowledgeBase } from '../../api/knowledge-bases.js'
 
+import BuildWizardForm from './components/BuildWizardForm.vue'
 import BuildRunLivePanel from './components/BuildRunLivePanel.vue'
 import {
   resolveCanManageRun,
@@ -22,23 +22,24 @@ import { KB_BUILD_COPY } from './kb-build-copy.js'
 
 // KbBuildWizardPage 的核心职责：
 // 1) 外层走 ConsoleLayout（shell），页面内部用 CSS Grid 做 7fr/5fr 分屏
-// 2) 左栏 = 现有 ModulePage（完整 6 步表单 + 业务状态机，保持不重写）
+// 2) 左栏 = BuildWizardForm（完整 6 步表单 + 业务状态机）
 // 3) 右栏 = BuildRunLivePanel（阶段时间线 + 日志流 + 重试/取消）
 //
 // 左右两栏通过 URL 中的 buildRunId 做单向同步：
-// - ModulePage 启动构建后会写 buildRunId 到 route.query
+// - 左栏在启动构建后会写 buildRunId 到 route.query
 // - 右侧 watch(buildRunId) 重启 useBuildRunStream 订阅
 //
 // 这样既实现了 M5 plan 的"分屏 + 实时面板"视觉目标，
-// 又保留了 ModulePage 里所有已验证的 6 步流水线逻辑。
+// 又保留了构建向导表单与右侧实时面板之间的单向同步。
 
 const route = useRoute()
 
 const buildRunId = computed(() => resolveBuildRunIdQuery(route.query))
 const knowledgeBase = ref(null)
 const runCache = ref(null)
+let runCacheRefreshSeq = 0
 
-const { state: streamState, start, stop, refresh } = useBuildRunStream({
+const { state: streamState, start, reset, refresh } = useBuildRunStream({
   buildRunId: buildRunId.value,
   pollIntervalMs: 5000,
   getBuildRun,
@@ -71,13 +72,24 @@ const emptyHint = computed(() =>
 
 const failedStageKey = computed(() => streamState.stages.find((s) => s.state === 'failed')?.key ?? '')
 
+async function syncRunCache() {
+  const requestSeq = ++runCacheRefreshSeq
+  const snapshot = await refresh()
+  if (requestSeq !== runCacheRefreshSeq) return null
+  runCache.value = snapshot ?? null
+  return snapshot
+}
+
 // buildRunId 变化时，重启订阅
 watch(buildRunId, (next) => {
   wizard.setBuildRunId(next)
   if (next) {
     start({ buildRunId: next })
+    void syncRunCache()
   } else {
-    stop()
+    reset()
+    runCacheRefreshSeq += 1
+    runCache.value = null
   }
 })
 
@@ -101,9 +113,7 @@ watch(
 onMounted(() => {
   if (buildRunId.value) {
     start({ buildRunId: buildRunId.value })
-    refresh().then((snapshot) => {
-      if (snapshot) runCache.value = snapshot
-    })
+    void syncRunCache()
   }
 })
 
@@ -111,7 +121,7 @@ async function onRetry(stageKey) {
   if (!stageKey) return
   const result = await wizard.retry(stageKey, {})
   if (result.status === 'success') {
-    refresh()
+    void syncRunCache()
   }
 }
 
@@ -123,7 +133,7 @@ function onSkip(stageKey) {
 async function onCancel() {
   if (!isBuildRunTerminal(streamState.status)) {
     await wizard.cancel()
-    refresh()
+    void syncRunCache()
   }
 }
 </script>
@@ -132,10 +142,13 @@ async function onCancel() {
   <div class="kb-build-wizard-page" data-testid="kb-build-wizard-page">
     <section class="kb-build-wizard-page__form">
       <!--
-        Form 侧完全复用 ModulePage（6 步 BuildStep* + primaryAction 长任务 + SSE）。
-        ModulePage 内部检测到 route.name === 'knowledge-base-build' 时会自动进入 workflow 分支。
+        Form 侧直接使用 BuildWizardForm（6 步 BuildStep* + primaryAction 长任务 + SSE）。
       -->
-      <ModulePage />
+      <BuildWizardForm
+        :build-run-id="buildRunId"
+        :kb="knowledgeBase"
+        :readonly="readonly"
+      />
     </section>
 
     <aside class="kb-build-wizard-page__live" aria-label="构建实时面板区">
