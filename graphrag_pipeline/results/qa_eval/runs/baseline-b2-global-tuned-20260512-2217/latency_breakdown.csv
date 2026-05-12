@@ -1,0 +1,5 @@
+question_id,category,mode,elapsed_seconds,success,timeout_like,answer_chars,total_tokens,error_type,error
+Q001,factual_lookup,graphrag-global-search:latest,98.572,True,False,888,34,,
+Q002,factual_lookup,graphrag-global-search:latest,108.1324,True,False,1344,65,,
+Q003,factual_lookup,graphrag-global-search:latest,113.0781,True,False,1209,47,,
+Q004,factual_lookup,graphrag-global-search:latest,105.8162,True,False,1354,98,,

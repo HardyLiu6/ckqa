@@ -1,0 +1,2 @@
+question_id,category,mode,entity_hit_rate,must_cite_hit,citation_format_present,negative_hit,answer_chars,length_score,info_density,elapsed_seconds,semantic_correctness,faithfulness,retrieval_precision,error
+Q001,factual_lookup,graphrag-global-search:latest,0.0,0.0,0.0,0.0,0.0,0.0,0.0,180.11635630999808,,,,1

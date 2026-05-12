@@ -1,0 +1,89 @@
+{
+  "run_id": "baseline-b2-global-tuned-20260512-2217",
+  "total_items": 4,
+  "modes": [
+    "graphrag-global-search:latest"
+  ],
+  "per_mode": {
+    "graphrag-global-search:latest": {
+      "total_count": 4,
+      "success_count": 4,
+      "error_count": 0,
+      "timeout_like_error_count": 0,
+      "mean_seconds": 106.3997,
+      "success_mean_seconds": 106.3997,
+      "error_mean_seconds": 0.0,
+      "p50_seconds": 108.1324,
+      "p95_seconds": 113.0781,
+      "max_seconds": 113.0781,
+      "min_seconds": 98.572
+    }
+  },
+  "per_category_mode": {
+    "factual_lookup": {
+      "graphrag-global-search:latest": {
+        "total_count": 4,
+        "success_count": 4,
+        "error_count": 0,
+        "timeout_like_error_count": 0,
+        "mean_seconds": 106.3997,
+        "success_mean_seconds": 106.3997,
+        "error_mean_seconds": 0.0,
+        "p50_seconds": 108.1324,
+        "p95_seconds": 113.0781,
+        "max_seconds": 113.0781,
+        "min_seconds": 98.572
+      }
+    }
+  },
+  "slowest_rows": [
+    {
+      "question_id": "Q003",
+      "category": "factual_lookup",
+      "mode": "graphrag-global-search:latest",
+      "elapsed_seconds": 113.0781,
+      "success": true,
+      "error": "",
+      "error_type": "",
+      "timeout_like": false,
+      "answer_chars": 1209,
+      "total_tokens": 47
+    },
+    {
+      "question_id": "Q002",
+      "category": "factual_lookup",
+      "mode": "graphrag-global-search:latest",
+      "elapsed_seconds": 108.1324,
+      "success": true,
+      "error": "",
+      "error_type": "",
+      "timeout_like": false,
+      "answer_chars": 1344,
+      "total_tokens": 65
+    },
+    {
+      "question_id": "Q004",
+      "category": "factual_lookup",
+      "mode": "graphrag-global-search:latest",
+      "elapsed_seconds": 105.8162,
+      "success": true,
+      "error": "",
+      "error_type": "",
+      "timeout_like": false,
+      "answer_chars": 1354,
+      "total_tokens": 98
+    },
+    {
+      "question_id": "Q001",
+      "category": "factual_lookup",
+      "mode": "graphrag-global-search:latest",
+      "elapsed_seconds": 98.572,
+      "success": true,
+      "error": "",
+      "error_type": "",
+      "timeout_like": false,
+      "answer_chars": 888,
+      "total_tokens": 34
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+question_id,category,mode,elapsed_seconds,success,timeout_like,answer_chars,total_tokens,error_type,error
+Q001,factual_lookup,graphrag-drift-search:latest,90.0893,False,True,0,,GraphRagApiError,"query failed after 1 attempts: HTTPConnectionPool(host='127.0.0.1', port=8013): Read timed out. (read timeout=90.0)"

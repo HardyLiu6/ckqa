@@ -1,0 +1,13 @@
+question_id,category,mode,error,error_message,entity_hit_rate,must_cite_hit,citation_format_present,negative_hit,answer_chars,length_score,info_density,elapsed_seconds
+Q001,factual_lookup,graphrag-local-search:latest,False,,1.0,1.0,1.0,1.0,738.0,0.0,5.4201,42.049953440000536
+Q001,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,1.0,1669.0,0.0,2.3966,113.39416117200744
+Q001,factual_lookup,graphrag-basic-search:latest,False,,1.0,1.0,1.0,1.0,614.0,0.0,6.5147,18.79313187400112
+Q002,factual_lookup,graphrag-local-search:latest,False,,1.0,1.0,1.0,0.0,1148.0,0.0,3.4843,32.614635161997285
+Q002,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,0.0,1920.0,0.0,2.0833,134.1938331979909
+Q002,factual_lookup,graphrag-basic-search:latest,False,,1.0,1.0,1.0,0.0,644.0,0.0,6.2112,19.475655393995112
+Q003,factual_lookup,graphrag-local-search:latest,False,,0.5,1.0,1.0,0.0,1061.0,0.0,1.885,26.39390209899284
+Q003,factual_lookup,graphrag-global-search:latest,False,,0.75,1.0,1.0,1.0,1630.0,0.0,1.8405,97.01734380901325
+Q003,factual_lookup,graphrag-basic-search:latest,False,,0.75,1.0,1.0,1.0,1531.0,0.0,1.9595,32.42750398800126
+Q004,factual_lookup,graphrag-local-search:latest,False,,0.75,1.0,1.0,0.0,1479.0,0.0,2.0284,44.825945499003865
+Q004,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,0.0,3374.0,0.0,1.1855,138.5347167729924
+Q004,factual_lookup,graphrag-basic-search:latest,False,,1.0,1.0,1.0,0.0,1134.0,0.0,3.5273,56.48334402500768

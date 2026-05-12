@@ -1,0 +1,13 @@
+question_id,category,mode,elapsed_seconds,success,timeout_like,answer_chars,total_tokens,error_type,error
+Q001,factual_lookup,graphrag-local-search:latest,42.05,True,False,738,33,,
+Q001,factual_lookup,graphrag-global-search:latest,113.3942,True,False,1669,62,,
+Q001,factual_lookup,graphrag-basic-search:latest,18.7931,True,False,614,24,,
+Q002,factual_lookup,graphrag-local-search:latest,32.6146,True,False,1148,70,,
+Q002,factual_lookup,graphrag-global-search:latest,134.1938,True,False,1920,97,,
+Q002,factual_lookup,graphrag-basic-search:latest,19.4757,True,False,644,36,,
+Q003,factual_lookup,graphrag-local-search:latest,26.3939,True,False,1061,49,,
+Q003,factual_lookup,graphrag-global-search:latest,97.0173,True,False,1630,84,,
+Q003,factual_lookup,graphrag-basic-search:latest,32.4275,True,False,1531,87,,
+Q004,factual_lookup,graphrag-local-search:latest,44.8259,True,False,1479,113,,
+Q004,factual_lookup,graphrag-global-search:latest,138.5347,True,False,3374,234,,
+Q004,factual_lookup,graphrag-basic-search:latest,56.4833,True,False,1134,81,,

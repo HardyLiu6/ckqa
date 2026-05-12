@@ -183,3 +183,9 @@ pdf_ingest/.temp/
 # Superpowers brainstorming (可视化伴随会话产物)
 # =========================
 .superpowers/
+
+# QA 评测：原始响应与中间 json 不入库
+graphrag_pipeline/results/qa_eval/runs/*/raw/
+graphrag_pipeline/results/qa_eval/runs/*/judge_raw/
+graphrag_pipeline/results/qa_eval/runs/*/rule_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/judge_scoring.json

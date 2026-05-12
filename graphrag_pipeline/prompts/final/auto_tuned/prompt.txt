@@ -1,0 +1,209 @@
+
+-Goal-
+Given a text document that is potentially relevant to this activity and a list of entity types, identify all entities of those types from the text and all relationships among the identified entities.
+
+-Steps-
+1. Identify all entities. For each identified entity, extract the following information:
+- entity_name: Name of the entity, capitalized
+- entity_type: One of the following types: [security model, security level, security rule, file, process, access permission, data structure, hardware component, operating system, storage system, memory management unit, allocation algorithm, i/o device, software layer, programming concept]
+- entity_description: Comprehensive description of the entity's attributes and activities
+Format each entity as ("entity"<|><entity_name><|><entity_type><|><entity_description>)
+
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
+For each pair of related entities, extract the following information:
+- source_entity: name of the source entity, as identified in step 1
+- target_entity: name of the target entity, as identified in step 1
+- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+- relationship_strength: an integer score between 1 to 10, indicating strength of the relationship between the source entity and target entity
+Format each relationship as ("relationship"<|><source_entity><|><target_entity><|><relationship_description><|><relationship_strength>)
+
+3. Return output in Chinese as a single list of all the entities and relationships identified in steps 1 and 2. Use **##** as the list delimiter.
+
+4. If you have to translate into Chinese, just translate the descriptions, nothing else!
+
+5. When finished, output <|COMPLETE|>.
+
+-Examples-
+######################
+
+Example 1:
+
+entity_types: [security model, security level, security rule, file, process, access permission, data structure, hardware component, operating system, storage system, memory management unit, allocation algorithm, i/o device, software layer, programming concept]
+text:
+，他可以访问所有的文件；而校级军官为机密级，他能访问机密级和更低密级的文件；而尉级军官为秘密级，被限定只能访问秘密级和更低的文件，而一般士兵则仅能访问内部级文件。由此可以得出，上校可以看上尉和士兵的文件，但决不能看将军的文件。由于该模型具有多个安全等级，所以称为多级安全模型。在该模型中对信息的流动做出如下两项规定：
+
+- (1) 不能上读。在密级  \mathbf{{k}} 层中运行的进程，只能读相同或更低密级层中的对象。例如允许将军阅读中尉拥有的文件，但不允许中尉阅读将军的文件，此规则称为简单安全规则。
+- (2) 不能下写。在密级 k 层中运行的进程，只能写相同或更高密级层中的对象。例如允许中尉在将军的信箱中添加信息，但不允许将军在中尉的信箱中添加信息，这样就不至于把更高密级的内容下泄。此规则称为 * 规则。
+
+只要系统严格执行了这两条规则，就能确保信息安全地流动，而不会发生信息从较高安全级泄露到较低安全级的安全问题。另外还规定，进程可以读写对象，但不能相互直接通信。图12-10示出了Bell-LaPadula模型。
+
+图12-10 Bell-LaPadula模型
+
+在图12-10中用带箭头的实线表示进程正在读对象，信息从对象流向进程。用带箭头的虚线表示进程正在写对象，信息从进程流向对象。图中示出了进程B正在从文件1中读取信息，向文件3中写入信息。由图还可看出，无论是带箭头的实线还是带箭头的虚线，它们都是水平方向或向上，而不具有向下方向的。这就是说信息没有往下流动的路径，因此处于较高层中的信息不可能流到较低的密级层次中去，这样就保证了模型的安全性。
+------------------------
+output:
+("entity"<|>CONTINUOUS ALLOCATION<|>allocation algorithm<|>连续组织方式是一种文件存储分配算法，将文件数据存放在连续的盘块中，形成顺序文件，具有简单且顺序存取速度快的优点，但会产生外部碎片)
+##
+("entity"<|>SEQUENTIAL FILE<|>file<|>顺序文件是由连续组织方式形成的文件，适合不经常更新且经常顺序访问的应用场合，如日志文件)
+##
+("entity"<|>LINKED ALLOCATION<|>allocation algorithm<|>链接组织方式是一种文件存储分配算法，通过在每个盘块中保存指向下一个盘块的指针来链接所有数据块，消除了外部碎片，但随机访问效率低)
+##
+("entity"<|>LINKED FILE<|>file<|>链接式文件是由链接组织方式形成的文件，盘块离散分布，通过指针链访问，常用于早期文件系统)
+##
+("entity"<|>FILE ALLOCATION TABLE<|>data structure<|>文件分配表是链接组织方式中用来记录每个簇的链接指针和状态的数据结构，以数组形式集中存放，减少了磁盘寻道)
+##
+("entity"<|>FAT12<|>storage system<|>FAT12是一种使用12位簇地址的文件系统，只能管理小容量磁盘，是FAT文件系统的早期版本)
+##
+("entity"<|>FAT16<|>storage system<|>FAT16从FAT12发展而来，使用16位簇地址，支持更大的磁盘容量，但仍受限于最大分区大小)
+##
+("entity"<|>FAT32<|>storage system<|>FAT32进一步使用32位簇地址，支持更大容量磁盘，并减小簇大小以节省空间，但兼容性和性能有折中)
+##
+("entity"<|>CLUSTER<|>allocation algorithm<|>簇是由多个连续扇区组成的文件分配基本单位，引入簇可以减少FAT表项数量，提高管理效率，但会增大内部碎片)
+##
+("entity"<|>NTFS<|>storage system<|>NTFS是Windows NT系列操作系统使用的文件系统，采用主文件表(MFT)和虚拟簇号(LCN)将文件映射到磁盘物理地址)
+##
+("entity"<|>LOGICAL CLUSTER NUMBER<|>programming concept<|>逻辑簇号是文件内部的簇偏移量，与虚拟簇号等同，在NTFS中通过簇映射表转换为物理磁盘上的簇地址)
+##
+("entity"<|>VIRTUAL CLUSTER NUMBER<|>programming concept<|>虚拟簇号即逻辑簇号，表示文件内的簇顺序，NTFS使用其进行物理地址映射)
+##
+("entity"<|>MS-DOS<|>operating system<|>MS-DOS是微软早期的单用户磁盘操作系统，其文件系统基于FAT12和FAT16，支持基本的文件和目录操作)
+##
+("entity"<|>UNIX<|>operating system<|>UNIX是一种多用户多任务操作系统，其文件系统采用索引结点(inode)和多级索引结构，支持高效的文件访问)
+##
+("entity"<|>INDEX ALLOCATION<|>allocation algorithm<|>索引组织方式为每个文件分配一个索引块，其中存放文件所有数据块的盘块号，支持直接访问任意块，适合随机访问)
+##
+("entity"<|>INDEX FILE<|>file<|>索引文件是基于索引组织方式的文件，通过索引块快速定位数据块，适用于经常更新和经常随机访问的场景)
+##
+("entity"<|>MULTI-LEVEL INDEX<|>allocation algorithm<|>多级索引是索引组织方式的扩展，使用多层索引块来处理大文件，如二级间接索引，克服了单一索引块大小限制)
+##
+("entity"<|>INCREMENTAL INDEX ORGANIZATION<|>allocation algorithm<|>增量式索引组织方式采用混合索引，如UNIX中直接块、一次间接块、二次间接块的组合，灵活适应不同文件大小)
+##
+("entity"<|>BIT MAP<|>data structure<|>位示图是一种管理磁盘空闲空间的数据结构，用二进制位表示盘块占用情况，1表示占用，0表示空闲，便于快速分配和回收)
+##
+("entity"<|>DISK BLOCK<|>storage system<|>盘块是磁盘存储的物理分配单元，通常大小为512字节或1KB，文件系统以盘块为单位进行空间分配)
+##
+("relationship"<|>CONTINUOUS ALLOCATION<|>SEQUENTIAL FILE<|>连续组织方式直接形成顺序文件，文件数据块物理上连续存放<|>9)
+##
+("relationship"<|>LINKED ALLOCATION<|>LINKED FILE<|>链接组织方式通过指针将盘块链接起来形成链接式文件<|>9)
+##
+("relationship"<|>LINKED ALLOCATION<|>FILE ALLOCATION TABLE<|>链接组织方式通常借助文件分配表集中存放链接指针，以改善随机访问性能<|>8)
+##
+("relationship"<|>FILE ALLOCATION TABLE<|>CLUSTER<|>文件分配表以簇为单位记录分配信息，引入簇是为了减少FAT表项数量<|>8)
+##
+("relationship"<|>MS-DOS<|>FAT12<|>MS-DOS最初使用FAT12作为其文件系统<|>9)
+##
+("relationship"<|>MS-DOS<|>FAT16<|>MS-DOS后期版本支持FAT16以适应更大磁盘<|>8)
+##
+("relationship"<|>FAT12<|>FAT16<|>FAT16是从FAT12发展而来的，扩大了簇地址宽度以支持更大容量<|>6)
+##
+("relationship"<|>FAT16<|>FAT32<|>FAT32是FAT16的进一步扩展，采用32位簇地址，支持更大磁盘并优化簇大小<|>6)
+##
+("relationship"<|>NTFS<|>VIRTUAL CLUSTER NUMBER<|>NTFS文件系统通过虚拟簇号将文件内容映射到磁盘物理地址<|>9)
+##
+("relationship"<|>VIRTUAL CLUSTER NUMBER<|>LOGICAL CLUSTER NUMBER<|>虚拟簇号与逻辑簇号是同一概念，均表示文件内的簇偏移<|>10)
+##
+("relationship"<|>UNIX<|>INDEX ALLOCATION<|>UNIX文件系统基于索引分配，每个文件的索引结点包含数据块指针<|>9)
+##
+("relationship"<|>INDEX ALLOCATION<|>INDEX FILE<|>索引分配机制产生了索引文件，通过索引块访问数据<|>9)
+##
+("relationship"<|>INDEX ALLOCATION<|>MULTI-LEVEL INDEX<|>为支持大文件，索引分配可扩展为多级索引，增加间接索引层<|>8)
+##
+("relationship"<|>MULTI-LEVEL INDEX<|>INCREMENTAL INDEX ORGANIZATION<|>增量式索引组织方式是一种多级索引的具体实现，如UNIX中混合使用直接、一次间接和二次间接地址项<|>8)
+##
+("relationship"<|>BIT MAP<|>DISK BLOCK<|>位示图中每一位对应一个盘块，用来管理盘块的空闲与占用<|>9)
+<|COMPLETE|>
+#############################
+
+
+Example 2:
+
+entity_types: [security model, security level, security rule, file, process, access permission, data structure, hardware component, operating system, storage system, memory management unit, allocation algorithm, i/o device, software layer, programming concept]
+text:
+；权力字段是指域  \mathbf{{D}}_2 对该对象所拥有的访问权限；对象字段是一个指向相应对象的指针，对UNIX系统来说，它就是索引结点的编号。由该表可以看出，域  \mathbf{{D}}_2 可以访问的对象有4个，即文件3、4、5和打印机，对文件3的访问权限是只读；对文件4的访问权限是读、写和执行等。
+
+类 型=文件; 权力=R--; 对 象=指向文件3的指针
+类 型=文件; 权力=RWE; 对 象=指向文件4的指针
+类 型=文件; 权力=RW-; 对 象=指向文件5的指针
+类 型=打印机; 权力=-W-; 对 象=指向打印机1的指针
+
+图7-23 访问权限表
+
+应当指出，仅当访问权限表安全时，由它所保护的对象才可能是安全的。因此，访问权限表不能允许直接被用户(进程)所访问。通常，将访问权限表存储到系统区内的一个专用区中，只有通过访问合法性检查的程序才能对该表进行访问，以实现对访问控制表的保护。
+
+目前，大多数系统都同时采用访问控制表和访问权限表，在系统中为每个对象配置一张访问控制表。当一个进程第一次试图去访问一个对象时，必须先检查访问控制表，检查
+
+进程是否具有对该对象的访问权。如果无权访问，便由系统来拒绝进程的访问，并构成一例外(异常)事件；否则(有权访问)，便允许进程对该对象进行访问，并为该进程建立一访问权限，将之连接到该进程。以后，该进程便可直接利用这一返回的权限去访问该对象，这样，便可快速地验证其访问的合法性。当进程不再需要对该对象进行访问时，便可撤消该访问权限。
+------------------------
+output:
+("entity"<|>CONTIGUOUS ALLOCATION METHOD<|>allocation algorithm<|>一种文件在外存上的连续分配方式，文件被存放在连续的盘块中，形成顺序文件)
+##
+("entity"<|>SEQUENTIAL FILE<|>file<|>由连续组织方式形成的文件，其逻辑记录顺序与物理存储顺序一致)
+##
+("entity"<|>LINKED FILE<|>file<|>采用链接组织方式的文件，每个盘块包含指向下一个盘块的指针)
+##
+("entity"<|>FILE ALLOCATION TABLE<|>data structure<|>一种用于记录文件各盘块链接信息的数据结构，广泛应用于MS-DOS等系统，简称为FAT)
+##
+("entity"<|>CLUSTER<|>allocation algorithm<|>文件分配表中用于分配磁盘空间的基本单位，由多个扇区组成，以减少FAT表项的数目)
+##
+("entity"<|>FAT12<|>data structure<|>文件分配表的早期版本，使用12位表项，支持较小磁盘容量)
+##
+("entity"<|>FAT16<|>data structure<|>文件分配表的改进版本，使用16位表项，支持较大磁盘容量)
+##
+("entity"<|>FAT32<|>data structure<|>文件分配表的进一步改进版本，使用32位表项，支持更大磁盘和更小簇)
+##
+("entity"<|>LOGICAL CLUSTER NUMBER<|>programming concept<|>文件在NTFS卷中相对于卷开始位置的簇编号，用于文件系统内部寻址)
+##
+("entity"<|>VIRTUAL CLUSTER NUMBER<|>programming concept<|>用于NTFS压缩和稀疏文件中的虚拟簇编号，实现文件数据的逻辑到物理映射)
+##
+("entity"<|>NTFS<|>storage system<|>Windows NT的文件系统，支持高级特性如安全性、压缩、大容量等，采用逻辑簇号和虚拟簇号映射物理地址)
+##
+("entity"<|>MS-DOS<|>operating system<|>微软早期磁盘操作系统，采用FAT文件系统管理文件)
+##
+("entity"<|>DISK BLOCK<|>hardware component<|>磁盘上固定大小的存储单位，是文件系统进行空间分配和读写操作的基本单元)
+##
+("entity"<|>UNIX<|>operating system<|>一种多用户多任务操作系统，其文件系统使用索引结点和盘块号进行地址映射)
+##
+("entity"<|>INDEXED FILE<|>file<|>一种文件组织方式，通过索引表记录文件记录的关键字和物理地址，支持快速随机访问)
+##
+("entity"<|>MULTILEVEL INDEX<|>data structure<|>为了支持大文件，将索引表分为多级，间接指向数据块，是索引文件的一种扩展)
+##
+("entity"<|>INCREMENTAL INDEX ORGANIZATION<|>allocation algorithm<|>一种索引组织方式，索引表按需增量分配，节省索引空间，适合动态增长的文件)
+##
+("entity"<|>BIT MAP<|>data structure<|>一种利用二进制位表示盘块使用情况的数据结构，用于磁盘空闲空间管理)
+##
+("relationship"<|>CONTIGUOUS ALLOCATION METHOD<|>SEQUENTIAL FILE<|>连续组织方式直接形成顺序文件<|>9)
+##
+("relationship"<|>LINKED FILE<|>FILE ALLOCATION TABLE<|>链接式文件通常使用文件分配表来记录盘块间的链接信息<|>8)
+##
+("relationship"<|>FILE ALLOCATION TABLE<|>CLUSTER<|>文件分配表以簇为基本分配单位<|>9)
+##
+("relationship"<|>FAT12<|>FAT16<|>FAT16是FAT12的演进版本，增加了表项位数<|>10)
+##
+("relationship"<|>FAT16<|>FAT32<|>FAT32是FAT16的进一步发展，支持更大磁盘容量<|>10)
+##
+("relationship"<|>NTFS<|>LOGICAL CLUSTER NUMBER<|>NTFS使用逻辑簇号来定位文件在卷中的位置<|>10)
+##
+("relationship"<|>NTFS<|>VIRTUAL CLUSTER NUMBER<|>NTFS使用虚拟簇号进行压缩和稀疏文件的地址映射<|>10)
+##
+("relationship"<|>MS-DOS<|>FILE ALLOCATION TABLE<|>MS-DOS采用文件分配表(FAT)作为其文件系统<|>10)
+##
+("relationship"<|>MS-DOS<|>DISK BLOCK<|>MS-DOS以盘块为单位进行磁盘存储管理<|>7)
+##
+("relationship"<|>UNIX<|>DISK BLOCK<|>UNIX文件系统以盘块为基本I/O单位，使用盘块号进行地址转换<|>8)
+##
+("relationship"<|>INDEXED FILE<|>MULTILEVEL INDEX<|>为了支持大文件，索引文件引入多级索引<|>9)
+##
+("relationship"<|>INDEXED FILE<|>INCREMENTAL INDEX ORGANIZATION<|>增量式索引组织方式是索引文件的一种实现方式<|>9)
+##
+("relationship"<|>BIT MAP<|>DISK BLOCK<|>位示图用来管理盘块的空闲状态<|>10)
+<|COMPLETE|>
+#############################
+
+
+
+-Real Data-
+######################
+entity_types: [security model, security level, security rule, file, process, access permission, data structure, hardware component, operating system, storage system, memory management unit, allocation algorithm, i/o device, software layer, programming concept]
+text: {input_text}
+######################
+output:

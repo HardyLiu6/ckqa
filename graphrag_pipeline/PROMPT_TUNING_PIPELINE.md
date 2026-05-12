@@ -81,3 +81,18 @@ graphrag_pipeline/
 2. `finalize_candidate_prompt.py` 默认优先固化候选目录中现有的 Prompt 文件；候选缺失时，只对可选项回退到默认模板，不会替你补齐不存在的主候选。
 3. 当前脚本已经覆盖“样本准备、候选生成、prompt-tune 封装、最终 Prompt 固化、抽取执行、规则化评测”主链路，但 QA 自动评测仍然相对薄弱。
 4. 现有 `prompts/`、`results/`、`utils/` 继续按原用途工作；调优脚本只在对应子目录内产生产物。
+
+## QA 评测
+
+`scripts/qa_eval/` 提供「规则 + LLM 裁判」双层评测：
+
+- 本流程默认复用 `graphrag_pipeline/output/` 下已有 parquet 与 LanceDB 查询产物；运行 QA baseline 不会执行 `graphrag index`。
+- `data/eval/qa_test_set.jsonl`：不少于 30 道题，由 `test_set_validator.py` 校验；`gold_text_unit_ids` 字段建议非空率不低于 80%。
+- `run_baseline_eval.py`：本地 GraphRAG API `/v1/chat/completions` 串行打四模式，写 `runs/<run_id>/raw/`；排查慢查询时可用 `--max-items` 先跑小样本诊断。
+- `latency_reporter.py`：读取 baseline raw 产物，生成 `latency_breakdown.md/.csv/.json`，按模式、题型和慢请求拆分耗时。
+- `baseline_scorer.py`：规则评分，输出 `entity_hit_rate / must_cite_hit / citation_format_present / negative_hit / length_score / info_density`，按（题型 x 模式）聚合。
+- `text_unit_lookup.py` + `judge_scorer.py`：通过外部裁判 LLM（默认 `gpt-4o-mini`，可通过 `GRAPHRAG_JUDGE_MODEL` 切换）计算 `semantic_correctness / faithfulness / retrieval_precision`。
+- `baseline_reporter.py`：合并两层评分，生成 `scoring.md`、`combined.csv` 与规则层 `rule_scoring.csv`。
+- `manual_review_template.py`：自动注入指标均值、读取 `hypotheses.md` 生成「假设验证」与「hybrid 路由建议」槽位，供人工复核。
+
+入门顺序：先确认现有 `output/` 完整并通过四模式 smoke query，再在 `results/qa_eval/hypotheses.md` 写至少 4 条可证伪假设，随后跑 baseline，最后在 `manual_review.md` 按假设验证格式给结论。

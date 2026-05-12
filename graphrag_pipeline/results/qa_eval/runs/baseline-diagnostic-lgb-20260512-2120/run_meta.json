@@ -1,0 +1,21 @@
+{
+  "run_id": "baseline-diagnostic-lgb-20260512-2120",
+  "created_at": "2026-05-12T13:38:50.266960+00:00",
+  "test_set_path": "graphrag_pipeline/data/eval/qa_test_set.jsonl",
+  "index_run_label": "existing-output-docs393@2026-05-12",
+  "base_url": "http://127.0.0.1:8013",
+  "modes": [
+    "graphrag-local-search:latest",
+    "graphrag-global-search:latest",
+    "graphrag-basic-search:latest"
+  ],
+  "mode_labels": {
+    "graphrag-local-search:latest": "local",
+    "graphrag-global-search:latest": "global",
+    "graphrag-basic-search:latest": "basic"
+  },
+  "total_items": 4,
+  "total_questions": 4,
+  "source_total_questions": 32,
+  "max_items": 4
+}
