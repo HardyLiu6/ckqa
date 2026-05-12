@@ -227,8 +227,14 @@ async def run_native_extraction(
     run_id: str | None = None,
     overwrite: bool = False,
     strict: bool = False,
+    concurrency: int = 1,
 ) -> dict[str, Any]:
-    """执行原生 GraphExtractor 抽取实验。"""
+    """执行原生 GraphExtractor 抽取实验。
+
+    参数：
+      concurrency: 并发数（默认 1 = 串行）。设为 N 时最多同时跑 N 个样本。
+                   建议根据 API 速率限制设置，本地 One API 代理可设 10-20。
+    """
 
     root = root.resolve()
     _load_env(root)
@@ -256,40 +262,82 @@ async def run_native_extraction(
     entity_type_map: dict[str, str] = {t.upper(): t for t in entity_types}
 
     logger.info(
-        "开始原生抽取：candidate=%s samples=%d max_gleanings=%d strict=%s",
+        "开始原生抽取：candidate=%s samples=%d max_gleanings=%d strict=%s concurrency=%d",
         candidate_name,
         len(samples),
         max_gleanings,
         strict,
+        concurrency,
     )
 
     results: list[StructuredExtractionResult] = []
-    for i, sample in enumerate(samples):
-        sample_id = str(sample.get("sample_id") or f"sample-{i}")
-        text = str(sample.get("text") or "")
-        if not text.strip():
-            results.append(StructuredExtractionResult(
+
+    if concurrency <= 1:
+        # 串行模式（向后兼容）
+        for i, sample in enumerate(samples):
+            sample_id = str(sample.get("sample_id") or f"sample-{i}")
+            text = str(sample.get("text") or "")
+            if not text.strip():
+                results.append(StructuredExtractionResult(
+                    sample_id=sample_id,
+                    candidate=candidate_name,
+                    status="parse_error",
+                    entities=[],
+                    relationships=[],
+                    raw_output="",
+                    error="empty text",
+                ))
+                continue
+
+            logger.info("  [%d/%d] %s ...", i + 1, len(samples), sample_id)
+            result = await _extract_one_sample(
+                extractor=extractor,
+                text=text,
+                entity_types=entity_types,
                 sample_id=sample_id,
                 candidate=candidate_name,
-                status="parse_error",
-                entities=[],
-                relationships=[],
-                raw_output="",
-                error="empty text",
-            ))
-            continue
+                entity_type_map=entity_type_map,
+                strict=strict,
+            )
+            results.append(result)
+    else:
+        # 并行模式
+        import asyncio
+        semaphore = asyncio.Semaphore(concurrency)
+        completed_count = 0
 
-        logger.info("  [%d/%d] %s ...", i + 1, len(samples), sample_id)
-        result = await _extract_one_sample(
-            extractor=extractor,
-            text=text,
-            entity_types=entity_types,
-            sample_id=sample_id,
-            candidate=candidate_name,
-            entity_type_map=entity_type_map,
-            strict=strict,
-        )
-        results.append(result)
+        async def _extract_with_semaphore(index: int, sample: dict) -> StructuredExtractionResult:
+            nonlocal completed_count
+            sample_id = str(sample.get("sample_id") or f"sample-{index}")
+            text = str(sample.get("text") or "")
+            if not text.strip():
+                return StructuredExtractionResult(
+                    sample_id=sample_id,
+                    candidate=candidate_name,
+                    status="parse_error",
+                    entities=[],
+                    relationships=[],
+                    raw_output="",
+                    error="empty text",
+                )
+
+            async with semaphore:
+                logger.info("  [并行] %s 开始...", sample_id)
+                result = await _extract_one_sample(
+                    extractor=extractor,
+                    text=text,
+                    entity_types=entity_types,
+                    sample_id=sample_id,
+                    candidate=candidate_name,
+                    entity_type_map=entity_type_map,
+                    strict=strict,
+                )
+                completed_count += 1
+                logger.info("  [并行] %s 完成 (%d/%d)", sample_id, completed_count, len(samples))
+                return result
+
+        tasks = [_extract_with_semaphore(i, sample) for i, sample in enumerate(samples)]
+        results = list(await asyncio.gather(*tasks))
 
     output = write_candidate_outputs(
         root=root,
@@ -330,6 +378,7 @@ async def run_native_extraction_from_manifest(
     run_id: str | None = None,
     overwrite: bool = False,
     strict: bool = False,
+    concurrency: int = 1,
 ) -> dict[str, Any]:
     """按 manifest 批量跑所有活跃候选，每个候选写一份 eval JSON。
 
@@ -369,6 +418,7 @@ async def run_native_extraction_from_manifest(
             run_id=run_id,
             overwrite=overwrite,
             strict=strict,
+            concurrency=concurrency,
         )
         per_candidate_summaries.append(summary)
 
@@ -441,6 +491,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="严格模式：不做引号剥离、不做 type 容错映射，暴露 prompt 真实缺陷（用于评估 prompt 格式稳定性）",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="并发数（默认 1 = 串行）。设为 N 时最多同时跑 N 个样本的 API 调用。建议 10-20。",
+    )
     return parser
 
 
@@ -469,6 +525,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_id=args.run_id,
             overwrite=args.overwrite,
             strict=args.strict,
+            concurrency=args.concurrency,
         ))
     else:
         # 单候选模式
@@ -485,6 +542,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_id=args.run_id,
             overwrite=args.overwrite,
             strict=args.strict,
+            concurrency=args.concurrency,
         ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
