@@ -242,6 +242,8 @@ const config = computed(() => {
   }
 })
 const loading = computed(() => requestState.value === 'loading')
+// 首次尚未返回数据时也视为 loading（避免空状态闪烁）
+const isInitialLoading = computed(() => requestState.value !== 'success' && !liveState.value)
 const detailRouteNames = ['course-detail', 'material-detail', 'parse-results', 'knowledge-base-detail', 'index-run-detail']
 const isDetailRoute = computed(() => detailRouteNames.includes(route.name))
 const showDetailSkeleton = computed(() => loading.value && isDetailRoute.value && !liveState.value)
@@ -423,6 +425,7 @@ const displayedTableRows = computed(() => {
 })
 const showsEmptyState = computed(() => (
   !loading.value
+  && !isInitialLoading.value
   && displayedTableRows.value.length === 0
   && ['courses', 'knowledge-bases'].includes(route.name)
 ))
@@ -3558,19 +3561,19 @@ onBeforeUnmount(() => {
   </section>
 
   <template v-else-if="config.variant === 'table'">
-    <Transition name="skeleton-fade">
+    <Transition name="skeleton-fade" mode="out-in">
       <SkeletonList
-        v-if="loading && route.name === 'courses'"
+        v-if="(loading || isInitialLoading) && route.name === 'courses'"
         key="skeleton-courses"
         :rows="6"
       />
       <SkeletonList
-        v-else-if="loading && route.name === 'knowledge-bases'"
+        v-else-if="(loading || isInitialLoading) && route.name === 'knowledge-bases'"
         key="skeleton-knowledge-bases"
         :rows="5"
       />
       <EmptyState
-        v-else-if="!loading && displayedTableRows.length === 0 && route.name === 'courses'"
+        v-else-if="showsEmptyState && route.name === 'courses'"
         key="empty-courses"
         :icon="BookOpen"
         title="暂无课程"
@@ -3579,7 +3582,7 @@ onBeforeUnmount(() => {
         @action="openCreationDialog"
       />
       <EmptyState
-        v-else-if="!loading && displayedTableRows.length === 0 && route.name === 'knowledge-bases'"
+        v-else-if="showsEmptyState && route.name === 'knowledge-bases'"
         key="empty-knowledge-bases"
         :icon="Brain"
         title="暂无知识库"
