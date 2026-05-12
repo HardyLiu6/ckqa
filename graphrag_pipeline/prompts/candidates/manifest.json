@@ -122,6 +122,10 @@
       "fewshot_example_count": 3,
       "fewshot_strategy": "distilled_negative_direction_rules_with_strict_tuple_guard",
       "generation_time": "2026-05-11T19:00:00+08:00",
+      "production_status": "frozen_v1",
+      "production_frozen_at": "2026-05-12",
+      "production_frozen_reason": "exp4 验证通过，1 期生产最终配置。prompt 文件为静态冻结，不随 gold 扩容或脚本变更自动重新生成。",
+      "production_prompt_md5": "14ab82b37aa379f6026287a491888a44",
       "files": {
         "prompt": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt",
         "readme": "prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/README.md"
