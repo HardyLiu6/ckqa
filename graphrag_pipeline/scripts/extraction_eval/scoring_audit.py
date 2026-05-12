@@ -19,7 +19,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 
 from .extraction_schema import StructuredExtractionResult
 from .scoring_metrics import _normalize_title
@@ -270,18 +270,28 @@ def _normalize_entity_type(value: str) -> str:
 
 def _build_ext_candidates(
     item: StructuredExtractionResult,
+    type_normalizer: "Callable[[str], str | None] | None" = None,
 ) -> list[ExtCandidate]:
     """从 ExtractionEntity 列表构建 ExtCandidate 列表。
 
     idx 对应 item.entities 的原始下标；title_norm 为空的条目被跳过但
     其它条目的 idx 保持原位，保证与 extraction 关系引用的 title 可对齐。
+
+    type_normalizer: 可选的类型归一化函数（来自 type_normalizer.py）。
+        如果提供，会先用它把自由类型映射到 schema PascalCase，再做 casefold。
+        返回 None 的类型会保留原值（不丢弃）。
     """
     out: list[ExtCandidate] = []
     for idx, ent in enumerate(item.entities):
         tn = _normalize_title(ent.title)
         if not tn:
             continue
-        out.append(ExtCandidate(idx=idx, title_norm=tn, type=_normalize_entity_type(ent.type)))
+        raw_type = ent.type
+        if type_normalizer is not None:
+            mapped = type_normalizer(raw_type)
+            if mapped is not None:
+                raw_type = mapped
+        out.append(ExtCandidate(idx=idx, title_norm=tn, type=_normalize_entity_type(raw_type)))
     return out
 
 
@@ -291,6 +301,8 @@ def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
     跳过 name 归一化后为空的条目；alias 缺失时视为空；alias 经
     canonicalize_gold_aliases 过滤空串并规范化。
     type 做 casefold 规范化，用于大小写不敏感的对齐。
+
+    注意：gold_entities 的 type 已经是 schema PascalCase，不需要归一化。
     """
     out: list[GoldEntity] = []
     for g in entry.gold_entities:
@@ -309,12 +321,17 @@ def _build_gold_entities(entry: AuditEntry) -> list[GoldEntity]:
 def compute_audit_entity_recall(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
+    type_normalizer: Callable[[str], str | None] | None = None,
 ) -> float:
     """每个成功样本：命中 gold 数 / gold 总数，按样本平均。
 
     零分母规则：
       - 样本级：len(gold_entities) == 0 时样本不计入。
       - 汇总级：无可用样本时整体返回 0.0。
+
+    type_normalizer: 可选的类型归一化函数，用于把抽取结果的自由类型
+        （如"概念, 信息载体"）映射到 schema PascalCase，支持跨 prompt 对比。
+        默认 None（严格精确匹配）。
     """
     recalls: list[float] = []
     for item in results:
@@ -326,7 +343,7 @@ def compute_audit_entity_recall(
         golds = _build_gold_entities(entry)
         if not golds:
             continue
-        cands = _build_ext_candidates(item)
+        cands = _build_ext_candidates(item, type_normalizer=type_normalizer)
         aligned = align_sample(golds, cands)
         hits = sum(1 for r in aligned.values() if r.matched_ext_idx is not None)
         recalls.append(hits / len(golds))
@@ -338,12 +355,15 @@ def compute_audit_entity_recall(
 def compute_audit_entity_precision(
     results: Sequence[StructuredExtractionResult],
     audit_index: dict[str, AuditEntry],
+    type_normalizer: Callable[[str], str | None] | None = None,
 ) -> float:
     """每个成功样本：命中 gold 的 ext 去重后 / ext 总数，按样本平均。
 
     零分母规则：
       - 样本级：len(ext_candidates) == 0 时样本返回 0.0。
       - 汇总级：无可用样本时整体返回 0.0。
+
+    type_normalizer: 可选的类型归一化函数，详见 compute_audit_entity_recall。
     """
     precisions: list[float] = []
     for item in results:
@@ -355,7 +375,7 @@ def compute_audit_entity_precision(
         golds = _build_gold_entities(entry)
         if not golds:
             continue
-        cands = _build_ext_candidates(item)
+        cands = _build_ext_candidates(item, type_normalizer=type_normalizer)
         if not cands:
             precisions.append(0.0)
             continue
