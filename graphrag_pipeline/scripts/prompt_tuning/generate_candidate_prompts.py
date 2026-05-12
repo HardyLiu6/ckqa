@@ -1284,6 +1284,100 @@ def _select_fewshot_examples(
     return examples, "audit_gold", source_ids, notes, selected[:fewshot_k]
 
 
+def _select_fewshot_examples_hybrid(
+    audit_records: Sequence[Dict[str, Any]],
+    fewshot_k: int,
+    *,
+    schema_catalog: SchemaCatalog,
+    input_max_chars: int,
+    max_entities: int,
+    max_relations: int,
+    target_texts: Sequence[str] | None = None,
+) -> tuple[List[FewShotExample], str, List[str], List[str], List[Dict[str, Any]]]:
+    """混合策略 few-shot 选择：TF-IDF 相关性预筛选 + 贪心类型覆盖。
+
+    相比 _select_fewshot_examples（纯贪心覆盖），本函数额外考虑
+    候选样本与目标文本的内容相似度，在保证类型覆盖的同时选择
+    内容更相关的示例。
+
+    参数：
+      target_texts: 待抽取的目标文本列表。若提供，则用 TF-IDF 预筛选；
+                    若为 None，则退回纯贪心策略。
+    """
+    if fewshot_k <= 0:
+        return [], "disabled", [], ["fewshot_k <= 0，未生成 few-shot 示例。"], []
+
+    usable = [
+        record
+        for record in audit_records
+        if record.get("gold_entities")
+        and record.get("gold_relations")
+        and _clean_string(record.get("text"))
+    ]
+    if not usable:
+        return [], "missing_audit_gold", [], ["未发现可直接复用的 audit gold 标注，将退回手写最小 few-shot 示例。"], []
+
+    # 如果没有目标文本或候选太少，退回纯贪心
+    if not target_texts or len(usable) <= fewshot_k:
+        return _select_fewshot_examples(
+            audit_records, fewshot_k,
+            schema_catalog=schema_catalog,
+            input_max_chars=input_max_chars,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+
+    # 使用混合策略
+    try:
+        from .fewshot_selector import select_fewshot_hybrid
+    except ImportError:
+        # sklearn 不可用时退回纯贪心
+        return _select_fewshot_examples(
+            audit_records, fewshot_k,
+            schema_catalog=schema_catalog,
+            input_max_chars=input_max_chars,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+
+    entity_type_names = [item.name for item in schema_catalog.entity_types]
+    relation_type_names = [item.name for item in schema_catalog.relation_types]
+
+    selected, report = select_fewshot_hybrid(
+        candidates=usable,
+        target_texts=target_texts,
+        k=fewshot_k,
+        entity_type_names=entity_type_names,
+        relation_type_names=relation_type_names,
+    )
+
+    if not selected:
+        return _select_fewshot_examples(
+            audit_records, fewshot_k,
+            schema_catalog=schema_catalog,
+            input_max_chars=input_max_chars,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+
+    examples = [
+        _build_fewshot_example_from_audit(
+            record,
+            input_max_chars=input_max_chars,
+            max_entities=max_entities,
+            max_relations=max_relations,
+        )
+        for record in selected[:fewshot_k]
+    ]
+    source_ids = [example.source_sample_id for example in examples if example.source_sample_id]
+    notes = [
+        f"few-shot 示例由混合策略选择（TF-IDF 预筛选 + 贪心类型覆盖）；"
+        f"预筛选池 {report.get('prefilter_pool_size', '?')} 个，"
+        f"关系覆盖 {report.get('relation_type_coverage', 0):.0%}。"
+    ]
+    return examples, "hybrid_tfidf_greedy", source_ids, notes, selected[:fewshot_k]
+
+
 def build_schema_fewshot_prompt(
     schema_catalog: SchemaCatalog,
     language: str,
