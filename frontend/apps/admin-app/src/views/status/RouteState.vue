@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { Icon } from '@iconify/vue'
 import { Gauge, HeartPulse, RefreshCw } from 'lucide-vue-next'
 import { useRoute } from 'vue-router'
 
@@ -66,6 +67,20 @@ const planningStatus = computed(() => {
   return statusLabels[route.meta.status] || '已纳入路由规划'
 })
 
+// 未开放页面专属图标：根据模块选择不同图标，与错误页面视觉区分
+const comingSoonIcon = computed(() => {
+  const group = route.meta.navGroup
+  const iconMap = {
+    dashboard: 'lucide:rocket',
+    courses: 'lucide:book-open',
+    knowledge: 'lucide:brain',
+    qa: 'lucide:message-circle',
+    users: 'lucide:users',
+    system: 'lucide:settings',
+  }
+  return iconMap[group] || 'lucide:construction'
+})
+
 const copy = computed(() => {
   if (currentState.value === 'forbidden') {
     return {
@@ -104,7 +119,12 @@ function refreshPage() {
 </script>
 
 <template>
-  <section class="route-state">
+  <section class="route-state" :class="{ 'route-state--coming-soon': currentState === 'coming-soon' }">
+    <!-- 未开放页面专属图标区域：使用 accent 配色，与错误页面的 warning/danger 区分 -->
+    <div v-if="currentState === 'coming-soon'" class="route-state__hero-icon">
+      <Icon :icon="comingSoonIcon" class="route-state__hero-icon-svg" aria-hidden="true" />
+    </div>
+
     <p class="eyebrow">{{ copy.eyebrow }}</p>
     <h1>{{ copy.title }}</h1>
     <p>{{ copy.message }}</p>

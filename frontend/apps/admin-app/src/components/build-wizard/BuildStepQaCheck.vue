@@ -21,15 +21,17 @@ defineEmits(['update-smoke-question'])
       :disabled="actionRunning"
       @input="$emit('update-smoke-question', $event)"
     />
-    <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
-      <div class="operation-feedback__heading">
-        <strong>{{ operationFeedback.title }}</strong>
-        <StatusBadge :status="operationFeedback.status" />
+    <Transition name="slide-down">
+      <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
+        <div class="operation-feedback__heading">
+          <strong>{{ operationFeedback.title }}</strong>
+          <StatusBadge :status="operationFeedback.status" />
+        </div>
+        <p>{{ operationFeedback.message }}</p>
+        <small>{{ operationFeedback.detail }}</small>
+        <small v-if="operationFeedback.meta">{{ operationFeedback.meta }}</small>
       </div>
-      <p>{{ operationFeedback.message }}</p>
-      <small>{{ operationFeedback.detail }}</small>
-      <small v-if="operationFeedback.meta">{{ operationFeedback.meta }}</small>
-    </div>
+    </Transition>
     <div v-if="smokeResult?.state === 'success'" class="result-box">
       <strong>助手摘要</strong>
       <p>{{ smokeResult.content }}</p>

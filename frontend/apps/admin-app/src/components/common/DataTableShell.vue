@@ -13,6 +13,7 @@ import {
   RotateCcw,
 } from 'lucide-vue-next'
 
+import SkeletonTable from './SkeletonTable.vue'
 import StatusBadge from './StatusBadge.vue'
 import {
   resolvePaginationState,
@@ -277,9 +278,11 @@ function getProgressFormat(cell) {
       </label>
     </div>
 
-    <div v-if="loading" class="empty-state">正在加载列表。</div>
+    <Transition name="skeleton-fade">
+      <SkeletonTable v-if="loading" :rows="6" :columns="4" />
+    </Transition>
 
-    <div v-else class="table-scroll">
+    <div v-if="!loading" class="table-scroll">
       <el-table
         class="ckqa-el-table"
         :data="filteredRows"

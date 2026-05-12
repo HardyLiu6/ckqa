@@ -5,8 +5,10 @@
   --ckqa-surface: #ffffff;
   --ckqa-surface-muted: #f1f5f9;
   --ckqa-surface-strong: #e7ebf1;
+  --ckqa-surface-hover: #f8fafc;
   --ckqa-border: #e2e8f0;
   --ckqa-border-strong: #cbd5e1;
+  --ckqa-border-subtle: #f1f5f9;
   --ckqa-text: #0f172a;
   --ckqa-text-muted: #64748b;
   --ckqa-text-weak: #94a3b8;
@@ -43,8 +45,10 @@
   --ckqa-surface: #0f172a;
   --ckqa-surface-muted: #1e293b;
   --ckqa-surface-strong: #243449;
+  --ckqa-surface-hover: #1e293b;
   --ckqa-border: #334155;
   --ckqa-border-strong: #475569;
+  --ckqa-border-subtle: #1e293b;
   --ckqa-text: #f8fafc;
   --ckqa-text-muted: #cbd5e1;
   --ckqa-text-weak: #94a3b8;
@@ -57,16 +61,37 @@
   --ckqa-accent-contrast: #ffffff;
 }
 
+[data-theme='dark'][data-accent='indigo'],
+[data-theme='dark'] [data-accent='indigo'] {
+  --ckqa-accent: #818cf8;
+  --ckqa-accent-strong: #a5b4fc;
+  --ckqa-accent-contrast: #0f172a;
+}
+
 [data-accent='blue'] {
   --ckqa-accent: #2563eb;
   --ckqa-accent-strong: #1d4ed8;
   --ckqa-accent-contrast: #ffffff;
 }
 
+[data-theme='dark'][data-accent='blue'],
+[data-theme='dark'] [data-accent='blue'] {
+  --ckqa-accent: #60a5fa;
+  --ckqa-accent-strong: #3b82f6;
+  --ckqa-accent-contrast: #0f172a;
+}
+
 [data-accent='teal'] {
   --ckqa-accent: #0d9488;
   --ckqa-accent-strong: #0f766e;
   --ckqa-accent-contrast: #ffffff;
+}
+
+[data-theme='dark'][data-accent='teal'],
+[data-theme='dark'] [data-accent='teal'] {
+  --ckqa-accent: #2dd4bf;
+  --ckqa-accent-strong: #14b8a6;
+  --ckqa-accent-contrast: #0f172a;
 }
 
 [data-accent='violet'],
@@ -76,8 +101,24 @@
   --ckqa-accent-contrast: #ffffff;
 }
 
+[data-theme='dark'][data-accent='violet'],
+[data-theme='dark'][data-accent='purple'],
+[data-theme='dark'] [data-accent='violet'],
+[data-theme='dark'] [data-accent='purple'] {
+  --ckqa-accent: #a78bfa;
+  --ckqa-accent-strong: #c4b5fd;
+  --ckqa-accent-contrast: #0f172a;
+}
+
 [data-accent='amber'] {
   --ckqa-accent: #d97706;
   --ckqa-accent-strong: #b45309;
   --ckqa-accent-contrast: #ffffff;
+}
+
+[data-theme='dark'][data-accent='amber'],
+[data-theme='dark'] [data-accent='amber'] {
+  --ckqa-accent: #fbbf24;
+  --ckqa-accent-strong: #f59e0b;
+  --ckqa-accent-contrast: #0f172a;
 }

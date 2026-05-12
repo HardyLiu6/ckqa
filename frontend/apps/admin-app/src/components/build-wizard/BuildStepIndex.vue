@@ -12,14 +12,16 @@ defineProps({
     <div v-if="blocks.indexAvailability?.warning" class="sync-warning">
       {{ blocks.indexAvailability.warning }}
     </div>
-    <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
-      <div class="operation-feedback__heading">
-        <strong>{{ operationFeedback.title }}</strong>
-        <StatusBadge :status="operationFeedback.status" />
+    <Transition name="slide-down">
+      <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
+        <div class="operation-feedback__heading">
+          <strong>{{ operationFeedback.title }}</strong>
+          <StatusBadge :status="operationFeedback.status" />
+        </div>
+        <p>{{ operationFeedback.message }}</p>
+        <small>{{ operationFeedback.detail }}</small>
       </div>
-      <p>{{ operationFeedback.message }}</p>
-      <small>{{ operationFeedback.detail }}</small>
-    </div>
+    </Transition>
     <ol class="build-task-list">
       <li v-for="item in blocks.indexRuns?.items" :key="item.id" class="build-task-row">
         <div>

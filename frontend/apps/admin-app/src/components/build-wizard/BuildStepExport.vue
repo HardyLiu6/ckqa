@@ -24,14 +24,16 @@ function resolveArtifactStatusLabel(row = {}) {
 
 <template>
   <section class="build-step-panel">
-    <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
-      <div class="operation-feedback__heading">
-        <strong>{{ operationFeedback.title }}</strong>
-        <StatusBadge :status="operationFeedback.status" />
+    <Transition name="slide-down">
+      <div v-if="operationFeedback" class="operation-feedback" :data-status="operationFeedback.status">
+        <div class="operation-feedback__heading">
+          <strong>{{ operationFeedback.title }}</strong>
+          <StatusBadge :status="operationFeedback.status" />
+        </div>
+        <p>{{ operationFeedback.message }}</p>
+        <small>{{ operationFeedback.detail }}</small>
       </div>
-      <p>{{ operationFeedback.message }}</p>
-      <small>{{ operationFeedback.detail }}</small>
-    </div>
+    </Transition>
     <div class="artifact-matrix">
       <article v-for="row in blocks.exportArtifacts?.items" :key="row.id" class="artifact-row">
         <header>

@@ -1,9 +1,12 @@
 @use './fonts';
 @use './tokens/colors';
+@use './tokens/space';
 @use './tokens/typography';
 @use './tokens/radius';
 @use './tokens/shadow';
+@use './tokens/elevation';
 @use './tokens/motion';
 @use './base';
+@use './transitions';
 @use './element-plus';
 @use './components';

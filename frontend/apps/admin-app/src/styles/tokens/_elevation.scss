@@ -1,0 +1,17 @@
+// Elevation Token — 三级语义阴影层级
+// 基于 _shadow.scss 的原始阴影值，提供语义化的 CSS Custom Properties
+// flat: 无阴影（平面元素）
+// raised: 轻微抬起（卡片、面板）
+// floating: 悬浮层（弹窗、下拉菜单、Tooltip）
+
+:root {
+  --ckqa-elevation-flat: none;
+  --ckqa-elevation-raised: 0 1px 3px rgb(15 23 42 / 6%), 0 6px 16px rgb(15 23 42 / 8%);
+  --ckqa-elevation-floating: 0 4px 12px rgb(15 23 42 / 8%), 0 16px 40px rgb(15 23 42 / 12%);
+}
+
+[data-theme='dark'] {
+  --ckqa-elevation-flat: none;
+  --ckqa-elevation-raised: 0 1px 3px rgb(0 0 0 / 20%), 0 6px 16px rgb(0 0 0 / 24%);
+  --ckqa-elevation-floating: 0 4px 12px rgb(0 0 0 / 28%), 0 16px 40px rgb(0 0 0 / 36%);
+}

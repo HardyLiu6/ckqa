@@ -1,4 +1,25 @@
 :root {
   --ckqa-font-sans: "DM Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
   --ckqa-font-mono: "DM Mono", "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+
+  // 字号层级 Token（5 级：h1–h4 + body）
+  --ckqa-text-h1-size: 28px;
+  --ckqa-text-h1-line-height: 1.2;
+  --ckqa-text-h1-weight: 800;
+
+  --ckqa-text-h2-size: 22px;
+  --ckqa-text-h2-line-height: 1.3;
+  --ckqa-text-h2-weight: 700;
+
+  --ckqa-text-h3-size: 18px;
+  --ckqa-text-h3-line-height: 1.4;
+  --ckqa-text-h3-weight: 600;
+
+  --ckqa-text-h4-size: 15px;
+  --ckqa-text-h4-line-height: 1.5;
+  --ckqa-text-h4-weight: 600;
+
+  --ckqa-text-body-size: 14px;
+  --ckqa-text-body-line-height: 1.6;
+  --ckqa-text-body-weight: 400;
 }

@@ -6,6 +6,7 @@ import { createApiError } from '../../api/client.js'
 import { getSystemHealth } from '../../api/system.js'
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DiagnosticLogPanel from '../../components/common/DiagnosticLogPanel.vue'
+import SkeletonCardGrid from '../../components/common/SkeletonCardGrid.vue'
 import StatusBadge from '../../components/common/StatusBadge.vue'
 import HealthMatrix from '../../components/system/HealthMatrix.vue'
 import { normalizeHealthResponse } from './health-model.js'
@@ -83,10 +84,10 @@ onMounted(loadHealth)
     </div>
 
     <p v-if="requestState === 'idle'" class="empty-state">等待自动刷新健康检查。</p>
-    <div v-else-if="requestState === 'loading'" class="health-loading">
-      <p>正在请求 GET /api/v1/system/health</p>
-    </div>
-    <p v-else-if="requestState === 'error'" class="inline-error">{{ errorMessage }}</p>
+    <Transition name="skeleton-fade">
+      <SkeletonCardGrid v-if="requestState === 'loading'" :cards="4" :columns="2" />
+    </Transition>
+    <p v-if="requestState === 'error'" class="inline-error">{{ errorMessage }}</p>
 
     <HealthMatrix v-if="healthPayload" :services="normalizedHealth.services" />
 

@@ -306,7 +306,7 @@
 .ckqa-el-table {
   --el-table-bg-color: var(--ckqa-surface);
   --el-table-tr-bg-color: var(--ckqa-surface);
-  --el-table-header-bg-color: var(--ckqa-surface-muted);
+  --el-table-header-bg-color: var(--ckqa-surface-strong);
   --el-table-header-text-color: var(--ckqa-text-muted);
   --el-table-text-color: var(--ckqa-text);
   --el-table-row-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
@@ -323,25 +323,28 @@
 }
 
 .ckqa-el-table .el-table__header-wrapper th.el-table__cell {
-  height: 44px;
-  color: color-mix(in srgb, var(--ckqa-text) 74%, var(--ckqa-text-muted));
-  background: color-mix(in srgb, var(--ckqa-surface-muted) 84%, var(--ckqa-surface));
+  height: calc(var(--ckqa-space-5) * 2 + 4px);
+  padding: var(--ckqa-space-3) var(--ckqa-space-4);
+  color: var(--ckqa-text-muted);
+  background: var(--ckqa-surface-strong);
+  border-bottom: 1px solid var(--ckqa-border);
   font-size: 12px;
   font-weight: 800;
 }
 
 .ckqa-el-table .el-table__body-wrapper td.el-table__cell {
-  height: 48px;
+  height: calc(var(--ckqa-space-6) * 2);
+  padding: var(--ckqa-space-3) var(--ckqa-space-4);
   border-bottom: 1px solid var(--ckqa-border-subtle);
   background: var(--ckqa-surface);
 }
 
 .ckqa-el-table .el-table__body-wrapper tr:nth-child(even) > td.el-table__cell {
-  background: color-mix(in srgb, var(--ckqa-surface-muted) 54%, var(--ckqa-surface));
+  background: var(--ckqa-surface-muted);
 }
 
 .ckqa-el-table .el-table__cell {
-  padding: 10px 0;
+  padding: var(--ckqa-space-3) 0;
 }
 
 .ckqa-el-table .cell {
@@ -381,6 +384,73 @@
   font-weight: 900;
 }
 
+// 通用 Element Plus 表格 Token 对齐覆写（非 .ckqa-el-table 的原生 el-table 也受益）
+.el-table {
+  --el-table-border-color: var(--ckqa-border);
+  --el-table-border: 1px solid var(--ckqa-border);
+  --el-table-text-color: var(--ckqa-text);
+  --el-table-header-text-color: var(--ckqa-text-muted);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
+  --el-table-header-bg-color: var(--ckqa-surface-strong);
+  --el-table-tr-bg-color: var(--ckqa-surface);
+  --el-table-bg-color: var(--ckqa-surface);
+  color: var(--ckqa-text);
+  font-family: var(--ckqa-font-sans);
+}
+
+.el-table th.el-table__cell {
+  background: var(--ckqa-surface-strong);
+  border-bottom: 1px solid var(--ckqa-border);
+  font-weight: 800;
+}
+
+.el-table td.el-table__cell {
+  border-bottom: 1px solid var(--ckqa-border-subtle);
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: var(--ckqa-surface-muted);
+}
+
+// 响应式：小屏幕下表格容器水平滚动
+@media (max-width: 767px) {
+  .ckqa-el-table,
+  .el-table {
+    overflow-x: auto;
+  }
+}
+
+// list-stagger：表格行逐条渐入动画
+// Requirements 4.2 — 列表数据加载完成后逐条渐入，stagger delay ≤ 50ms/条
+@keyframes list-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ckqa-el-table .el-table__body-wrapper tr {
+  animation: list-stagger-in var(--ckqa-duration-normal) var(--ckqa-ease-decelerate) both;
+}
+
+// 逐行 stagger delay（最多 20 行，每行 50ms）
+@for $i from 1 through 20 {
+  .ckqa-el-table .el-table__body-wrapper tr:nth-child(#{$i}) {
+    animation-delay: #{($i - 1) * 50}ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ckqa-el-table .el-table__body-wrapper tr {
+    animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+  }
+}
+
 .el-pagination {
   --el-pagination-bg-color: var(--ckqa-surface);
   --el-pagination-button-bg-color: var(--ckqa-surface);
@@ -405,4 +475,128 @@
   border-color: var(--ckqa-accent-strong);
   color: var(--ckqa-accent-contrast);
   background: var(--ckqa-accent-strong);
+}
+
+/* ============================================================
+   任务 8.2：按钮状态视觉反馈 + 表单输入框 focus 态
+   Requirements: 3.1, 3.5
+   ============================================================ */
+
+/* --- Primary 按钮状态 --- */
+.el-button--primary {
+  transition:
+    background var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    border-color var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    transform var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus-visible {
+  --el-button-hover-bg-color: color-mix(in srgb, var(--ckqa-accent-strong) 85%, #000);
+  --el-button-hover-border-color: color-mix(in srgb, var(--ckqa-accent-strong) 85%, #000);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ckqa-accent-strong) 30%, transparent);
+}
+
+.el-button--primary:active {
+  --el-button-active-bg-color: color-mix(in srgb, var(--ckqa-accent-strong) 72%, #000);
+  --el-button-active-border-color: color-mix(in srgb, var(--ckqa-accent-strong) 72%, #000);
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover,
+.el-button--primary.is-disabled:active {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* --- Secondary（Default）按钮状态 --- */
+.el-button--default {
+  transition:
+    background var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    border-color var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    transform var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+.el-button--default:hover,
+.el-button--default:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 40%, var(--ckqa-border));
+  background: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 6%);
+}
+
+.el-button--default:active {
+  transform: scale(0.97);
+  border-color: color-mix(in srgb, var(--ckqa-accent) 50%, var(--ckqa-border));
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface));
+  box-shadow: none;
+}
+
+.el-button--default.is-disabled,
+.el-button--default.is-disabled:hover,
+.el-button--default.is-disabled:active {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* --- Danger 按钮状态 --- */
+.el-button--danger {
+  --el-button-bg-color: var(--ckqa-danger);
+  --el-button-border-color: var(--ckqa-danger);
+  --el-button-text-color: #ffffff;
+  transition:
+    background var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    border-color var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    transform var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+.el-button--danger:hover,
+.el-button--danger:focus-visible {
+  --el-button-hover-bg-color: color-mix(in srgb, var(--ckqa-danger) 85%, #000);
+  --el-button-hover-border-color: color-mix(in srgb, var(--ckqa-danger) 85%, #000);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ckqa-danger) 30%, transparent);
+}
+
+.el-button--danger:active {
+  --el-button-active-bg-color: color-mix(in srgb, var(--ckqa-danger) 72%, #000);
+  --el-button-active-border-color: color-mix(in srgb, var(--ckqa-danger) 72%, #000);
+  transform: scale(0.97);
+  box-shadow: none;
+}
+
+.el-button--danger.is-disabled,
+.el-button--danger.is-disabled:hover,
+.el-button--danger.is-disabled:active {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* --- 表单输入框 focus 态：Accent 色描边 + 柔和外发光 --- */
+:root .el-input__wrapper,
+:root .el-select__wrapper,
+:root .el-textarea__inner {
+  transition:
+    border-color var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+:root .el-input__wrapper.is-focus,
+:root .el-select__wrapper.is-focused,
+:root .el-select__wrapper.is-focus,
+:root .el-textarea__inner:focus {
+  border-color: var(--ckqa-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ckqa-accent) 16%, transparent);
 }

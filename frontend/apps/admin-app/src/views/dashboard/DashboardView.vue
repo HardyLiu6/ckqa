@@ -1,10 +1,14 @@
 <script setup>
+import { onMounted, ref } from 'vue'
 import { ArrowRight, DatabaseZap, Server } from 'lucide-vue-next'
 
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DiagnosticLogPanel from '../../components/common/DiagnosticLogPanel.vue'
 import MetricTile from '../../components/common/MetricTile.vue'
+import SkeletonCardGrid from '../../components/common/SkeletonCardGrid.vue'
 import ProductionTrack from './ProductionTrack.vue'
+
+const loading = ref(true)
 
 const metrics = [
   { label: '可管理课程', value: '6', tone: 'running', hint: '按当前身份过滤' },
@@ -34,6 +38,13 @@ const diagnosticLines = [
   '[index] kb:data-structure 等待 output/lancedb 刷新',
   '[qa] smoke-run#17 命中率低于阈值，建议复测',
 ]
+
+onMounted(() => {
+  // 模拟数据加载完成（后续接入真实 API 时替换为实际请求状态）
+  requestAnimationFrame(() => {
+    loading.value = false
+  })
+})
 </script>
 
 <template>
@@ -57,16 +68,31 @@ const diagnosticLines = [
     </div>
   </section>
 
-  <section class="dashboard-grid">
-    <MetricTile
-      v-for="metric in metrics"
-      :key="metric.label"
-      :label="metric.label"
-      :value="metric.value"
-      :hint="metric.hint"
-      :tone="metric.tone"
+  <Transition name="skeleton-fade">
+    <SkeletonCardGrid
+      v-if="loading"
+      :cards="5"
+      :columns="5"
     />
-  </section>
+    <!-- list-stagger：指标卡片逐条渐入，Requirements 4.2 -->
+    <TransitionGroup
+      v-else
+      name="list-stagger"
+      tag="section"
+      class="dashboard-grid"
+      appear
+    >
+      <MetricTile
+        v-for="(metric, index) in metrics"
+        :key="metric.label"
+        :label="metric.label"
+        :value="metric.value"
+        :hint="metric.hint"
+        :tone="metric.tone"
+        :style="{ '--stagger-index': index }"
+      />
+    </TransitionGroup>
+  </Transition>
 
   <ProductionTrack :nodes="productionSteps" />
 
@@ -79,13 +105,23 @@ const diagnosticLines = [
           查看知识库
         </el-button>
       </div>
-      <ul class="event-list">
-        <li v-for="item in recentRuns" :key="item.title">
+      <!-- list-stagger：最近索引与解析列表逐条渐入，Requirements 4.2 -->
+      <TransitionGroup
+        name="list-stagger"
+        tag="ul"
+        class="event-list"
+        appear
+      >
+        <li
+          v-for="(item, index) in recentRuns"
+          :key="item.title"
+          :style="{ '--stagger-index': index }"
+        >
           <span>{{ item.title }}</span>
           <strong :data-tone="item.tone">{{ item.status }}</strong>
           <time>{{ item.time }}</time>
         </li>
-      </ul>
+      </TransitionGroup>
     </article>
 
     <article class="panel">

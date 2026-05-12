@@ -1,7 +1,23 @@
+// 间距 Token · 基准 4px
+// CSS Custom Properties 版本（推荐使用）
+
+:root {
+  --ckqa-space-1: 4px;
+  --ckqa-space-2: 8px;
+  --ckqa-space-3: 12px;
+  --ckqa-space-4: 16px;
+  --ckqa-space-5: 20px;
+  --ckqa-space-6: 24px;
+  --ckqa-space-7: 28px;
+  --ckqa-space-8: 32px;
+}
+
+// SCSS 变量兼容别名（保留向后兼容）
 $space-1: 4px;
 $space-2: 8px;
 $space-3: 12px;
 $space-4: 16px;
 $space-5: 20px;
 $space-6: 24px;
+$space-7: 28px;
 $space-8: 32px;

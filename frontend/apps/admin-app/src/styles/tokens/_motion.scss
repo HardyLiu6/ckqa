@@ -1,10 +1,30 @@
+// 动效 Token：三级时长 + 缓动曲线
+// Requirements 1.5
+
 :root {
-  --ckqa-duration-fast: 160ms;
-  --ckqa-duration-base: 220ms;
-  --ckqa-duration-slow: 320ms;
+  // 三级时长
+  --ckqa-duration-fast: 150ms;
+  --ckqa-duration-normal: 250ms;
+  --ckqa-duration-slow: 400ms;
+
+  // 兼容别名（--ckqa-duration-base 已弃用，使用 --ckqa-duration-normal）
+  --ckqa-duration-base: var(--ckqa-duration-normal);
+
+  // 缓动曲线
+  --ckqa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ckqa-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ckqa-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
 }
 
-$duration-fast: 160ms;
-$duration-base: 220ms;
-$duration-slow: 320ms;
+// SCSS 变量（与 CSS Custom Properties 同步）
+$duration-fast: 150ms;
+$duration-normal: 250ms;
+$duration-slow: 400ms;
+
+// SCSS 兼容别名
+$duration-base: $duration-normal;
+
+// 缓动曲线 SCSS 变量
 $ease-standard: cubic-bezier(0.2, 0, 0, 1);
+$ease-decelerate: cubic-bezier(0, 0, 0, 1);
+$ease-accelerate: cubic-bezier(0.3, 0, 1, 1);

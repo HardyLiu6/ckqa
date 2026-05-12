@@ -35,6 +35,7 @@ watch(avatarUrl, () => {
 
 <template>
   <header class="app-topbar">
+    <slot name="prepend" />
     <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
       <span class="brand-mark">CK</span>
       <span>

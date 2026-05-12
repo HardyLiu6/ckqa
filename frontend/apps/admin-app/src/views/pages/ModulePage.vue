@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  BookOpen,
+  Brain,
   ChevronLeft,
   Check,
   DatabaseZap,
@@ -64,6 +66,10 @@ import {
 } from '../../api/materials.js'
 import DataSourceChip from '../../components/common/DataSourceChip.vue'
 import DataTableShell from '../../components/common/DataTableShell.vue'
+import EmptyState from '../../components/common/EmptyState.vue'
+import RetryPanel from '../../components/common/RetryPanel.vue'
+import SkeletonDetail from '../../components/common/SkeletonDetail.vue'
+import SkeletonList from '../../components/common/SkeletonList.vue'
 import StatusBadge from '../../components/common/StatusBadge.vue'
 import WorkflowStepper from '../../components/common/WorkflowStepper.vue'
 import BuildStepExport from '../../components/build-wizard/BuildStepExport.vue'
@@ -156,6 +162,7 @@ const requestGuard = createStaleRequestGuard()
 const baseConfig = computed(() => getModulePageConfig(route.name))
 const liveState = ref(null)
 const loadError = ref(null)
+const loadRetryCount = ref(0)
 const requestState = ref('idle')
 const activeStepKey = ref('')
 const actionState = ref('idle')
@@ -235,6 +242,10 @@ const config = computed(() => {
   }
 })
 const loading = computed(() => requestState.value === 'loading')
+const detailRouteNames = ['course-detail', 'material-detail', 'parse-results', 'knowledge-base-detail', 'index-run-detail']
+const isDetailRoute = computed(() => detailRouteNames.includes(route.name))
+const showDetailSkeleton = computed(() => loading.value && isDetailRoute.value && !liveState.value)
+const detailSkeletonShowSidebar = computed(() => route.name === 'course-detail')
 const actionRunning = computed(() => ['running', 'confirming'].includes(actionState.value))
 const creationSubmitting = computed(() => creationState.value === 'running')
 const creationCourseLoading = computed(() => creationCourseState.value === 'loading')
@@ -410,6 +421,11 @@ const displayedTableRows = computed(() => {
 
   return withActiveMaterialParsePreview(config.value.rows ?? [])
 })
+const showsEmptyState = computed(() => (
+  !loading.value
+  && displayedTableRows.value.length === 0
+  && ['courses', 'knowledge-bases'].includes(route.name)
+))
 const primaryActionIcon = computed(() => {
   if (canOpenCreationDialog.value) return Plus
   if (route.name === 'material-detail') return Play
@@ -559,6 +575,11 @@ async function loadPage(query = route.query) {
   requestState.value = result.requestState
   loadError.value = result.error ? createApiError(result.error) : null
 
+  // 加载成功时重置重试计数
+  if (!loadError.value) {
+    loadRetryCount.value = 0
+  }
+
   if (route.name === 'knowledge-base-build') {
     const stepKeys = result.workflowSteps?.map((step) => step.key) ?? []
     const resolvedActiveStepKey = result.actions?.activeStepKey ?? stepKeys[0] ?? ''
@@ -568,6 +589,7 @@ async function loadPage(query = route.query) {
   }
 
   if (loadError.value) {
+    loadRetryCount.value++
     const action = resolveApiErrorAction(loadError.value, { route: routeSnapshot })
     if (action.type === 'redirect') {
       await router.replace(action.to)
@@ -2534,7 +2556,7 @@ onBeforeUnmount(() => {
 
     <div class="button-row">
       <el-button
-        v-if="hasPrimaryAction && route.name !== 'knowledge-base-build'"
+        v-if="hasPrimaryAction && route.name !== 'knowledge-base-build' && !showsEmptyState"
         :class="primaryHeroButtonClass"
         :type="primaryHeroButtonType"
         native-type="button"
@@ -3447,23 +3469,22 @@ onBeforeUnmount(() => {
   <section v-if="loadError" class="panel">
     <div class="panel-heading">
       <h2>实时数据加载失败</h2>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--secondary"
-        native-type="button"
-        :disabled="loading"
-        @click="loadPage()"
-      >
-        <RefreshCw class="button-icon" :size="16" aria-hidden="true" />
-        重试
-      </el-button>
     </div>
-    <el-alert
-      type="error"
-      show-icon
-      :closable="false"
-      :title="loadError.message"
+    <RetryPanel
+      :error="loadError"
+      :retry-count="loadRetryCount"
+      :loading="loading"
+      @retry="loadPage()"
     />
   </section>
+
+  <Transition name="skeleton-fade">
+    <SkeletonDetail
+      v-if="showDetailSkeleton"
+      :show-sidebar="detailSkeletonShowSidebar"
+      :show-header="true"
+    />
+  </Transition>
 
   <WorkflowStepper
     v-if="config.variant === 'workflow'"
@@ -3535,23 +3556,56 @@ onBeforeUnmount(() => {
     </footer>
   </section>
 
-  <DataTableShell
-    v-else-if="config.variant === 'table'"
-    :title="tableTitle"
-    :columns="config.columns"
-    :rows="displayedTableRows"
-    :filters="config.filters"
-    :pagination="config.pagination"
-    :search="config.search"
-    :search-text="tableSearchText"
-    :filter-values="tableFilterValues"
-    :loading="loading"
-    :error="loadError"
-    @page-change="handlePageChange"
-    @search-change="handleTableSearch"
-    @filter-change="handleTableFilterChange"
-    @row-action="handleTableRowAction"
-  />
+  <template v-else-if="config.variant === 'table'">
+    <Transition name="skeleton-fade">
+      <SkeletonList
+        v-if="loading && route.name === 'courses'"
+        key="skeleton-courses"
+        :rows="6"
+      />
+      <SkeletonList
+        v-else-if="loading && route.name === 'knowledge-bases'"
+        key="skeleton-knowledge-bases"
+        :rows="5"
+      />
+      <EmptyState
+        v-else-if="!loading && displayedTableRows.length === 0 && route.name === 'courses'"
+        key="empty-courses"
+        :icon="BookOpen"
+        title="暂无课程"
+        description="创建第一个课程开始使用"
+        action-label="新建课程"
+        @action="openCreationDialog"
+      />
+      <EmptyState
+        v-else-if="!loading && displayedTableRows.length === 0 && route.name === 'knowledge-bases'"
+        key="empty-knowledge-bases"
+        :icon="Brain"
+        title="暂无知识库"
+        description="基于课程资料构建知识库"
+        action-label="创建知识库"
+        @action="openCreationDialog"
+      />
+      <DataTableShell
+        v-else
+        key="data-table"
+        :title="tableTitle"
+        :columns="config.columns"
+        :rows="displayedTableRows"
+        :filters="config.filters"
+        :pagination="config.pagination"
+        :search="config.search"
+        :search-text="tableSearchText"
+        :filter-values="tableFilterValues"
+        :loading="loading"
+        :error="loadError"
+        @page-change="handlePageChange"
+        @search-change="handleTableSearch"
+        @filter-change="handleTableFilterChange"
+        @row-action="handleTableRowAction"
+      />
+    </Transition>
+  </template>
 
   <section v-else-if="courseBlock" class="course-detail-stage">
     <article class="panel course-detail-hero-panel">
@@ -3705,8 +3759,19 @@ onBeforeUnmount(() => {
           管理成员
         </el-button>
       </div>
-      <ol v-if="courseBlock.teachers?.items?.length" class="course-teacher-list">
-        <li v-for="teacher in courseBlock.teachers.items" :key="teacher.id">
+      <!-- list-stagger：授课教师列表逐条渐入，Requirements 4.2 -->
+      <TransitionGroup
+        v-if="courseBlock.teachers?.items?.length"
+        name="list-stagger"
+        tag="ol"
+        class="course-teacher-list"
+        appear
+      >
+        <li
+          v-for="(teacher, index) in courseBlock.teachers.items"
+          :key="teacher.id"
+          :style="{ '--stagger-index': index }"
+        >
           <span class="course-teacher-avatar">
             <span>{{ teacher.name?.charAt(0) || '师' }}</span>
             <img
@@ -3722,7 +3787,7 @@ onBeforeUnmount(() => {
             <small>{{ teacher.meta || '工号/账号待补充' }}</small>
           </span>
         </li>
-      </ol>
+      </TransitionGroup>
       <div v-else class="empty-action-state">
         <p>暂无授课教师绑定。</p>
         <el-button
@@ -3783,19 +3848,21 @@ onBeforeUnmount(() => {
         <p>{{ materialParseProgress.detail }}</p>
         <small>{{ materialParseProgress.pollHint }}</small>
       </div>
-      <div
-        v-if="materialOperationFeedback"
-        class="operation-feedback"
-        :data-status="materialOperationFeedback.status"
-      >
-        <div class="operation-feedback__heading">
-          <strong>{{ materialOperationFeedback.title }}</strong>
-          <StatusBadge :status="materialOperationFeedback.status" />
+      <Transition name="slide-down">
+        <div
+          v-if="materialOperationFeedback"
+          class="operation-feedback"
+          :data-status="materialOperationFeedback.status"
+        >
+          <div class="operation-feedback__heading">
+            <strong>{{ materialOperationFeedback.title }}</strong>
+            <StatusBadge :status="materialOperationFeedback.status" />
+          </div>
+          <p>{{ materialOperationFeedback.message }}</p>
+          <small>{{ materialOperationFeedback.detail }}</small>
+          <small v-if="materialOperationFeedback.meta">{{ materialOperationFeedback.meta }}</small>
         </div>
-        <p>{{ materialOperationFeedback.message }}</p>
-        <small>{{ materialOperationFeedback.detail }}</small>
-        <small v-if="materialOperationFeedback.meta">{{ materialOperationFeedback.meta }}</small>
-      </div>
+      </Transition>
     </article>
 
     <article class="panel material-results-panel">
@@ -3835,8 +3902,18 @@ onBeforeUnmount(() => {
               <small>{{ group.summary }}</small>
             </span>
           </summary>
-          <ol class="parse-result-item-list">
-            <li v-for="item in group.items" :key="item.id">
+          <!-- list-stagger：解析产物列表逐条渐入，Requirements 4.2 -->
+          <TransitionGroup
+            name="list-stagger"
+            tag="ol"
+            class="parse-result-item-list"
+            appear
+          >
+            <li
+              v-for="(item, index) in group.items"
+              :key="item.id"
+              :style="{ '--stagger-index': index }"
+            >
               <StatusBadge :status="item.meta" />
               <div class="parse-result-copy">
                 <strong>{{ item.title }}</strong>
@@ -3865,7 +3942,7 @@ onBeforeUnmount(() => {
                 </el-button>
               </div>
             </li>
-          </ol>
+          </TransitionGroup>
         </details>
       </div>
       <div v-if="parseResultsBlock?.state === 'empty'" class="empty-action-state material-empty-state">
@@ -3916,13 +3993,23 @@ onBeforeUnmount(() => {
       <div class="panel-heading">
         <h2>索引运行</h2>
       </div>
-      <ol class="timeline-list">
-        <li v-for="item in indexRunsBlock.items" :key="item.id">
+      <!-- list-stagger：索引运行时间线逐条渐入，Requirements 4.2 -->
+      <TransitionGroup
+        name="list-stagger"
+        tag="ol"
+        class="timeline-list"
+        appear
+      >
+        <li
+          v-for="(item, index) in indexRunsBlock.items"
+          :key="item.id"
+          :style="{ '--stagger-index': index }"
+        >
           <StatusBadge :status="item.meta" />
           <RouterLink :to="item.to">{{ item.title }}</RouterLink>
           <small>{{ item.detail }}</small>
         </li>
-      </ol>
+      </TransitionGroup>
       <p v-if="indexRunsBlock.state === 'empty'">暂无索引运行。</p>
     </article>
   </section>
