@@ -36,6 +36,7 @@ CSV_COLUMNS: tuple[str, ...] = (
     "audit_entity_recall",
     "audit_entity_precision",
     "audit_relation_recall",
+    "faithfulness_error_rate",
     "parse_error_count",
     "llm_error_count",
     "strict_output_retry_count",

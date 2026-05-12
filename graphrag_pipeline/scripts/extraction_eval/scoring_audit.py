@@ -65,13 +65,14 @@ def canonicalize_gold_aliases(aliases: Sequence[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-@dataclass(frozen=True)
+@dataclass
 class AuditEntry:
     gold_entities: list[dict]
     gold_relations: list[dict]
     gold_seed: bool = False
     gold_seed_version: str = ""
     source_text: str = ""
+    metadata_context: dict[str, str] = field(default_factory=dict)
 
 
 REQUIRED_MANUAL_GOLD_SEED_RELATION_TYPES: tuple[str, ...] = (
@@ -96,12 +97,27 @@ def load_audit_index(path: Path) -> dict[str, AuditEntry]:
         sample_id = str(sample.get("source_sample_id") or "").strip()
         if not sample_id:
             continue
+        # 构建 metadata context 用于 faithfulness 豁免
+        heading_path_list = sample.get("heading_path") or []
+        metadata_ctx: dict[str, str] = {}
+        if sample.get("course_id"):
+            metadata_ctx["course_id"] = str(sample["course_id"])
+        if sample.get("source_file"):
+            metadata_ctx["source_file"] = str(sample["source_file"])
+        if sample.get("chapter"):
+            metadata_ctx["chapter"] = str(sample["chapter"])
+        if sample.get("section"):
+            metadata_ctx["section"] = str(sample["section"])
+        if heading_path_list:
+            metadata_ctx["heading_path"] = "|".join(str(h) for h in heading_path_list)
+
         index[sample_id] = AuditEntry(
             gold_entities=list(sample.get("gold_entities") or []),
             gold_relations=list(sample.get("gold_relations") or []),
             gold_seed=bool(sample.get("gold_seed")),
             gold_seed_version=str(sample.get("gold_seed_version") or ""),
             source_text=str(sample.get("text") or ""),
+            metadata_context=metadata_ctx,
         )
     return index
 
@@ -431,35 +447,69 @@ def _is_entity_name_fragment(name: str) -> bool:
 def _entity_has_text_grounding(entity_title: str, source_text: str) -> bool:
     """判断实体名是否在源文本中有 span 依据。
 
-    使用宽松匹配：忽略空格差异，对中文实体做连续子串匹配。
+    使用多级匹配策略：
+      Level 1: 完整子串匹配（忽略空格）
+      Level 2: casefold 子串匹配（处理英文大小写）
+      Level 3: 核心词素匹配——实体名拆分后，主要词素在源文本中出现
+               （处理"响应比公式"这类组合名称，源文本有"响应比"和"公式"）
     """
     if not entity_title or not source_text:
         return False
     # 规范化：去除多余空格
     title_clean = re.sub(r"\s+", "", entity_title.strip())
     text_clean = re.sub(r"\s+", "", source_text)
-    # 直接子串匹配（忽略空格）
+
+    # Level 1: 直接子串匹配
     if title_clean in text_clean:
         return True
-    # 对英文/混合名称尝试 casefold 匹配
+
+    # Level 2: casefold 匹配
     if title_clean.casefold() in text_clean.casefold():
         return True
+
+    # Level 3: 核心词素匹配
+    # 将实体名按中文/英文/数字边界拆分为词素
+    morphemes = _split_morphemes(title_clean)
+    if len(morphemes) >= 2:
+        # 要求至少 2/3 的词素（且至少 2 个）在源文本中出现
+        text_lower = text_clean.casefold()
+        hits = sum(1 for m in morphemes if m.casefold() in text_lower)
+        threshold = max(2, len(morphemes) * 2 // 3)
+        if hits >= threshold:
+            return True
+
     return False
+
+
+def _split_morphemes(text: str) -> list[str]:
+    """将实体名拆分为有意义的词素。
+
+    拆分规则：
+      - 中文连续字符序列（>= 2 字符）作为一个词素
+      - 英文/数字连续序列作为一个词素
+      - 单个中文字符不作为独立词素（避免"的""和"等虚词）
+    """
+    # 按中文/非中文边界拆分
+    parts = re.findall(r"[\u4e00-\u9fff]{2,}|[a-zA-Z0-9]+", text)
+    return [p for p in parts if len(p) >= 2]
 
 
 def judge_entity_faithfulness(
     entity_title: str,
     entity_type: str,
     source_text: str,
+    *,
+    metadata_context: dict[str, str] | None = None,
 ) -> FaithfulnessVerdict:
     """对单个抽取实体进行忠实度判定。
 
     判定规则（确定性，不依赖语义推理）：
       1. 名称碎片检测：过短、纯标点、纯数字 → unfaithful
       2. 类型合规检测：类型不在 schema 中 → unfaithful
-      3. 文本依据检测：实体名在源文本中无 span 对应 → unfaithful
+      3. 文本依据检测：实体名在源文本或文档元数据中无 span 对应 → unfaithful
 
-    三条规则全部通过 → faithful。
+    metadata_context 用于豁免 metadata-closure 注入的实体（如 course_id、
+    章节标题、节标题），这些实体来自文档结构元数据而非正文。
     """
     reasons: list[str] = []
     title = entity_title.strip() if entity_title else ""
@@ -473,8 +523,12 @@ def judge_entity_faithfulness(
     if _normalize_entity_type(etype) not in _VALID_ENTITY_TYPES:
         reasons.append("invalid_type")
 
-    # 规则 3：文本依据
-    if not _entity_has_text_grounding(title, source_text):
+    # 规则 3：文本依据（含 metadata 豁免）
+    has_grounding = _entity_has_text_grounding(title, source_text)
+    if not has_grounding and metadata_context:
+        # 检查是否在文档元数据中有依据
+        has_grounding = _entity_in_metadata_context(title, etype, metadata_context)
+    if not has_grounding:
         reasons.append("no_text_grounding")
 
     return FaithfulnessVerdict(
@@ -483,6 +537,57 @@ def judge_entity_faithfulness(
         is_faithful=len(reasons) == 0,
         failure_reasons=reasons,
     )
+
+
+def _entity_in_metadata_context(
+    entity_title: str,
+    entity_type: str,
+    metadata: dict[str, str],
+) -> bool:
+    """检查实体是否来自文档元数据（metadata-closure 注入）。
+
+    豁免条件：
+      - Course 类型且名称匹配 course_id 或 source_file
+      - Chapter 类型且名称匹配 chapter 元数据
+      - Section 类型且名称匹配 section 或 heading_path 中的元素
+    """
+    etype_norm = _normalize_entity_type(entity_type)
+    title_norm = re.sub(r"\s+", "", entity_title.strip()).casefold()
+
+    if etype_norm == "course":
+        for key in ("course_id", "source_file", "course_name"):
+            val = metadata.get(key, "")
+            if val and re.sub(r"\s+", "", val).casefold() == title_norm:
+                return True
+            # course_id 模式匹配（如 crs-YYYYMMDD-XXXXXX）
+            if val and title_norm == re.sub(r"\s+", "", val).casefold():
+                return True
+        return False
+
+    if etype_norm == "chapter":
+        chapter_val = metadata.get("chapter", "")
+        if chapter_val and re.sub(r"\s+", "", chapter_val).casefold() == title_norm:
+            return True
+        # heading_path 中的第一个元素通常是章
+        heading_path = metadata.get("heading_path", "")
+        if heading_path:
+            for h in heading_path.split("|"):
+                if re.sub(r"\s+", "", h).casefold() == title_norm:
+                    return True
+        return False
+
+    if etype_norm == "section":
+        section_val = metadata.get("section", "")
+        if section_val and re.sub(r"\s+", "", section_val).casefold() == title_norm:
+            return True
+        heading_path = metadata.get("heading_path", "")
+        if heading_path:
+            for h in heading_path.split("|"):
+                if re.sub(r"\s+", "", h).casefold() == title_norm:
+                    return True
+        return False
+
+    return False
 
 
 @dataclass
@@ -499,13 +604,17 @@ class FaithfulnessSampleResult:
 def compute_sample_faithfulness(
     item: StructuredExtractionResult,
     source_text: str,
+    metadata_context: dict[str, str] | None = None,
 ) -> FaithfulnessSampleResult:
     """对单个样本的所有抽取实体进行忠实度评估。"""
     verdicts: list[FaithfulnessVerdict] = []
     for ent in item.entities:
         if not ent.title.strip():
             continue
-        verdict = judge_entity_faithfulness(ent.title, ent.type, source_text)
+        verdict = judge_entity_faithfulness(
+            ent.title, ent.type, source_text,
+            metadata_context=metadata_context,
+        )
         verdicts.append(verdict)
 
     total = len(verdicts)
@@ -531,7 +640,7 @@ def compute_faithfulness_error_rate(
 
     faithfulness_error_rate = avg(unfaithful_entities / total_entities)
 
-    不依赖 gold 标注密度，只依赖源文本。
+    不依赖 gold 标注密度，只依赖源文本和文档元数据。
     当样本无源文本或无抽取实体时跳过。
 
     返回值范围 [0.0, 1.0]，越低越好。
@@ -543,7 +652,7 @@ def compute_faithfulness_error_rate(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.source_text:
             continue
-        result = compute_sample_faithfulness(item, entry.source_text)
+        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context)
         if result.total_entities == 0:
             continue
         rates.append(result.error_rate)
@@ -566,7 +675,7 @@ def compute_faithfulness_details(
         entry = audit_index.get(item.sample_id)
         if entry is None or not entry.source_text:
             continue
-        result = compute_sample_faithfulness(item, entry.source_text)
+        result = compute_sample_faithfulness(item, entry.source_text, entry.metadata_context)
         if result.total_entities == 0:
             continue
         sample_results.append(result)

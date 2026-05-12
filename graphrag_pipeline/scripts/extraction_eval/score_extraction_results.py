@@ -41,6 +41,8 @@ from .scoring_audit import (
     compute_audit_entity_precision,
     compute_audit_entity_recall,
     compute_audit_relation_recall,
+    compute_faithfulness_error_rate,
+    compute_faithfulness_details,
     load_audit_index,
     summarize_manual_gold_seed_coverage,
 )
@@ -726,6 +728,9 @@ def _build_leakage_group_metrics(
     audit_rel = (
         compute_audit_relation_recall(results, audit_index) if audit_metrics_enabled else None
     )
+    faithfulness_err = (
+        compute_faithfulness_error_rate(results, audit_index) if audit_index else None
+    )
     return {
         "group_available": True,
         "sample_count": len(results),
@@ -737,6 +742,7 @@ def _build_leakage_group_metrics(
         "audit_entity_recall": audit_ent,
         "audit_entity_precision": audit_ent_prec,
         "audit_relation_recall": audit_rel,
+        "faithfulness_error_rate": faithfulness_err,
         "output_stability": compute_output_stability(results) if results else None,
         "average_entity_count": _mean_success_count(results, "entities"),
         "average_relation_count": _mean_success_count(results, "relationships"),
@@ -970,6 +976,9 @@ def score_extraction_results(
         audit_rel = (
             compute_audit_relation_recall(results, audit_index) if audit_metrics_enabled else None
         )
+        faithfulness_err = (
+            compute_faithfulness_error_rate(results, audit_index) if audit_index else None
+        )
         metrics = aggregate_candidate_metrics(
             results,
             entity_type_names=entity_type_names,
@@ -979,6 +988,8 @@ def score_extraction_results(
             audit_relation_recall=audit_rel,
             audit_entity_precision=audit_ent_prec,
         )
+        if faithfulness_err is not None:
+            metrics["faithfulness_error_rate"] = faithfulness_err
         metrics["composite_score"] = compute_composite_score(metrics, effective_weights)
         metrics_by_candidate[candidate] = metrics
         results_by_candidate[candidate] = results
