@@ -118,6 +118,7 @@ environment-minimal.yml
 *.swo
 *~
 .worktrees/
+.claude/worktrees/
 
 # =========================
 # Logs
