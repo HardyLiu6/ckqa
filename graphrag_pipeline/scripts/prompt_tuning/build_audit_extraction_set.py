@@ -1108,10 +1108,18 @@ def build_annotation_guidelines(schema_catalog: SchemaCatalog, sample_size: int)
 """
 
 
+def _to_relative_path(path_str: str) -> str:
+    """将绝对路径转为相对于 PROJECT_ROOT 的路径，避免泄露本地目录结构。"""
+    try:
+        return str(Path(path_str).relative_to(PROJECT_ROOT))
+    except ValueError:
+        return path_str
+
+
 def _schema_reference(schema_catalog: SchemaCatalog) -> Dict[str, Any]:
     return {
-        "entity_schema_path": schema_catalog.entity_schema_path,
-        "relation_schema_path": schema_catalog.relation_schema_path,
+        "entity_schema_path": _to_relative_path(schema_catalog.entity_schema_path),
+        "relation_schema_path": _to_relative_path(schema_catalog.relation_schema_path),
         "entity_type_names": [item.name for item in schema_catalog.entity_types],
         "relation_type_names": [item.name for item in schema_catalog.relation_types],
     }
@@ -1141,7 +1149,7 @@ def build_audit_dataset(
         "schema_version": "v1",
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "audit_extraction_set",
-        "source_input": str(input_file),
+        "source_input": _to_relative_path(str(input_file)),
         "selection_parameters": {
             "sample_size": sample_size,
             "random_seed": random_seed,
@@ -1171,7 +1179,7 @@ def build_audit_dataset(
     report = {
         "schema_version": "v1",
         "generated_at": dataset["generated_at"],
-        "input_file": str(input_file),
+        "input_file": _to_relative_path(str(input_file)),
         "selection_strategy": selection_strategy,
         "fallback_to_random": fallback_to_random,
         "selection_parameters": dataset["selection_parameters"],

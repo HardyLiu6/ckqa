@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "generated_at": "2026-05-11T10:41:58",
   "task": "audit_extraction_set",
-  "source_input": "/home/sunlight/Projects/ckqa/graphrag_pipeline/data/prompt_tuning_samples/material_7_samples.json",
+  "source_input": "data/prompt_tuning_samples/material_7_samples.json",
   "selection_parameters": {
     "sample_size": 20,
     "random_seed": 42,
@@ -16,8 +16,8 @@
     ]
   },
   "schema_reference": {
-    "entity_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/entity_types.json",
-    "relation_schema_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/config/schema/relation_types.json",
+    "entity_schema_path": "config/schema/entity_types.json",
+    "relation_schema_path": "config/schema/relation_types.json",
     "entity_type_names": [
       "Course",
       "Chapter",
@@ -1056,7 +1056,7 @@
           "target_entity_id": "m66-e02",
           "type": "belongs_to",
           "evidence_text": "进程概念位于 2.2.1 进程的定义和特征小节。",
-          "notes": "用于校准 belongs_to 只能指向结构容器。"
+          "notes": "用于校准 belongs_to 只能指向结构容器。此关系与 m66-r02 互为 derivable_inverse，保留用于校准评分器对 belongs_to 的识别能力。"
         },
         {
           "relation_id": "m66-r04",
