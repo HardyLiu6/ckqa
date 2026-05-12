@@ -507,6 +507,10 @@ SOFT_METRIC_KEYS: tuple[str, ...] = (
 
 GATE_THRESHOLD: float = 0.95
 
+# Faithfulness Gate：faithfulness_error_rate 必须低于此阈值才通过
+# 方向与 HARD_METRIC_KEYS 相反（越低越好），单独检查
+FAITHFULNESS_ERROR_THRESHOLD: float = 0.15
+
 
 def _subset_composite(
     metrics: dict[str, float | None],
@@ -547,7 +551,8 @@ def compute_composite_soft(
 
 
 def compute_gate_passed(metrics: dict[str, float | None]) -> bool:
-    """所有硬指标非空且 >= GATE_THRESHOLD 才算过门槛。"""
+    """所有硬指标非空且 >= GATE_THRESHOLD，且 faithfulness_error_rate
+    （若存在）<= FAITHFULNESS_ERROR_THRESHOLD 才算过门槛。"""
     for key in HARD_METRIC_KEYS:
         value = metrics.get(key)
         if value is None:
@@ -557,6 +562,14 @@ def compute_gate_passed(metrics: dict[str, float | None]) -> bool:
                 return False
         except (TypeError, ValueError):
             return False
+    # Faithfulness Gate：若指标存在则检查
+    faith_err = metrics.get("faithfulness_error_rate")
+    if faith_err is not None:
+        try:
+            if float(faith_err) > FAITHFULNESS_ERROR_THRESHOLD:
+                return False
+        except (TypeError, ValueError):
+            pass
     return True
 
 
