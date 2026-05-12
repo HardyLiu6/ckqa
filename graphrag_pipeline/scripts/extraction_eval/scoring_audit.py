@@ -16,7 +16,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Sequence
 
@@ -70,6 +71,7 @@ class AuditEntry:
     gold_relations: list[dict]
     gold_seed: bool = False
     gold_seed_version: str = ""
+    source_text: str = ""
 
 
 REQUIRED_MANUAL_GOLD_SEED_RELATION_TYPES: tuple[str, ...] = (
@@ -99,6 +101,7 @@ def load_audit_index(path: Path) -> dict[str, AuditEntry]:
             gold_relations=list(sample.get("gold_relations") or []),
             gold_seed=bool(sample.get("gold_seed")),
             gold_seed_version=str(sample.get("gold_seed_version") or ""),
+            source_text=str(sample.get("text") or ""),
         )
     return index
 
@@ -381,3 +384,228 @@ def compute_audit_relation_recall(
     if not recalls:
         return 0.0
     return sum(recalls) / len(recalls)
+
+
+# ---------------------------------------------------------------------------
+# Faithfulness Gate：基于源文本的忠实度评估
+# ---------------------------------------------------------------------------
+# 不依赖 gold 标注密度，只判定抽取实体是否在源文本中有依据。
+# 参考：ARGUS (2025) hallucination/omission 分离、FinReflectKG-EvalBench
+# (NeurIPS 2025) faithfulness 维度、PU Learning NER 评估修正。
+# ---------------------------------------------------------------------------
+
+# 合法实体类型集合（casefold），用于类型合规检查
+_VALID_ENTITY_TYPES: frozenset[str] = frozenset(
+    t.casefold() for t in [
+        "Course", "Chapter", "Section", "KnowledgePoint", "Concept",
+        "Term", "FormulaOrDefinition", "AlgorithmOrMethod",
+        "Experiment", "Assignment", "ToolOrPlatform",
+    ]
+)
+
+# 碎片检测正则：纯标点、纯数字、单字符、OCR 残片
+_FRAGMENT_PATTERN = re.compile(
+    r"^[\s\d\W]{0,2}$"  # 长度 <= 2 且全是空白/数字/标点
+    r"|^[^\w]+$"         # 全是非单词字符
+    r"|^.$",             # 单字符
+    re.UNICODE,
+)
+
+
+@dataclass
+class FaithfulnessVerdict:
+    """单个实体的忠实度判定结果。"""
+    entity_title: str
+    entity_type: str
+    is_faithful: bool
+    failure_reasons: list[str] = field(default_factory=list)
+
+
+def _is_entity_name_fragment(name: str) -> bool:
+    """判断实体名是否为碎片（过短、纯标点、纯数字等）。"""
+    if not name or len(name.strip()) < 2:
+        return True
+    return bool(_FRAGMENT_PATTERN.match(name.strip()))
+
+
+def _entity_has_text_grounding(entity_title: str, source_text: str) -> bool:
+    """判断实体名是否在源文本中有 span 依据。
+
+    使用宽松匹配：忽略空格差异，对中文实体做连续子串匹配。
+    """
+    if not entity_title or not source_text:
+        return False
+    # 规范化：去除多余空格
+    title_clean = re.sub(r"\s+", "", entity_title.strip())
+    text_clean = re.sub(r"\s+", "", source_text)
+    # 直接子串匹配（忽略空格）
+    if title_clean in text_clean:
+        return True
+    # 对英文/混合名称尝试 casefold 匹配
+    if title_clean.casefold() in text_clean.casefold():
+        return True
+    return False
+
+
+def judge_entity_faithfulness(
+    entity_title: str,
+    entity_type: str,
+    source_text: str,
+) -> FaithfulnessVerdict:
+    """对单个抽取实体进行忠实度判定。
+
+    判定规则（确定性，不依赖语义推理）：
+      1. 名称碎片检测：过短、纯标点、纯数字 → unfaithful
+      2. 类型合规检测：类型不在 schema 中 → unfaithful
+      3. 文本依据检测：实体名在源文本中无 span 对应 → unfaithful
+
+    三条规则全部通过 → faithful。
+    """
+    reasons: list[str] = []
+    title = entity_title.strip() if entity_title else ""
+    etype = entity_type.strip() if entity_type else ""
+
+    # 规则 1：碎片检测
+    if _is_entity_name_fragment(title):
+        reasons.append("name_fragment")
+
+    # 规则 2：类型合规
+    if _normalize_entity_type(etype) not in _VALID_ENTITY_TYPES:
+        reasons.append("invalid_type")
+
+    # 规则 3：文本依据
+    if not _entity_has_text_grounding(title, source_text):
+        reasons.append("no_text_grounding")
+
+    return FaithfulnessVerdict(
+        entity_title=title,
+        entity_type=etype,
+        is_faithful=len(reasons) == 0,
+        failure_reasons=reasons,
+    )
+
+
+@dataclass
+class FaithfulnessSampleResult:
+    """单个样本的忠实度评估结果。"""
+    sample_id: str
+    total_entities: int
+    faithful_count: int
+    unfaithful_count: int
+    error_rate: float
+    verdicts: list[FaithfulnessVerdict]
+
+
+def compute_sample_faithfulness(
+    item: StructuredExtractionResult,
+    source_text: str,
+) -> FaithfulnessSampleResult:
+    """对单个样本的所有抽取实体进行忠实度评估。"""
+    verdicts: list[FaithfulnessVerdict] = []
+    for ent in item.entities:
+        if not ent.title.strip():
+            continue
+        verdict = judge_entity_faithfulness(ent.title, ent.type, source_text)
+        verdicts.append(verdict)
+
+    total = len(verdicts)
+    unfaithful = sum(1 for v in verdicts if not v.is_faithful)
+    faithful = total - unfaithful
+    error_rate = unfaithful / total if total > 0 else 0.0
+
+    return FaithfulnessSampleResult(
+        sample_id=item.sample_id,
+        total_entities=total,
+        faithful_count=faithful,
+        unfaithful_count=unfaithful,
+        error_rate=error_rate,
+        verdicts=verdicts,
+    )
+
+
+def compute_faithfulness_error_rate(
+    results: Sequence[StructuredExtractionResult],
+    audit_index: dict[str, AuditEntry],
+) -> float:
+    """计算所有成功样本的平均忠实度错误率。
+
+    faithfulness_error_rate = avg(unfaithful_entities / total_entities)
+
+    不依赖 gold 标注密度，只依赖源文本。
+    当样本无源文本或无抽取实体时跳过。
+
+    返回值范围 [0.0, 1.0]，越低越好。
+    """
+    rates: list[float] = []
+    for item in results:
+        if item.status != "success":
+            continue
+        entry = audit_index.get(item.sample_id)
+        if entry is None or not entry.source_text:
+            continue
+        result = compute_sample_faithfulness(item, entry.source_text)
+        if result.total_entities == 0:
+            continue
+        rates.append(result.error_rate)
+    if not rates:
+        return 0.0
+    return sum(rates) / len(rates)
+
+
+def compute_faithfulness_details(
+    results: Sequence[StructuredExtractionResult],
+    audit_index: dict[str, AuditEntry],
+) -> dict:
+    """计算忠实度评估的详细报告，包含分类统计和样本级明细。"""
+    sample_results: list[FaithfulnessSampleResult] = []
+    failure_reason_counts: dict[str, int] = {}
+
+    for item in results:
+        if item.status != "success":
+            continue
+        entry = audit_index.get(item.sample_id)
+        if entry is None or not entry.source_text:
+            continue
+        result = compute_sample_faithfulness(item, entry.source_text)
+        if result.total_entities == 0:
+            continue
+        sample_results.append(result)
+        for v in result.verdicts:
+            for reason in v.failure_reasons:
+                failure_reason_counts[reason] = failure_reason_counts.get(reason, 0) + 1
+
+    if not sample_results:
+        return {
+            "faithfulness_error_rate": 0.0,
+            "sample_count": 0,
+            "total_entities_evaluated": 0,
+            "total_unfaithful": 0,
+            "failure_reason_counts": {},
+            "per_sample": [],
+        }
+
+    avg_error_rate = sum(r.error_rate for r in sample_results) / len(sample_results)
+    total_entities = sum(r.total_entities for r in sample_results)
+    total_unfaithful = sum(r.unfaithful_count for r in sample_results)
+
+    return {
+        "faithfulness_error_rate": round(avg_error_rate, 4),
+        "sample_count": len(sample_results),
+        "total_entities_evaluated": total_entities,
+        "total_unfaithful": total_unfaithful,
+        "global_error_rate": round(total_unfaithful / total_entities, 4) if total_entities else 0.0,
+        "failure_reason_counts": dict(sorted(failure_reason_counts.items(), key=lambda x: -x[1])),
+        "per_sample": [
+            {
+                "sample_id": r.sample_id,
+                "total": r.total_entities,
+                "unfaithful": r.unfaithful_count,
+                "error_rate": round(r.error_rate, 4),
+                "unfaithful_entities": [
+                    {"title": v.entity_title, "type": v.entity_type, "reasons": v.failure_reasons}
+                    for v in r.verdicts if not v.is_faithful
+                ],
+            }
+            for r in sample_results
+        ],
+    }
