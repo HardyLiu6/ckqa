@@ -450,35 +450,50 @@ def _entity_has_text_grounding(entity_title: str, source_text: str) -> bool:
     使用多级匹配策略：
       Level 1: 完整子串匹配（忽略空格）
       Level 2: casefold 子串匹配（处理英文大小写）
-      Level 3: 核心词素匹配——实体名拆分后，主要词素在源文本中出现
-               （处理"响应比公式"这类组合名称，源文本有"响应比"和"公式"）
+      Level 3: 核心词+后缀拆分（处理"响应比公式"这类组合名称）
+      Level 4: 前后半拆分匹配（处理"进程同步"这类组合概念）
     """
     if not entity_title or not source_text:
         return False
     # 规范化：去除多余空格
     title_clean = re.sub(r"\s+", "", entity_title.strip())
     text_clean = re.sub(r"\s+", "", source_text)
+    text_lower = text_clean.casefold()
+    title_lower = title_clean.casefold()
 
     # Level 1: 直接子串匹配
     if title_clean in text_clean:
         return True
 
     # Level 2: casefold 匹配
-    if title_clean.casefold() in text_clean.casefold():
+    if title_lower in text_lower:
         return True
 
-    # Level 3: 核心词素匹配
-    # 将实体名按中文/英文/数字边界拆分为词素
-    morphemes = _split_morphemes(title_clean)
-    if len(morphemes) >= 2:
-        # 要求至少 2/3 的词素（且至少 2 个）在源文本中出现
-        text_lower = text_clean.casefold()
-        hits = sum(1 for m in morphemes if m.casefold() in text_lower)
-        threshold = max(2, len(morphemes) * 2 // 3)
-        if hits >= threshold:
-            return True
+    # Level 3: 核心词+后缀拆分
+    for suffix in _ENTITY_NAME_SUFFIXES:
+        if title_lower.endswith(suffix) and len(title_lower) > len(suffix) + 1:
+            core = title_lower[:-len(suffix)]
+            if core in text_lower:
+                return True
+
+    # Level 4: 前后半拆分匹配（中文 4 字以上实体）
+    cn_only = re.sub(r"[^\u4e00-\u9fff]", "", title_lower)
+    if len(cn_only) >= 4:
+        mid = len(cn_only) // 2
+        front = cn_only[:mid]
+        back = cn_only[mid:]
+        if len(front) >= 2 and len(back) >= 2:
+            if front in text_lower and back in text_lower:
+                return True
 
     return False
+
+
+# 常见实体名后缀，用于 Level 3 核心词+后缀拆分
+_ENTITY_NAME_SUFFIXES: tuple[str, ...] = (
+    "公式", "定义", "条件", "算法", "方法", "机制",
+    "原理", "定律", "习题", "实验", "策略", "技术",
+)
 
 
 def _split_morphemes(text: str) -> list[str]:
