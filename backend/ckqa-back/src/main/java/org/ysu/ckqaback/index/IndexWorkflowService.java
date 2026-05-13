@@ -185,6 +185,7 @@ public class IndexWorkflowService {
         }
 
         BuildRunDetailResponse buildRun = buildRunService.getBuildRun(buildRunId);
+        assertPromptConfirmed(buildRun);
         KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(buildRun.getKnowledgeBaseId());
         indexRunsService.recoverStaleRunningRuns(knowledgeBase.getId(), staleThreshold);
         if (indexRunsService.findActiveRunningByKnowledgeBaseId(knowledgeBase.getId()).isPresent()) {
@@ -373,5 +374,26 @@ public class IndexWorkflowService {
             return "";
         }
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /**
+     * 兜底校验：确保构建流水线已确认提示词策略，防止通过 URL 伪造跳过确认步骤。
+     */
+    private void assertPromptConfirmed(BuildRunDetailResponse buildRun) {
+        String metadata = buildRun.getBuildMetadata();
+        if (!org.springframework.util.StringUtils.hasText(metadata)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "请先确认提示词策略");
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadata);
+            if (!node.path("promptConfirmed").asBoolean(false)) {
+                throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                        "请先确认提示词策略");
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "构建元数据格式无效");
+        }
     }
 }

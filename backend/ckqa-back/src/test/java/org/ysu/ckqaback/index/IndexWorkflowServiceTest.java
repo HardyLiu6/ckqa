@@ -168,6 +168,108 @@ class IndexWorkflowServiceTest {
         org.assertj.core.api.Assertions.assertThat(fixture.workspace.resolve("index/input/material_3.section_docs.json")).exists();
     }
 
+    @Test
+    void createBuildRunIndexRun_rejectsWhenPromptNotConfirmed() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(1L)).willReturn(BuildRunDetailResponse.builder()
+                .id(1L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata("{\"stage\":\"prompt\",\"promptConfirmed\":false}")
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(1L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先确认提示词策略");
+    }
+
+    @Test
+    void createBuildRunIndexRun_rejectsWhenMetadataMissing() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(2L)).willReturn(BuildRunDetailResponse.builder()
+                .id(2L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata(null)
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(2L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先确认提示词策略");
+    }
+
+    @Test
+    void createBuildRunIndexRun_rejectsWhenMetadataInvalid() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(3L)).willReturn(BuildRunDetailResponse.builder()
+                .id(3L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata("{invalid json")
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(3L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("构建元数据格式无效");
+    }
+
     private ProcessExecutionResult successResult(List<String> command) {
         return ProcessExecutionResult.builder()
                 .command(command)
@@ -220,6 +322,7 @@ class IndexWorkflowServiceTest {
                 .courseId("os")
                 .selectedMaterialIds("[3]")
                 .workspaceUri(workspaceUri)
+                .buildMetadata("{\"stage\":\"prompt\",\"promptConfirmed\":true,\"promptStrategy\":\"default\"}")
                 .build());
         given(knowledgeBasesService.getRequiredById(5L)).willReturn(kb);
         given(indexRunsService.recoverStaleRunningRuns(5L, Duration.ofSeconds(2400))).willReturn(List.of());
