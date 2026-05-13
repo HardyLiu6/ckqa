@@ -617,6 +617,35 @@ public class KnowledgeBaseBuildRunService {
         return "kb" + knowledgeBaseId + "-" + BUILD_VERSION_FORMATTER.format(now) + "-" + random;
     }
 
+    private static final java.util.Set<String> SUPPORTED_PROMPT_STRATEGIES =
+            java.util.Set.of("default", "graphrag_tuned", "custom_pipeline");
+
+    /**
+     * 归一化提示词策略值。
+     * null/空白 → "default"；旧值 "active"（不区分大小写）→ "default"；
+     * 已知策略原样返回；未知策略抛出 BusinessException。
+     */
+    String normalizeStrategy(String raw) {
+        if (raw == null) {
+            return "default";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return "default";
+        }
+        // legacy: "active" 旧值在仓库语义上等价于"使用 .env 当前激活的提示词"，
+        // 既可能是系统默认也可能是自动调优。新设计下统一归一化为 default，
+        // 因为 default 行为最稳健，不依赖 active_prompt.json 是否存在。
+        if ("active".equalsIgnoreCase(trimmed)) {
+            return "default";
+        }
+        if (SUPPORTED_PROMPT_STRATEGIES.contains(trimmed)) {
+            return trimmed;
+        }
+        throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                "未知的提示词策略: " + raw);
+    }
+
     private String defaultText(String value, String defaultValue) {
         return StringUtils.hasText(value) ? value.trim() : defaultValue;
     }

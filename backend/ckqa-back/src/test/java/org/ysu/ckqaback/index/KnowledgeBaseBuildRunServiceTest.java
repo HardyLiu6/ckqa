@@ -433,6 +433,34 @@ class KnowledgeBaseBuildRunServiceTest {
         assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");  // 保留
     }
 
+    @Test
+    void normalizeStrategy_acceptsThreeNewValues() {
+        assertThat(service.normalizeStrategy("default")).isEqualTo("default");
+        assertThat(service.normalizeStrategy("graphrag_tuned")).isEqualTo("graphrag_tuned");
+        assertThat(service.normalizeStrategy("custom_pipeline")).isEqualTo("custom_pipeline");
+    }
+
+    @Test
+    void normalizeStrategy_mapsLegacyActiveToDefault() {
+        assertThat(service.normalizeStrategy("active")).isEqualTo("default");
+        assertThat(service.normalizeStrategy("ACTIVE")).isEqualTo("default");
+        assertThat(service.normalizeStrategy(" active ")).isEqualTo("default");
+    }
+
+    @Test
+    void normalizeStrategy_nullAndBlankReturnDefault() {
+        assertThat(service.normalizeStrategy(null)).isEqualTo("default");
+        assertThat(service.normalizeStrategy("")).isEqualTo("default");
+        assertThat(service.normalizeStrategy("   ")).isEqualTo("default");
+    }
+
+    @Test
+    void normalizeStrategy_unknownThrowsBusinessException() {
+        assertThatThrownBy(() -> service.normalizeStrategy("invalid_strategy"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未知的提示词策略");
+    }
+
     private IndexRuns successIndexRun(Long id, Long buildRunId, LocalDateTime finishedAt) {
         IndexRuns run = new IndexRuns();
         run.setId(id);
