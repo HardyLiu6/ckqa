@@ -219,6 +219,20 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/knowledge-bases/:kbId/build/prompt-builder',
+    name: 'knowledge-base-prompt-builder',
+    componentKey: 'PromptBuilderPage',
+    meta: {
+      title: '手动调优提示词',
+      layout: 'workflow',
+      permissions: ['kb:index'],
+      status: 'mvp',
+      navGroup: 'knowledge',
+      resource: 'knowledgeBase',
+      scope: 'course',
+    },
+  },
+  {
     path: '/app/knowledge-bases/:kbId/index-runs',
     name: 'index-runs',
     componentKey: 'RouteState',
