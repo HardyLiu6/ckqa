@@ -84,6 +84,7 @@ import {
   resolveLongTaskState,
 } from './long-task-state.js'
 import {
+  applyParseSnapshotToTaskRow,
   getModulePageConfig,
   resolveBuildStepNavigation,
 } from './module-content.js'
@@ -330,6 +331,35 @@ const buildPrimaryAction = computed(() => (
 ))
 const activeBuildStepComponent = computed(() => buildStepComponents[activeBuildStep.value?.key] ?? BuildStepMaterial)
 const buildNavigation = computed(() => resolveBuildStepNavigation(config.value.workflowSteps ?? [], activeBuildStep.value?.key))
+
+/**
+ * 把 SSE 推送的 parseStreamSnapshots 实时合并到 blocks.parseTasks.items，
+ * 让构建向导第 02 步「解析检查」的进度条不依赖整页 reload，与资料管理页保持一致。
+ */
+const activeBuildBlocks = computed(() => {
+  const baseBlocks = config.value.blocks ?? {}
+  const parseTasks = baseBlocks.parseTasks
+  const items = parseTasks?.items
+  if (!items || items.length === 0) {
+    return baseBlocks
+  }
+  const snapshots = parseStreamSnapshots.value
+  const hasSnapshot = items.some((row) => snapshots[String(row?.id ?? '')])
+  if (!hasSnapshot) {
+    return baseBlocks
+  }
+  const merged = items.map((row) => {
+    const snapshot = snapshots[String(row?.id ?? '')]
+    return snapshot ? applyParseSnapshotToTaskRow(row, snapshot) : row
+  })
+  return {
+    ...baseBlocks,
+    parseTasks: {
+      ...parseTasks,
+      items: merged,
+    },
+  }
+})
 const buildStepIndexLabel = computed(() => {
   const index = (config.value.workflowSteps ?? []).findIndex((step) => step.key === activeBuildStep.value?.key)
   return index >= 0 ? String(index + 1).padStart(2, '0') : '01'
@@ -1860,13 +1890,13 @@ function syncMaterialParseStreams(pageState = null) {
   for (const id of desiredIds) {
     void openMaterialParseStream(id, {
       targetId: id,
-      refreshOnTerminal: ['material-detail', 'parse-results'].includes(route.name),
+      refreshOnTerminal: ['material-detail', 'parse-results', 'knowledge-base-build'].includes(route.name),
     })
   }
 }
 
 function resolveProcessingMaterialIds(pageState = null) {
-  if (!['course-materials', 'material-detail', 'parse-results'].includes(route.name)) {
+  if (!['course-materials', 'material-detail', 'parse-results', 'knowledge-base-build'].includes(route.name)) {
     closeAllMaterialParseStreams()
     return []
   }
@@ -1877,6 +1907,27 @@ function resolveProcessingMaterialIds(pageState = null) {
       .filter((material) => String(material?.parseStatus ?? '').toLowerCase() === 'processing')
       .map((material) => String(material.id ?? material.materialId ?? ''))
       .filter(Boolean)
+  }
+
+  if (route.name === 'knowledge-base-build') {
+    // 构建向导的 parseTasks.items 不带原始 parseStatus 字段，
+    // 借由 row.status 的 running/processing 状态推断需要订阅 SSE 的资料。
+    // 同时也涵盖 selection.materials（首次进入向导时尚未拉取 parseTasks）。
+    const parseTaskRows = pageState?.blocks?.parseTasks?.items ?? []
+    const taskIds = parseTaskRows
+      .filter((row) => ['running', 'processing', 'pending'].includes(String(row?.status ?? '').toLowerCase()))
+      .map((row) => String(row.id ?? ''))
+      .filter(Boolean)
+
+    const selectionMaterials = pageState?.raw?.selectedMaterials
+      ?? pageState?.blocks?.selection?.materials
+      ?? []
+    const selectionIds = selectionMaterials
+      .filter((material) => String(material?.parseStatus ?? '').toLowerCase() === 'processing')
+      .map((material) => String(material.id ?? material.materialId ?? ''))
+      .filter(Boolean)
+
+    return Array.from(new Set([...taskIds, ...selectionIds]))
   }
 
   const material = pageState?.blocks?.material?.item
@@ -3618,7 +3669,7 @@ onBeforeUnmount(() => {
     <div class="build-step-stage__body">
       <component
         :is="activeBuildStepComponent"
-        :blocks="config.blocks"
+        :blocks="activeBuildBlocks"
         :step="activeBuildStep"
         :action-running="actionRunning"
         :operation-feedback="activeBuildOperationFeedback"

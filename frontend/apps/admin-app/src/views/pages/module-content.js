@@ -618,6 +618,51 @@ export function resolveParseTaskRows(materials = []) {
   })
 }
 
+/**
+ * 把 SSE 推送的解析快照合并到构建向导的 parseTasks 行里。
+ * 解析快照来自 PDF 解析事件流（snapshot 事件 payload），
+ * 字段格式与 mineru 输出一致：parseStatus / parseProgress (可能是 number 或 {percent, stage, stageLabel, detail, estimated}).
+ *
+ * @param {Object} row 由 resolveParseTaskRows 输出的行
+ * @param {Object} snapshot SSE 快照
+ * @returns {Object} 合并后的行（保留原 id 与 title），percent / status / detail 实时刷新
+ */
+export function applyParseSnapshotToTaskRow(row = {}, snapshot = {}) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return row
+  }
+  const status = normalizeParseStatus(
+    snapshot.parseStatus ?? snapshot.parseState ?? snapshot.status ?? row.status,
+  )
+  const progress = snapshot.parseProgress
+  const progressIsObject = progress && typeof progress === 'object'
+  const rawPercent = Number(
+    progressIsObject ? progress.percent : (progress ?? snapshot.progress),
+  )
+  const hasPercent = Number.isFinite(rawPercent)
+  const percentByStatus = {
+    done: 100,
+    pending: 0,
+    running: hasPercent ? rawPercent : 50,
+    failed: hasPercent ? rawPercent : 0,
+  }
+  const stageLabel = progressIsObject ? progress.stageLabel ?? progress.detail : null
+  const fallbackDetailByStatus = {
+    done: '解析完成',
+    pending: '等待解析',
+    running: stageLabel ?? '解析进行中',
+    failed: progressIsObject
+      ? progress.detail ?? snapshot.parseErrorMsg ?? '解析失败'
+      : snapshot.parseErrorMsg ?? snapshot.failureReason ?? '解析失败',
+  }
+  return {
+    ...row,
+    status,
+    percent: clampPercent(percentByStatus[status] ?? row.percent ?? 0),
+    detail: fallbackDetailByStatus[status] ?? row.detail,
+  }
+}
+
 export function resolveExportArtifactRows(materials = [], parseResultsByMaterialId = {}) {
   const rows = materials.map((material) => {
     const id = String(material.id ?? material.materialId ?? material.pdfFileId ?? '')
