@@ -1,2 +1,0 @@
-question_id,category,mode,entity_hit_rate,must_cite_hit,citation_format_present,negative_hit,answer_chars,length_score,info_density,elapsed_seconds,semantic_correctness,faithfulness,retrieval_precision,error
-Q001,factual_lookup,graphrag-drift-search:latest,0.0,0.0,0.0,0.0,0.0,0.0,0.0,90.08934675500495,,,,1

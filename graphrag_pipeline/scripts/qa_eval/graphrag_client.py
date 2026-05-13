@@ -44,7 +44,7 @@ class OpenAICompatibleClient:
         backoff_seconds: float = 2.0,
         allow_arbitrary_models: bool = False,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _normalize_base_url(base_url)
         self._timeout = request_timeout_seconds
         self._max_retries = max(1, max_retries)
         self._backoff_seconds = max(0.0, backoff_seconds)
@@ -127,3 +127,10 @@ def _should_bypass_env_proxy(base_url: str) -> bool:
         return ipaddress.ip_address(hostname).is_loopback
     except ValueError:
         return False
+
+
+def _normalize_base_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized[:-3]
+    return normalized

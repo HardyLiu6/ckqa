@@ -21,17 +21,21 @@ from graphrag_pipeline.scripts.qa_eval.graphrag_client import (
 )
 from graphrag_pipeline.scripts.qa_eval.judge_prompts import (
     FAITHFULNESS_PROMPT,
+    RETRIEVAL_PROMPT,
     SEMANTIC_PROMPT,
 )
 from graphrag_pipeline.scripts.qa_eval.test_set_schema import TEXT_UNIT_ID_PREFIX_LEN
 from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import (
+    DataCitationLookup,
     TextUnitLookup,
+    load_data_citation_lookup,
     load_text_unit_lookup,
 )
 
 
 LOGGER = logging.getLogger(__name__)
 JUDGE_FALLBACK_SENTINEL = -1.0
+DEFAULT_TEXT_UNITS_PATH = Path("graphrag_pipeline/output/text_units.parquet")
 
 JUDGE_METRICS: tuple[str, ...] = (
     "semantic_correctness",
@@ -58,6 +62,7 @@ class JudgeSummary:
 class JudgeRunner:
     client: OpenAICompatibleClient
     text_unit_lookup: TextUnitLookup
+    data_citation_lookup: DataCitationLookup | None
     judge_model: str
     api_key: str | None
     max_parse_retries: int = 2
@@ -132,12 +137,18 @@ def extract_text_unit_refs_from_answer(answer: str) -> list[str]:
     return out
 
 
-def score_run_with_judge(run_dir: Path | str, *, runner: JudgeRunner) -> JudgeSummary:
+def score_run_with_judge(
+    run_dir: Path | str,
+    *,
+    runner: JudgeRunner,
+    question_ids: list[str] | None = None,
+) -> JudgeSummary:
     run_path = Path(run_dir)
     raw_dir = run_path / "raw"
     raw_files = sorted(raw_dir.glob("Q*.json"))
     if not raw_files:
         raise FileNotFoundError(f"no raw items under {raw_dir}")
+    raw_files = _select_raw_files(raw_files, question_ids)
 
     modes = _load_modes_from_meta(run_path)
     judge_raw_dir = run_path / "judge_raw"
@@ -175,6 +186,22 @@ def score_run_with_judge(run_dir: Path | str, *, runner: JudgeRunner) -> JudgeSu
     return summary
 
 
+def _select_raw_files(raw_files: list[Path], question_ids: list[str] | None) -> list[Path]:
+    if question_ids is None:
+        return raw_files
+
+    duplicates = _find_duplicates(question_ids)
+    if duplicates:
+        raise ValueError(f"duplicate question id(s): {', '.join(duplicates)}")
+
+    raw_files_by_id = {raw_file.stem: raw_file for raw_file in raw_files}
+    missing = [question_id for question_id in question_ids if question_id not in raw_files_by_id]
+    if missing:
+        raise ValueError(f"unknown question id(s): {', '.join(missing)}")
+
+    return [raw_files_by_id[question_id] for question_id in question_ids]
+
+
 def _score_item(
     *,
     item: dict[str, Any],
@@ -210,11 +237,13 @@ def _score_item(
     )
     semantic_score = _coerce_semantic_score(semantic_payload)
 
+    retrieval_precision = 0.0
     if gold_refs:
+        evidence = runner.text_unit_lookup.render_for_prompt(gold_refs)
         faithfulness_payload = runner.score_pair(
             prompt=FAITHFULNESS_PROMPT.format(
                 question=question,
-                evidence=runner.text_unit_lookup.render_for_prompt(gold_refs),
+                evidence=evidence,
                 answer=answer,
             ),
             kind="faithfulness",
@@ -223,26 +252,54 @@ def _score_item(
             judge_raw_dir=judge_raw_dir,
         )
         faithfulness = _coerce_faithfulness(faithfulness_payload)
+        deterministic_retrieval = _retrieval_precision_from_answer(
+            answer,
+            gold_refs,
+            runner.data_citation_lookup,
+        )
+        if deterministic_retrieval is not None:
+            retrieval_precision = deterministic_retrieval
+        else:
+            retrieval_payload = runner.score_pair(
+                prompt=RETRIEVAL_PROMPT.format(
+                    question=question,
+                    evidence=evidence,
+                    answer=answer,
+                ),
+                kind="retrieval",
+                question_id=item_id,
+                mode=mode,
+                judge_raw_dir=judge_raw_dir,
+            )
+            retrieval_precision = _coerce_ternary_score(retrieval_payload)
     else:
         faithfulness = JUDGE_FALLBACK_SENTINEL
 
     return {
         "semantic_correctness": semantic_score,
         "faithfulness": faithfulness,
-        "retrieval_precision": _retrieval_precision(answer, gold_refs),
+        "retrieval_precision": retrieval_precision,
         "error": False,
     }
 
 
-def _retrieval_precision(answer: str, gold_refs: list[str]) -> float:
+def _retrieval_precision_from_answer(
+    answer: str,
+    gold_refs: list[str],
+    data_citation_lookup: DataCitationLookup | None,
+) -> float | None:
     if not gold_refs:
         return 0.0
     answer_refs = set(extract_text_unit_refs_from_answer(answer))
+    if data_citation_lookup is not None:
+        answer_refs.update(data_citation_lookup.resolve_answer_refs(answer))
+    if not answer_refs:
+        return None
     gold_set = set(gold_refs)
     return round(len(answer_refs & gold_set) / len(gold_set), 4)
 
 
-def _coerce_semantic_score(payload: dict[str, Any] | None) -> float:
+def _coerce_ternary_score(payload: dict[str, Any] | None) -> float:
     if payload is None:
         return JUDGE_FALLBACK_SENTINEL
     try:
@@ -252,13 +309,17 @@ def _coerce_semantic_score(payload: dict[str, Any] | None) -> float:
     return value if value in {0.0, 0.5, 1.0} else JUDGE_FALLBACK_SENTINEL
 
 
+def _coerce_semantic_score(payload: dict[str, Any] | None) -> float:
+    return _coerce_ternary_score(payload)
+
+
 def _coerce_faithfulness(payload: dict[str, Any] | None) -> float:
     if payload is None:
         return JUDGE_FALLBACK_SENTINEL
     value = payload.get("is_supported")
     if isinstance(value, bool):
         return 1.0 if value else 0.0
-    return JUDGE_FALLBACK_SENTINEL
+    return _coerce_ternary_score(payload)
 
 
 def _summarize(metrics: dict[str, list[float]]) -> dict[str, float]:
@@ -355,19 +416,49 @@ def _write_markdown(path: Path, summary: JudgeSummary, judge_model: str) -> None
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _find_duplicates(values: list[str]) -> list[str]:
+    duplicates: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+            continue
+        seen.add(value)
+    return duplicates
+
+
+def _resolve_text_units_path(run_dir: Path, text_units_path: Path | None) -> Path:
+    if text_units_path is not None:
+        resolved = text_units_path
+    else:
+        meta_path = run_dir / "run_meta.json"
+        index_output_dir: str | None = None
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            raw_index_output_dir = meta.get("index_output_dir")
+            if raw_index_output_dir:
+                index_output_dir = str(raw_index_output_dir)
+        resolved = Path(index_output_dir) / "text_units.parquet" if index_output_dir else DEFAULT_TEXT_UNITS_PATH
+
+    if not resolved.exists():
+        raise FileNotFoundError(f"resolved text_units.parquet does not exist: {resolved}")
+    return resolved
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Score a QA baseline run with an LLM judge.")
     parser.add_argument("--run-dir", type=Path, required=True)
+    parser.add_argument("--question-ids", nargs="+", default=None)
     parser.add_argument(
         "--text-units-path",
         type=Path,
-        default=Path("graphrag_pipeline/output/text_units.parquet"),
+        default=None,
     )
     parser.add_argument(
         "--judge-base-url",
         default=os.environ.get("GRAPHRAG_JUDGE_BASE_URL", os.environ.get("GRAPHRAG_API_BASE", "")),
     )
-    parser.add_argument("--judge-model", default=os.environ.get("GRAPHRAG_JUDGE_MODEL", "gpt-4o-mini"))
+    parser.add_argument("--judge-model", default=os.environ.get("GRAPHRAG_JUDGE_MODEL", "deepseek-v4-flash"))
     parser.add_argument(
         "--judge-api-key",
         default=os.environ.get("GRAPHRAG_JUDGE_API_KEY", os.environ.get("GRAPHRAG_CHAT_API_KEY", "")),
@@ -380,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not args.judge_base_url:
         raise SystemExit("missing judge base url; set GRAPHRAG_JUDGE_BASE_URL or pass --judge-base-url")
+    text_units_path = _resolve_text_units_path(args.run_dir, args.text_units_path)
 
     client = OpenAICompatibleClient(
         base_url=args.judge_base_url,
@@ -389,12 +481,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     runner = JudgeRunner(
         client=client,
-        text_unit_lookup=load_text_unit_lookup(args.text_units_path),
+        text_unit_lookup=load_text_unit_lookup(text_units_path),
+        data_citation_lookup=load_data_citation_lookup(text_units_path),
         judge_model=args.judge_model,
         api_key=args.judge_api_key or None,
         max_parse_retries=args.max_parse_retries,
     )
-    summary = score_run_with_judge(args.run_dir, runner=runner)
+    summary = score_run_with_judge(args.run_dir, runner=runner, question_ids=args.question_ids)
     print(json.dumps(summary.per_mode, ensure_ascii=False, indent=2))
     return 0
 

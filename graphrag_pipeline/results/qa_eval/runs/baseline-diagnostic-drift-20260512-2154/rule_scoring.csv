@@ -1,2 +1,0 @@
-question_id,category,mode,error,error_message,entity_hit_rate,must_cite_hit,citation_format_present,negative_hit,answer_chars,length_score,info_density,elapsed_seconds
-Q001,factual_lookup,graphrag-drift-search:latest,True,"query failed after 1 attempts: HTTPConnectionPool(host='127.0.0.1', port=8013): Read timed out. (read timeout=90.0)",0.0,0.0,0.0,0.0,0.0,0.0,0.0,90.09115748299519

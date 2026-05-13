@@ -25,7 +25,7 @@
 
 ## 下一步优先级
 
-已补充执行 `settings.yaml` 查询参数 A/B，结论见 `results/qa_eval/settings_ab_latency_findings.md`。
+已补充执行 `settings.yaml` 查询参数 A/B，并用 2026-05-13 新索引复测 DRIFT，结论见 `results/qa_eval/settings_ab_latency_findings.md`。
 
 1. 先调 `settings.yaml` 查询参数，不重建索引：
    - `global_search`: 降低 `max_context_tokens/data_max_tokens/map_max_length/reduce_max_length`。

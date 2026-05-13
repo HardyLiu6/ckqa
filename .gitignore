@@ -189,3 +189,4 @@ graphrag_pipeline/results/qa_eval/runs/*/raw/
 graphrag_pipeline/results/qa_eval/runs/*/judge_raw/
 graphrag_pipeline/results/qa_eval/runs/*/rule_scoring.json
 graphrag_pipeline/results/qa_eval/runs/*/judge_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/scoring*.json

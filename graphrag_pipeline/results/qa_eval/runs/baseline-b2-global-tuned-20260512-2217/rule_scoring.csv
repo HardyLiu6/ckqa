@@ -1,5 +1,0 @@
-question_id,category,mode,error,error_message,entity_hit_rate,must_cite_hit,citation_format_present,negative_hit,answer_chars,length_score,info_density,elapsed_seconds
-Q001,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,1.0,888.0,0.0,4.5045,98.5720314909995
-Q002,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,0.0,1344.0,0.0,2.9762,108.1324477030139
-Q003,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,1.0,1209.0,0.0,3.3085,113.07814014898031
-Q004,factual_lookup,graphrag-global-search:latest,False,,1.0,1.0,1.0,0.0,1354.0,0.0,2.9542,105.8161830159952

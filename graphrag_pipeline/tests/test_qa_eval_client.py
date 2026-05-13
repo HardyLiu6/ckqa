@@ -153,3 +153,19 @@ def test_client_allows_arbitrary_judge_models():
         )
         result = judge_client.query(model="gpt-4o-mini", prompt="...", api_key="sk-test")
         assert result.answer == "{\"score\":1}"
+
+
+def test_client_normalizes_base_url_with_v1_suffix():
+    payload = {
+        "choices": [{"message": {"role": "assistant", "content": "{\"score\":1}"}}],
+        "usage": {"total_tokens": 50},
+    }
+    with patch.object(requests.Session, "post", return_value=_FakeResponse(200, payload)) as mock:
+        judge_client = OpenAICompatibleClient(
+            base_url="http://127.0.0.1:3301/v1",
+            request_timeout_seconds=10,
+            allow_arbitrary_models=True,
+        )
+        result = judge_client.query(model="gpt-4o-mini", prompt="...", api_key="sk-test")
+        assert result.answer == "{\"score\":1}"
+        assert mock.call_args.args[0] == "http://127.0.0.1:3301/v1/chat/completions"
