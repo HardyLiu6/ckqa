@@ -12,16 +12,19 @@ import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.index.IndexWorkflowService;
 import org.ysu.ckqaback.index.KnowledgeBaseBuildRunService;
 import org.ysu.ckqaback.index.dto.BuildRunIndexRequest;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
 
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -141,5 +144,37 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.id").value(27))
                 .andExpect(jsonPath("$.data.currentStage").value("qa_smoke"))
                 .andExpect(jsonPath("$.data.qaStatus").value("running"));
+    }
+
+    @Test
+    void putCustomPromptDraft_returnsOkAndBuildRunDetail() throws Exception {
+        given(buildRunService.saveCustomPromptDraft(eq(1L), any(BuildRunCustomPromptDraftRequest.class)))
+                .willReturn(BuildRunDetailResponse.builder()
+                        .id(1L)
+                        .status("running")
+                        .currentStage("prompt")
+                        .build());
+
+        String body = """
+                {"seed":"system_default","prompts":{"extract_graph":{"content":"x"}}}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void putCustomPromptDraft_rejectsMissingSeed() throws Exception {
+        String body = """
+                {"prompts":{"extract_graph":{"content":"x"}}}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
     }
 }

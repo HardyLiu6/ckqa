@@ -19,6 +19,7 @@ import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.index.IndexWorkflowService;
 import org.ysu.ckqaback.index.KnowledgeBaseBuildRunService;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.BuildRunGraphInputRequest;
 import org.ysu.ckqaback.index.dto.BuildRunIndexRequest;
@@ -97,6 +98,14 @@ public class KnowledgeBaseBuildRunsController {
             @Valid @RequestBody(required = false) BuildRunPromptConfirmationRequest request
     ) {
         return ApiResponseUtils.success(buildRunService.confirmPrompt(id, request));
+    }
+
+    @PutMapping("/{id}/custom-prompt-draft")
+    public ApiResponse<BuildRunDetailResponse> saveCustomPromptDraft(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody BuildRunCustomPromptDraftRequest request
+    ) {
+        return ApiResponseUtils.success(buildRunService.saveCustomPromptDraft(id, request));
     }
 
     @PostMapping("/{id}/index-runs")
