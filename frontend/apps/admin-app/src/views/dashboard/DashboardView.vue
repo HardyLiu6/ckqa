@@ -68,31 +68,29 @@ onMounted(() => {
     </div>
   </section>
 
-  <Transition name="skeleton-fade">
-    <SkeletonCardGrid
-      v-if="loading"
-      :cards="5"
-      :columns="5"
+  <SkeletonCardGrid
+    v-if="loading"
+    :cards="5"
+    :columns="5"
+  />
+  <!-- list-stagger：指标卡片逐条渐入，Requirements 4.2 -->
+  <TransitionGroup
+    v-else
+    name="list-stagger"
+    tag="section"
+    class="dashboard-grid"
+    appear
+  >
+    <MetricTile
+      v-for="(metric, index) in metrics"
+      :key="metric.label"
+      :label="metric.label"
+      :value="metric.value"
+      :hint="metric.hint"
+      :tone="metric.tone"
+      :style="{ '--stagger-index': index }"
     />
-    <!-- list-stagger：指标卡片逐条渐入，Requirements 4.2 -->
-    <TransitionGroup
-      v-else
-      name="list-stagger"
-      tag="section"
-      class="dashboard-grid"
-      appear
-    >
-      <MetricTile
-        v-for="(metric, index) in metrics"
-        :key="metric.label"
-        :label="metric.label"
-        :value="metric.value"
-        :hint="metric.hint"
-        :tone="metric.tone"
-        :style="{ '--stagger-index': index }"
-      />
-    </TransitionGroup>
-  </Transition>
+  </TransitionGroup>
 
   <ProductionTrack :nodes="productionSteps" />
 

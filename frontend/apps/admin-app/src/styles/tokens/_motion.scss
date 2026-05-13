@@ -2,10 +2,10 @@
 // Requirements 1.5
 
 :root {
-  // 三级时长
-  --ckqa-duration-fast: 150ms;
-  --ckqa-duration-normal: 250ms;
-  --ckqa-duration-slow: 400ms;
+  // 三级时长（精简视觉节奏，避免长时间切换造成卡顿感）
+  --ckqa-duration-fast: 120ms;
+  --ckqa-duration-normal: 180ms;
+  --ckqa-duration-slow: 280ms;
 
   // 兼容别名（--ckqa-duration-base 已弃用，使用 --ckqa-duration-normal）
   --ckqa-duration-base: var(--ckqa-duration-normal);
@@ -17,9 +17,9 @@
 }
 
 // SCSS 变量（与 CSS Custom Properties 同步）
-$duration-fast: 150ms;
-$duration-normal: 250ms;
-$duration-slow: 400ms;
+$duration-fast: 120ms;
+$duration-normal: 180ms;
+$duration-slow: 280ms;
 
 // SCSS 兼容别名
 $duration-base: $duration-normal;

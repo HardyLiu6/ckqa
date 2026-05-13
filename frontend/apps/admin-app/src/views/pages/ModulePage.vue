@@ -243,7 +243,8 @@ const config = computed(() => {
 })
 const loading = computed(() => requestState.value === 'loading')
 // 首次尚未返回数据时也视为 loading（避免空状态闪烁）
-const isInitialLoading = computed(() => requestState.value !== 'success' && !liveState.value)
+// 仅在 idle 或 loading 阶段显示骨架屏；一旦拿到 liveState（成功/空/错误）即切换到真实内容
+const isInitialLoading = computed(() => !liveState.value && requestState.value !== 'error')
 const detailRouteNames = ['course-detail', 'material-detail', 'parse-results', 'knowledge-base-detail', 'index-run-detail']
 const isDetailRoute = computed(() => detailRouteNames.includes(route.name))
 const showDetailSkeleton = computed(() => loading.value && isDetailRoute.value && !liveState.value)
@@ -3485,6 +3486,7 @@ onBeforeUnmount(() => {
   <Transition name="skeleton-fade">
     <SkeletonDetail
       v-if="showDetailSkeleton"
+      key="skeleton-detail"
       :show-sidebar="detailSkeletonShowSidebar"
       :show-header="true"
     />
@@ -3561,54 +3563,52 @@ onBeforeUnmount(() => {
   </section>
 
   <template v-else-if="config.variant === 'table'">
-    <Transition name="skeleton-fade" mode="out-in">
-      <SkeletonList
-        v-if="(loading || isInitialLoading) && route.name === 'courses'"
-        key="skeleton-courses"
-        :rows="6"
-      />
-      <SkeletonList
-        v-else-if="(loading || isInitialLoading) && route.name === 'knowledge-bases'"
-        key="skeleton-knowledge-bases"
-        :rows="5"
-      />
-      <EmptyState
-        v-else-if="showsEmptyState && route.name === 'courses'"
-        key="empty-courses"
-        :icon="BookOpen"
-        title="暂无课程"
-        description="创建第一个课程开始使用"
-        action-label="新建课程"
-        @action="openCreationDialog"
-      />
-      <EmptyState
-        v-else-if="showsEmptyState && route.name === 'knowledge-bases'"
-        key="empty-knowledge-bases"
-        :icon="Brain"
-        title="暂无知识库"
-        description="基于课程资料构建知识库"
-        action-label="创建知识库"
-        @action="openCreationDialog"
-      />
-      <DataTableShell
-        v-else
-        key="data-table"
-        :title="tableTitle"
-        :columns="config.columns"
-        :rows="displayedTableRows"
-        :filters="config.filters"
-        :pagination="config.pagination"
-        :search="config.search"
-        :search-text="tableSearchText"
-        :filter-values="tableFilterValues"
-        :loading="loading"
-        :error="loadError"
-        @page-change="handlePageChange"
-        @search-change="handleTableSearch"
-        @filter-change="handleTableFilterChange"
-        @row-action="handleTableRowAction"
-      />
-    </Transition>
+    <SkeletonList
+      v-if="(loading || isInitialLoading) && route.name === 'courses'"
+      key="skeleton-courses"
+      :rows="6"
+    />
+    <SkeletonList
+      v-else-if="(loading || isInitialLoading) && route.name === 'knowledge-bases'"
+      key="skeleton-knowledge-bases"
+      :rows="5"
+    />
+    <EmptyState
+      v-else-if="showsEmptyState && route.name === 'courses'"
+      key="empty-courses"
+      :icon="BookOpen"
+      title="暂无课程"
+      description="创建第一个课程开始使用"
+      action-label="新建课程"
+      @action="openCreationDialog"
+    />
+    <EmptyState
+      v-else-if="showsEmptyState && route.name === 'knowledge-bases'"
+      key="empty-knowledge-bases"
+      :icon="Brain"
+      title="暂无知识库"
+      description="基于课程资料构建知识库"
+      action-label="创建知识库"
+      @action="openCreationDialog"
+    />
+    <DataTableShell
+      v-else
+      key="data-table"
+      :title="tableTitle"
+      :columns="config.columns"
+      :rows="displayedTableRows"
+      :filters="config.filters"
+      :pagination="config.pagination"
+      :search="config.search"
+      :search-text="tableSearchText"
+      :filter-values="tableFilterValues"
+      :loading="loading"
+      :error="loadError"
+      @page-change="handlePageChange"
+      @search-change="handleTableSearch"
+      @filter-change="handleTableFilterChange"
+      @row-action="handleTableRowAction"
+    />
   </template>
 
   <section v-else-if="courseBlock" class="course-detail-stage">

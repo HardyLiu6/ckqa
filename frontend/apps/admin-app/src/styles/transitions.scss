@@ -93,11 +93,11 @@
 }
 
 // ============================================================
-// 4. skeleton-fade — 骨架屏淡出替换，duration ≤ 300ms
+// 4. skeleton-fade — 骨架屏淡出替换
 // ============================================================
 .skeleton-fade-enter-active,
 .skeleton-fade-leave-active {
-  transition: opacity 300ms var(--ckqa-ease-standard);
+  transition: opacity var(--ckqa-duration-fast) var(--ckqa-ease-standard);
 }
 
 .skeleton-fade-enter-from,
