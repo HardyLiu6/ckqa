@@ -1847,10 +1847,27 @@ textarea.text-input {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--ckqa-space-3);
-  padding: var(--ckqa-space-3);
-  border: 1px solid color-mix(in srgb, var(--ckqa-border) 76%, transparent);
-  border-radius: var(--ckqa-radius-sm);
-  background: color-mix(in srgb, var(--ckqa-surface-muted) 54%, var(--ckqa-surface));
+  padding: var(--ckqa-space-3) var(--ckqa-space-4);
+  border: 1px solid color-mix(in srgb, var(--ckqa-border) 70%, transparent);
+  border-radius: var(--ckqa-radius-lg, 14px);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ckqa-surface) 100%, transparent) 0%,
+    color-mix(in srgb, var(--ckqa-surface-muted) 65%, var(--ckqa-surface)) 100%
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--ckqa-text) 4%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 60%, transparent);
+  transition:
+    border-color var(--ckqa-duration-fast) ease,
+    box-shadow var(--ckqa-duration-fast) ease;
+}
+
+.table-toolbar:focus-within {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 38%, var(--ckqa-border));
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--ckqa-accent) 10%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
 }
 
 .table-toolbar-field {
@@ -1861,11 +1878,24 @@ textarea.text-input {
 }
 
 .table-toolbar-field--search {
-  flex: 1 1 320px;
+  flex: 1 1 280px;
+  max-width: 480px;
 }
 
 .table-toolbar-field--filter {
-  flex: 0 1 220px;
+  flex: 0 1 200px;
+}
+
+.table-toolbar-count {
+  margin-left: auto;
+  padding: 4px 12px;
+  border-radius: var(--ckqa-radius-full);
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface));
+  color: var(--ckqa-accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  letter-spacing: 0.4px;
 }
 
 .table-toolbar-tag.el-tag {
@@ -1878,6 +1908,69 @@ textarea.text-input {
 
 .table-search-input {
   width: 100%;
+}
+
+// 搜索框 — 圆润灵动样式
+.table-search-input.el-input .el-input__wrapper {
+  --el-input-border-radius: var(--ckqa-radius-full);
+  border-radius: var(--ckqa-radius-full);
+  padding: 4px var(--ckqa-space-3);
+  background: var(--ckqa-surface);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ckqa-border) 80%, transparent),
+    0 1px 2px color-mix(in srgb, var(--ckqa-text) 3%, transparent);
+  transition:
+    box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard),
+    transform var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+.table-search-input.el-input .el-input__wrapper:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ckqa-accent) 32%, var(--ckqa-border)),
+    0 2px 6px color-mix(in srgb, var(--ckqa-accent) 10%, transparent);
+}
+
+.table-search-input.el-input.is-focus .el-input__wrapper,
+.table-search-input.el-input .el-input__wrapper.is-focus {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ckqa-accent) 55%, transparent),
+    0 4px 12px color-mix(in srgb, var(--ckqa-accent) 18%, transparent);
+}
+
+.table-search-input.el-input .el-input__prefix {
+  color: color-mix(in srgb, var(--ckqa-accent) 70%, var(--ckqa-text-muted));
+  margin-right: 6px;
+}
+
+.table-search-input.el-input .el-input__inner {
+  font-size: 13.5px;
+}
+
+.table-search-input.el-input .el-input__inner::placeholder {
+  color: color-mix(in srgb, var(--ckqa-text-muted) 80%, transparent);
+  font-size: 13px;
+}
+
+// 筛选下拉框 — 与搜索框一致的圆润感
+.table-filter-select.el-select .el-select__wrapper {
+  border-radius: var(--ckqa-radius-full);
+  padding: 2px var(--ckqa-space-3);
+  background: var(--ckqa-surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ckqa-border) 80%, transparent);
+  transition: box-shadow var(--ckqa-duration-fast) var(--ckqa-ease-standard);
+}
+
+.table-filter-select.el-select .el-select__wrapper:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ckqa-accent) 32%, var(--ckqa-border)),
+    0 2px 6px color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+}
+
+.table-filter-select.el-select.is-focused .el-select__wrapper,
+.table-filter-select.el-select .el-select__wrapper.is-focused {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ckqa-accent) 50%, transparent),
+    0 4px 10px color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
 }
 
 .data-table-shell,

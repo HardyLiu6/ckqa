@@ -230,16 +230,12 @@ function getProgressFormat(cell) {
 
 <template>
   <section class="panel data-table-shell" :aria-labelledby="`${title}-table-title`">
-    <div class="panel-heading">
-      <h2 :id="`${title}-table-title`" class="data-table-shell__sr-title">{{ title }}</h2>
-      <span class="record-count">{{ recordCount }} 条</span>
-    </div>
+    <h2 :id="`${title}-table-title`" class="data-table-shell__sr-title">{{ title }}</h2>
 
     <p v-if="tableError" class="inline-error">{{ tableError }}</p>
 
     <div v-if="searchConfig || filters.length" class="table-toolbar" aria-label="列表检索与筛选">
       <label v-if="searchConfig" class="table-toolbar-field table-toolbar-field--search">
-        <el-tag class="table-toolbar-tag" type="primary" effect="light">检索</el-tag>
         <el-input
           class="table-search-input"
           :model-value="effectiveSearchText"
@@ -276,6 +272,8 @@ function getProgressFormat(cell) {
           />
         </el-select>
       </label>
+
+      <span class="table-toolbar-count" aria-live="polite">共 {{ recordCount }} 条</span>
     </div>
 
     <Transition name="skeleton-fade">
