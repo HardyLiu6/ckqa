@@ -2356,6 +2356,7 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
     materialIds: '9',
     exportConfirmed: '1',
     promptConfirmed: '1',
+    promptStrategy: 'default',
     step: 'index',
   })
 

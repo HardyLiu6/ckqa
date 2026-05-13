@@ -922,22 +922,37 @@ function resolvePromptPrimaryAction(context = {}) {
     })
   }
 
-  if (!promptState.confirmed) {
-    const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'promptConfirmed', true)
-
+  if (promptState.confirmed) {
     return createBuildAction({
-      label: '确认提示词策略',
-      operationKey: 'prompt-confirm',
+      label: '进入创建索引',
+      operationKey: 'step-index',
       nextStepKey: 'index',
-      nextQuery: resolveBuildStepQuery(queryWithConfirm, 'index'),
+      nextQuery: resolveBuildStepQuery(context.query ?? {}, 'index'),
     })
   }
 
+  // 切换中态：query 中的 promptStrategy 优先（用户刚点了策略卡，URL 已 replace），否则用 promptState 中已存的
+  const queryStrategy = context.query?.promptStrategy
+  const selectedStrategy = queryStrategy
+    ? normalizePromptStrategy(queryStrategy)
+    : promptState.strategy ?? 'default'
+
+  if (selectedStrategy === 'custom_pipeline' && !promptState.customDraftReady) {
+    return createBuildAction({
+      label: '确认提示词策略',
+      operationKey: 'prompt-confirm',
+      disabled: true,
+      disabledReason: '请先完成手动调优提示词构建',
+    })
+  }
+
+  const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'promptConfirmed', true)
+
   return createBuildAction({
-    label: '进入创建索引',
-    operationKey: 'step-index',
+    label: '确认提示词策略',
+    operationKey: 'prompt-confirm',
     nextStepKey: 'index',
-    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'index'),
+    nextQuery: resolveBuildStepQuery({ ...queryWithConfirm, promptStrategy: selectedStrategy }, 'index'),
   })
 }
 
