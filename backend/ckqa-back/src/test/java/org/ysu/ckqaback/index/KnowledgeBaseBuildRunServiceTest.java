@@ -384,6 +384,55 @@ class KnowledgeBaseBuildRunServiceTest {
         return buildRun;
     }
 
+    @Test
+    void mergeStageMetadata_preservesPersistKeysAcrossStages() throws Exception {
+        KnowledgeBaseBuildRuns existing = new KnowledgeBaseBuildRuns();
+        existing.setBuildMetadata("{\"stage\":\"prompt\",\"promptConfirmed\":true,\"promptStrategy\":\"custom_pipeline\",\"customPromptDraft\":{\"seed\":\"graphrag_tuned\"}}");
+
+        String merged = service.mergeStageMetadata(
+                existing,
+                "index_build",
+                java.util.Map.of("indexRunId", 99L),
+                java.util.List.of("customPromptDraft", "promptStrategy", "promptConfirmed")
+        );
+
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(merged);
+        assertThat(node.get("stage").asText()).isEqualTo("index_build");
+        assertThat(node.get("indexRunId").asLong()).isEqualTo(99L);
+        assertThat(node.get("promptConfirmed").asBoolean()).isTrue();
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");
+        assertThat(node.get("customPromptDraft").get("seed").asText()).isEqualTo("graphrag_tuned");
+    }
+
+    @Test
+    void mergeStageMetadata_emptyExistingMetadataYieldsOnlyStageAndExtras() throws Exception {
+        KnowledgeBaseBuildRuns empty = new KnowledgeBaseBuildRuns();
+        empty.setBuildMetadata(null);
+
+        String merged = service.mergeStageMetadata(
+                empty, "prompt", java.util.Map.of("foo", "bar"), java.util.List.of("customPromptDraft")
+        );
+
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(merged);
+        assertThat(node.get("stage").asText()).isEqualTo("prompt");
+        assertThat(node.get("foo").asText()).isEqualTo("bar");
+        assertThat(node.has("customPromptDraft")).isFalse();
+    }
+
+    @Test
+    void mergeStageMetadata_extrasTakePrecedenceOverPersistedKeys() throws Exception {
+        KnowledgeBaseBuildRuns existing = new KnowledgeBaseBuildRuns();
+        existing.setBuildMetadata("{\"promptConfirmed\":true,\"promptStrategy\":\"custom_pipeline\"}");
+
+        String merged = service.mergeStageMetadata(existing, "prompt",
+                java.util.Map.of("promptConfirmed", false),  // extras 覆盖旧值
+                java.util.List.of("promptConfirmed", "promptStrategy"));
+
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(merged);
+        assertThat(node.get("promptConfirmed").asBoolean()).isFalse();  // 被 extras 覆盖
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");  // 保留
+    }
+
     private IndexRuns successIndexRun(Long id, Long buildRunId, LocalDateTime finishedAt) {
         IndexRuns run = new IndexRuns();
         run.setId(id);

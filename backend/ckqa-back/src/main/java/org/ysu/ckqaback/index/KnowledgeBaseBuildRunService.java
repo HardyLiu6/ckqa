@@ -576,6 +576,35 @@ public class KnowledgeBaseBuildRunService {
         return payload;
     }
 
+    /**
+     * 合并阶段元数据，保留跨阶段持久键。
+     * extras 在 persist 之后 put，因此 extras 中的同名键会覆盖 persist 的旧值。
+     */
+    String mergeStageMetadata(KnowledgeBaseBuildRuns buildRun,
+                              String stage,
+                              Map<String, ?> extras,
+                              List<String> persistKeys) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        merged.put("stage", stage);
+
+        if (StringUtils.hasText(buildRun.getBuildMetadata())) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode existing = objectMapper.readTree(buildRun.getBuildMetadata());
+                for (String key : persistKeys) {
+                    if (existing.has(key) && !existing.get(key).isNull()) {
+                        merged.put(key, objectMapper.treeToValue(existing.get(key), Object.class));
+                    }
+                }
+            } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+                // 旧 metadata 无效 JSON 时，按空对象处理；不影响新阶段写入
+            }
+        }
+        if (extras != null) {
+            merged.putAll(extras);
+        }
+        return toJson(merged);
+    }
+
     private String stageMetadata(String stage, Map<String, ?> extra) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("stage", stage);
