@@ -3052,7 +3052,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /submitCourseArchive/)
   assert.match(modulePage, /openCourseKnowledgeAction/)
   assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId \}\)/)
-  assert.match(modulePage, /import \{ ElMessage \} from 'element-plus'/)
+  assert.match(modulePage, /import \{ ElMessage, ElMessageBox \} from 'element-plus'/)
   assert.match(modulePage, /ElMessage\.warning\(message\)/)
   assert.match(modulePage, /<el-alert[\s\S]*:title="materialActionError\.message"/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')

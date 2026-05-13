@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   BookOpen,
   Brain,
@@ -173,6 +173,7 @@ const parseStreamSnapshots = ref({})
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
+const selectedPromptStrategy = ref('default')
 const creationDialog = ref('')
 const creationState = ref('idle')
 const creationError = ref(null)
@@ -633,6 +634,12 @@ async function loadPage(query = route.query) {
       nextQuery = resolveBuildConfirmQuery(nextQuery, 'promptConfirmed', false)
     }
 
+    if (result.blocks?.prompt?.shouldCleanPromptStrategyQuery) {
+      const cleaned = { ...nextQuery }
+      delete cleaned.promptStrategy
+      nextQuery = cleaned
+    }
+
     if (route.query.step && stepKeys.length > 0) {
       nextQuery = resolveCleanBuildStepQuery(nextQuery, stepKeys)
     }
@@ -643,6 +650,25 @@ async function loadPage(query = route.query) {
   }
 
   syncMaterialParseStreams(result)
+
+  if (route.name === 'knowledge-base-build') {
+    syncSelectedPromptStrategy()
+  }
+}
+
+function syncSelectedPromptStrategy() {
+  const queryStrategy = firstQueryValue(route.query?.promptStrategy)
+  const metaStrategy = config.value.blocks?.prompt?.strategy
+  selectedPromptStrategy.value = queryStrategy || metaStrategy || 'default'
+}
+
+function updateBuildPromptStrategy(strategyKey) {
+  if (selectedPromptStrategy.value === strategyKey) return
+  selectedPromptStrategy.value = strategyKey
+  const nextQuery = { ...route.query, promptStrategy: strategyKey }
+  if (!isSameQuery(route.query, nextQuery)) {
+    router.replace({ query: nextQuery })
+  }
 }
 
 function isSameQuery(left = {}, right = {}) {
@@ -2164,13 +2190,44 @@ async function runBuildGraphInput(action) {
 }
 
 async function runBuildPromptConfirmation(action) {
+  const strategy = selectedPromptStrategy.value || 'default'
   await runBuildRunRequest({
     operationKey: 'prompt-confirm',
     request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
       confirmed: true,
-      promptStrategy: 'active',
+      promptStrategy: strategy,
     }),
-    nextQuery: action.nextQuery,
+    nextQuery: { ...(action.nextQuery ?? {}), promptStrategy: strategy },
+  })
+}
+
+async function resetBuildPromptConfirmation() {
+  try {
+    await ElMessageBox.confirm('确定要重新选择提示词策略吗？将清除当前确认状态。',
+      '重新选择策略', { type: 'warning' })
+  } catch {
+    return
+  }
+  const strategy = selectedPromptStrategy.value || config.value.blocks?.prompt?.strategy || 'default'
+  await runBuildRunRequest({
+    operationKey: 'prompt-reset',
+    request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
+      confirmed: false,
+      promptStrategy: strategy,
+    }),
+    nextQuery: { ...route.query, promptConfirmed: undefined },
+  })
+}
+
+function gotoPromptBuilder() {
+  const kbId = String(route.params?.kbId ?? '')
+  const buildRunId = config.value.blocks?.buildRun?.item?.id
+    ?? firstQueryValue(route.query?.buildRunId)
+  if (!kbId || !buildRunId) return
+  router.push({
+    name: 'knowledge-base-prompt-builder',
+    params: { kbId },
+    query: { buildRunId: String(buildRunId) },
   })
 }
 
@@ -2530,7 +2587,26 @@ function resolveKnowledgeBaseStatusLabel(status) {
   }[status] ?? status
 }
 
-watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
+// 仅做本地 UI 状态的 query 键，变化时不触发 loadPage
+const UI_ONLY_QUERY_KEYS = new Set(['promptStrategy'])
+
+watch(() => [route.name, route.params, route.query], (next, prev) => {
+  // route.name 或 params 变化时始终 reload
+  if (next[0] !== prev?.[0] || JSON.stringify(next[1]) !== JSON.stringify(prev?.[1])) {
+    loadPage()
+    return
+  }
+  // query 变化时，检查是否只有 UI-only 键发生了变化
+  const nextQuery = next[2] ?? {}
+  const prevQuery = prev?.[2] ?? {}
+  const allKeys = new Set([...Object.keys(nextQuery), ...Object.keys(prevQuery)])
+  const onlyUiKeysChanged = [...allKeys].every((key) =>
+    UI_ONLY_QUERY_KEYS.has(key) || JSON.stringify(nextQuery[key]) === JSON.stringify(prevQuery[key]),
+  )
+  if (!onlyUiKeysChanged) {
+    loadPage()
+  }
+}, { deep: true, immediate: true })
 onBeforeUnmount(() => {
   cancelLongTask()
   closeAllMaterialParseStreams()
@@ -3540,10 +3616,14 @@ onBeforeUnmount(() => {
         :step="activeBuildStep"
         :action-running="actionRunning"
         :operation-feedback="activeBuildOperationFeedback"
+        :selected-strategy="selectedPromptStrategy"
         :smoke-question="smokeQuestion"
         :smoke-result="smokeResult"
         @select-materials="updateBuildMaterialSelection"
         @update-smoke-question="updateSmokeQuestion"
+        @update:strategy="updateBuildPromptStrategy"
+        @goto-builder="gotoPromptBuilder"
+        @reset-confirm="resetBuildPromptConfirmation"
       />
     </div>
 
