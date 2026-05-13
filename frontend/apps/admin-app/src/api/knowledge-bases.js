@@ -81,6 +81,13 @@ export async function confirmBuildRunPrompt(id, payload, client = http) {
   ))
 }
 
+export async function saveBuildRunCustomPromptDraft(id, payload, client = http) {
+  return unwrapApiResponse(await client.put(
+    `/knowledge-base-build-runs/${encodeURIComponent(id)}/custom-prompt-draft`,
+    payload,
+  ))
+}
+
 export async function createBuildRunIndexRun(id, payload, client = http) {
   return unwrapApiResponse(await client.post(`/knowledge-base-build-runs/${encodeURIComponent(id)}/index-runs`, payload))
 }
