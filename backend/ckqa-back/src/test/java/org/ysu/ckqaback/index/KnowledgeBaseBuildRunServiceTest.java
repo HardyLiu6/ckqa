@@ -461,6 +461,70 @@ class KnowledgeBaseBuildRunServiceTest {
                 .hasMessageContaining("未知的提示词策略");
     }
 
+    @Test
+    void confirmPrompt_confirmedTrueWithDefaultStrategy_writesMetadata() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest req = new org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest();
+        req.setConfirmed(true);
+        req.setPromptStrategy("default");
+
+        service.confirmPrompt(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
+        assertThat(node.get("stage").asText()).isEqualTo("prompt");
+        assertThat(node.get("promptConfirmed").asBoolean()).isTrue();
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("default");
+    }
+
+    @Test
+    void confirmPrompt_confirmedFalseResetsWithoutDraftCheck() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"promptConfirmed\":true,\"promptStrategy\":\"custom_pipeline\","
+            + "\"customPromptDraft\":{\"seed\":\"graphrag_tuned\",\"prompts\":{\"extract_graph\":{\"content\":\"x\"}}}}"
+        );
+        org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest req = new org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest();
+        req.setConfirmed(false);
+        req.setPromptStrategy("default");
+
+        service.confirmPrompt(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
+        assertThat(node.get("promptConfirmed").asBoolean()).isFalse();
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("default");
+        assertThat(node.get("customPromptDraft").get("seed").asText()).isEqualTo("graphrag_tuned");  // 草稿保留
+    }
+
+    @Test
+    void confirmPrompt_legacyActiveStrategyNormalizedToDefault() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest req = new org.ysu.ckqaback.index.dto.BuildRunPromptConfirmationRequest();
+        req.setConfirmed(true);
+        req.setPromptStrategy("active");
+
+        service.confirmPrompt(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("default");
+    }
+
+    private KnowledgeBaseBuildRuns newBuildRunPersisted() {
+        return newBuildRunPersistedWithMetadata("{\"stage\":\"graph_input_export\"}");
+    }
+
+    private KnowledgeBaseBuildRuns newBuildRunPersistedWithMetadata(String metadata) {
+        KnowledgeBaseBuildRuns run = new KnowledgeBaseBuildRuns();
+        run.setId(1L);
+        run.setKnowledgeBaseId(10L);
+        run.setBuildMetadata(metadata);
+        run.setCurrentStage("graph_input_export");
+        when(buildRunsStore.getRequiredById(1L)).thenReturn(run);
+        when(buildRunsStore.updateById(any())).thenReturn(true);
+        return run;
+    }
+
     private IndexRuns successIndexRun(Long id, Long buildRunId, LocalDateTime finishedAt) {
         IndexRuns run = new IndexRuns();
         run.setId(id);

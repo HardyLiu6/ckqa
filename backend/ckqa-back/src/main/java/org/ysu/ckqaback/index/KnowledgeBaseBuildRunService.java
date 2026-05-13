@@ -280,10 +280,20 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse confirmPrompt(Long id, BuildRunPromptConfirmationRequest request) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("confirmed", request != null && Boolean.TRUE.equals(request.getConfirmed()));
-        metadata.put("promptStrategy", request == null ? "active" : request.getPromptStrategy());
-        updateStage(buildRun, "prompt", stageMetadata("prompt", metadata));
+        boolean confirmed = request != null && Boolean.TRUE.equals(request.getConfirmed());
+        String strategy = normalizeStrategy(request == null ? null : request.getPromptStrategy());
+
+        if (confirmed && "custom_pipeline".equals(strategy)) {
+            assertCustomDraftExists(buildRun);
+        }
+
+        Map<String, Object> extras = new LinkedHashMap<>();
+        extras.put("promptConfirmed", confirmed);
+        extras.put("promptStrategy", strategy);
+
+        String metadata = mergeStageMetadata(buildRun, "prompt", extras,
+                List.of("customPromptDraft"));
+        updateStage(buildRun, "prompt", metadata);
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
     }
 
@@ -325,6 +335,31 @@ public class KnowledgeBaseBuildRunService {
         buildRunsStore.updateById(buildRun);
         syncQaSmokeTerminalIfAvailable(buildRun, session.getId(), submission.getTaskId());
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+    }
+
+    private void assertCustomDraftExists(KnowledgeBaseBuildRuns buildRun) {
+        String content = readDraftExtractGraphContent(buildRun.getBuildMetadata());
+        if (content == null || content.strip().isEmpty()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "请先完成手动调优提示词构建");
+        }
+    }
+
+    private String readDraftExtractGraphContent(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(metadataJson);
+            com.fasterxml.jackson.databind.JsonNode node = root
+                    .path("customPromptDraft")
+                    .path("prompts")
+                    .path("extract_graph")
+                    .path("content");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     private void updateStage(KnowledgeBaseBuildRuns buildRun, String stage, String metadata) {
