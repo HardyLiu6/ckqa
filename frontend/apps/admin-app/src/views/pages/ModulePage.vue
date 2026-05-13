@@ -2562,6 +2562,23 @@ function resolveMaterialProgressStatus(status) {
   return undefined
 }
 
+/**
+ * 根据进度百分比与状态派生进度条 tone（用于 .ckqa-el-progress 配色）：
+ * 冷蓝 → 青 → 暖橙 → 火橙（≥ 90%）/ 翠绿（done）/ 红（failed）。
+ * 与 BuildStepParse / DataTableShell 等所有进度条共享同一套色阶。
+ */
+function resolveProgressTone(percent, status) {
+  const normalized = String(status ?? '').toLowerCase()
+  if (['failed', 'error', 'exception'].includes(normalized)) return 'danger'
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) return 'success'
+  const value = Number(percent)
+  if (!Number.isFinite(value)) return 'cold'
+  if (value >= 90) return 'hot'
+  if (value >= 60) return 'warm'
+  if (value >= 30) return 'cool'
+  return 'cold'
+}
+
 function renderFactValue(field) {
   return typeof field === 'string' ? '待确认' : field.value
 }
@@ -3570,7 +3587,11 @@ onBeforeUnmount(() => {
           class="creation-form__wide upload-progress-panel"
         >
           <span>上传进度</span>
-          <el-progress :percentage="materialUploadProgress" />
+          <el-progress
+            class="ckqa-el-progress"
+            :percentage="materialUploadProgress"
+            :data-active="materialActionRunning ? 'true' : 'false'"
+          />
         </div>
         <el-alert
           v-if="materialActionError"
@@ -3860,11 +3881,13 @@ onBeforeUnmount(() => {
           class="course-progress-strip__item"
         >
           <el-progress
+            class="ckqa-el-progress--circle"
             type="circle"
             :width="52"
             :stroke-width="6"
             :percentage="Number(metric.percent ?? 0)"
             :status="resolveMetricProgressStatus(metric.status)"
+            :data-tone="resolveProgressTone(metric.percent, metric.status)"
             :aria-label="`${metric.label}：${metric.value}`"
           />
           <div>
@@ -3981,10 +4004,12 @@ onBeforeUnmount(() => {
           />
         </div>
         <el-progress
+          class="ckqa-el-progress"
           :percentage="getMaterialProgressPercentage(materialParseProgress)"
           :status="resolveMaterialProgressStatus(materialParseProgress.status)"
           :indeterminate="!materialParseProgress.hasPercent && materialParseProgress.status === 'processing'"
           :format="formatMaterialProgressLabel"
+          :data-tone="resolveProgressTone(getMaterialProgressPercentage(materialParseProgress), materialParseProgress.status)"
         />
         <p>{{ materialParseProgress.detail }}</p>
         <small>{{ materialParseProgress.pollHint }}</small>

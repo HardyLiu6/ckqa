@@ -2914,7 +2914,7 @@ test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
   assert.match(tableShell, /<el-tag class="table-toolbar-tag" :type="getFilterTagType\(index\)" effect="light">/)
   assert.match(tableShell, /class="table-progress-cell"/)
   assert.match(tableShell, /type="circle"/)
-  assert.match(tableShell, /class="table-progress-cell__ring"/)
+  assert.match(tableShell, /class="table-progress-cell__ring ckqa-el-progress--circle"/)
   assert.match(tableShell, /fixed="right"/)
   assert.match(tableShell, /<el-pagination[\s\S]*@current-change="handlePageChange"/)
   assert.doesNotMatch(tableShell, /<table\s/)

@@ -2794,21 +2794,28 @@ textarea.text-input {
 }
 
 // ─── 渐变进度条（按 tone 分阶上色）────────────────────────────────────────
+// 通用类 .ckqa-el-progress：线性进度条
+// - 槽与卡片底色拉开层次
+// - 填充层加扫光高光，进行中时持续动效
+// - 通过 [data-tone] 切换 cold/cool/warm/hot/success/danger 五段配色
+//   不带 data-tone（如上传/索引等单纯进度）默认走 accent 紫，简洁不喧宾夺主
+.ckqa-el-progress.el-progress,
 .build-task-progress.el-progress {
   width: 100%;
 }
 
+.ckqa-el-progress.el-progress .el-progress-bar__outer,
 .build-task-progress.el-progress .el-progress-bar__outer {
-  // 对比明显的槽：略深的灰，与卡片白底拉开层次
+  // 对比明显的槽：略深的中性色，与卡片白底拉开层次
   background: color-mix(in srgb, var(--ckqa-text) 8%, var(--ckqa-surface-muted));
   border-radius: var(--ckqa-radius-full);
   overflow: hidden;
   box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ckqa-text) 8%, transparent);
 }
 
+.ckqa-el-progress.el-progress .el-progress-bar__inner,
 .build-task-progress.el-progress .el-progress-bar__inner {
   border-radius: var(--ckqa-radius-full);
-  // 内置高光，让填充看起来更立体
   background-image: linear-gradient(
     90deg,
     color-mix(in srgb, currentColor 92%, transparent) 0%,
@@ -2819,6 +2826,7 @@ textarea.text-input {
 }
 
 // 高光扫光（进行中带动感）
+.ckqa-el-progress.el-progress .el-progress-bar__inner::after,
 .build-task-progress.el-progress .el-progress-bar__inner::after {
   content: '';
   position: absolute;
@@ -2830,46 +2838,62 @@ textarea.text-input {
     transparent 100%
   );
   background-size: 200% 100%;
-  animation: build-task-progress-shimmer 2.4s linear infinite;
+  animation: ckqa-progress-shimmer 2.4s linear infinite;
   opacity: 0;
 }
 
+.ckqa-el-progress.is-undetermined .el-progress-bar__inner::after,
+.ckqa-el-progress[data-active='true'] .el-progress-bar__inner::after,
 .build-task-progress.is-undetermined .el-progress-bar__inner::after,
 .build-task-row[data-status='running'] .build-task-progress .el-progress-bar__inner::after,
-.build-task-row[data-status='processing'] .build-task-progress .el-progress-bar__inner::after {
+.build-task-row[data-status='processing'] .build-task-progress .el-progress-bar__inner::after,
+.material-parse-progress[data-status='processing'] .ckqa-el-progress .el-progress-bar__inner::after {
   opacity: 1;
 }
 
-@keyframes build-task-progress-shimmer {
+@keyframes ckqa-progress-shimmer {
   from { background-position: -200% 0; }
   to { background-position: 200% 0; }
 }
 
-// tone 颜色：冷蓝 → 青 → 暖橙 → 翠绿（done） / 红（failed）
+// 默认填充色：accent 紫（无 tone 语义时使用）
+.ckqa-el-progress.el-progress .el-progress-bar__inner,
+.build-task-progress.el-progress .el-progress-bar__inner {
+  background-color: var(--ckqa-accent);
+  color: var(--ckqa-accent);
+}
+
+// tone 颜色：冷蓝 → 青 → 暖橙 → 火橙（≥90%）/ 翠绿（done）/ 红（failed）
+.ckqa-el-progress[data-tone='cold'] .el-progress-bar__inner,
 .build-task-progress[data-tone='cold'] .el-progress-bar__inner {
   --el-color-primary: #3b82f6;
   background-color: #3b82f6;
   color: #3b82f6;
 }
 
+.ckqa-el-progress[data-tone='cool'] .el-progress-bar__inner,
 .build-task-progress[data-tone='cool'] .el-progress-bar__inner {
   --el-color-primary: #06b6d4;
   background-color: #06b6d4;
   color: #06b6d4;
 }
 
+.ckqa-el-progress[data-tone='warm'] .el-progress-bar__inner,
 .build-task-progress[data-tone='warm'] .el-progress-bar__inner {
   --el-color-primary: #f59e0b;
   background-color: #f59e0b;
   color: #f59e0b;
 }
 
+.ckqa-el-progress[data-tone='hot'] .el-progress-bar__inner,
 .build-task-progress[data-tone='hot'] .el-progress-bar__inner {
   --el-color-primary: #f97316;
   background-color: #f97316;
   color: #f97316;
 }
 
+.ckqa-el-progress[data-tone='success'] .el-progress-bar__inner,
+.ckqa-el-progress.is-success .el-progress-bar__inner,
 .build-task-progress[data-tone='success'] .el-progress-bar__inner,
 .build-task-progress.is-success .el-progress-bar__inner {
   --el-color-primary: #10b981;
@@ -2877,6 +2901,8 @@ textarea.text-input {
   color: #10b981;
 }
 
+.ckqa-el-progress[data-tone='danger'] .el-progress-bar__inner,
+.ckqa-el-progress.is-exception .el-progress-bar__inner,
 .build-task-progress[data-tone='danger'] .el-progress-bar__inner,
 .build-task-progress.is-exception .el-progress-bar__inner {
   --el-color-primary: var(--ckqa-danger);
@@ -2884,10 +2910,53 @@ textarea.text-input {
   color: var(--ckqa-danger);
 }
 
+.ckqa-el-progress.el-progress .el-progress__text,
 .build-task-progress.el-progress .el-progress__text {
   font-weight: 800;
   font-size: 12.5px;
   min-width: 44px;
+  color: var(--ckqa-text);
+}
+
+// ─── 环形进度条（type="circle"）────────────────────────────────────────
+// 使用 SVG track 自带的 stroke 颜色覆盖
+.ckqa-el-progress--circle.el-progress--circle .el-progress-circle__track {
+  stroke: color-mix(in srgb, var(--ckqa-text) 10%, var(--ckqa-surface-muted));
+}
+
+.ckqa-el-progress--circle.el-progress--circle .el-progress-circle__path {
+  stroke: var(--ckqa-accent);
+  transition: stroke 0.3s ease;
+}
+
+.ckqa-el-progress--circle[data-tone='cold'].el-progress--circle .el-progress-circle__path {
+  stroke: #3b82f6;
+}
+
+.ckqa-el-progress--circle[data-tone='cool'].el-progress--circle .el-progress-circle__path {
+  stroke: #06b6d4;
+}
+
+.ckqa-el-progress--circle[data-tone='warm'].el-progress--circle .el-progress-circle__path {
+  stroke: #f59e0b;
+}
+
+.ckqa-el-progress--circle[data-tone='hot'].el-progress--circle .el-progress-circle__path {
+  stroke: #f97316;
+}
+
+.ckqa-el-progress--circle[data-tone='success'].el-progress--circle .el-progress-circle__path,
+.ckqa-el-progress--circle.is-success.el-progress--circle .el-progress-circle__path {
+  stroke: #10b981;
+}
+
+.ckqa-el-progress--circle[data-tone='danger'].el-progress--circle .el-progress-circle__path,
+.ckqa-el-progress--circle.is-exception.el-progress--circle .el-progress-circle__path {
+  stroke: var(--ckqa-danger);
+}
+
+.ckqa-el-progress--circle.el-progress--circle .el-progress__text {
+  font-weight: 800;
   color: var(--ckqa-text);
 }
 

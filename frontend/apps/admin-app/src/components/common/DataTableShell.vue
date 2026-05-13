@@ -226,6 +226,20 @@ function getProgressFormat(cell) {
 
   return `${getProgressPercentage(cell)}%`
 }
+
+/**
+ * 派生进度条 tone（与全局 .ckqa-el-progress 的 data-tone 配色一致）。
+ */
+function resolveProgressTone(cell) {
+  const status = String(cell?.status ?? '').toLowerCase()
+  if (['failed', 'error', 'exception'].includes(status)) return 'danger'
+  if (['done', 'success', 'complete', 'completed'].includes(status)) return 'success'
+  const percent = getProgressPercentage(cell)
+  if (percent >= 90) return 'hot'
+  if (percent >= 60) return 'warm'
+  if (percent >= 30) return 'cool'
+  return 'cold'
+}
 </script>
 
 <template>
@@ -316,13 +330,14 @@ function getProgressFormat(cell) {
             </template>
             <div v-else-if="isProgressCell(getCell(row, index))" class="table-progress-cell">
               <el-progress
-                class="table-progress-cell__ring"
+                class="table-progress-cell__ring ckqa-el-progress--circle"
                 type="circle"
                 :width="42"
                 :stroke-width="5"
                 :percentage="getProgressPercentage(getCell(row, index))"
                 :status="resolveProgressStatus(getCell(row, index).status)"
                 :format="() => getProgressFormat(getCell(row, index))"
+                :data-tone="resolveProgressTone(getCell(row, index))"
                 :aria-label="`${column}：${getCell(row, index).summary}`"
               />
               <div class="table-progress-cell__copy">
