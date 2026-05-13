@@ -231,7 +231,7 @@ function getProgressFormat(cell) {
 <template>
   <section class="panel data-table-shell" :aria-labelledby="`${title}-table-title`">
     <div class="panel-heading">
-      <h2 :id="`${title}-table-title`">{{ title }}</h2>
+      <h2 :id="`${title}-table-title`" class="data-table-shell__sr-title">{{ title }}</h2>
       <span class="record-count">{{ recordCount }} 条</span>
     </div>
 

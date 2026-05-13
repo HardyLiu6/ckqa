@@ -3031,7 +3031,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
   assert.match(modulePage, /v-if="config\.eyebrow"/)
-  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table' && route\.name !== 'material-detail'\)/)
+  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => route\.name !== 'material-detail'\)/)
   assert.match(modulePage, /const materialParseProgress = computed/)
   assert.match(modulePage, /const hasPrimaryAction = computed/)
   assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build' && !showsEmptyState"/)

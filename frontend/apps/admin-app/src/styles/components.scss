@@ -3636,13 +3636,6 @@ textarea.text-input {
 .prompt-builder-page__header h2 { margin: 0; font-size: 22px; font-weight: 800; }
 .prompt-builder-page__header p { margin: 4px 0 0; color: var(--ckqa-text-muted); font-size: 12.5px; }
 
-.prompt-builder-page__title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--ckqa-space-2);
-}
-
 .prompt-builder-page__body {
   background: var(--ckqa-surface);
   border: 1px solid var(--ckqa-border);
@@ -3675,4 +3668,17 @@ textarea.text-input {
 .prompt-builder-page__buttons {
   display: flex;
   gap: var(--ckqa-space-2);
+}
+
+// 仅供屏幕阅读器使用，视觉隐藏（Bootstrap sr-only 模式）
+.data-table-shell__sr-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

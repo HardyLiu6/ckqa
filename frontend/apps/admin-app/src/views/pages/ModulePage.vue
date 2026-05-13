@@ -317,7 +317,7 @@ const creationSubmitDisabled = computed(() => (
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
 const tableTitle = computed(() => config.value.tableTitle || pageTitle.value)
-const showModuleHeroTitle = computed(() => config.value.variant !== 'table' && route.name !== 'material-detail')
+const showModuleHeroTitle = computed(() => route.name !== 'material-detail')
 const activeBuildStep = computed(() => {
   const steps = config.value.workflowSteps ?? []
   return steps.find((step) => step.key === activeStepKey.value)
@@ -2620,11 +2620,6 @@ onBeforeUnmount(() => {
       <p v-if="config.eyebrow" class="eyebrow">{{ config.eyebrow }}</p>
       <div class="module-title-row">
         <h2 v-if="showModuleHeroTitle">{{ pageTitle }}</h2>
-        <span
-          v-if="route.meta.status"
-          class="status-badge"
-          :data-status="route.meta.status"
-        >{{ route.meta.status }}</span>
         <DataSourceChip :source="config.dataSource" :refreshed-at="config.refreshedAt" />
         <el-button
           v-if="canManualRefresh"
