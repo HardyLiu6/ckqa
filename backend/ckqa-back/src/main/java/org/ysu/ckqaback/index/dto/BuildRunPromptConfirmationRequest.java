@@ -10,7 +10,7 @@ import lombok.Setter;
 @Setter
 public class BuildRunPromptConfirmationRequest {
 
-    private String promptStrategy = "active";
+    private String promptStrategy = "default";
 
     private Boolean confirmed = false;
 }
