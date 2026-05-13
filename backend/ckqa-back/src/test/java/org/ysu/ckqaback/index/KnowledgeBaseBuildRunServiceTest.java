@@ -11,6 +11,7 @@ import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunGraphInputRequest;
 import org.ysu.ckqaback.index.dto.BuildRunMaterialSelectionRequest;
 import org.ysu.ckqaback.index.dto.BuildRunQaSmokeRequest;
@@ -508,6 +509,123 @@ class KnowledgeBaseBuildRunServiceTest {
         KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
         com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
         assertThat(node.get("promptStrategy").asText()).isEqualTo("default");
+    }
+
+    @Test
+    void saveCustomPromptDraft_writesDraftStrategyAndClearsConfirmation() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"promptConfirmed\":true,\"promptStrategy\":\"default\"}"
+        );
+
+        BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
+        req.setSeed("system_default");
+        BuildRunCustomPromptDraftRequest.PromptBlock block = new BuildRunCustomPromptDraftRequest.PromptBlock();
+        block.setContent("-Goal-\nExtract entities.");
+        req.setPrompts(java.util.Map.of("extract_graph", block));
+
+        service.saveCustomPromptDraft(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");
+        assertThat(node.get("promptConfirmed").asBoolean()).isFalse();  // 原子清除
+        com.fasterxml.jackson.databind.JsonNode draft = node.get("customPromptDraft");
+        assertThat(draft.get("seed").asText()).isEqualTo("system_default");
+        assertThat(draft.get("prompts").get("extract_graph").get("content").asText())
+                .isEqualTo("-Goal-\nExtract entities.");
+        assertThat(draft.get("updatedAt").isTextual()).isTrue();
+        assertThat(draft.get("seedSnapshotAt").isTextual()).isTrue();
+        assertThat(draft.get("prompts").get("extract_graph").get("modifiedAt").isTextual()).isTrue();
+        assertThat(draft.get("prompts").get("extract_graph").get("baseHash").asText())
+                .startsWith("sha256:");
+    }
+
+    @Test
+    void saveCustomPromptDraft_preservesPriorStageKeys() throws Exception {
+        // 验证 saveCustomPromptDraft 不会抹掉前序阶段写入的 exportConfirmed / graphInputConfirmed
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"exportConfirmed\":true,\"graphInputConfirmed\":true,"
+            + "\"promptConfirmed\":true,\"promptStrategy\":\"default\"}"
+        );
+
+        BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
+        req.setSeed("graphrag_tuned");
+        BuildRunCustomPromptDraftRequest.PromptBlock block = new BuildRunCustomPromptDraftRequest.PromptBlock();
+        block.setContent("-Goal-\nDo extraction.");
+        req.setPrompts(java.util.Map.of("extract_graph", block));
+
+        service.saveCustomPromptDraft(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(updated.getBuildMetadata());
+        // 前序阶段键被保留
+        assertThat(node.get("exportConfirmed").asBoolean()).isTrue();
+        assertThat(node.get("graphInputConfirmed").asBoolean()).isTrue();
+        // 当前阶段键被 extras 覆盖
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");
+        assertThat(node.get("promptConfirmed").asBoolean()).isFalse();
+        assertThat(node.has("customPromptDraft")).isTrue();
+    }
+
+    @Test
+    void saveCustomPromptDraft_seedHistoryDraftRejected() {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("history_draft", "valid content");
+
+        assertThatThrownBy(() -> service.saveCustomPromptDraft(buildRun.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("暂未开放");
+    }
+
+    @Test
+    void saveCustomPromptDraft_unknownSeedRejected() {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("invalid_seed", "valid content");
+
+        assertThatThrownBy(() -> service.saveCustomPromptDraft(buildRun.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未知的种子模板");
+    }
+
+    @Test
+    void saveCustomPromptDraft_blankContentRejected() {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("system_default", "   \n\t  ");
+
+        assertThatThrownBy(() -> service.saveCustomPromptDraft(buildRun.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("提示词内容不能为空");
+    }
+
+    @Test
+    void saveCustomPromptDraft_oversizeContentRejected() {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        String oversize = "a".repeat(32 * 1024 + 1);  // 32 KB + 1 字节
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("system_default", oversize);
+
+        assertThatThrownBy(() -> service.saveCustomPromptDraft(buildRun.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("32");
+    }
+
+    @Test
+    void saveCustomPromptDraft_chineseContentUsesByteLength() {
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersisted();
+        String chinese = "你好".repeat(5500);  // 每字符 3 字节，约 33 KB 字节
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("system_default", chinese);
+
+        assertThatThrownBy(() -> service.saveCustomPromptDraft(buildRun.getId(), req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("32");
+    }
+
+    private BuildRunCustomPromptDraftRequest newDraftRequest(String seed, String content) {
+        BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
+        req.setSeed(seed);
+        BuildRunCustomPromptDraftRequest.PromptBlock block = new BuildRunCustomPromptDraftRequest.PromptBlock();
+        block.setContent(content);
+        req.setPrompts(java.util.Map.of("extract_graph", block));
+        return req;
     }
 
     private KnowledgeBaseBuildRuns newBuildRunPersisted() {

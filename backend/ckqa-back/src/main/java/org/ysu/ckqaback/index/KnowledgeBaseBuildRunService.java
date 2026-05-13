@@ -16,6 +16,7 @@ import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.BuildRunGcRequest;
 import org.ysu.ckqaback.index.dto.BuildRunGcResponse;
@@ -41,8 +42,11 @@ import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.ParseResultsService;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -50,6 +54,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -60,6 +65,13 @@ import java.util.UUID;
 public class KnowledgeBaseBuildRunService {
 
     private static final DateTimeFormatter BUILD_VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
+
+    // 允许的草稿种子模板白名单。
+    // 注意：history_draft 不在此白名单中，而是在 validateDraftRequest 中
+    // 作为特判先行拦截并返回"暂未开放"错误，与"未知种子"错误区分开。
+    // 这样 history_draft 走的是"暂未开放"分支，其他未知值走"未知种子"分支。
+    private static final Set<String> ALLOWED_DRAFT_SEEDS = Set.of("system_default", "graphrag_tuned");
+    private static final int DRAFT_CONTENT_MAX_BYTES = 32 * 1024;
 
     private final KnowledgeBasesService knowledgeBasesService;
     private final KnowledgeBaseBuildRunsService buildRunsStore;
@@ -298,6 +310,50 @@ public class KnowledgeBaseBuildRunService {
     }
 
     @Transactional
+    public BuildRunDetailResponse saveCustomPromptDraft(Long id, BuildRunCustomPromptDraftRequest request) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
+        validateDraftRequest(request);
+
+        String seed = request.getSeed().trim();
+        String content = request.getPrompts().get("extract_graph").getContent();
+
+        String existingMetadata = buildRun.getBuildMetadata();
+        String previousSeed = readDraftSeed(existingMetadata);
+        String previousSeedSnapshotAt = readDraftSeedSnapshotAt(existingMetadata);
+
+        String nowIso = LocalDateTime.now().toString();
+
+        Map<String, Object> extractGraph = new LinkedHashMap<>();
+        extractGraph.put("content", content);
+        extractGraph.put("modifiedAt", nowIso);
+        extractGraph.put("baseHash", computeSeedBaseHash(seed));
+
+        Map<String, Object> draft = new LinkedHashMap<>();
+        draft.put("seed", seed);
+        boolean seedChanged = !seed.equals(previousSeed);
+        draft.put("seedSnapshotAt", seedChanged || previousSeedSnapshotAt == null ? nowIso : previousSeedSnapshotAt);
+        draft.put("updatedAt", nowIso);
+        draft.put("prompts", Map.of("extract_graph", extractGraph));
+
+        Map<String, Object> extras = new LinkedHashMap<>();
+        extras.put("customPromptDraft", draft);
+        extras.put("promptStrategy", "custom_pipeline");
+        extras.put("promptConfirmed", false);  // 原子清除
+
+        String stage = buildRun.getCurrentStage() == null ? "prompt" : buildRun.getCurrentStage();
+        String metadata = mergeStageMetadata(buildRun, stage, extras,
+                List.of("exportConfirmed", "graphInputConfirmed"));  // 保留前序阶段键，避免数据丢失
+        buildRun.setBuildMetadata(metadata);
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        // 注意：此处故意不使用 updateStage()，因为 updateStage 会设置 status="running" 并更新 currentStage。
+        // saveCustomPromptDraft 仅保存草稿内容到 metadata，不推进工作流阶段，不改变 buildRun 的 status/currentStage。
+        // confirmPrompt 使用 updateStage 是因为它代表阶段确认动作，需要推进工作流。
+
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+    }
+
+    @Transactional
     public BuildRunDetailResponse runQaSmoke(Long id, BuildRunQaSmokeRequest request) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         Long smokeIndexRunId = resolveSmokeIndexRunId(buildRun);
@@ -342,6 +398,73 @@ public class KnowledgeBaseBuildRunService {
         if (content == null || content.strip().isEmpty()) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
                     "请先完成手动调优提示词构建");
+        }
+    }
+
+    private void validateDraftRequest(BuildRunCustomPromptDraftRequest request) {
+        if (request == null) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "草稿请求不能为空");
+        }
+        String seed = request.getSeed() == null ? "" : request.getSeed().trim();
+        // history_draft 在白名单检查之前先行拦截，返回"暂未开放"而非"未知种子"
+        if ("history_draft".equals(seed)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "我的历史草稿能力暂未开放");
+        }
+        if (!ALLOWED_DRAFT_SEEDS.contains(seed)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "未知的种子模板: " + request.getSeed());
+        }
+        if (request.getPrompts() == null
+                || request.getPrompts().get("extract_graph") == null
+                || request.getPrompts().get("extract_graph").getContent() == null) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "extract_graph 提示词内容必填");
+        }
+        String content = request.getPrompts().get("extract_graph").getContent();
+        if (content.strip().isEmpty()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "提示词内容不能为空");
+        }
+        int bytes = content.getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > DRAFT_CONTENT_MAX_BYTES) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.PAYLOAD_TOO_LARGE,
+                    "提示词内容超过 32 KB（当前 " + bytes + " 字节）");
+        }
+    }
+
+    private String readDraftSeed(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft").path("seed");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String readDraftSeedSnapshotAt(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft").path("seedSnapshotAt");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String computeSeedBaseHash(String seed) {
+        // 返回种子内容的 SHA-256 哈希；后续 Task 9 接入真实 seed 内容读取
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(("seed:" + seed).getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder("sha256:");
+            for (byte b : digest) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "sha256:unavailable";
         }
     }
 
