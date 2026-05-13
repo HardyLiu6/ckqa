@@ -46,11 +46,20 @@ public class CourseAccessService {
         if (course == null) {
             throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        if ("public".equalsIgnoreCase(course.getAccessPolicy())) {
-            return CourseAccessDecision.granted(courseId, null, normalize(actorUserCode), null, null, "public-course");
-        }
 
         Users actor = findActiveUserByCode(actorUserCode);
+
+        if ("public".equalsIgnoreCase(course.getAccessPolicy())) {
+            // 公开课程对读访问无门槛；如果调用方携带了有效身份，
+            // 优先返回 admin-override（让写权限校验能够识别管理员身份），
+            // 否则回退为 public-course（仅授权读取）。
+            if (actor != null && usersService.hasRole(actor.getId(), "admin")) {
+                return CourseAccessDecision.granted(courseId, actor.getId(), actor.getUserCode(), null, null, "admin-override");
+            }
+            return CourseAccessDecision.granted(courseId, actor == null ? null : actor.getId(),
+                    actor == null ? normalize(actorUserCode) : actor.getUserCode(), null, null, "public-course");
+        }
+
         if (actor == null) {
             return CourseAccessDecision.denied(courseId, null, normalize(actorUserCode), "actor-not-found");
         }
