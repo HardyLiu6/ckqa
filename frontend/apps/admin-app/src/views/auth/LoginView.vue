@@ -58,7 +58,7 @@ function resolveRedirect() {
   <div class="login-view login-split">
     <section class="login-positioning" aria-labelledby="login-title">
       <div class="login-brand">
-        <span class="brand-mark">智课</span>
+        <img class="brand-mark brand-mark--login" src="/logo.png" alt="智课问答" />
         <div>
           <p class="eyebrow">智课问答</p>
           <h1 id="login-title">智课问答管理台</h1>

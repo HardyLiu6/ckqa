@@ -664,15 +664,21 @@ textarea.text-input {
 }
 
 .brand-mark {
-  display: grid;
+  display: inline-block;
   width: 40px;
   height: 40px;
   flex: 0 0 auto;
-  place-items: center;
   border-radius: var(--ckqa-radius-md);
-  color: var(--ckqa-accent-contrast);
-  background: var(--ckqa-accent-strong);
-  font-weight: 900;
+  object-fit: contain;
+  // 透明 PDF/PNG 在白底头部正常显示；保留 background 以兼容老的纯文字徽章
+  background: transparent;
+}
+
+// 登录页 brand-mark 尺寸更大，与左栏品牌区视觉权重匹配
+.brand-mark--login {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--ckqa-radius-lg, 14px);
 }
 
 .brand strong,

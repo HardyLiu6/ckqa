@@ -37,7 +37,7 @@ watch(avatarUrl, () => {
   <header class="app-topbar">
     <slot name="prepend" />
     <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
-      <span class="brand-mark">智课</span>
+      <img class="brand-mark" src="/logo.png" alt="智课问答" />
       <span>
         <strong>智课问答</strong>
         <small>课程资料 · 知识库 · 智能问答</small>
