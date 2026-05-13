@@ -930,7 +930,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const exportArtifacts = resolveExportArtifactRows(selection.materials, selection.parseResultsByMaterialId)
   const promptState = resolvePromptConfirmState(query, {
     complete: selection.materials.length > 0 && exportArtifacts.missingCount === 0,
-  })
+  }, buildRun?.buildMetadata)
   const indexState = resolveIndexAvailabilityState(knowledgeBase, indexRuns)
   const workflowSteps = buildKnowledgeBaseWorkflowSteps({
     query,
@@ -1126,7 +1126,7 @@ export function buildKnowledgeBaseWorkflowSteps({
   const materialConfirmed = isBuildQueryConfirmed(query.materialConfirmed)
   const exportConfirmed = isBuildQueryConfirmed(query.exportConfirmed)
   const promptConfirmed = isBuildQueryConfirmed(query.promptConfirmed)
-  const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete })
+  const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete }, buildRun?.buildMetadata)
   const indexAvailability = indexState ?? resolveIndexAvailabilityState(knowledgeBase, [])
   const materialStatus = hasMaterialSelection && materialConfirmed ? 'done' : 'ready'
   const parseStatus = resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed })

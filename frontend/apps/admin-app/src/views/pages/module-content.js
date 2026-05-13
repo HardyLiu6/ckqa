@@ -646,22 +646,73 @@ export function resolveExportArtifactRows(materials = [], parseResultsByMaterial
   }
 }
 
-export function resolvePromptConfirmState(query = {}, exportState = {}) {
+const SUPPORTED_PROMPT_STRATEGIES = new Set(['default', 'graphrag_tuned', 'custom_pipeline'])
+
+function normalizePromptStrategy(raw) {
+  if (raw === null || raw === undefined) return 'default'
+  const trimmed = String(raw).trim()
+  if (trimmed === '') return 'default'
+  if (trimmed.toLowerCase() === 'active') return 'default'
+  if (SUPPORTED_PROMPT_STRATEGIES.has(trimmed)) return trimmed
+  return 'default'
+}
+
+function parseBuildMetadata(metadata) {
+  if (!metadata) return {}
+  if (typeof metadata === 'object') return metadata
+  try {
+    return JSON.parse(metadata)
+  } catch {
+    return {}
+  }
+}
+
+export function resolvePromptConfirmState(query = {}, exportState = {}, metadata = null) {
+  const meta = parseBuildMetadata(metadata)
   const exportComplete = isExportStateComplete(exportState)
-  const confirmed = exportComplete && isQueryConfirmed(query.promptConfirmed)
+
+  const hasMeta = metadata !== null && metadata !== undefined
+  const metaConfirmed = meta.promptConfirmed === true
+  const queryConfirmed = isQueryConfirmed(query.promptConfirmed)
+  const strategy = normalizePromptStrategy(meta.promptStrategy)
+
+  const draft = meta.customPromptDraft ?? null
+  const draftContent = draft?.prompts?.extract_graph?.content ?? ''
+  const customDraftReady = String(draftContent).trim() !== ''
+
+  // 当 metadata 不存在时，保持旧行为：以 query 为确认来源
+  const confirmed = hasMeta
+    ? (exportComplete && metaConfirmed)
+    : (exportComplete && queryConfirmed)
 
   if (!exportComplete) {
     return {
       status: 'blocked',
       confirmed: false,
-      shouldCleanPromptConfirmed: isQueryConfirmed(query.promptConfirmed),
+      readonly: false,
+      strategy,
+      shouldCleanPromptConfirmed: queryConfirmed,
+      shouldCleanPromptStrategyQuery: false,
+      customDraft: draft,
+      customDraftReady,
+      graphragTunedSummary: meta.graphragTunedSummary ?? null,
+      disabledReason: null,
     }
   }
 
   return {
     status: confirmed ? 'done' : 'ready',
     confirmed,
-    shouldCleanPromptConfirmed: false,
+    readonly: confirmed,
+    strategy,
+    shouldCleanPromptConfirmed: hasMeta ? (queryConfirmed && !metaConfirmed) : false,
+    shouldCleanPromptStrategyQuery:
+      Boolean(query.promptStrategy) && confirmed
+      && normalizePromptStrategy(query.promptStrategy) !== strategy,
+    customDraft: draft,
+    customDraftReady,
+    graphragTunedSummary: meta.graphragTunedSummary ?? null,
+    disabledReason: null,
   }
 }
 

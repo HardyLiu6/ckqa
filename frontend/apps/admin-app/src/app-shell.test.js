@@ -2253,26 +2253,33 @@ test('解析任务行和多资料导出产物矩阵使用纯数据模型', () =>
 })
 
 test('提示词确认状态和索引可用性覆盖阻塞、确认、同步超时', () => {
-  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1' }, { complete: true }), {
-    status: 'ready',
-    confirmed: false,
-    shouldCleanPromptConfirmed: false,
-  })
-  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1', promptConfirmed: '1' }, { complete: false }), {
-    status: 'blocked',
-    confirmed: false,
-    shouldCleanPromptConfirmed: true,
-  })
-  assert.deepEqual(resolvePromptConfirmState({ promptConfirmed: '1' }, { status: 'complete' }), {
-    status: 'done',
-    confirmed: true,
-    shouldCleanPromptConfirmed: false,
-  })
-  assert.deepEqual(resolvePromptConfirmState({}, { status: 'complete' }), {
-    status: 'ready',
-    confirmed: false,
-    shouldCleanPromptConfirmed: false,
-  })
+  const readyState = resolvePromptConfirmState({ exportConfirmed: '1' }, { complete: true })
+  assert.equal(readyState.status, 'ready')
+  assert.equal(readyState.confirmed, false)
+  assert.equal(readyState.shouldCleanPromptConfirmed, false)
+  assert.equal(readyState.strategy, 'default')
+  assert.equal(readyState.customDraftReady, false)
+
+  const blockedState = resolvePromptConfirmState({ exportConfirmed: '1', promptConfirmed: '1' }, { complete: false })
+  assert.equal(blockedState.status, 'blocked')
+  assert.equal(blockedState.confirmed, false)
+  assert.equal(blockedState.shouldCleanPromptConfirmed, true)
+  assert.equal(blockedState.strategy, 'default')
+  assert.equal(blockedState.customDraftReady, false)
+
+  const doneState = resolvePromptConfirmState({ promptConfirmed: '1' }, { status: 'complete' })
+  assert.equal(doneState.status, 'done')
+  assert.equal(doneState.confirmed, true)
+  assert.equal(doneState.shouldCleanPromptConfirmed, false)
+  assert.equal(doneState.strategy, 'default')
+  assert.equal(doneState.customDraftReady, false)
+
+  const noConfirmState = resolvePromptConfirmState({}, { status: 'complete' })
+  assert.equal(noConfirmState.status, 'ready')
+  assert.equal(noConfirmState.confirmed, false)
+  assert.equal(noConfirmState.shouldCleanPromptConfirmed, false)
+  assert.equal(noConfirmState.strategy, 'default')
+  assert.equal(noConfirmState.customDraftReady, false)
 
   assert.deepEqual(
     resolveIndexAvailabilityState(
