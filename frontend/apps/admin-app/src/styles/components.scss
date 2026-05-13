@@ -2337,8 +2337,8 @@ textarea.text-input {
 
 .workflow-progress-rail__steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(220px, 1fr));
-  gap: var(--ckqa-space-3);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--ckqa-space-2);
   padding: 0;
   margin: 0;
   list-style: none;
@@ -2348,8 +2348,8 @@ textarea.text-input {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 104px;
-  padding: var(--ckqa-space-3) var(--ckqa-space-3) var(--ckqa-space-3) var(--ckqa-space-4);
+  min-height: 64px;
+  padding: 10px 10px 10px 14px;
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-sm);
   color: var(--ckqa-text);
@@ -2405,9 +2405,9 @@ textarea.text-input {
 .workflow-progress-rail__step.el-button > span {
   display: grid;
   width: 100%;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: start;
-  gap: var(--ckqa-space-2);
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
 }
 
 .workflow-progress-rail__steps li.active .workflow-progress-rail__step.el-button {
@@ -2418,38 +2418,50 @@ textarea.text-input {
 
 .workflow-step-index {
   display: inline-grid;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border-radius: var(--ckqa-radius-full);
   color: var(--ckqa-text-muted);
   background: var(--ckqa-surface);
   font-family: var(--ckqa-font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .workflow-step-copy {
   display: grid;
-  gap: var(--ckqa-space-1);
+  gap: 2px;
   min-width: 0;
 }
 
 .workflow-step-label {
   overflow-wrap: anywhere;
   font-weight: 800;
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .workflow-step-copy small {
   color: var(--ckqa-text-muted);
-  line-height: 1.5;
+  line-height: 1.3;
   overflow-wrap: anywhere;
+  font-size: 11px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
+// 状态徽章：紧凑版隐藏在窄卡内，只通过 ::before 指示条 + 卡片颜色表达状态
 .workflow-progress-rail__step .status-badge {
-  grid-column: 1 / -1;
-  justify-self: start;
-  white-space: nowrap;
+  display: none;
+}
+
+@media (max-width: 1280px) {
+  .workflow-progress-rail__steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -2458,7 +2470,7 @@ textarea.text-input {
   }
 
   .workflow-progress-rail__steps {
-    grid-template-columns: minmax(220px, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

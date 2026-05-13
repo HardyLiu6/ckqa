@@ -7,7 +7,7 @@ export const BUILD_STEP_LABELS = {
   material: '资料选择',
   parse: '解析检查',
   export: '生成图谱输入',
-  prompt: 'Prompt确认',
+  prompt: '提示词确认',
   index: '索引构建',
   qa_check: '问答验证',
 }
@@ -285,19 +285,19 @@ const configs = {
         label: '生成图谱输入',
         state: 'ready',
         status: 'ready',
-        detail: '生成 normalized / section / page 图谱输入',
-        shortLabel: 'normalized / section / page 就绪',
+        detail: '导出本次构建所需的图谱输入文件',
+        shortLabel: '导出图谱输入',
         conditions: ['解析结果存在', '标准化文档通过导出校验'],
         actionLabel: '生成缺失图谱输入',
         logLabel: '查看导出记录',
       },
       {
         key: 'prompt',
-        label: 'Prompt确认',
+        label: '提示词确认',
         state: 'blocked',
         status: 'blocked',
-        detail: '确认本次索引沿用当前活动提示词',
-        shortLabel: '确认活动提示词',
+        detail: '选择本次索引使用的提示词策略',
+        shortLabel: '确认提示词策略',
         conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
         actionLabel: '确认提示词策略',
         logLabel: '查看提示词策略',
@@ -895,7 +895,7 @@ function resolveExportPrimaryAction(context = {}) {
     const { promptConfirmed, ...queryWithoutPromptConfirm } = queryWithConfirm
 
     return createBuildAction({
-      label: '确认图谱输入并进入 Prompt 确认',
+      label: '确认图谱输入并进入提示词确认',
       operationKey: 'export-confirm',
       nextStepKey: 'prompt',
       nextQuery: resolveBuildStepQuery(queryWithoutPromptConfirm, 'prompt'),
@@ -903,7 +903,7 @@ function resolveExportPrimaryAction(context = {}) {
   }
 
   return createBuildAction({
-    label: '进入 Prompt 确认',
+    label: '进入提示词确认',
     operationKey: 'step-prompt',
     nextStepKey: 'prompt',
     nextQuery: resolveBuildStepQuery(context.query ?? {}, 'prompt'),

@@ -39,8 +39,8 @@ watch(avatarUrl, () => {
     <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
       <span class="brand-mark">CK</span>
       <span>
-        <strong>CKQA 运维台</strong>
-        <small>课程知识库构建与运维平台</small>
+        <strong>课程知识助手</strong>
+        <small>课程资料 · 知识库 · 智能问答</small>
       </span>
     </RouterLink>
 

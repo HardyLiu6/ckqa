@@ -1177,10 +1177,10 @@ export function buildKnowledgeBaseWorkflowSteps({
     createWorkflowStep({
       key: 'export',
       status: statusByStep.export,
-      detail: exportComplete ? 'GraphRAG 必需输入产物已完整' : '需要 normalized、section 与 page 导出产物',
-      shortLabel: 'normalized / section / page 就绪',
-      conditions: ['解析结果存在', 'section_docs/page_docs 已导出'],
-      actionLabel: exportComplete ? '确认图谱输入并进入 Prompt 确认' : '生成缺失图谱输入',
+      detail: exportComplete ? '图谱输入已就绪' : '需要先生成图谱输入文件',
+      shortLabel: '导出图谱输入',
+      conditions: ['解析结果存在', '图谱输入已导出'],
+      actionLabel: exportComplete ? '确认图谱输入并进入提示词确认' : '生成缺失图谱输入',
       logLabel: '查看导出记录',
       primaryAction: resolveBuildPrimaryAction('export', {
         query,
@@ -1195,9 +1195,9 @@ export function buildKnowledgeBaseWorkflowSteps({
     createWorkflowStep({
       key: 'prompt',
       status: statusByStep.prompt,
-      detail: promptConfirmed ? '已确认沿用当前活动提示词' : '确认本次索引沿用 GraphRAG 当前活动提示词',
-      shortLabel: '确认活动提示词',
-      conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
+      detail: promptConfirmed ? '已确认提示词策略' : '选择本次索引使用的提示词策略',
+      shortLabel: '确认提示词策略',
+      conditions: ['图谱输入已确认', '当前提示词可用于索引'],
       actionLabel: promptConfirmed ? '进入创建索引' : '确认提示词策略',
       logLabel: '查看提示词策略',
       primaryAction: resolveBuildPrimaryAction('prompt', {

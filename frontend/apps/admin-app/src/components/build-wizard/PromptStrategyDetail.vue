@@ -29,12 +29,12 @@ const draftSummary = computed(() => {
 <template>
   <div class="prompt-strategy-detail" :data-variant="variant">
     <template v-if="variant === 'default'">
-      <p class="prompt-strategy-detail__primary">将使用系统默认的 GraphRAG 提示词进行索引构建。</p>
+      <p class="prompt-strategy-detail__primary">将使用系统默认的提示词进行索引构建。</p>
       <p class="prompt-strategy-detail__secondary">覆盖实体抽取、描述总结、社区报告等 5 个核心提示词。</p>
     </template>
 
     <template v-else-if="variant === 'graphrag_tuned'">
-      <p class="prompt-strategy-detail__primary">将使用 GraphRAG 自动调优生成的提示词进行索引构建。</p>
+      <p class="prompt-strategy-detail__primary">将使用基于本课程样本自动调优后的提示词进行索引构建。</p>
       <p class="prompt-strategy-detail__secondary">
         {{ graphragTunedSummary?.name ?? '本课程当前激活的自动调优结果' }}
       </p>

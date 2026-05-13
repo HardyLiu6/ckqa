@@ -19,9 +19,9 @@ const disabled = computed(() => promptBlock.value.status === 'blocked' || prompt
 
 const STRATEGIES = [
   { key: 'default',         title: '默认提示词',          icon: '⚙',
-    description: '使用系统默认的 GraphRAG 提示词，开箱即用。' },
-  { key: 'graphrag_tuned',  title: 'GraphRAG 自动调优提示词', icon: '✨',
-    description: '使用 GraphRAG 基于本课程样本自动调优生成的提示词。' },
+    description: '使用系统默认的提示词，开箱即用。' },
+  { key: 'graphrag_tuned',  title: '自动调优提示词', icon: '✨',
+    description: '使用基于本课程样本自动调优后的提示词。' },
   { key: 'custom_pipeline', title: '手动调优提示词',      icon: '🛠',
     description: '进入独立页面，按 3 步流程亲手调优本次构建使用的提示词。' },
 ]
