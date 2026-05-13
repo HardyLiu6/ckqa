@@ -44,7 +44,7 @@ function meta(option) {
         class="seed-card"
         :data-selected="seed === option.key ? 'true' : 'false'"
         :data-disabled="option.disabled ? 'true' : 'false'"
-        @click="if (!option.disabled) emit('select-seed', option.key)"
+        @click="!option.disabled && emit('select-seed', option.key)"
       >
         <strong>{{ option.title }}</strong>
         <p>{{ option.desc }}</p>
