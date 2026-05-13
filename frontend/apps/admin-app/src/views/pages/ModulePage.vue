@@ -1262,15 +1262,21 @@ async function submitMaterialUpload() {
       materialType: materialForm.value.materialType,
       onUploadProgress: (event) => {
         if (event.total) {
-          materialUploadProgress.value = Math.min(100, Math.round((event.loaded / event.total) * 100))
+          // 浏览器到后端的字节传输进度（最高到 99%，留 1% 给后端确认）
+          // 后端响应成功时再推到 100%，避免失败时误显示 100%
+          const ratio = Math.round((event.loaded / event.total) * 100)
+          materialUploadProgress.value = Math.min(99, ratio)
         }
       },
     })
+    // 后端确认成功后才置 100%
     materialUploadProgress.value = 100
     materialActionState.value = 'success'
     closeMaterialActionDialog()
     await loadPage()
   } catch (error) {
+    // 失败时进度条复位，避免"100% + 错误信息"误导用户
+    materialUploadProgress.value = 0
     materialActionState.value = 'failed'
     materialActionError.value = createApiError(error)
   }

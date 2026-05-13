@@ -89,7 +89,7 @@ public class CourseMaterialManagementService {
             String materialType,
             String actorUserCode
     ) {
-        courseAccessService.assertCourseMembershipWritable(courseId, actorUserCode);
+        courseAccessService.assertCourseMaterialWritable(courseId, actorUserCode);
         assertCourseExists(courseId);
         validatePdf(file);
         String normalizedMaterialType = normalizeMaterialType(materialType);
@@ -126,7 +126,7 @@ public class CourseMaterialManagementService {
             CourseMaterialUpdateRequest request,
             String actorUserCode
     ) {
-        courseAccessService.assertCourseMembershipWritable(courseId, actorUserCode);
+        courseAccessService.assertCourseMaterialWritable(courseId, actorUserCode);
         CourseMaterials material = getRequiredCourseMaterial(courseId, materialId);
         String requestedDisplayName = trimToNull(request.getDisplayName());
         if (requestedDisplayName != null && !Objects.equals(requestedDisplayName, material.getDisplayName())) {
@@ -143,7 +143,7 @@ public class CourseMaterialManagementService {
 
     @Transactional
     public void deleteMaterial(String courseId, Long materialId, String actorUserCode) {
-        courseAccessService.assertCourseMembershipWritable(courseId, actorUserCode);
+        courseAccessService.assertCourseMaterialWritable(courseId, actorUserCode);
         CourseMaterials material = getRequiredCourseMaterial(courseId, materialId);
         if ("processing".equalsIgnoreCase(material.getParseStatus())) {
             throw new BusinessException(ApiResultCode.PDF_PARSE_STATE_CONFLICT, HttpStatus.CONFLICT, "解析中的资料不能删除");

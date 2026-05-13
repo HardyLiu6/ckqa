@@ -110,6 +110,33 @@ public class CourseAccessService {
         }
     }
 
+    /**
+     * 校验课程资料读写权限（上传 / 编辑 / 删除）。
+     * 与 assertCourseMembershipWritable 区分开：
+     * - 该方法用于资料管理操作，授权语义不同，错误消息直观（"无课程资料管理权限"）。
+     * - 管理员通过 admin-override 直接放行；
+     * - 教师 / 助教持有 active membership 即可操作课程资料；
+     * - 其他角色（如学生）和无 membership 的非管理员被拒绝。
+     */
+    public void assertCourseMaterialWritable(String courseId, String actorUserCode) {
+        Courses course = getRequiredCourse(courseId);
+        assertCourseWritable(course);
+        if (!StringUtils.hasText(actorUserCode)) {
+            return;
+        }
+        CourseAccessDecision decision = resolveAccess(course, actorUserCode);
+        if (!decision.isGranted()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程资料管理权限");
+        }
+        if ("admin-override".equals(decision.getReason())) {
+            return;
+        }
+        String role = decision.getMembershipRole();
+        if (!"teacher".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程资料管理权限");
+        }
+    }
+
     public void assertCourseWritable(String courseId) {
         assertCourseWritable(getRequiredCourse(courseId));
     }

@@ -58,10 +58,10 @@ function resolveRedirect() {
   <div class="login-view login-split">
     <section class="login-positioning" aria-labelledby="login-title">
       <div class="login-brand">
-        <span class="brand-mark">CK</span>
+        <span class="brand-mark">智课</span>
         <div>
-          <p class="eyebrow">CKQA Admin</p>
-          <h1 id="login-title">课程知识库运维台</h1>
+          <p class="eyebrow">智课问答</p>
+          <h1 id="login-title">智课问答管理台</h1>
         </div>
       </div>
       <p class="login-copy">
