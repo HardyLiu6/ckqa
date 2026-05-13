@@ -53,7 +53,14 @@ onMounted(loadHealth)
   <section class="module-hero">
     <div>
       <p class="eyebrow">System Health</p>
-      <h2>Java 编排入口健康检查</h2>
+      <div class="module-title-row">
+        <h2>Java 编排入口健康检查</h2>
+        <span
+          v-if="$route.meta.status"
+          class="status-badge"
+          :data-status="$route.meta.status"
+        >{{ $route.meta.status }}</span>
+      </div>
       <p>聚合 MySQL、PDF 解析、GraphRAG 输出和问答服务状态。</p>
     </div>
     <div class="page-title-actions">

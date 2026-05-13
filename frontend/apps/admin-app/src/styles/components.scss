@@ -992,15 +992,11 @@ textarea.text-input {
 }
 
 .workspace-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ckqa-space-5);
-  margin-bottom: var(--ckqa-space-5);
+  margin-bottom: var(--ckqa-space-3);
 }
 
 .breadcrumb {
-  margin-bottom: var(--ckqa-space-2);
+  margin: 0;
 }
 
 .breadcrumb-list {
@@ -3340,10 +3336,6 @@ textarea.text-input {
     padding: var(--ckqa-space-4);
   }
 
-  .workspace-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 
 // ─── Prompt Builder Steps ────────────────────────────────────────────────────
@@ -3643,6 +3635,13 @@ textarea.text-input {
 
 .prompt-builder-page__header h2 { margin: 0; font-size: 22px; font-weight: 800; }
 .prompt-builder-page__header p { margin: 4px 0 0; color: var(--ckqa-text-muted); font-size: 12.5px; }
+
+.prompt-builder-page__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ckqa-space-2);
+}
 
 .prompt-builder-page__body {
   background: var(--ckqa-surface);

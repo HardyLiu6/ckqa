@@ -2620,6 +2620,11 @@ onBeforeUnmount(() => {
       <p v-if="config.eyebrow" class="eyebrow">{{ config.eyebrow }}</p>
       <div class="module-title-row">
         <h2 v-if="showModuleHeroTitle">{{ pageTitle }}</h2>
+        <span
+          v-if="route.meta.status"
+          class="status-badge"
+          :data-status="route.meta.status"
+        >{{ route.meta.status }}</span>
         <DataSourceChip :source="config.dataSource" :refreshed-at="config.refreshedAt" />
         <el-button
           v-if="canManualRefresh"

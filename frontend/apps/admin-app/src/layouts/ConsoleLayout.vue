@@ -125,23 +125,19 @@ function closeMobileMenu() {
 
     <main id="main-content" class="workspace">
       <div class="workspace-heading">
-        <div>
-          <nav class="breadcrumb" aria-label="面包屑导航">
-            <ol class="breadcrumb-list">
-              <li
-                v-for="item in breadcrumbItems"
-                :key="`${item.kind}-${item.label}`"
-                class="breadcrumb-item"
-                :data-kind="item.kind"
-              >
-                <RouterLink v-if="item.to" :to="item.to">{{ item.label }}</RouterLink>
-                <span v-else>{{ item.label }}</span>
-              </li>
-            </ol>
-          </nav>
-          <h1>{{ route.meta.title }}</h1>
-        </div>
-        <span class="status-badge" :data-status="route.meta.status">{{ route.meta.status }}</span>
+        <nav class="breadcrumb" aria-label="面包屑导航">
+          <ol class="breadcrumb-list">
+            <li
+              v-for="item in breadcrumbItems"
+              :key="`${item.kind}-${item.label}`"
+              class="breadcrumb-item"
+              :data-kind="item.kind"
+            >
+              <RouterLink v-if="item.to" :to="item.to">{{ item.label }}</RouterLink>
+              <span v-else>{{ item.label }}</span>
+            </li>
+          </ol>
+        </nav>
       </div>
       <slot />
     </main>

@@ -51,7 +51,14 @@ onMounted(() => {
   <section class="overview-strip">
     <div>
       <p class="eyebrow">Operations Snapshot</p>
-      <h2>知识库生产链路</h2>
+      <div class="module-title-row">
+        <h2>知识库生产链路</h2>
+        <span
+          v-if="$route.meta.status"
+          class="status-badge"
+          :data-status="$route.meta.status"
+        >{{ $route.meta.status }}</span>
+      </div>
       <p>从课程资料到索引激活和问答验证，首屏只保留最需要扫读的状态。</p>
     </div>
     <div class="page-title-actions">

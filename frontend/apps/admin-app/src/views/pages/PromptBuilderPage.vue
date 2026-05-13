@@ -207,7 +207,14 @@ function returnToWizardWithStrategy() {
   <section class="prompt-builder-page">
     <header class="prompt-builder-page__header">
       <div>
-        <h2>{{ promptTitle }}</h2>
+        <div class="prompt-builder-page__title-row">
+          <h2>{{ promptTitle }}</h2>
+          <span
+            v-if="$route.meta.status"
+            class="status-badge"
+            :data-status="$route.meta.status"
+          >{{ $route.meta.status }}</span>
+        </div>
         <p v-if="buildRunId">为本次构建（Build Run ID：{{ buildRunId }}）设计提示词。</p>
       </div>
       <el-button
