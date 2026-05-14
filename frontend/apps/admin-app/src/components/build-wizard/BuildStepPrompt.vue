@@ -18,7 +18,6 @@ const props = defineProps({
 const emit = defineEmits([
   'update:strategy',
   'goto-builder',
-  'reset-confirm',
   'prompt-tune-trigger',
   'prompt-tune-retry',
   'prompt-tune-regenerate',
@@ -76,15 +75,5 @@ function handleSelect(key) {
       @prompt-tune-retry="$emit('prompt-tune-retry')"
       @prompt-tune-regenerate="$emit('prompt-tune-regenerate')"
     />
-
-    <div v-if="promptBlock.confirmed" class="prompt-reset-actions">
-      <el-button
-        class="ckqa-el-button ckqa-el-button--ghost"
-        :disabled="actionRunning"
-        @click="$emit('reset-confirm')"
-      >
-        重新选择策略
-      </el-button>
-    </div>
   </section>
 </template>

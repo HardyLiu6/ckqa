@@ -1137,10 +1137,25 @@ export function buildKnowledgeBaseWorkflowSteps({
   const exportComplete = hasMaterialSelection
     && exportArtifacts.rows?.length === materialIds.length
     && Number(exportArtifacts.missingCount ?? 0) === 0
-  const materialConfirmed = isBuildQueryConfirmed(query.materialConfirmed)
-  const exportConfirmed = isBuildQueryConfirmed(query.exportConfirmed)
-  const promptConfirmed = isBuildQueryConfirmed(query.promptConfirmed)
+  // exportConfirmed / promptConfirmed 优先以 buildRun.currentStage 为权威来源：
+  // 用户在阶段 X 点"进入下一步"按钮才会推进 currentStage 到下一阶段，
+  // 因此 currentStage 推进到下一阶段意味着前阶段已被用户确认。
+  // 例如 currentStage='prompt' 意味着 export 已确认；用户在 prompt 步骤点击"确认提示词"后
+  // metadata.promptConfirmed=true（即使 currentStage 仍为 prompt）。
+  // URL query 仅作为 fallback。
+  const stageReached = buildRunStageReached(buildRun?.currentStage)
+  const materialConfirmed = stageReached('parse')
+    || isBuildQueryConfirmed(query.materialConfirmed)
+  const exportConfirmed = stageReached('prompt')
+    || isBuildQueryConfirmed(query.exportConfirmed)
   const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete }, buildRun?.buildMetadata)
+  // promptConfirmed 来源：
+  // 1) prompt.confirmed 来自 metadata.promptConfirmed（用户已点过"确认提示词策略"按钮）；
+  // 2) currentStage 已推进到 'index' 或更后（一般已经包含 1）；
+  // 3) URL query 兜底。
+  const promptConfirmed = prompt?.confirmed
+    || stageReached('index')
+    || isBuildQueryConfirmed(query.promptConfirmed)
   const indexAvailability = indexState ?? resolveIndexAvailabilityState(knowledgeBase, [])
   const materialStatus = hasMaterialSelection && materialConfirmed ? 'done' : 'ready'
   const parseStatus = resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed })
@@ -1149,7 +1164,10 @@ export function buildKnowledgeBaseWorkflowSteps({
   const indexStatus = !exportConfirmed || !promptConfirmed || !exportComplete
     ? 'blocked'
     : indexAvailability.status
-  const qaStatus = activeIndexRunId ? 'ready' : 'blocked'
+  // qa_check 需要索引步骤非阻塞且有激活索引才可进入；
+  // 当前置步骤（prompt/export）未确认时 index 为 blocked，qa_check 也应阻塞
+  const qaStatus = indexStatus === 'blocked' ? 'blocked'
+    : activeIndexRunId ? 'ready' : 'blocked'
   const statusByStep = applyBuildRunStageStatuses({
     material: materialStatus,
     parse: parseStatus,
@@ -1341,6 +1359,32 @@ const BUILD_RUN_STAGE_TO_STEP = {
 
 const BUILD_RUN_STEP_ORDER = ['material', 'parse', 'export', 'prompt', 'index', 'qa_check']
 
+/**
+ * 返回一个谓词：判断当前 buildRun 的 currentStage 是否已推进到指定步骤之后。
+ *
+ * 例如 stageReached('prompt') 为 true 表示 currentStage 至少已到 prompt 阶段，
+ * 也就意味着前面的 material/parse/export 都已被用户确认。
+ *
+ * 当 currentStage 缺失或为 done 时，分别返回总是 false / 总是 true 的谓词。
+ */
+function buildRunStageReached(currentStage) {
+  const stageKey = BUILD_RUN_STAGE_TO_STEP[String(currentStage ?? '').toLowerCase()]
+
+  if (!stageKey) {
+    return () => false
+  }
+
+  if (stageKey === 'done') {
+    return () => true
+  }
+
+  const reachedIndex = BUILD_RUN_STEP_ORDER.indexOf(stageKey)
+  return (targetStepKey) => {
+    const targetIndex = BUILD_RUN_STEP_ORDER.indexOf(targetStepKey)
+    return targetIndex >= 0 && reachedIndex >= targetIndex
+  }
+}
+
 function applyBuildRunStageStatuses(baseStatuses, buildRun) {
   const stageKey = BUILD_RUN_STAGE_TO_STEP[String(buildRun?.currentStage ?? '').toLowerCase()]
 
@@ -1375,6 +1419,11 @@ function applyBuildRunStageStatuses(baseStatuses, buildRun) {
         : baseStatuses.material
   } else if (['parse', 'export'].includes(stageKey) && runStatus !== 'failed') {
     nextStatuses[stageKey] = baseStatuses[stageKey]
+  } else if (stageKey === 'prompt') {
+    // prompt 不是持续后台任务，当 buildRun.status 为空（归一化为 ready）时
+    // 应使用 baseStatuses 中根据 metadata 计算的状态（done/ready/blocked）；
+    // 但如果 buildRun.status 明确为 running（如自动调优进行中）或 failed，则保留
+    nextStatuses[stageKey] = runStatus === 'ready' ? baseStatuses[stageKey] : runStatus
   } else {
     nextStatuses[stageKey] = runStatus
   }
@@ -1404,7 +1453,9 @@ function normalizeBuildRunStatus(status) {
 function mergeQaStatus(baseStatus, qaStatus) {
   const normalized = String(qaStatus ?? '').toLowerCase()
 
-  if (!normalized || normalized === 'not_started') {
+  // 'skipped' 是 buildRun 创建时的默认值，表示尚未执行 QA 验证；
+  // 'not_started' 同语义。两者都应回退到 baseStatus（由前置步骤推导）。
+  if (!normalized || normalized === 'not_started' || normalized === 'skipped') {
     return baseStatus
   }
 

@@ -2761,15 +2761,55 @@ textarea.text-input {
 .build-step-stage__back.el-button {
   width: 36px;
   min-width: 36px;
-  padding: var(--ckqa-space-2);
+  height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .build-step-stage__header-tail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-2);
+  align-items: flex-end;
+}
+
+.build-step-stage__header-chips {
   display: flex;
   gap: var(--ckqa-space-2);
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.build-step-stage__header-action.el-button {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.build-step-stage__reset-chip.el-button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #b45309;
+  border: 1px solid rgb(180 83 9 / 24%);
+  background: rgb(255 237 213 / 62%);
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.build-step-stage__reset-chip.el-button:hover,
+.build-step-stage__reset-chip.el-button:focus-visible {
+  background: rgb(255 237 213 / 92%);
+  border-color: rgb(180 83 9 / 42%);
+  transform: none;
+  box-shadow: none;
 }
 
 .build-step-stage__header-chip {
@@ -4225,8 +4265,7 @@ textarea.text-input {
 }
 
 .prompt-reset-actions {
-  display: flex;
-  justify-content: flex-start;
+  display: none;
 }
 
 // PromptBuilderPage 布局

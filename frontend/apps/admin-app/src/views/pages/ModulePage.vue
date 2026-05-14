@@ -2407,13 +2407,15 @@ async function resetBuildPromptConfirmation() {
     return
   }
   const strategy = selectedPromptStrategy.value || config.value.blocks?.prompt?.strategy || 'default'
+  const nextQuery = { ...route.query }
+  delete nextQuery.promptConfirmed
   await runBuildRunRequest({
     operationKey: 'prompt-reset',
     request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
       confirmed: false,
       promptStrategy: strategy,
     }),
-    nextQuery: { ...route.query, promptConfirmed: undefined },
+    nextQuery,
   })
 }
 
@@ -3927,21 +3929,33 @@ onBeforeUnmount(() => {
         <p>{{ activeBuildStep?.detail }}</p>
       </div>
       <div class="build-step-stage__header-tail">
-        <el-tag
-          v-for="chip in buildSummaryChips"
-          :key="chip.label"
-          :type="chip.tone === 'warn' ? 'warning' : (chip.tone === 'ok' ? 'success' : 'info')"
-          size="default"
-          effect="light"
+        <div class="build-step-stage__header-chips">
+          <el-tag
+            v-for="chip in buildSummaryChips"
+            :key="chip.label"
+            :type="chip.tone === 'warn' ? 'warning' : (chip.tone === 'ok' ? 'success' : 'info')"
+            size="default"
+            effect="light"
+            round
+            class="build-step-stage__header-chip"
+          >
+            {{ chip.label }} {{ chip.value }}
+          </el-tag>
+          <StatusBadge
+            :status="activeBuildStep?.status"
+            :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
+          />
+        </div>
+        <el-button
+          v-if="activeBuildStep?.key === 'prompt' && config.blocks?.prompt?.confirmed"
+          class="build-step-stage__reset-chip"
+          native-type="button"
+          :disabled="actionRunning"
           round
-          class="build-step-stage__header-chip"
+          @click="resetBuildPromptConfirmation"
         >
-          {{ chip.label }} {{ chip.value }}
-        </el-tag>
-        <StatusBadge
-          :status="activeBuildStep?.status"
-          :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
-        />
+          ↺ 重新选择策略
+        </el-button>
       </div>
     </header>
 
@@ -3961,7 +3975,6 @@ onBeforeUnmount(() => {
         @update-smoke-question="updateSmokeQuestion"
         @update:strategy="updateBuildPromptStrategy"
         @goto-builder="gotoPromptBuilder"
-        @reset-confirm="resetBuildPromptConfirmation"
         @prompt-tune-trigger="handlePromptTuneTrigger"
         @prompt-tune-retry="handlePromptTuneRetry"
         @prompt-tune-regenerate="handlePromptTuneRegenerate"
