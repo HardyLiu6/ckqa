@@ -116,6 +116,19 @@ export function buildConsoleBreadcrumbItems(route = {}) {
 
   items.push(...resolveCourseParents(route))
 
+  if (route.name === 'knowledge-base-build-runs') {
+    items.push({
+      label: '知识库列表',
+      name: 'knowledge-bases',
+      to: '/app/knowledge-bases',
+      kind: 'link',
+    })
+    const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
+    if (detailParent) {
+      items.push(detailParent)
+    }
+  }
+
   if (route.name === 'knowledge-base-build' && route.query?.from === 'detail') {
     const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
     if (detailParent) {

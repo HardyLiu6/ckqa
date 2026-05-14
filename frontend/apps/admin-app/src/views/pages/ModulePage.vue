@@ -53,6 +53,7 @@ import {
   getBuildRun,
   triggerBuildRunPromptTune,
   getBuildRunPromptTuneStatus,
+  deleteBuildRun,
 } from '../../api/knowledge-bases.js'
 import {
   deleteCourseMaterial,
@@ -1048,6 +1049,11 @@ function handleKnowledgeBaseRowAction(row, action) {
 
   if (action?.key === 'delete-knowledge-base') {
     openKnowledgeBaseDeleteDialog(knowledgeBase)
+  }
+
+  if (action?.key === 'archive-build-run') {
+    void handleArchiveBuildRun(row)
+    return
   }
 }
 
@@ -2766,6 +2772,27 @@ watch(() => [route.name, route.params, route.query], (next, prev) => {
     loadPage()
   }
 }, { deep: true, immediate: true })
+async function handleArchiveBuildRun(row) {
+  const id = row?.id
+  if (!id) return
+  try {
+    await ElMessageBox.confirm(
+      '归档后该构建流水线不会再出现在「待恢复」列表中，但磁盘工作区与索引产物会保留。是否继续？',
+      '归档构建流水线',
+      { confirmButtonText: '归档', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteBuildRun(id, { keepArtifacts: true, deleteWorkspace: false })
+    ElMessage.success('已归档')
+    await loadPage()
+  } catch (error) {
+    ElMessage.error(createApiError(error)?.message ?? '归档失败')
+  }
+}
+
 onBeforeUnmount(() => {
   cancelLongTask()
   closeAllMaterialParseStreams()
