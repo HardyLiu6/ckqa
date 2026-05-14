@@ -2931,7 +2931,7 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
 
-  assert.match(tableShell, /label="操作"[\s\S]*min-width="140"/)
+  assert.match(tableShell, /label="操作"[\s\S]*:width="actionColumnWidth"/)
   assert.match(tableShell, /'rowAction'/)
   assert.match(tableShell, /header-class-name="ckqa-el-table__action-column"/)
   assert.match(tableShell, /fixed="right"/)

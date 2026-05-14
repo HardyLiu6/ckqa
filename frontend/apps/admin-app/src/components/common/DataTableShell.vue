@@ -72,6 +72,12 @@ const filteredRows = computed(() => filterRowsBySearchAndFilters(
 ))
 const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
 const hasRowActions = computed(() => filteredRows.value.some((row) => getRowActions(row).length > 0))
+const actionColumnWidth = computed(() => {
+  // 每个按钮约 90px（图标 + 文字 + padding），加上容器 gap 和 padding
+  const maxActions = filteredRows.value.reduce((max, row) => Math.max(max, getRowActions(row).length), 0)
+  if (maxActions <= 0) return 0
+  return Math.max(140, maxActions * 95 + 24)
+})
 
 function isStatusCell(column, cell) {
   return cell?.kind === 'status' || column.includes('状态') || STATUS_VALUES.has(String(cell))
@@ -360,7 +366,7 @@ function resolveProgressTone(cell) {
           v-if="hasRowActions"
           label="操作"
           fixed="right"
-          min-width="140"
+          :width="actionColumnWidth"
           class-name="ckqa-el-table__action-column"
           header-class-name="ckqa-el-table__action-column"
         >

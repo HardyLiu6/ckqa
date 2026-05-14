@@ -1999,7 +1999,8 @@ textarea.text-input {
 .table-scroll {
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-md);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: var(--ckqa-surface);
 }
 

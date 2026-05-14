@@ -367,7 +367,13 @@
 
 .ckqa-el-table .ckqa-el-table__action-column {
   border-left: 1px solid var(--ckqa-border-subtle);
-  background: var(--ckqa-surface-muted, #f8f9fb);
+  background: var(--ckqa-surface-muted, #f8f9fb) !important;
+}
+
+// 操作列 fixed 定位时的背景覆盖（Element Plus 用 sticky + 独立 z-index）
+.ckqa-el-table td.ckqa-el-table__action-column,
+.ckqa-el-table th.ckqa-el-table__action-column {
+  background: var(--ckqa-surface-muted, #f8f9fb) !important;
 }
 
 .ckqa-el-table .el-progress-bar__outer {
