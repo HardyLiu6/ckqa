@@ -32,8 +32,12 @@ const draftSummary = computed(() => {
 <template>
   <div class="prompt-strategy-detail" :data-variant="variant">
     <template v-if="variant === 'default'">
-      <p class="prompt-strategy-detail__primary">将使用系统默认的提示词进行索引构建。</p>
-      <p class="prompt-strategy-detail__secondary">覆盖实体抽取、描述总结、社区报告等 5 个核心提示词。</p>
+      <p class="prompt-strategy-detail__primary">⚙ 已选「默认提示词」</p>
+      <p class="prompt-strategy-detail__secondary">
+        点击「确认提示词策略」即可进入索引构建。<br>
+        graphrag 会按通用模板抽取实体与关系。
+      </p>
+      <p class="prompt-strategy-detail__hint">无需额外操作。</p>
     </template>
 
     <template v-else-if="variant === 'graphrag_tuned'">
@@ -48,8 +52,11 @@ const draftSummary = computed(() => {
     </template>
 
     <template v-else-if="variant === 'custom_pipeline_empty'">
-      <p class="prompt-strategy-detail__primary">尚未构建手动调优提示词。</p>
-      <p class="prompt-strategy-detail__secondary">点击下方按钮进入独立页面，按 3 步流程设计本次构建使用的提示词。</p>
+      <p class="prompt-strategy-detail__primary">🛠 已选「手动调优提示词」</p>
+      <p class="prompt-strategy-detail__secondary">
+        尚未构建草稿。本次构建专属，不复用历史。<br>
+        从默认或自动调优为种子继续编辑实体抽取规则。
+      </p>
       <el-button
         class="ckqa-el-button ckqa-el-button--primary"
         type="primary"
@@ -61,10 +68,11 @@ const draftSummary = computed(() => {
     </template>
 
     <template v-else-if="variant === 'custom_pipeline_ready'">
-      <p class="prompt-strategy-detail__primary">已构建手动调优提示词。</p>
+      <p class="prompt-strategy-detail__primary">🛠 已构建手动调优提示词</p>
       <p class="prompt-strategy-detail__secondary">
         上次保存于 {{ draftSummary?.updated ?? '未知时间' }} · 已修改 1 个提示词块（实体抽取）
       </p>
+      <p class="prompt-strategy-detail__hint">点击「确认提示词策略」即可使用本草稿。</p>
       <el-button
         class="ckqa-el-button ckqa-el-button--ghost"
         :disabled="disabled"
