@@ -92,8 +92,8 @@ const primaryAction = computed(() => resolvePrimaryAction(status.value))
       </p>
       <p class="prompt-tune-progress__secondary">
         <span v-if="finishedAt">完成于 {{ finishedAt }}</span>
-        <span v-if="props.state?.promptSha256"> · 指纹 {{ props.state.promptSha256.slice(0, 16) }}…</span>
       </p>
+      <p class="prompt-tune-progress__hint">点击「确认提示词策略」即可使用本次产物。</p>
       <el-button
         class="ckqa-el-button ckqa-el-button--ghost"
         :loading="triggering"
