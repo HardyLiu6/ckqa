@@ -1055,6 +1055,11 @@ function handleKnowledgeBaseRowAction(row, action) {
     void handleArchiveBuildRun(row)
     return
   }
+
+  if (action?.key === 'delete-build-run') {
+    void handleDeleteBuildRun(row)
+    return
+  }
 }
 
 async function handleCourseMemberRowAction(row, action) {
@@ -2790,6 +2795,27 @@ async function handleArchiveBuildRun(row) {
     await loadPage()
   } catch (error) {
     ElMessage.error(createApiError(error)?.message ?? '归档失败')
+  }
+}
+
+async function handleDeleteBuildRun(row) {
+  const id = row?.id
+  if (!id) return
+  try {
+    await ElMessageBox.confirm(
+      '删除后该构建流水线记录将被永久移除，磁盘工作区也会被清理。此操作不可恢复，是否继续？',
+      '删除构建流水线',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'error' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteBuildRun(id, { keepArtifacts: false, deleteWorkspace: true })
+    ElMessage.success('已删除')
+    await loadPage()
+  } catch (error) {
+    ElMessage.error(createApiError(error)?.message ?? '删除失败')
   }
 }
 

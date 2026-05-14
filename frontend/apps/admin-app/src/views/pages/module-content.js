@@ -242,7 +242,10 @@ const configs = {
     eyebrow: 'Build History',
     tableTitle: '构建历史',
     summary: '本知识库的所有构建流水线运行记录，可重新打开向导继续编辑或归档不再需要的运行。',
-    search: null,
+    search: {
+      placeholder: '搜索构建版本号',
+      ariaLabel: '搜索构建历史',
+    },
     primaryAction: null,
     secondaryAction: null,
     filters: [

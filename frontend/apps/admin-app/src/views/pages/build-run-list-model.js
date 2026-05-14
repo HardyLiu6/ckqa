@@ -82,6 +82,12 @@ export function mapBuildRunRow(knowledgeBaseId, buildRun = {}) {
       icon: 'archive',
       variant: 'ghost',
     })
+    actions.push({
+      label: '删除',
+      key: 'delete-build-run',
+      icon: 'delete',
+      variant: 'danger',
+    })
   }
 
   return {
