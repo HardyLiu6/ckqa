@@ -334,11 +334,11 @@
   height: 44px;
   padding: var(--ckqa-space-2) var(--ckqa-space-4);
   color: var(--ckqa-text-muted);
-  background: var(--ckqa-surface-strong);
-  border-bottom: 1px solid var(--ckqa-border);
-  font-size: 11.5px;
+  background: color-mix(in srgb, var(--ckqa-accent) 4%, var(--ckqa-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-accent) 12%, var(--ckqa-border));
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
@@ -388,14 +388,14 @@
   overflow: visible;
 }
 
-// 操作列：微妙分隔 + 半透明背景
+// 操作列：微妙分隔 + 带 accent 色调的浅背景
 .ckqa-el-table .ckqa-el-table__action-column {
-  border-left: 1px solid color-mix(in srgb, var(--ckqa-border) 50%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-border));
 }
 
 .ckqa-el-table td.ckqa-el-table__action-column,
 .ckqa-el-table th.ckqa-el-table__action-column {
-  background: color-mix(in srgb, var(--ckqa-surface-muted) 70%, var(--ckqa-surface)) !important;
+  background: color-mix(in srgb, var(--ckqa-accent) 3%, var(--ckqa-surface)) !important;
 }
 
 .ckqa-el-table .el-progress-bar__outer {
