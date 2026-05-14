@@ -2971,7 +2971,7 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
 
   assert.match(workflowStepper, /class="workflow-progress-rail"/)
   assert.match(workflowStepper, /progress\.summary/)
-  assert.match(workflowStepper, /:title="step\.detail"/)
+  assert.match(workflowStepper, /:title="step\.status === 'blocked' \? '请先完成前置步骤' : step\.detail"/)
   assert.match(workflowStepper, /:data-status="step\.status"/)
   assert.doesNotMatch(workflowStepper, /当前动作/)
   assert.match(modulePage, /class="build-step-stage"/)
