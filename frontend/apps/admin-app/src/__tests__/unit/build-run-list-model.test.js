@@ -26,13 +26,13 @@ test('buildBuildRunListParams status 透传', () => {
   assert.deepEqual(buildBuildRunListParams({ status: 'failed' }).status, 'failed')
 })
 
-test('STATUS_LABELS 覆盖六个枚举', () => {
+test('STATUS_LABELS 覆盖五个有效枚举（interrupted 因后端未使用已从前端移除）', () => {
   assert.equal(STATUS_LABELS.pending, '待开始')
   assert.equal(STATUS_LABELS.running, '运行中')
   assert.equal(STATUS_LABELS.success, '已完成')
   assert.equal(STATUS_LABELS.failed, '失败')
-  assert.equal(STATUS_LABELS.interrupted, '已中断')
   assert.equal(STATUS_LABELS.archived, '已归档')
+  assert.equal(STATUS_LABELS.interrupted, undefined)
 })
 
 test('STAGE_LABELS 覆盖七个阶段', () => {

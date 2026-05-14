@@ -9,9 +9,12 @@ export const STATUS_LABELS = {
   running: '运行中',
   success: '已完成',
   failed: '失败',
-  interrupted: '已中断',
   archived: '已归档',
 }
+
+// 注意：枚举里还存在 'interrupted'，但当前后端代码从未真正写入过该值，
+// 失败 / 中断都统一记为 'failed'。前端不再渲染该状态，避免给用户造成困惑；
+// 详情见 docs/遗留问题.md「Issue: buildRun.status='interrupted' 枚举从未使用」。
 
 export const STAGE_LABELS = {
   material_selection: '资料选择',

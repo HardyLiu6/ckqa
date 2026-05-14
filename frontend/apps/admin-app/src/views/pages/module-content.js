@@ -259,7 +259,6 @@ const configs = {
           { label: '运行中', value: 'running' },
           { label: '已完成', value: 'success' },
           { label: '失败', value: 'failed' },
-          { label: '已中断', value: 'interrupted' },
         ],
       },
     ],
