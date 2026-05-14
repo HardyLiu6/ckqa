@@ -1997,14 +1997,14 @@ textarea.text-input {
 }
 
 .table-scroll {
-  border: 1px solid var(--ckqa-border);
+  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 14%, var(--ckqa-border));
   border-radius: var(--ckqa-radius-lg);
   overflow-x: auto;
   overflow-y: hidden;
   background: var(--ckqa-surface);
   box-shadow:
-    0 1px 3px rgb(15 23 42 / 4%),
-    0 6px 24px rgb(15 23 42 / 6%);
+    0 1px 3px color-mix(in srgb, var(--ckqa-accent) 6%, rgb(15 23 42 / 4%)),
+    0 8px 28px color-mix(in srgb, var(--ckqa-accent) 4%, rgb(15 23 42 / 6%));
 }
 
 .ckqa-table-primary,

@@ -306,11 +306,11 @@
 .ckqa-el-table {
   --el-table-bg-color: var(--ckqa-surface);
   --el-table-tr-bg-color: var(--ckqa-surface);
-  --el-table-header-bg-color: var(--ckqa-surface-strong);
-  --el-table-header-text-color: var(--ckqa-text-muted);
+  --el-table-header-bg-color: color-mix(in srgb, var(--ckqa-accent) 8%, var(--ckqa-surface));
+  --el-table-header-text-color: var(--ckqa-text);
   --el-table-text-color: var(--ckqa-text);
-  --el-table-row-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 8%, var(--ckqa-surface));
-  --el-table-border-color: var(--ckqa-border);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface));
+  --el-table-border-color: color-mix(in srgb, var(--ckqa-accent) 12%, var(--ckqa-border));
   --el-table-border: none;
   width: 100%;
   border-radius: var(--ckqa-radius-lg);
@@ -323,37 +323,36 @@
   background: var(--ckqa-surface);
 }
 
-// 表头：大写字母间距 + 底部微阴影增加层次
+// 表头：accent 色调背景 + 深色文字 + 底部阴影
 .ckqa-el-table .el-table__header-wrapper {
   position: relative;
   z-index: 2;
-  box-shadow: 0 2px 6px rgb(15 23 42 / 4%);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ckqa-accent) 8%, rgb(15 23 42 / 6%));
 }
 
 .ckqa-el-table .el-table__header-wrapper th.el-table__cell {
-  height: 44px;
+  height: 46px;
   padding: var(--ckqa-space-2) var(--ckqa-space-4);
-  color: var(--ckqa-text-muted);
-  background: color-mix(in srgb, var(--ckqa-accent) 4%, var(--ckqa-surface));
-  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-accent) 12%, var(--ckqa-border));
+  color: var(--ckqa-text);
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, var(--ckqa-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-accent) 18%, var(--ckqa-border));
   font-size: 13px;
   font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
-// 数据行：紧凑行高 + 极细分隔线
+// 数据行：紧凑行高 + accent 色调斑马纹（低亮度屏幕也能看出差异）
 .ckqa-el-table .el-table__body-wrapper td.el-table__cell {
   height: 52px;
   padding: var(--ckqa-space-2) var(--ckqa-space-4);
-  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-border-subtle) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-border-subtle));
   background: var(--ckqa-surface);
   transition: background 120ms ease, box-shadow 120ms ease;
 }
 
-// 去掉斑马纹（现代风格用纯白 + hover 高亮）
+// 斑马纹：accent 2% 混合（比纯灰更有品牌感，低亮度也可辨识）
 .ckqa-el-table .el-table__body-wrapper tr:nth-child(even) > td.el-table__cell {
-  background: var(--ckqa-surface);
+  background: color-mix(in srgb, var(--ckqa-accent) 3%, var(--ckqa-surface));
 }
 
 .ckqa-el-table .el-table__cell {
@@ -369,7 +368,7 @@
 
 // hover 行：左侧 accent 色条 + 更明显的背景
 .ckqa-el-table .el-table__row:hover td.el-table__cell {
-  background: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, var(--ckqa-surface));
 }
 
 .ckqa-el-table .el-table__row:hover td.el-table__cell:first-child {
@@ -388,14 +387,14 @@
   overflow: visible;
 }
 
-// 操作列：微妙分隔 + 带 accent 色调的浅背景
+// 操作列：accent 5% 混合背景——比数据列明显但不突兀
 .ckqa-el-table .ckqa-el-table__action-column {
-  border-left: 1px solid color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-border));
+  border-left: 1px solid color-mix(in srgb, var(--ckqa-accent) 15%, var(--ckqa-border));
 }
 
 .ckqa-el-table td.ckqa-el-table__action-column,
 .ckqa-el-table th.ckqa-el-table__action-column {
-  background: color-mix(in srgb, var(--ckqa-accent) 3%, var(--ckqa-surface)) !important;
+  background: color-mix(in srgb, var(--ckqa-accent) 5%, var(--ckqa-surface)) !important;
 }
 
 .ckqa-el-table .el-progress-bar__outer {
