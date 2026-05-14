@@ -105,7 +105,7 @@ digraph user_journey {
 - 右栏工作区从上到下：
   1. **样本元信息条**：标题 + breadcrumb（PDF 名 / 章节 / 页码）+ 类型 + 优先级徽章 + "跳过 / 完成 ✓"按钮。
   2. **♻ 历史标注横幅**（绿色，仅命中时显示）："发现 N 条已有标注来自 <其他构建>，已为你预填"，附"不使用"按钮。
-  3. **✨ AI 预填横幅**（紫色，仅有候选时显示）："AI 助手已生成 N 个候选实体，请审阅采纳或拒绝"，附"全部采纳 / 忽略"快捷按钮。
+  3. **✨ AI 预填横幅**（紫色，仅有候选时显示）："AI 助手已生成 N 个候选实体，请逐条审阅"。**只放一个"按置信度排序"按钮**，不提供"全部采纳"。这是与风险 1 缓解措施一致的硬性约束。
   4. **原文卡**：白底卡片展示样本 text，命中信号高亮（黄色背景，可点击添加为实体），已确认实体高亮（紫色背景）。鼠标在原文中拖选 → 浮动按钮"添加为实体"。
   5. **命中信号 chip 行**：定义信号 / 公式信号 / 步骤列表等。
   6. **实体卡列表**：每个实体一张卡片。
@@ -129,7 +129,7 @@ digraph user_journey {
 **布局**：
 
 - **顶部摘要条**：横向 4 列指标，"已生成 N 个候选 / 本次将评分 X 个 · X×20=Y 次大模型调用 / 预估 token 消耗 / 预估时长"，所有数字随勾选实时更新。
-- **候选网格**：2 列 4 行，每个候选一张卡片。卡片顶部右上角圆形复选框，左侧主区：
+- **候选网格**：2 列流式布局（CSS Grid `repeat(auto-fill, minmax(420px, 1fr))`），候选数从 4 扩展到 6+ 时自动换行，不会出现空白格。每个候选一张卡片。卡片顶部右上角圆形复选框，左侧主区：
   - 候选中文译名（大字体粗体）+ 后端候选标识符（mono 字体灰色副标题）。
   - 类型描述（"基线 · 课程域微调"等）。
   - 特性标签 chips（schema 注入 / 方向卡 / few-shot 蒸馏 / 严格 tuple 等）。
@@ -137,7 +137,7 @@ digraph user_journey {
   - token 估算条（绿→黄→红渐变），右侧 mono 字体显示 `~Xk`。
   - 底部"查看完整 prompt →"按钮。
 - **推荐徽章**：根据后端 manifest 中的元数据（如 `is_recommended` 标志，需要后端在 manifest 中标注），最优候选卡片左上角带紫色"✦ 推荐"角标。
-- **快捷动作行**：候选网格上方的"全选 / 反选 / 仅选基线"按钮。
+- **快捷动作行**：候选网格上方的"全选 / 反选 / 仅选基线"按钮。"仅选基线"指仅勾选 `category === "baseline"` 的候选（当前对应 `default`），用于快速做"基线对照单跑"。
 - **底部固定操作条**：左侧实时摘要文案"已选 X 个候选 · 预估 ~Yk tokens · 约 Z 分钟"，右侧"返回 02 / 开始抽取评分 →"按钮。
 
 **候选译名映射**（前端 hardcode，与后端 ID 解耦）：
@@ -165,12 +165,14 @@ digraph user_journey {
 
 **时态 ② 评分完成（排行榜 + 详情抽屉）**
 
-- **左侧排行榜表格**：列依次是 #（金银铜奖牌）/ 候选（中文译名 + ID 副标题）/ 综合分（数值 + 进度条）/ 解析成功率 / 召回率 / 准确率 / token 消耗。
+- **左侧排行榜表格**：列依次是 #（金银铜奖牌）/ 候选（中文译名 + ID 副标题）/ 综合分（数值 + 进度条）/ 解析成功率 / 召回率 / 准确率 / token 消耗 / **操作列**。
   - 第 1 名金牌（金黄色径向渐变）、第 2 名银牌（灰色渐变）、第 3 名铜牌（铜色渐变），其余灰圆。
   - 表头右上角下拉切换排序维度（综合分 / 召回率 / 准确率 / 解析成功率，默认综合分倒序）。
-  - 行可点击，整行 hover 时浅紫底，点击后右侧抽屉滑出展示详情。
-- **详情抽屉**（右侧 380px 宽，从右滑入，半透明遮罩）：
-  - 顶部排名徽章 + 候选译名 + 标识符副标题 + "已选定" pill（如果是当前选中）。
+  - **行点击 = 查看详情**：点击候选行（操作列除外）右侧抽屉滑出展示详情，行左侧显示紫色高亮条。详情抽屉**只读**，不承担"选定"动作。
+  - **操作列 = 选定/已选定**：每行操作列放一个按钮。未选定时显示"选定"，点击后立即把该候选记为本次构建选定候选；已选定的行操作列变为绿底"✓ 已选定"且不可再次点击其他行（先取消当前选定再选别行）。整张表同一时刻只能有一个"已选定"。
+  - 行可被高亮和被选定是两个独立状态：可以查看候选 A 的详情（高亮）的同时，候选 B 处于"已选定"状态（操作列绿色）。
+- **详情抽屉**（右侧 380px 宽，从右滑入，半透明遮罩，点空白或 Esc 关闭）：
+  - 顶部排名徽章 + 候选译名 + 标识符副标题 + 当前是否"已选定"的状态 pill（仅展示，不可在抽屉内切换选定状态）。
   - 大号综合分数字（32px、紫色）+ small "综合分"。
   - 6 块指标方块（2 列 3 行）：解析成功率 / 召回率 / 准确率 / F1 / 实体均数 / 关系均数。颜色规则：解析成功率 / 召回率 / 准确率 / F1 这四项达到下方质量门控阈值显绿、低于阈值但 > 阈值×0.7 显黄、其余显红；实体均数和关系均数始终用中性色（黑），不参与门控配色。
   - **质量门控** 区块：每条规则一行，✓/✗ 图标 + 中文规则文案 + 实测值。规则与阈值（与后端 `score_extraction_results.py` 中 `gate_passed` 逻辑保持一致）：
@@ -180,7 +182,7 @@ digraph user_journey {
     - 关系类型方向正确（即所有关系都符合 `source_types` / `target_types` 约束）
   - **成本** 区块：tokens / 耗时两块。
   - 底部"查看 20 条样本抽取详情 →"链接（打开二级抽屉显示具体抽取结果对比 audit gold）。
-- **底部固定操作条**：左侧"当前选定：<候选译名>（rank N，综合分 X.XX）"，右侧"返回 03 / 选定此候选，进入 05 →"。
+- **底部固定操作条**：左侧"已选定：<候选译名>（rank N，综合分 X.XX）"或"尚未选定候选"，右侧"返回 03"和"进入 05 →"按钮。**"进入 05 →"在尚未选定候选时禁用**，hover 提示"请在排行榜操作列点击'选定'"。
 
 ### 05 预览保存
 
@@ -189,7 +191,7 @@ digraph user_journey {
 **左栏 prompt 预览**：
 
 - 顶部 head 区：金牌 chip + 综合分 chip + 候选中文译名（h2）。下方副标题展示 `来源候选 + 标识符 + 大小 + 单次 token 估算`。右上角"📋 复制"按钮。
-- Tab 行（5 个）：实体抽取提示词（标"主"，紫色徽章）/ 描述总结 / 社区报告·图 / 社区报告·文 / 声明抽取，后 4 个标"未改"灰显。点击切换内容。
+- Tab 行（5 个）：实体抽取提示词（标"主"，紫色徽章）/ 描述总结 / 社区报告·图 / 社区报告·文 / 声明抽取，后 4 个标"沿用模板"灰显并禁用点击；点击主 tab 时显示对应内容，hover 灰显 tab 时弹 tooltip"本流程仅调整实体抽取提示词，其余 4 个使用所选种子的默认内容"。
 - 主体使用本设计 § "提示词文本显示组件" 中定义的组合方案：默认富文本视图（B），按钮可切原文视图（A）。
 
 **右栏表单**：
@@ -223,6 +225,24 @@ digraph user_journey {
 
 **容错**：如果 parser 解析失败（段落数 < 2 或某段过长），回退为 `raw` 模式并在头部条展示提示"无法解析为文档视图，已切到原文"。
 
+## 路由设计
+
+整个手动调优向导是单一路由，通过 query 切换步骤；这样浏览器后退 / 刷新 / 分享 URL 都能复现状态。
+
+- 路由：`/app/knowledge-bases/:kbId/build/prompt-builder`（沿用现有路由 `name: "knowledge-base-prompt-builder"`，不新增）。
+- Query 参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `buildRunId` | string（数字 ID） | ✓ | 当前所属 build run，缺失时进入引导回构建向导 |
+| `step` | `seed` / `prepare` / `candidates` / `scoring` / `save` | — | 当前步骤，缺失默认按数据状态推断（详见进度门控） |
+| `sampleId` | string | — | 02 步当前打开的样本 ID，方便回到具体样本继续标注 |
+| `selectedCandidates` | comma-separated string | — | 03 步勾选的候选 ID 列表（如 `default,auto_tuned`），缺失默认全选 |
+| `evalRunId` | string | — | 04 步的评分 run，跑完后保留以便刷新页面恢复 |
+| `selectedCandidate` | string | — | 用户在 04 步选定要进 05 的候选 ID |
+
+URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 query；组件内部不再保留独立的步骤 state。`selectedCandidates` 一旦写入就持久化，避免用户刷新后又要重选。
+
 ## 数据模型与后端契约
 
 ### 复用的现有契约
@@ -247,6 +267,37 @@ digraph user_journey {
 | `POST` | `/api/v1/knowledge-base-build-runs/{id}/finalize` | 保存选定候选到 customPromptDraft，可选入库 prompt_drafts |
 | `GET` | `/api/v1/knowledge-bases/{kbId}/prompt-drafts` | 历史草稿列表（用于 01 步种子选择） |
 | `GET` | `/api/v1/relation-schemas` | 返回 schema 定义供 02 步关系下拉过滤（可缓存） |
+
+### 关键 API 响应字段约定
+
+为避免前后端在实施时对字段语义产生分歧，固化以下字段约定：
+
+**`GET /audit-samples` 响应中每条样本字段**：
+
+- `id`、`source_sample_id`、`text`、`heading_path`、`page_start`、`page_end`、`audit_priority`、`audit_reason`、`hit_signals`（命中信号 chip 列表，如 `["definition_signal", "formula_signal"]`，前端按 § 02 命中信号 chip 行渲染）。
+- `gold_entities`、`gold_relations`、`annotation_notes`、`reviewer_decision`、`reviewer_confidence`：用户标注内容。
+- `gold_stable_key`：稳定来源键，用于历史复用匹配。
+- `reused_from`（可空）：当本条样本是从历史标注复用而来时，包含 `{buildRunId, buildRunName, reusedAt}`。前端据此渲染 02 步绿色 ♻ 横幅文案"发现 N 条已有标注来自 <buildRunName>"。
+
+**`GET /candidates` 响应中每个候选字段**：
+
+- `candidate_id`：稳定标识符（如 `schema_fewshot_distilled_v2_strict_tuple`）。
+- `display_name_zh`：中文译名（如 `图谱感知 + 蒸馏样例`）。后端从 manifest 读出，前端展示时优先用，缺失时退化到前端 hardcode 表（见 § 风险 3）。
+- `category`：候选分类，枚举 `baseline` / `auto_tuned` / `schema_aware` / `schema_fewshot`。03 步"仅选基线"按钮选 `category === "baseline"` 的候选（即 `default`）。
+- `is_recommended`：布尔值，后端依据 manifest 的 `notes` 标注或上一次评分历史决定。03 步据此渲染紫色"✦ 推荐"角标。
+- `traits`：特性标签数组（如 `["schema_injected", "directional_card", "few_shot_distilled", "strict_tuple"]`），前端 hardcode 中文映射后渲染为 chips。
+- `estimated_token_per_call`：单次调用估算 token 数，03 步据此计算 token 总量与渲染绿/黄/红渐变条。
+- `prompt_size_bytes`、`schema_used`、`fewshot_example_count`、`fewshot_strategy`、`base_prompt_source`、`generation_time` 等 manifest 已有字段透传。
+
+**`GET /extraction-eval/status` 评分进度响应**：
+
+- `overall`：`{totalCalls, finishedCalls, elapsedSeconds, estimatedRemainingSeconds, tokensUsed, estimatedTotalTokens}`。
+- `candidates[]`：每个候选 `{candidate_id, extract: {finished, total, currentSampleId}, score: {finished, total}, status: "queued" | "extracting" | "scoring" | "done" | "failed"}`。
+
+**`GET /extraction-eval/report` 评分完成响应**：
+
+- `candidates[]`：每个候选 `{candidate_id, rank, composite_score, parse_success_rate, recall, precision, f1, entity_count_avg, relation_count_avg, tokens_used, elapsed_seconds, gates: [{name, threshold, value, passed}], failed_samples: [{sample_id, reason}]}`。
+- `gates[].name`：枚举 `parse_success` / `audit_recall` / `audit_precision` / `relation_direction`。前端按此 key hardcode 中文规则文案（如 § 04 详情抽屉所列）。
 
 ### 新增数据表
 
@@ -283,14 +334,14 @@ digraph user_journey {
 | 置信度 / 字节计数等数值动画 | `@vueuse/core` 的 `useTransition` 或 `useNow` | 已有 |
 | 图标 | `lucide-vue-next` + `@iconify/vue` + `@element-plus/icons-vue` | 已有 3 套，足够覆盖 |
 
-### 新增库（4 个）
+### 新增库（2 个）
 
 | 库 | 大小 | License | 用途 | 选用理由 |
 | --- | --- | --- | --- | --- |
 | `markdown-it` | ~140 KB（gzipped ~30 KB） | MIT | 02 步样本原文 / 05 步 `<PromptDisplay>` rich 模式的章节解析，把 `-Schema Constraints-` 这种段落标记转成结构化段落 | 老牌、活跃维护、API 简单；用于把 prompt txt 解析成段落树，比自己写 parser 健壮 |
 | `prismjs` | ~25 KB（按需引入） | MIT | `<PromptDisplay>` raw 模式的语法高亮（暗色 IDE 风） | 业界事实标准，体积小，能把英文 prompt + 中文混排都高亮好；不引重的 monaco / shiki |
-| `prism-themes`（可选，PrismJS 主题） | ~5 KB | MIT | 定制 raw 模式暗色主题 | 一行 import 解决配色 |
-| `@vueuse/integrations` 的 `useScroll` | 已是 vueuse 子模块 | MIT | `<PromptDisplay>` split 模式的同步滚动 | 跟 `@vueuse/core` 同源，无新依赖负担 |
+
+`<PromptDisplay>` 的 split 模式同步滚动直接用 **已有依赖** `@vueuse/core` 的 `useScroll`，不引新库。Prism 主题用 PrismJS 自带 CSS（`prism.css` / `prism-tomorrow.css` 任选其一），不引 `prism-themes` 包。
 
 ### 标注 IDE（02 步）的库选型决策
 
@@ -317,7 +368,7 @@ digraph user_journey {
 ## 错误处理
 
 - 02.1 / 02.2 脚本失败 → 折叠头部转红色，附"查看错误详情 / 重新运行"按钮，进度门控锁定。
-- 02.3 标注保存失败 → toast 错误提示 + 自动重试 3 次；失败后样本卡顶部显示"保存失败，已暂存到本地"，离开页面前确认对话框。
+- 02.3 标注保存失败 → toast 错误提示 + 自动重试 3 次；失败后样本卡顶部显示"保存失败，已暂存到本地"。本地暂存使用 **IndexedDB**（不用 localStorage，避免 5MB 配额限制和大 JSON 阻塞主线程），库名 `ckqa-prompt-annotation-drafts`，每条样本一条记录，主键 `${buildRunId}:${sampleId}`，字段 `{gold_entities, gold_relations, annotation_notes, savedAt}`。下次进入页面时，前端先拉服务端样本，再用 IndexedDB 中匹配的本地暂存覆盖未上传字段，并在样本卡顶部展示"本地有未同步的修改"提示和"重试上传"按钮。
 - 03 候选生成失败 → 整页错误状态，附"重试 / 返回 02"。
 - 04 评分中途失败 → 候选矩阵中失败行变红，弹窗"评分失败，已完成的候选可继续选定，或重新运行"。
 - 05 finalize 失败 → toast + 保留页面状态，"重试"按钮。
