@@ -236,11 +236,33 @@ public class KnowledgeBaseBuildRunService {
 
     @Transactional
     public BuildRunDetailResponse markIndexSuccessDone(Long buildRunId, String qaStatus) {
+        return markIndexSuccessDone(buildRunId, qaStatus, null, null, null);
+    }
+
+    @Transactional
+    public BuildRunDetailResponse markIndexSuccessDone(
+            Long buildRunId,
+            String qaStatus,
+            String promptStrategy,
+            String promptContentSha256,
+            String promptFallbackReason
+    ) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
         buildRun.setStatus("success");
         buildRun.setCurrentStage("done");
         buildRun.setQaStatus(normalizeQaStatus(qaStatus));
-        buildRun.setBuildMetadata(stageMetadata("done", Map.of("indexStatus", "success")));
+        Map<String, Object> stageExtras = new LinkedHashMap<>();
+        stageExtras.put("indexStatus", "success");
+        if (StringUtils.hasText(promptStrategy)) {
+            stageExtras.put("promptStrategyApplied", promptStrategy);
+        }
+        if (StringUtils.hasText(promptContentSha256)) {
+            stageExtras.put("promptContentSha256", promptContentSha256);
+        }
+        if (StringUtils.hasText(promptFallbackReason)) {
+            stageExtras.put("promptFallbackReason", promptFallbackReason);
+        }
+        buildRun.setBuildMetadata(stageMetadata("done", stageExtras));
         buildRun.setFinishedAt(LocalDateTime.now());
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);

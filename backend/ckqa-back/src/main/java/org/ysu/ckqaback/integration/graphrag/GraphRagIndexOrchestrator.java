@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -102,6 +103,20 @@ public class GraphRagIndexOrchestrator {
     }
 
     public ProcessExecutionResult runIndex(IndexRuns run, Path workspaceRoot) throws IOException, InterruptedException {
+        return runIndex(run, workspaceRoot, null);
+    }
+
+    /**
+     * 在 build run 工作区内执行 {@code graphrag index}。
+     *
+     * @param entityExtractionPromptFile 实体抽取提示词文件绝对路径；为空时使用 graphrag {@code .env}
+     *                                   中默认配置（向后兼容）
+     */
+    public ProcessExecutionResult runIndex(
+            IndexRuns run,
+            Path workspaceRoot,
+            Path entityExtractionPromptFile
+    ) throws IOException, InterruptedException {
         Path indexRoot = workspaceRoot.resolve("index");
         Path logsDir = indexRoot.resolve("logs");
         java.nio.file.Files.createDirectories(logsDir);
@@ -113,16 +128,26 @@ public class GraphRagIndexOrchestrator {
                 "--root",
                 "."
         ));
+
+        Map<String, String> environment = new LinkedHashMap<>();
+        environment.put("GRAPHRAG_INPUT_DIR", indexRoot.resolve("input").toString());
+        environment.put("GRAPHRAG_OUTPUT_DIR", indexRoot.resolve("output").toString());
+        environment.put("GRAPHRAG_STORAGE_DIR", indexRoot.resolve("output").toString());
+        environment.put("GRAPHRAG_REPORTING_DIR", indexRoot.resolve("reports").toString());
+        environment.put("GRAPHRAG_CACHE_DIR", indexRoot.resolve("cache").toString());
+        if (entityExtractionPromptFile != null) {
+            // settings.yaml 中 extract_graph.prompt 解析的是相对 GRAPHRAG_ROOT 的路径，
+            // 这里直接把工作区下的绝对路径塞进去，CLI 会按绝对路径打开文件。
+            environment.put(
+                    "GRAPHRAG_ENTITY_EXTRACTION_PROMPT_FILE",
+                    entityExtractionPromptFile.toAbsolutePath().toString()
+            );
+        }
+
         return processRunner.run(
                 command,
                 Path.of(properties.getGraphrag().getRoot()),
-                Map.of(
-                        "GRAPHRAG_INPUT_DIR", indexRoot.resolve("input").toString(),
-                        "GRAPHRAG_OUTPUT_DIR", indexRoot.resolve("output").toString(),
-                        "GRAPHRAG_STORAGE_DIR", indexRoot.resolve("output").toString(),
-                        "GRAPHRAG_REPORTING_DIR", indexRoot.resolve("reports").toString(),
-                        "GRAPHRAG_CACHE_DIR", indexRoot.resolve("cache").toString()
-                ),
+                environment,
                 Duration.ofSeconds(properties.getTimeout().getIndexSeconds()),
                 ProcessContext.builder()
                         .operation("index")

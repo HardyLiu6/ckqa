@@ -15,4 +15,7 @@ public class IndexRunMetadata {
     private final Integer exitCode;
     private final String errorSummary;
     private final Boolean staleTimeoutRecovered;
+    private final String promptStrategy;
+    private final String promptContentSha256;
+    private final String promptFallbackReason;
 }

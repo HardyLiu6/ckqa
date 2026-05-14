@@ -49,6 +49,7 @@ public class IndexWorkflowService {
     private final BuildRunWorkspaceService workspaceService;
     private final IndexArtifactRegistryService artifactRegistryService;
     private final ActiveIndexRunService activeIndexRunService;
+    private final BuildRunPromptMaterializer promptMaterializer;
 
     @Autowired
     public IndexWorkflowService(
@@ -59,6 +60,7 @@ public class IndexWorkflowService {
             BuildRunWorkspaceService workspaceService,
             IndexArtifactRegistryService artifactRegistryService,
             ActiveIndexRunService activeIndexRunService,
+            BuildRunPromptMaterializer promptMaterializer,
             CkqaIntegrationProperties properties
     ) {
         this(
@@ -70,7 +72,8 @@ public class IndexWorkflowService {
                 buildRunService,
                 workspaceService,
                 artifactRegistryService,
-                activeIndexRunService
+                activeIndexRunService,
+                promptMaterializer
         );
     }
 
@@ -81,7 +84,18 @@ public class IndexWorkflowService {
             ObjectMapper objectMapper,
             Duration staleThreshold
     ) {
-        this(indexRunsService, knowledgeBasesService, graphRagIndexOrchestrator, objectMapper, staleThreshold, null, null, null, null);
+        this(
+                indexRunsService,
+                knowledgeBasesService,
+                graphRagIndexOrchestrator,
+                objectMapper,
+                staleThreshold,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     IndexWorkflowService(
@@ -95,6 +109,32 @@ public class IndexWorkflowService {
             IndexArtifactRegistryService artifactRegistryService,
             ActiveIndexRunService activeIndexRunService
     ) {
+        this(
+                indexRunsService,
+                knowledgeBasesService,
+                graphRagIndexOrchestrator,
+                objectMapper,
+                staleThreshold,
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService,
+                null
+        );
+    }
+
+    IndexWorkflowService(
+            IndexRunsService indexRunsService,
+            KnowledgeBasesService knowledgeBasesService,
+            GraphRagIndexOrchestrator graphRagIndexOrchestrator,
+            ObjectMapper objectMapper,
+            Duration staleThreshold,
+            KnowledgeBaseBuildRunService buildRunService,
+            BuildRunWorkspaceService workspaceService,
+            IndexArtifactRegistryService artifactRegistryService,
+            ActiveIndexRunService activeIndexRunService,
+            BuildRunPromptMaterializer promptMaterializer
+    ) {
         this.indexRunsService = indexRunsService;
         this.knowledgeBasesService = knowledgeBasesService;
         this.graphRagIndexOrchestrator = graphRagIndexOrchestrator;
@@ -104,6 +144,7 @@ public class IndexWorkflowService {
         this.workspaceService = workspaceService;
         this.artifactRegistryService = artifactRegistryService;
         this.activeIndexRunService = activeIndexRunService;
+        this.promptMaterializer = promptMaterializer;
     }
 
     public IndexRunResponse createIndexRun(Long knowledgeBaseId) throws IOException, InterruptedException {
@@ -199,7 +240,22 @@ public class IndexWorkflowService {
 
         try {
             prepareIndexInput(run, knowledgeBase, buildRun, workspaceRoot);
-            ProcessExecutionResult indexResult = graphRagIndexOrchestrator.runIndex(run, workspaceRoot);
+            Path entityExtractionPromptFile = null;
+            String materializedStrategy = null;
+            String materializedSha256 = null;
+            String fallbackReason = null;
+            if (promptMaterializer != null) {
+                MaterializedPromptResult materialized = promptMaterializer.materialize(buildRun);
+                entityExtractionPromptFile = materialized.getEntityExtractionPromptFile();
+                materializedStrategy = materialized.getStrategy();
+                materializedSha256 = materialized.getContentSha256();
+                fallbackReason = materialized.getFallbackReason();
+            }
+            ProcessExecutionResult indexResult = graphRagIndexOrchestrator.runIndex(
+                    run,
+                    workspaceRoot,
+                    entityExtractionPromptFile
+            );
             if (indexResult.isTimedOut() || indexResult.getExitCode() != 0) {
                 indexRunsService.markFailed(
                         run.getId(),
@@ -214,7 +270,16 @@ public class IndexWorkflowService {
                 throw new BusinessException(ApiResultCode.INDEX_RUN_EXECUTION_FAILED, HttpStatus.INTERNAL_SERVER_ERROR, "索引构建失败");
             }
 
-            String metadata = toMetadataJson(INDEX_COMMAND, indexResult.getElapsedSeconds(), indexResult.getExitCode(), null, false);
+            String metadata = toMetadataJson(
+                    INDEX_COMMAND,
+                    indexResult.getElapsedSeconds(),
+                    indexResult.getExitCode(),
+                    null,
+                    false,
+                    materializedStrategy,
+                    materializedSha256,
+                    fallbackReason
+            );
             indexRunsService.markSuccess(run.getId(), metadata);
             IndexRuns refreshedRun = indexRunsService.getRequiredById(run.getId());
             artifactRegistryService.scanAndRegister(refreshedRun, workspaceRoot, buildRun.getWorkspaceUri());
@@ -225,10 +290,25 @@ public class IndexWorkflowService {
             } else if (activateOnSuccess) {
                 indexRunsService.markSuccess(
                         run.getId(),
-                        toMetadataJson(INDEX_COMMAND, indexResult.getElapsedSeconds(), indexResult.getExitCode(), "skipped_newer_build_exists", false)
+                        toMetadataJson(
+                                INDEX_COMMAND,
+                                indexResult.getElapsedSeconds(),
+                                indexResult.getExitCode(),
+                                "skipped_newer_build_exists",
+                                false,
+                                materializedStrategy,
+                                materializedSha256,
+                                fallbackReason
+                        )
                 );
             }
-            buildRunService.markIndexSuccessDone(buildRunId, "skipped");
+            buildRunService.markIndexSuccessDone(
+                    buildRunId,
+                    "skipped",
+                    materializedStrategy,
+                    materializedSha256,
+                    fallbackReason
+            );
             return IndexRunResponse.fromEntity(indexRunsService.getRequiredById(run.getId()));
         } catch (IOException exception) {
             indexRunsService.markFailed(
@@ -264,6 +344,19 @@ public class IndexWorkflowService {
             String errorSummary,
             boolean staleTimeoutRecovered
     ) {
+        return toMetadataJson(command, elapsedSeconds, exitCode, errorSummary, staleTimeoutRecovered, null, null, null);
+    }
+
+    private String toMetadataJson(
+            String command,
+            Long elapsedSeconds,
+            Integer exitCode,
+            String errorSummary,
+            boolean staleTimeoutRecovered,
+            String promptStrategy,
+            String promptContentSha256,
+            String promptFallbackReason
+    ) {
         try {
             return objectMapper.writeValueAsString(IndexRunMetadata.builder()
                     .command(command)
@@ -271,6 +364,9 @@ public class IndexWorkflowService {
                     .exitCode(exitCode)
                     .errorSummary(errorSummary)
                     .staleTimeoutRecovered(staleTimeoutRecovered)
+                    .promptStrategy(promptStrategy)
+                    .promptContentSha256(promptContentSha256)
+                    .promptFallbackReason(promptFallbackReason)
                     .build());
         } catch (Exception exception) {
             return "{\"command\":\"metadata-serialization-failed\",\"errorSummary\":\"" + escapeJson(errorSummary) + "\"}";
