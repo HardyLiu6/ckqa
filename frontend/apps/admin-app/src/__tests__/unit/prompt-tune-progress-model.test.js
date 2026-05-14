@@ -28,6 +28,30 @@ test('resolveProgressPercentage running 不同 stage 给不同档位', () => {
   assert.equal(resolveProgressPercentage('running', 'done'), 95)
 })
 
+test('resolveProgressPercentage prompt-tune 细分阶段使用精确百分比', () => {
+  // 与后端 PromptTunePhase 一一对应，必须严格递增。
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_chunking'), 5)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_domain'), 10)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_language'), 15)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_persona'), 20)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_community_ranking'), 30)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_entity_types'), 40)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_examples'), 60)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_extract_prompt'), 75)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_summary_prompt'), 80)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_community_role'), 85)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_community_summary'), 95)
+  assert.equal(resolveProgressPercentage('running', 'prompt_tune_writing'), 100)
+})
+
+test('resolveStageLabel prompt-tune 细分阶段返回中文标签', () => {
+  assert.equal(resolveStageLabel('prompt_tune_chunking'), '拆分文档')
+  assert.equal(resolveStageLabel('prompt_tune_persona'), '生成专家角色画像')
+  assert.equal(resolveStageLabel('prompt_tune_examples'), '生成实体关系示例')
+  assert.equal(resolveStageLabel('prompt_tune_extract_prompt'), '撰写实体抽取提示词')
+  assert.equal(resolveStageLabel('prompt_tune_writing'), '保存调优产物')
+})
+
 test('resolveStageLabel 已知阶段返回中文标签', () => {
   assert.equal(resolveStageLabel('queued'), '已入队，等待执行')
   assert.equal(resolveStageLabel('fetch_input'), '正在拉取课程资料')

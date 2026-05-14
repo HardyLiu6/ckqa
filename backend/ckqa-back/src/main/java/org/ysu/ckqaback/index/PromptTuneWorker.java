@@ -124,18 +124,49 @@ public class PromptTuneWorker {
 
             // ---- 2. run prompt-tune ----
             updateProgress(run.getId(), "prompt_tune", logBuffer);
+            // per-run 报告目录：让 graphrag 的 logging 落到这里而不是仓库共享 reports/。
+            Path reportingDir = candidateDir.resolve("reports");
+            Files.createDirectories(reportingDir);
+            Path graphragLogFile = reportingDir.resolve("prompt-tuning.log");
+
             PromptTuneOrchestrator.PromptTuneCommand command = PromptTuneOrchestrator.PromptTuneCommand.builder()
                     .inputDir(inputDir)
                     .candidateDir(autoTunedDir)
                     .reportFile(reportFile)
+                    .reportingDir(reportingDir)
                     .runId("prompt_tune_run_" + run.getId())
                     .domain(DEFAULT_DOMAIN)
                     .language(DEFAULT_LANGUAGE)
                     .noEntityTypes(true)
                     .build();
 
-            PromptTuneOrchestrator.PromptTuneExecutionResult execResult =
-                    orchestrator.runPromptTune(command, line -> appendLog(run.getId(), logBuffer, line));
+            // 启动日志 tailer：尾随 per-run 隔离的 prompt-tuning.log。
+            // 因为是 per-run 独立文件，offset 从 0 开始；tailer 会在子进程创建文件后开始读。
+            PromptTuneLogTailer tailer = new PromptTuneLogTailer(
+                    graphragLogFile,
+                    0L,
+                    phase -> updateProgress(run.getId(), phase.getStageKey(), logBuffer),
+                    line -> appendLog(run.getId(), logBuffer, line),
+                    300L
+            );
+            Thread tailerThread = new Thread(tailer, "prompt-tune-tailer-" + run.getId());
+            tailerThread.setDaemon(true);
+            tailerThread.start();
+
+            PromptTuneOrchestrator.PromptTuneExecutionResult execResult;
+            try {
+                execResult = orchestrator.runPromptTune(
+                        command,
+                        line -> appendLog(run.getId(), logBuffer, line)
+                );
+            } finally {
+                tailer.stop();
+                try {
+                    tailerThread.join(2000);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
 
             if (execResult.isTimedOut() || execResult.getExitCode() != 0) {
                 String msg = execResult.isTimedOut()

@@ -78,7 +78,6 @@ const primaryAction = computed(() => resolvePrimaryAction(status.value))
       <el-progress
         :percentage="progressPercentage"
         :status="status === 'pending' ? null : 'success'"
-        :indeterminate="status === 'running'"
       />
       <details v-if="latestLogTail.length" class="prompt-tune-progress__logs">
         <summary>查看最近日志</summary>

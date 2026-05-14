@@ -132,8 +132,14 @@ public class PromptTuneOrchestrator {
         }
 
         Map<String, String> env = new LinkedHashMap<>();
-        // 关键：覆盖 graphrag 自身解析的输入目录，让官方 prompt-tune 看到 build run 工作区里的多份资料。
+        // 关键：覆盖 graphrag 自身解析的输入目录，让官方 prompt-tune 看到我们的临时输入目录。
         env.put("GRAPHRAG_INPUT_DIR", command.inputDir.toAbsolutePath().toString());
+        if (command.reportingDir != null) {
+            // 把 graphrag 内部 logging 重定向到 per-run reports 目录，避免跨 run 共享一份
+            // graphrag_pipeline/reports/prompt-tuning.log 造成日志污染。
+            Files.createDirectories(command.reportingDir);
+            env.put("GRAPHRAG_REPORTING_DIR", command.reportingDir.toAbsolutePath().toString());
+        }
 
         ProcessBuilder builder = new ProcessBuilder(argv);
         builder.directory(Path.of(properties.getGraphrag().getRoot()).toFile());
@@ -245,6 +251,11 @@ public class PromptTuneOrchestrator {
         private final Path inputDir;
         private final Path candidateDir;
         private final Path reportFile;
+        /**
+         * graphrag 内部 logging 写入目录；为空时沿用 graphrag {@code .env} 默认值。
+         * 注入后日志会落到 {@code <reportingDir>/prompt-tuning.log}，方便 per-run 隔离。
+         */
+        private final Path reportingDir;
         private final String runId;
         private final String domain;
         private final String language;
