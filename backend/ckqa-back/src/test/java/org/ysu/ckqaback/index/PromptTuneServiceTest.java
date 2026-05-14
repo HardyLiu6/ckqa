@@ -193,6 +193,52 @@ class PromptTuneServiceTest {
         assertThat(response.getCacheKey()).isEqualTo("idle_key");
     }
 
+    @Test
+    void trigger_freshRun_dispatchesOnlyAfterTransactionCommit() {
+        // 回归测试：worker.dispatch 必须等事务提交后再执行，否则在 worker 线程里查不到刚插入的记录。
+        KnowledgeBaseBuildRuns buildRun = newBuildRun(99L, "[7]");
+        given(buildRunsStore.getRequiredById(99L)).willReturn(buildRun);
+        var ctx = new PromptTuneCacheKeyResolver.PromptTuneCacheContext(
+                List.of(7L),
+                java.util.Map.of(7L, "md5_a"),
+                "txn_key"
+        );
+        given(cacheKeyResolver.resolve("[7]", "os")).willReturn(ctx);
+        given(promptTuneRunsService.findLatestSuccessByCacheKey("txn_key")).willReturn(Optional.empty());
+        given(promptTuneRunsService.findActiveByCacheKey("txn_key")).willReturn(Optional.empty());
+        given(promptTuneRunsService.save(any(PromptTuneRuns.class))).willAnswer(invocation -> {
+            PromptTuneRuns saved = invocation.getArgument(0);
+            saved.setId(321L);
+            return true;
+        });
+
+        java.util.List<org.springframework.transaction.support.TransactionSynchronization> registered = new java.util.ArrayList<>();
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            // 注册一个 mock 同步器拦截器：触发 service 时，service 自己注册的 synchronization 会写到当前线程的 List 中。
+            // 我们直接读 TransactionSynchronizationManager.getSynchronizations()。
+            service.trigger(99L, false);
+
+            // 关键断言：trigger 返回时，worker.dispatch 不应被立即调用
+            then(worker).should(never()).dispatch(anyLong(), anyList());
+
+            registered.addAll(org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations());
+            org.assertj.core.api.Assertions.assertThat(registered)
+                    .as("trigger 必须注册 afterCommit 回调，把 dispatch 推迟到事务提交后")
+                    .isNotEmpty();
+
+            // 模拟事务提交：执行所有 afterCommit 回调
+            for (var sync : registered) {
+                sync.afterCommit();
+            }
+
+            // 提交后才应触发 dispatch
+            then(worker).should().dispatch(321L, List.of(7L));
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
     private KnowledgeBaseBuildRuns newBuildRun(Long id, String selectedMaterialIds) {
         KnowledgeBaseBuildRuns buildRun = new KnowledgeBaseBuildRuns();
         buildRun.setId(id);

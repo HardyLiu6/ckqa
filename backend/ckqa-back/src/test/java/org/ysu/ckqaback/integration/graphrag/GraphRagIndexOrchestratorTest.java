@@ -95,6 +95,25 @@ class GraphRagIndexOrchestratorTest {
         );
     }
 
+    @Test
+    void shouldTolerateNullIndexRunsForPromptTuneFetch() throws Exception {
+        // 回归测试：prompt-tune 调用链没有 IndexRuns 实体，传 null 不应抛 NPE。
+        ProcessRunner processRunner = mock(ProcessRunner.class);
+        CkqaIntegrationProperties properties = properties();
+        GraphRagIndexOrchestrator orchestrator = new GraphRagIndexOrchestrator(properties, processRunner);
+        KnowledgeBases kb = new KnowledgeBases();
+        kb.setCourseId("os");
+        Path graphInputDir = tempDir.resolve("prompt-tune/input");
+
+        ArgumentCaptor<ProcessContext> contextCaptor = ArgumentCaptor.forClass(ProcessContext.class);
+        given(processRunner.run(any(), any(), any(), any(), contextCaptor.capture())).willReturn(success());
+
+        orchestrator.fetchMaterialInput(null, kb, 7L, graphInputDir, "section_docs.json", "material_7.section_docs.json");
+
+        assertThat(contextCaptor.getValue().getOperation()).isEqualTo("fetch-material-input");
+        assertThat(contextCaptor.getValue().getIndexRunId()).isNull();
+    }
+
     private CkqaIntegrationProperties properties() {
         CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
         properties.getGraphrag().setRoot(tempDir.resolve("graphrag").toString());

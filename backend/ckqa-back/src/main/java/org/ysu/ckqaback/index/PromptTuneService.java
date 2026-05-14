@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.PromptTuneRuns;
@@ -64,8 +66,25 @@ public class PromptTuneService {
         }
 
         PromptTuneRuns run = createPendingRun(buildRun, context);
-        worker.dispatch(run.getId(), context.materialIds());
+        dispatchAfterCommit(run.getId(), context.materialIds());
         return PromptTuneRunResponse.fromEntity(run, false);
+    }
+
+    /**
+     * 把异步派发推迟到事务提交之后，避免 worker 线程在提交前查不到刚 INSERT 的记录。
+     * 在没有事务上下文（比如直接被测试调用）时退化为立即派发。
+     */
+    private void dispatchAfterCommit(Long promptTuneRunId, List<Long> materialIds) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            worker.dispatch(promptTuneRunId, materialIds);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                worker.dispatch(promptTuneRunId, materialIds);
+            }
+        });
     }
 
     /**

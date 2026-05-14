@@ -97,7 +97,9 @@ public class GraphRagIndexOrchestrator {
                 Duration.ofSeconds(properties.getTimeout().getFetchSeconds()),
                 ProcessContext.builder()
                         .operation("fetch-material-input")
-                        .indexRunId(run.getId())
+                        // run 在 prompt-tune 链路下可能为空（不属于具体 IndexRuns）；
+                        // ProcessContext.indexRunId 只是审计字段，允许 null。
+                        .indexRunId(run == null ? null : run.getId())
                         .build()
         );
     }
