@@ -263,6 +263,57 @@ digraph user_journey {
 - composite_score（评分时的综合分）
 - created_at / updated_at
 
+## 第三方依赖选型
+
+**约束**：现有依赖见 `frontend/apps/admin-app/package.json`，已有 Vue 3.5、Element Plus 2.13、@vueuse/core 14、@iconify/vue、lucide-vue-next、Pinia、@formkit/auto-animate、colord。本节只列**需要新增**的库，沿用 Element Plus 能解决的就不引第三方。
+
+### 已有库可直接复用
+
+| 需求场景 | 已有库 | 用法 |
+| --- | --- | --- |
+| 抽屉（03 候选预览、04 详情、05 看原文） | Element Plus `<el-drawer>` | 直接用，宽度 / direction / 遮罩配置都齐 |
+| 折叠面板（02 步任务折叠、05 来源记录） | Element Plus `<el-collapse>` | 直接用 |
+| 表单（05 草稿名、说明、保存范围 radio） | Element Plus `<el-form>` / `<el-input>` / `<el-radio-group>` | 直接用 |
+| 表格（04 排行榜） | Element Plus `<el-table>` 或自定义（已有 mock，可直接用 element-plus） | 排序、固定表头都内置 |
+| 标签 chip / pill | Element Plus `<el-tag>` | 已经在用 |
+| 进度条（02 标注进度、03 token 估算） | Element Plus `<el-progress>` | 已经在用，支持渐变色 |
+| Tab 切换（05 prompt tab） | Element Plus `<el-tabs>` | 直接用 |
+| 复选框 / 单选框 | Element Plus `<el-checkbox>` / `<el-radio>` | 直接用 |
+| 列表渐入动画（实体卡 / AI 候选） | `@formkit/auto-animate` | 已有，加在父容器上即可 |
+| 置信度 / 字节计数等数值动画 | `@vueuse/core` 的 `useTransition` 或 `useNow` | 已有 |
+| 图标 | `lucide-vue-next` + `@iconify/vue` + `@element-plus/icons-vue` | 已有 3 套，足够覆盖 |
+
+### 新增库（4 个）
+
+| 库 | 大小 | License | 用途 | 选用理由 |
+| --- | --- | --- | --- | --- |
+| `markdown-it` | ~140 KB（gzipped ~30 KB） | MIT | 02 步样本原文 / 05 步 `<PromptDisplay>` rich 模式的章节解析，把 `-Schema Constraints-` 这种段落标记转成结构化段落 | 老牌、活跃维护、API 简单；用于把 prompt txt 解析成段落树，比自己写 parser 健壮 |
+| `prismjs` | ~25 KB（按需引入） | MIT | `<PromptDisplay>` raw 模式的语法高亮（暗色 IDE 风） | 业界事实标准，体积小，能把英文 prompt + 中文混排都高亮好；不引重的 monaco / shiki |
+| `prism-themes`（可选，PrismJS 主题） | ~5 KB | MIT | 定制 raw 模式暗色主题 | 一行 import 解决配色 |
+| `@vueuse/integrations` 的 `useScroll` | 已是 vueuse 子模块 | MIT | `<PromptDisplay>` split 模式的同步滚动 | 跟 `@vueuse/core` 同源，无新依赖负担 |
+
+### 标注 IDE（02 步）的库选型决策
+
+调研发现的几个候选：
+
+- **`v-annotator-vue3`**（doccano `v-annotator` 的 Vue 3 移植）：能用但社区活跃度低（Star 17、最近发布 2023），且核心是"可视化关系箭头连线"——和我们要的"表单式实体/关系编辑"形态不匹配。**不采用**。
+- **`vue3-annotator`**：小众包（依赖 SVG 绘制），定位更偏"在文本上画框"而非业务标注。**不采用**。
+- **`vue-annotated-text`**：只做高亮渲染不做编辑，可以参考实现思路。**不采用，但保留思路**。
+
+**最终决策**：02 步标注 IDE **不引第三方标注组件库**，原因有三：
+1. 我们的标注形态是"表单 + 文本高亮"，不是"画框 + 关系连线"，第三方组件覆盖度都不到 50%，强行用反而要改写。
+2. 实体表 / 关系表用 Element Plus 的 form / table 已经能完整表达，加上 `markdown-it` 解析样本原文 + `colord` 处理高亮颜色，自己实现的成本也只是中等。
+3. 智能能力 A（AI 预填）/ C（关系候选）/ D（历史复用）都涉及深度的业务定制，第三方组件无法承载。
+
+### 候选间评分对比的可视化（04 步）
+
+排行榜的 composite 进度条、6 块指标方块、token 渐变条都用纯 CSS 实现，**不引图表库**。原因：
+
+- 单值 + 进度条用 div + 线性渐变即可，引 ECharts / Chart.js 这类几百 KB 的库杀鸡用牛刀。
+- 候选数固定 4-6 个，不存在数据量大需要交互式探索的场景。
+
+如果将来需要展示候选间的多指标雷达图对比（v2 需求），再考虑引入 `vue-echarts`（`echarts` 6.x 已支持按需引入，雷达图模块 ~30KB）。
+
 ## 错误处理
 
 - 02.1 / 02.2 脚本失败 → 折叠头部转红色，附"查看错误详情 / 重新运行"按钮，进度门控锁定。
