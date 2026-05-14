@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import StatusBadge from '../common/StatusBadge.vue'
 import PromptStrategyCard from './PromptStrategyCard.vue'
 import PromptStrategyDetail from './PromptStrategyDetail.vue'
+import { STRATEGIES } from './build-step-prompt-strategies.js'
 
 const props = defineProps({
   blocks: { type: Object, default: () => ({}) },
@@ -25,15 +26,6 @@ const emit = defineEmits([
 
 const promptBlock = computed(() => props.blocks.prompt ?? {})
 const disabled = computed(() => promptBlock.value.status === 'blocked' || promptBlock.value.readonly === true)
-
-const STRATEGIES = [
-  { key: 'default',         title: '默认提示词',          icon: '⚙',
-    description: '使用系统默认的提示词，开箱即用。' },
-  { key: 'graphrag_tuned',  title: '自动调优提示词', icon: '✨',
-    description: '使用基于本课程样本自动调优后的提示词。' },
-  { key: 'custom_pipeline', title: '手动调优提示词',      icon: '🛠',
-    description: '进入独立页面，按 3 步流程亲手调优本次构建使用的提示词。' },
-]
 
 function handleSelect(key) {
   if (disabled.value) return
@@ -60,7 +52,10 @@ function handleSelect(key) {
         :key="s.key"
         :strategy-key="s.key"
         :title="s.title"
-        :description="s.description"
+        :tagline="s.tagline"
+        :pros="s.pros"
+        :cons="s.cons"
+        :best-for="s.bestFor"
         :icon="s.icon"
         :selected="selectedStrategy === s.key"
         :disabled="disabled"
