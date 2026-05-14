@@ -1998,10 +1998,13 @@ textarea.text-input {
 
 .table-scroll {
   border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
+  border-radius: var(--ckqa-radius-lg);
   overflow-x: auto;
   overflow-y: hidden;
   background: var(--ckqa-surface);
+  box-shadow:
+    0 1px 3px rgb(15 23 42 / 4%),
+    0 6px 24px rgb(15 23 42 / 6%);
 }
 
 .ckqa-table-primary,
@@ -2112,6 +2115,8 @@ textarea.text-input {
 .pagination-bar {
   display: flex;
   justify-content: center;
+  padding-top: var(--ckqa-space-4);
+  margin-top: var(--ckqa-space-2);
 }
 
 .data-row {
