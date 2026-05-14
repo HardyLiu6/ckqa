@@ -202,6 +202,7 @@ python -m graphrag_pipeline.scripts.qa_eval.algorithmic_seed_builder \
 
 ```bash
 python -m graphrag_pipeline.scripts.qa_eval.algorithmic_scorer --run-dir <run_dir>
+python -m graphrag_pipeline.scripts.qa_eval.semantic_threshold_calibrator --run-dir <run_dir>
 python -m graphrag_pipeline.scripts.qa_eval.significance_reporter --run-dir <run_dir>
 python -m graphrag_pipeline.scripts.qa_eval.ragas_exporter --run-dir <run_dir>
 python -m graphrag_pipeline.scripts.qa_eval.factuality_extra_exporter --run-dir <run_dir>
@@ -211,6 +212,16 @@ python -m graphrag_pipeline.scripts.qa_eval.factuality_extra_exporter --run-dir 
 
 ```bash
 python -m graphrag_pipeline.scripts.qa_eval.algorithmic_scorer --run-dir <run_dir> --cheap-only
+```
+
+BGE-M3 在有 CUDA 的机器上建议显式使用 GPU、fp16 与更大的 batch：
+
+```bash
+python -m graphrag_pipeline.scripts.qa_eval.algorithmic_scorer \
+  --run-dir <run_dir> \
+  --bge-device cuda \
+  --bge-fp16 \
+  --bge-batch-size 32
 ```
 
 BERTScore 兼容指标只在需要与旧报告对齐时安装：

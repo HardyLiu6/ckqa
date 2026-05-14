@@ -12,11 +12,11 @@ from graphrag_pipeline.scripts.qa_eval.citation_extractor import extract_text_un
 from graphrag_pipeline.scripts.qa_eval.ir_metrics import score_ranked_citations
 from graphrag_pipeline.scripts.qa_eval.run_loader import (
     audit_text_unit_prefix_collisions,
-    infer_question_ids_from_raw,
     load_raw_mode_answer,
     load_run_meta,
     load_test_set,
     resolve_text_units_path,
+    select_question_ids_for_run,
 )
 from graphrag_pipeline.scripts.qa_eval.semantic_similarity import SemanticScoringConfig, score_semantic_similarity
 from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import DataCitationLookup, load_data_citation_lookup
@@ -140,31 +140,8 @@ def _select_items_for_run(
     meta: dict[str, Any],
     run_dir: Path,
 ) -> list[Any]:
-    question_ids = _coerce_question_ids(meta.get("question_ids"))
-    if not question_ids:
-        question_ids = infer_question_ids_from_raw(run_dir)
-    if not question_ids:
-        question_ids = _fallback_question_ids_from_limits(items, meta)
-    if not question_ids:
-        return list(items.values())
+    question_ids = select_question_ids_for_run(items, meta, run_dir)
     return [items[question_id] for question_id in question_ids if question_id in items]
-
-
-def _coerce_question_ids(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _fallback_question_ids_from_limits(items: dict[str, Any], meta: dict[str, Any]) -> list[str]:
-    limit = meta.get("total_items", meta.get("max_items"))
-    try:
-        count = int(limit)
-    except (TypeError, ValueError):
-        return []
-    if count <= 0:
-        return []
-    return list(items)[:count]
 
 
 def _dataframe_to_markdown(frame: pd.DataFrame) -> str:
@@ -186,6 +163,12 @@ def main() -> int:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--test-set", type=Path, default=None)
     parser.add_argument("--text-units-path", type=Path, default=None)
+    parser.add_argument("--bge-model", default=None, help="BGE-M3 model name or local model directory.")
+    parser.add_argument("--bge-device", default=None, help="BGE-M3 device, for example `cuda` or `cpu`.")
+    parser.add_argument("--bge-batch-size", type=int, default=8, help="BGE-M3 encode batch size.")
+    parser.add_argument("--bge-fp16", action="store_true", help="Use fp16 for BGE-M3, recommended on CUDA GPUs.")
+    parser.add_argument("--similarity-threshold", type=float, default=0.62, help="BGE-M3 coverage threshold.")
+    parser.add_argument("--max-chunk-chars", type=int, default=260, help="Maximum chars per semantic chunk.")
     parser.add_argument(
         "--cheap-only",
         "--disable-bge-m3",
@@ -198,6 +181,14 @@ def main() -> int:
         args.run_dir,
         test_set_path=args.test_set,
         text_units_path=args.text_units_path,
+        semantic_config=SemanticScoringConfig(
+            bge_m3_model=args.bge_model,
+            bge_device=args.bge_device,
+            bge_use_fp16=args.bge_fp16,
+            bge_batch_size=args.bge_batch_size,
+            similarity_threshold=args.similarity_threshold,
+            max_chunk_chars=args.max_chunk_chars,
+        ),
         enable_bge_m3=not args.cheap_only,
     )
     print(f"wrote algorithmic scoring under {args.run_dir}")

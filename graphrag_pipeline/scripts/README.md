@@ -13,6 +13,7 @@
 | --- | --- |
 | `qa_eval/algorithmic_seed_builder.py` | 生成候选题材覆盖清单。 |
 | `qa_eval/semantic_similarity.py` | 生成 BGE-M3 分块语义覆盖、ROUGE-Lsum、keyword recall 与可选 BERTScore。 |
+| `qa_eval/semantic_threshold_calibrator.py` | 对 BGE-M3 语义覆盖阈值做抽样校准并生成 `semantic_threshold_calibration.md`。 |
 | `qa_eval/run_loader.py` | 读取 run/test/raw 与索引路径，审计 text unit 前缀碰撞。 |
 | `qa_eval/citation_extractor.py` | 解析 GraphRAG citation，并把 Reports / Sources / Entities / Relationships 映射回 text unit 前缀。 |
 | `qa_eval/ir_metrics.py` | 调用 `ir-measures` 计算 citation R@k / RR / nDCG@k / AP。 |

@@ -94,6 +94,38 @@ def infer_question_ids_from_raw(run_dir: Path) -> list[str]:
     return question_ids
 
 
+def coerce_question_ids(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def fallback_question_ids_from_limits(items: dict[str, Any], meta: dict[str, Any]) -> list[str]:
+    limit = meta.get("total_items", meta.get("max_items"))
+    try:
+        count = int(limit)
+    except (TypeError, ValueError):
+        return []
+    if count <= 0:
+        return []
+    return list(items)[:count]
+
+
+def select_question_ids_for_run(
+    items: dict[str, Any],
+    meta: dict[str, Any],
+    run_dir: Path,
+) -> list[str]:
+    question_ids = coerce_question_ids(meta.get("question_ids"))
+    if not question_ids:
+        question_ids = infer_question_ids_from_raw(run_dir)
+    if not question_ids:
+        question_ids = fallback_question_ids_from_limits(items, meta)
+    if not question_ids:
+        question_ids = list(items)
+    return [question_id for question_id in question_ids if question_id in items]
+
+
 def resolve_text_units_path(run_dir: Path, explicit_path: Path | None = None) -> Path:
     if explicit_path is not None:
         resolved = explicit_path

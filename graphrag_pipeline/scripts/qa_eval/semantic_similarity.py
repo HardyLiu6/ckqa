@@ -16,6 +16,9 @@ DEFAULT_BERTSCORE_MODEL = "bert-base-chinese"
 @dataclass(slots=True)
 class SemanticScoringConfig:
     bge_m3_model: str | None = None
+    bge_device: str | None = None
+    bge_use_fp16: bool = False
+    bge_batch_size: int = 8
     bge_max_length: int = 8192
     max_chunk_chars: int = 260
     similarity_threshold: float = 0.62
@@ -85,20 +88,33 @@ def _tokenize_for_rouge(text: str, jieba_module: Any) -> list[str]:
     return [token for token in jieba_module.lcut(text or "") if token.strip()]
 
 
-@lru_cache(maxsize=2)
-def _load_bge_m3_model(model_name: str) -> Any:
+@lru_cache(maxsize=4)
+def _load_bge_m3_model(model_name: str, device: str | None, use_fp16: bool, batch_size: int) -> Any:
     try:
         from FlagEmbedding import BGEM3FlagModel
     except ImportError as exc:
         raise RuntimeError('BGE-M3 scoring requires `pip install -e ".[eval]"`.') from exc
-    return BGEM3FlagModel(model_name, use_fp16=False)
+    return BGEM3FlagModel(
+        model_name,
+        use_fp16=use_fp16,
+        devices=device,
+        batch_size=batch_size,
+    )
 
 
-def _encode_dense_chunks(chunks: list[str], *, model_name: str, max_length: int) -> np.ndarray:
-    model = _load_bge_m3_model(model_name)
+def _encode_dense_chunks(
+    chunks: list[str],
+    *,
+    model_name: str,
+    max_length: int,
+    device: str | None = None,
+    use_fp16: bool = False,
+    batch_size: int = 8,
+) -> np.ndarray:
+    model = _load_bge_m3_model(model_name, device, use_fp16, batch_size)
     encoded = model.encode(
         chunks,
-        batch_size=8,
+        batch_size=batch_size,
         max_length=max_length,
         return_dense=True,
         return_sparse=False,
@@ -137,8 +153,23 @@ def _score_bge_m3_coverage(
     if not answer_chunks or not reference_chunks:
         return _coverage_from_similarity(np.empty((0, 0)), threshold=config.similarity_threshold)
     model_name = config.bge_m3_model or os.environ.get("CKQA_BGE_M3_MODEL", DEFAULT_BGE_M3_MODEL)
-    answer_vectors = _encode_dense_chunks(answer_chunks, model_name=model_name, max_length=config.bge_max_length)
-    reference_vectors = _encode_dense_chunks(reference_chunks, model_name=model_name, max_length=config.bge_max_length)
+    device = config.bge_device or os.environ.get("CKQA_BGE_M3_DEVICE") or None
+    answer_vectors = _encode_dense_chunks(
+        answer_chunks,
+        model_name=model_name,
+        max_length=config.bge_max_length,
+        device=device,
+        use_fp16=config.bge_use_fp16,
+        batch_size=config.bge_batch_size,
+    )
+    reference_vectors = _encode_dense_chunks(
+        reference_chunks,
+        model_name=model_name,
+        max_length=config.bge_max_length,
+        device=device,
+        use_fp16=config.bge_use_fp16,
+        batch_size=config.bge_batch_size,
+    )
     return _coverage_from_similarity(answer_vectors @ reference_vectors.T, threshold=config.similarity_threshold)
 
 
