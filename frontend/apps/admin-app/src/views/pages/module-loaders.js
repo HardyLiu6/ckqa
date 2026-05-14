@@ -2189,12 +2189,7 @@ async function loadKnowledgeBaseBuildRunList(route, query, services) {
       throw pageResult.reason
     }
     const pageData = pageResult.value
-    // 默认"未归档"模式：query.status 为空时前端排除 archived（后端不支持"排除某状态"语义）
-    const statusFilter = String(query.status ?? '').trim()
-    const filteredItems = statusFilter === '' || statusFilter === 'all'
-      ? (pageData.items ?? []).filter((run) => statusFilter === 'all' || run.status !== 'archived')
-      : (pageData.items ?? [])
-    const rows = filteredItems.map((buildRun) => mapBuildRunRow(kbId, buildRun))
+    const rows = (pageData.items ?? []).map((buildRun) => mapBuildRunRow(kbId, buildRun))
     const knowledgeBase = knowledgeBaseResult.status === 'fulfilled'
       ? knowledgeBaseResult.value
       : null

@@ -83,21 +83,21 @@ test('mapBuildRunRow 输出 7 列', () => {
   assert.equal(row.cells[6], '2026-05-05T00:30:00')
 })
 
-test('mapBuildRunRow 行动作根据 status 区分', () => {
+test('mapBuildRunRow 行动作包含打开向导和删除', () => {
   const successRow = mapBuildRunRow(5, { id: 27, status: 'success', activeIndexRunId: 99 })
   const actionKeys = successRow.actions.map((a) => a.key ?? a.label)
   assert.ok(actionKeys.includes('打开向导'))
-  assert.ok(actionKeys.includes('archive-build-run'))
+  assert.ok(actionKeys.includes('delete-build-run'))
+})
 
+test('mapBuildRunRow running 状态也有删除按钮', () => {
   const runningRow = mapBuildRunRow(5, { id: 28, status: 'running' })
   const runningKeys = runningRow.actions.map((a) => a.key ?? a.label)
   assert.ok(runningKeys.includes('打开向导'))
-  assert.ok(!runningKeys.includes('archive-build-run'),
-    'running 状态不能归档，避免误操作')
+  assert.ok(runningKeys.includes('delete-build-run'))
 })
 
-test('mapBuildRunRow archived 状态隐藏归档动作', () => {
-  const row = mapBuildRunRow(5, { id: 29, status: 'archived' })
-  const actionKeys = row.actions.map((a) => a.key ?? a.label)
-  assert.ok(!actionKeys.includes('archive-build-run'))
+test('mapBuildRunRow 无 id 时无动作', () => {
+  const row = mapBuildRunRow(5, { status: 'success' })
+  assert.equal(row.actions.length, 0)
 })

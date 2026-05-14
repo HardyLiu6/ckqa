@@ -74,14 +74,6 @@ export function mapBuildRunRow(knowledgeBaseId, buildRun = {}) {
       label: '打开向导',
       to: `/app/knowledge-bases/${knowledgeBaseId}/build?buildRunId=${id}`,
     })
-  }
-  if (id && status !== 'running' && status !== 'archived') {
-    actions.push({
-      label: '归档',
-      key: 'archive-build-run',
-      icon: 'archive',
-      variant: 'ghost',
-    })
     actions.push({
       label: '删除',
       key: 'delete-build-run',
