@@ -1,15 +1,18 @@
 <script setup>
 import { computed } from 'vue'
+import PromptTuneProgress from './PromptTuneProgress.vue'
 
 const props = defineProps({
   strategy: { type: String, default: 'default' },
   customDraftReady: { type: Boolean, default: false },
   customDraft: { type: Object, default: null },
   graphragTunedSummary: { type: Object, default: null },
+  promptTuneState: { type: Object, default: null },
+  promptTuneTriggering: { type: Boolean, default: false },
   disabled: { type: Boolean, default: false },
 })
 
-defineEmits(['goto-builder'])
+defineEmits(['goto-builder', 'prompt-tune-trigger', 'prompt-tune-retry', 'prompt-tune-regenerate'])
 
 const variant = computed(() => {
   if (props.strategy === 'default') return 'default'
@@ -34,10 +37,14 @@ const draftSummary = computed(() => {
     </template>
 
     <template v-else-if="variant === 'graphrag_tuned'">
-      <p class="prompt-strategy-detail__primary">将使用基于本课程样本自动调优后的提示词进行索引构建。</p>
-      <p class="prompt-strategy-detail__secondary">
-        {{ graphragTunedSummary?.name ?? '本课程当前激活的自动调优结果' }}
-      </p>
+      <PromptTuneProgress
+        :state="promptTuneState"
+        :triggering="promptTuneTriggering"
+        :disabled="disabled"
+        @trigger="$emit('prompt-tune-trigger')"
+        @retry="$emit('prompt-tune-retry')"
+        @regenerate="$emit('prompt-tune-regenerate')"
+      />
     </template>
 
     <template v-else-if="variant === 'custom_pipeline_empty'">

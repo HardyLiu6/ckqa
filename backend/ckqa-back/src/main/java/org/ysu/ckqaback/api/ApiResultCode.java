@@ -86,6 +86,11 @@ public enum ApiResultCode {
     KNOWLEDGE_BASE_BUILD_RUN_NOT_FOUND(4049, "知识库构建流水线不存在"),
 
     /**
+     * 提示词自动调优记录不存在。
+     */
+    PROMPT_TUNE_RUN_NOT_FOUND(4050, "提示词自动调优记录不存在"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
@@ -134,6 +139,11 @@ public enum ApiResultCode {
      * 当前知识库已有构建流水线未完成。
      */
     KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING(4099, "当前知识库已有构建流水线未完成"),
+
+    /**
+     * 当前调优缓存键已有运行中的调优任务。
+     */
+    PROMPT_TUNE_ALREADY_RUNNING(4102, "相同选材的自动调优正在执行，请稍候"),
 
     /**
      * 课程资料已存在。

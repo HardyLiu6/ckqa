@@ -52,13 +52,27 @@ public class BuildRunPromptMaterializer {
     private final BuildRunWorkspaceService workspaceService;
     private final CkqaIntegrationProperties properties;
     private final ObjectMapper objectMapper;
+    private final PromptTuneCacheKeyResolver promptTuneCacheKeyResolver;
+    private final PromptTuneService promptTuneService;
 
     @Autowired
     public BuildRunPromptMaterializer(
             BuildRunWorkspaceService workspaceService,
+            CkqaIntegrationProperties properties,
+            PromptTuneCacheKeyResolver promptTuneCacheKeyResolver,
+            PromptTuneService promptTuneService
+    ) {
+        this(workspaceService, properties, new ObjectMapper(), promptTuneCacheKeyResolver, promptTuneService);
+    }
+
+    /**
+     * 测试用构造器：可以脱离 prompt-tune 缓存（即不解析 selected_material_ids、不查 cache）。
+     */
+    BuildRunPromptMaterializer(
+            BuildRunWorkspaceService workspaceService,
             CkqaIntegrationProperties properties
     ) {
-        this(workspaceService, properties, new ObjectMapper());
+        this(workspaceService, properties, new ObjectMapper(), null, null);
     }
 
     BuildRunPromptMaterializer(
@@ -66,9 +80,21 @@ public class BuildRunPromptMaterializer {
             CkqaIntegrationProperties properties,
             ObjectMapper objectMapper
     ) {
+        this(workspaceService, properties, objectMapper, null, null);
+    }
+
+    BuildRunPromptMaterializer(
+            BuildRunWorkspaceService workspaceService,
+            CkqaIntegrationProperties properties,
+            ObjectMapper objectMapper,
+            PromptTuneCacheKeyResolver promptTuneCacheKeyResolver,
+            PromptTuneService promptTuneService
+    ) {
         this.workspaceService = workspaceService;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.promptTuneCacheKeyResolver = promptTuneCacheKeyResolver;
+        this.promptTuneService = promptTuneService;
     }
 
     /**
@@ -90,6 +116,11 @@ public class BuildRunPromptMaterializer {
         switch (strategy) {
             case "custom_pipeline" -> content = readCustomDraftContent(metadata);
             case "graphrag_tuned" -> {
+                String cached = readPromptTuneCacheContent(buildRun);
+                if (cached != null) {
+                    content = cached;
+                    break;
+                }
                 String tuned = readGraphRagTunedContent();
                 if (tuned == null) {
                     fallbackReason = "graphrag_tuned_source_missing";
@@ -177,6 +208,43 @@ public class BuildRunPromptMaterializer {
             );
         }
         return Files.readString(source, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 在 graphrag_tuned 策略下优先读取后端 prompt-tune 缓存（按 build run 的 selectedMaterialIds 计算 cacheKey）。
+     * <p>命中已 success 的缓存：返回 extract_graph.txt 内容；其它情况返回 null 让上层走 active_prompt.json 等回退。</p>
+     */
+    private String readPromptTuneCacheContent(BuildRunDetailResponse buildRun) {
+        if (promptTuneCacheKeyResolver == null || promptTuneService == null) {
+            return null;
+        }
+        try {
+            PromptTuneCacheKeyResolver.PromptTuneCacheContext context =
+                    promptTuneCacheKeyResolver.resolve(buildRun.getSelectedMaterialIds(), buildRun.getCourseId());
+            return promptTuneService.findReadyByCacheKey(context.cacheKey())
+                    .map(run -> run.getCandidateDir())
+                    .map(workspaceService::resolve)
+                    .map(dir -> dir.resolve("extract_graph.txt"))
+                    .filter(Files::isRegularFile)
+                    .map(this::readFileQuietly)
+                    .orElse(null);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "读取 build_run={} 的 prompt-tune 缓存失败，回退到默认 graphrag_tuned 链路：{}",
+                    buildRun.getId(),
+                    exception.getMessage()
+            );
+            return null;
+        }
+    }
+
+    private String readFileQuietly(Path file) {
+        try {
+            return Files.readString(file, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            log.warn("读取 prompt-tune 缓存文件失败 {}: {}", file, exception.getMessage());
+            return null;
+        }
     }
 
     /**

@@ -32,15 +32,17 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
 
     private KnowledgeBaseBuildRunService buildRunService;
     private IndexWorkflowService indexWorkflowService;
+    private org.ysu.ckqaback.index.PromptTuneService promptTuneService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         buildRunService = Mockito.mock(KnowledgeBaseBuildRunService.class);
         indexWorkflowService = Mockito.mock(IndexWorkflowService.class);
+        promptTuneService = Mockito.mock(org.ysu.ckqaback.index.PromptTuneService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new KnowledgeBaseBuildRunsController(buildRunService, indexWorkflowService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new KnowledgeBaseBuildRunsController(buildRunService, indexWorkflowService, promptTuneService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();

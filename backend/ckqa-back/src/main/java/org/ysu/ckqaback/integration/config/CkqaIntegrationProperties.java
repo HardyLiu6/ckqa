@@ -127,6 +127,8 @@ public class CkqaIntegrationProperties {
         private long querySeconds = 120L;
         private long indexStaleSeconds = 2400L;
         private long queryTaskStaleSeconds = 300L;
+        private long promptTuneSeconds = 1800L;
+        private long promptTuneStaleSeconds = 2400L;
         private Map<String, Long> queryTaskModeStaleSeconds = new LinkedHashMap<>(Map.of(
                 "local", 300L,
                 "basic", 300L,

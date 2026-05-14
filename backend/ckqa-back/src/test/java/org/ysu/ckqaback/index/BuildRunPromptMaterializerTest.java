@@ -210,6 +210,71 @@ class BuildRunPromptMaterializerTest {
         assertThat(Files.readString(target)).isEqualTo("DEFAULT_PROMPT_BODY");
     }
 
+    @Test
+    void materialize_graphragTunedWithPromptTuneCacheHit_readsCachedContent() throws Exception {
+        // 预置 prompt-tune cache 文件
+        Path tuneCacheDir = buildRunsRoot.resolve("prompt-tune-cache/key_abc/run_99");
+        Files.createDirectories(tuneCacheDir);
+        Files.writeString(tuneCacheDir.resolve("extract_graph.txt"), "PROMPT_TUNE_CACHED_BODY");
+
+        org.ysu.ckqaback.service.CourseMaterialsService courseMaterialsService =
+                org.mockito.Mockito.mock(org.ysu.ckqaback.service.CourseMaterialsService.class);
+        org.ysu.ckqaback.service.MaterialObjectsService materialObjectsService =
+                org.mockito.Mockito.mock(org.ysu.ckqaback.service.MaterialObjectsService.class);
+        PromptTuneCacheKeyResolver realResolver =
+                new PromptTuneCacheKeyResolver(courseMaterialsService, materialObjectsService);
+
+        org.ysu.ckqaback.entity.CourseMaterials material = new org.ysu.ckqaback.entity.CourseMaterials();
+        material.setId(7L);
+        material.setCourseId("os");
+        material.setMaterialObjectId(70L);
+        org.mockito.BDDMockito.given(courseMaterialsService.getRequiredById(7L)).willReturn(material);
+        org.ysu.ckqaback.entity.MaterialObjects object = new org.ysu.ckqaback.entity.MaterialObjects();
+        object.setId(70L);
+        object.setFileMd5("md5_a");
+        org.mockito.BDDMockito.given(materialObjectsService.getById(70L)).willReturn(object);
+
+        // 计算实际 cacheKey
+        var ctx = realResolver.resolve("[7]", "os");
+        Path realCacheDir = buildRunsRoot.resolve("prompt-tune-cache/" + ctx.cacheKey() + "/run_99");
+        Files.createDirectories(realCacheDir);
+        Files.writeString(realCacheDir.resolve("extract_graph.txt"), "PROMPT_TUNE_CACHED_BODY");
+
+        PromptTuneService promptTuneService = org.mockito.Mockito.mock(PromptTuneService.class);
+        org.ysu.ckqaback.entity.PromptTuneRuns run = new org.ysu.ckqaback.entity.PromptTuneRuns();
+        run.setId(99L);
+        run.setCacheKey(ctx.cacheKey());
+        run.setStatus("success");
+        run.setCandidateDir("prompt-tune-cache/" + ctx.cacheKey() + "/run_99");
+        org.mockito.BDDMockito.given(promptTuneService.findReadyByCacheKey(ctx.cacheKey()))
+                .willReturn(java.util.Optional.of(run));
+
+        BuildRunPromptMaterializer cachedMaterializer = new BuildRunPromptMaterializer(
+                workspaceService,
+                properties,
+                new com.fasterxml.jackson.databind.ObjectMapper(),
+                realResolver,
+                promptTuneService
+        );
+
+        BuildRunDetailResponse buildRun = BuildRunDetailResponse.builder()
+                .id(80L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .selectedMaterialIds("[7]")
+                .workspaceUri("user_0/kb_5/build_80")
+                .buildMetadata("{\"stage\":\"prompt\",\"promptStrategy\":\"graphrag_tuned\"}")
+                .build();
+        prepareWorkspace(buildRun);
+
+        MaterializedPromptResult result = cachedMaterializer.materialize(buildRun);
+
+        Path target = buildRunsRoot.resolve(buildRun.getWorkspaceUri()).resolve("prompt/extract_graph.txt");
+        assertThat(Files.readString(target)).isEqualTo("PROMPT_TUNE_CACHED_BODY");
+        assertThat(result.getStrategy()).isEqualTo("graphrag_tuned");
+        assertThat(result.getFallbackReason()).isNull();
+    }
+
     private BuildRunDetailResponse newBuildRun(Long buildRunId, String metadata) {
         return BuildRunDetailResponse.builder()
                 .id(buildRunId)

@@ -43,6 +43,7 @@ public class KnowledgeBaseBuildRunsController {
 
     private final KnowledgeBaseBuildRunService buildRunService;
     private final IndexWorkflowService indexWorkflowService;
+    private final org.ysu.ckqaback.index.PromptTuneService promptTuneService;
 
     @GetMapping("/{id}")
     public ApiResponse<BuildRunDetailResponse> getBuildRun(
@@ -122,5 +123,21 @@ public class KnowledgeBaseBuildRunsController {
             @Valid @RequestBody(required = false) BuildRunQaSmokeRequest request
     ) {
         return ApiResponseUtils.success(buildRunService.runQaSmoke(id, request));
+    }
+
+    @PostMapping("/{id}/prompt-tune")
+    public ApiResponse<org.ysu.ckqaback.index.dto.PromptTuneRunResponse> triggerPromptTune(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @RequestBody(required = false) org.ysu.ckqaback.index.dto.PromptTuneTriggerRequest request
+    ) {
+        boolean force = request != null && Boolean.TRUE.equals(request.getForce());
+        return ApiResponseUtils.success(promptTuneService.trigger(id, force));
+    }
+
+    @GetMapping("/{id}/prompt-tune")
+    public ApiResponse<org.ysu.ckqaback.index.dto.PromptTuneRunResponse> getPromptTuneStatus(
+            @PathVariable @Positive(message = "id必须大于0") Long id
+    ) {
+        return ApiResponseUtils.success(promptTuneService.getLatestStatus(id));
     }
 }

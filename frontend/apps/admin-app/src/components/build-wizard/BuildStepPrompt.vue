@@ -10,9 +10,18 @@ const props = defineProps({
   actionRunning: { type: Boolean, default: false },
   operationFeedback: { type: Object, default: null },
   selectedStrategy: { type: String, default: 'default' },
+  promptTuneState: { type: Object, default: null },
+  promptTuneTriggering: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:strategy', 'goto-builder', 'reset-confirm'])
+const emit = defineEmits([
+  'update:strategy',
+  'goto-builder',
+  'reset-confirm',
+  'prompt-tune-trigger',
+  'prompt-tune-retry',
+  'prompt-tune-regenerate',
+])
 
 const promptBlock = computed(() => props.blocks.prompt ?? {})
 const disabled = computed(() => promptBlock.value.status === 'blocked' || promptBlock.value.readonly === true)
@@ -64,8 +73,13 @@ function handleSelect(key) {
       :custom-draft-ready="promptBlock.customDraftReady"
       :custom-draft="promptBlock.customDraft"
       :graphrag-tuned-summary="promptBlock.graphragTunedSummary"
+      :prompt-tune-state="promptTuneState"
+      :prompt-tune-triggering="promptTuneTriggering"
       :disabled="disabled || actionRunning"
       @goto-builder="$emit('goto-builder')"
+      @prompt-tune-trigger="$emit('prompt-tune-trigger')"
+      @prompt-tune-retry="$emit('prompt-tune-retry')"
+      @prompt-tune-regenerate="$emit('prompt-tune-regenerate')"
     />
 
     <div v-if="promptBlock.confirmed" class="prompt-reset-actions">

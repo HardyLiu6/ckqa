@@ -51,6 +51,8 @@ import {
   updateKnowledgeBase,
   updateBuildRunMaterialSelection as submitBuildRunMaterialSelection,
   getBuildRun,
+  triggerBuildRunPromptTune,
+  getBuildRunPromptTuneStatus,
 } from '../../api/knowledge-bases.js'
 import {
   deleteCourseMaterial,
@@ -175,6 +177,9 @@ const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
 const selectedPromptStrategy = ref('default')
+const promptTuneState = ref(null)
+const promptTuneTriggering = ref(false)
+let promptTunePollTimer = null
 const creationDialog = ref('')
 const creationState = ref('idle')
 const creationError = ref(null)
@@ -683,6 +688,7 @@ async function loadPage(query = route.query) {
 
   if (route.name === 'knowledge-base-build') {
     syncSelectedPromptStrategy()
+    syncPromptTuneState()
   }
 }
 
@@ -692,9 +698,22 @@ function syncSelectedPromptStrategy() {
   selectedPromptStrategy.value = queryStrategy || metaStrategy || 'default'
 }
 
+function syncPromptTuneState() {
+  const buildRunId = currentBuildRunId()
+  if (!buildRunId) {
+    promptTuneState.value = null
+    stopPromptTunePolling()
+    return
+  }
+  refreshPromptTuneStatus(buildRunId)
+}
+
 function updateBuildPromptStrategy(strategyKey) {
   if (selectedPromptStrategy.value === strategyKey) return
   selectedPromptStrategy.value = strategyKey
+  if (strategyKey === 'graphrag_tuned') {
+    syncPromptTuneState()
+  }
   const nextQuery = { ...route.query, promptStrategy: strategyKey }
   if (!isSameQuery(route.query, nextQuery)) {
     router.replace({ query: nextQuery })
@@ -2288,6 +2307,72 @@ function gotoPromptBuilder() {
   })
 }
 
+function currentBuildRunId() {
+  return config.value.blocks?.buildRun?.item?.id
+    ?? firstQueryValue(route.query?.buildRunId)
+}
+
+function stopPromptTunePolling() {
+  if (promptTunePollTimer != null) {
+    clearTimeout(promptTunePollTimer)
+    promptTunePollTimer = null
+  }
+}
+
+async function refreshPromptTuneStatus(buildRunId) {
+  if (!buildRunId) return
+  try {
+    const status = await getBuildRunPromptTuneStatus(buildRunId)
+    promptTuneState.value = status
+    const interval = Number(status?.recommendedPollingIntervalMillis ?? 0)
+    if (interval > 0 && (status?.status === 'pending' || status?.status === 'running')) {
+      stopPromptTunePolling()
+      promptTunePollTimer = setTimeout(() => refreshPromptTuneStatus(buildRunId), interval)
+    } else {
+      stopPromptTunePolling()
+    }
+  } catch (error) {
+    // 轮询失败不打扰用户，下一次状态切换时再尝试。
+    console.warn('[prompt-tune] 状态轮询失败', error)
+    stopPromptTunePolling()
+  }
+}
+
+async function triggerPromptTune({ force = false } = {}) {
+  const buildRunId = currentBuildRunId()
+  if (!buildRunId || promptTuneTriggering.value) return
+  promptTuneTriggering.value = true
+  try {
+    const response = await triggerBuildRunPromptTune(buildRunId, { force })
+    promptTuneState.value = response
+    if (response?.status === 'success') {
+      ElMessage.success(response.cacheHit ? '已复用历史调优结果' : '自动调优完成')
+    } else if (response?.status === 'pending' || response?.status === 'running') {
+      // 启动轮询（容错处理）
+      stopPromptTunePolling()
+      promptTunePollTimer = setTimeout(() => refreshPromptTuneStatus(buildRunId), 1500)
+    } else if (response?.status === 'failed') {
+      ElMessage.error(response.errorMessage || '自动调优失败，请稍后重试')
+    }
+  } catch (error) {
+    ElMessage.error(resolveApiErrorAction(error)?.message || '触发自动调优失败')
+  } finally {
+    promptTuneTriggering.value = false
+  }
+}
+
+function handlePromptTuneTrigger() {
+  triggerPromptTune({ force: false })
+}
+
+function handlePromptTuneRetry() {
+  triggerPromptTune({ force: false })
+}
+
+function handlePromptTuneRegenerate() {
+  triggerPromptTune({ force: true })
+}
+
 async function runBuildRunRequest({ operationKey, request, nextQuery }) {
   if (actionRunning.value) {
     return
@@ -2684,6 +2769,7 @@ watch(() => [route.name, route.params, route.query], (next, prev) => {
 onBeforeUnmount(() => {
   cancelLongTask()
   closeAllMaterialParseStreams()
+  stopPromptTunePolling()
 })
 </script>
 
@@ -3697,11 +3783,16 @@ onBeforeUnmount(() => {
         :selected-strategy="selectedPromptStrategy"
         :smoke-question="smokeQuestion"
         :smoke-result="smokeResult"
+        :prompt-tune-state="promptTuneState"
+        :prompt-tune-triggering="promptTuneTriggering"
         @select-materials="updateBuildMaterialSelection"
         @update-smoke-question="updateSmokeQuestion"
         @update:strategy="updateBuildPromptStrategy"
         @goto-builder="gotoPromptBuilder"
         @reset-confirm="resetBuildPromptConfirmation"
+        @prompt-tune-trigger="handlePromptTuneTrigger"
+        @prompt-tune-retry="handlePromptTuneRetry"
+        @prompt-tune-regenerate="handlePromptTuneRegenerate"
       />
     </div>
 
