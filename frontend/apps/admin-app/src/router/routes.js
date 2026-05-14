@@ -233,17 +233,31 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/knowledge-bases/:kbId/build-runs',
+    name: 'knowledge-base-build-runs',
+    componentKey: 'ModulePage',
+    meta: {
+      title: '构建历史',
+      layout: 'console',
+      permissions: ['kb:read'],
+      status: 'mvp',
+      navGroup: 'knowledge',
+      resource: 'knowledgeBase',
+      scope: 'course',
+      keepAlive: true,
+    },
+  },
+  {
     path: '/app/knowledge-bases/:kbId/index-runs',
     name: 'index-runs',
-    componentKey: 'RouteState',
-    props: { state: 'coming-soon' },
+    redirect: (to) => ({
+      name: 'knowledge-base-build-runs',
+      params: { kbId: to.params.kbId },
+      query: to.query,
+    }),
     meta: {
-      title: '索引运行列表',
-      layout: 'detail',
+      hidden: true,
       permissions: ['kb:read'],
-      status: 'upcoming',
-      routeState: 'coming-soon',
-      navGroup: 'knowledge',
     },
   },
   {
