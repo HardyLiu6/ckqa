@@ -2991,7 +2991,7 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.doesNotMatch(materialStep, /row\.updatedAt \|\| row\.detail/)
   assert.doesNotMatch(materialStep, /未勾选/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
-  assert.match(componentsCss, /\.build-summary-chip\s*\{/)
+  assert.match(componentsCss, /\.build-step-stage__header-tail\s*\{/)
   assert.match(componentsCss, /white-space:\s*normal/)
   assert.match(workflowStepsCss, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/)
   for (const file of buildStepFiles) {

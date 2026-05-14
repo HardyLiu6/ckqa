@@ -3755,23 +3755,22 @@ onBeforeUnmount(() => {
         <h2>{{ activeBuildStep?.label }}</h2>
         <p>{{ activeBuildStep?.detail }}</p>
       </div>
-      <StatusBadge
-        :status="activeBuildStep?.status"
-        :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
-      />
+      <div class="build-step-stage__header-tail">
+        <el-tag
+          v-for="chip in buildSummaryChips"
+          :key="chip.label"
+          :type="chip.tone === 'warn' ? 'warning' : (chip.tone === 'ok' ? 'success' : 'info')"
+          size="small"
+          effect="plain"
+        >
+          {{ chip.label }} {{ chip.value }}
+        </el-tag>
+        <StatusBadge
+          :status="activeBuildStep?.status"
+          :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
+        />
+      </div>
     </header>
-
-    <div class="build-summary-strip">
-      <span
-        v-for="chip in buildSummaryChips"
-        :key="chip.label"
-        class="build-summary-chip"
-        :data-tone="chip.tone"
-      >
-        <strong>{{ chip.label }}</strong>
-        <span>{{ chip.value }}</span>
-      </span>
-    </div>
 
     <div class="build-step-stage__body">
       <component
