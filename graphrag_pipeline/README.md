@@ -180,6 +180,47 @@ python scripts/run_candidate_extraction.py \
 - 输出文件默认写入 `results/extraction_eval/`、`results/extraction_raw/`、`results/errors/`
 - `data/prompt_tuning_samples/`、`data/eval/audit_extraction_set.json`、`prompts/candidates/`、`prompts/final/` 和 `results/` 下的评测/报告文件都是可再生调优产物；重新抽取一版课程前可以清空，避免旧课程材料污染新评测
 
+### 8. QA baseline 算法增强评测
+
+本流程默认复用已经通过 smoke query 的 `graphrag_pipeline/output/` 产物与 baseline run，不运行 `graphrag index`。日常路由评测主线使用规则指标、标准 IR 指标、BGE-M3 分块语义覆盖、latency/error 与 bootstrap；LLM judge、BERTScore、RAGAS 和 factuality extra 都是可选复核。
+
+安装可复现算法评测依赖：
+
+```bash
+pip install -e ".[eval]"
+```
+
+生成候选题材：
+
+```bash
+python -m graphrag_pipeline.scripts.qa_eval.algorithmic_seed_builder \
+  --output graphrag_pipeline/data/eval/qa_candidate_seeds.jsonl \
+  --max-items 80
+```
+
+在 baseline run 完成后追加算法评分与显著性分析：
+
+```bash
+python -m graphrag_pipeline.scripts.qa_eval.algorithmic_scorer --run-dir <run_dir>
+python -m graphrag_pipeline.scripts.qa_eval.significance_reporter --run-dir <run_dir>
+python -m graphrag_pipeline.scripts.qa_eval.ragas_exporter --run-dir <run_dir>
+python -m graphrag_pipeline.scripts.qa_eval.factuality_extra_exporter --run-dir <run_dir>
+```
+
+如果当前环境没有 BGE-M3 或只想跑快速回归，可以临时使用低成本 baseline：
+
+```bash
+python -m graphrag_pipeline.scripts.qa_eval.algorithmic_scorer --run-dir <run_dir> --cheap-only
+```
+
+BERTScore 兼容指标只在需要与旧报告对齐时安装：
+
+```bash
+pip install -e ".[semantic-compat]"
+```
+
+SummaC / AlignScore / SCALE 只作为专项 factuality extra；其中 SCALE 可通过 `factuality-extra` extra 安装，SummaC 与 AlignScore 通常按上游仓库说明安装后读取 `factuality_extra_dataset.jsonl` 离线运行。
+
 ## API 说明
 
 ### 端点

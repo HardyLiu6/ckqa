@@ -80,3 +80,29 @@ python -m graphrag_pipeline.scripts.qa_eval.test_set_validator \
 | 裁判 | `semantic_correctness` | `gold_answer_summary` | LLM 裁判对语义正确性的 0 / 0.5 / 1 判断。 |
 | 裁判 | `faithfulness` | `gold_text_unit_ids` 对应原文 | 判断答案是否忠实于 gold 证据文本。 |
 | 检索 | `retrieval_precision` | `gold_text_unit_ids` | 命中 gold text_unit 的数量除以 gold 数量。 |
+
+## 6. 算法增强评测字段
+
+- 算法增强层复用基础 baseline 的现有 `output/` 与 `runs/<run_id>/raw/`，不触发索引重建；抽取评测结果只能作为背景参考，不能替代四模式问答 raw。
+- `gold_text_unit_ids` 同时用于 LLM faithfulness 取证与标准 IR 指标。当前 schema 使用 `TEXT_UNIT_ID_PREFIX_LEN = 12` 的 text unit 前缀；算法层会先审计前缀碰撞，发现碰撞时停止评分并提示调整 schema。
+- `qa_candidate_seeds.jsonl` 是机器生成的候选题材清单，不是 gold set；正式题目仍以 `qa_test_set.jsonl` 为准。
+- `Text Units`、`Sources`、`Entities`、`Relationships`、`Reports` citation 会通过 `text_unit_lookup.py` 尽量映射回 text unit 前缀，避免系统性低估 global search。
+
+算法层指标：
+
+| 指标 | 含义 |
+| --- | --- |
+| `semantic_coverage_precision` | 答案分块中能被参考摘要分块覆盖的比例，用于发现跑题或冗余。 |
+| `semantic_coverage_recall` | 参考摘要分块被答案覆盖的比例，用于衡量长答案关键点覆盖。 |
+| `semantic_coverage_f1` | precision / recall 的综合值，默认由 BGE-M3 dense embedding 相似度矩阵计算。 |
+| `rouge_lsum` | 极低成本的字面长摘要覆盖 baseline；中文会先经 `jieba` 分词，当前实现近似单段 ROUGE-L。 |
+| `keyword_recall` | 参考摘要关键词在答案中的覆盖率。 |
+| `citation_recall_at_3` | 答案引用的前 3 个 text unit 覆盖 gold text unit 的比例。 |
+| `citation_rr` | 单题第一个正确引用的 reciprocal rank；汇总均值即 MRR。 |
+| `citation_ndcg_at_5` | 前 5 个引用的排序质量。 |
+| `elapsed_seconds` / `error_count` | 路由决策必须同时考虑的运行代价与稳定性。 |
+| `error_type` / `error_message` | raw 缺失、mode 缺失或查询异常的可追踪错误字段。 |
+| `effective_score_experimental` | 面向路由的候选综合分，默认合成规则指标、IR 指标、BGE-M3 语义覆盖和 latency/error penalty；该权重是待校准占位值，不能作为上线规则直接使用。 |
+| `bertscore_f1` | 可选兼容指标，只有安装 `semantic-compat` 且显式开启时生成，不作为日常主线。 |
+
+BGE-M3 默认阈值 `0.62` 只是初始候选值。首次启用或换语料时，建议抽取 10 道好/差答案样本，对比 `0.50 / 0.60 / 0.65 / 0.70` 下的 `semantic_coverage_f1` 分布，并把结论记录到 run 目录的 `semantic_threshold_calibration.md`。
