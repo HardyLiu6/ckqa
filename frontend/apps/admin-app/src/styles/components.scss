@@ -2573,6 +2573,11 @@ textarea.text-input {
   justify-content: flex-end;
 }
 
+.build-step-stage__header-chip {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .build-step-stage__body,
 .build-step-panel {
   display: grid;
@@ -3220,41 +3225,100 @@ textarea.text-input {
 
 .prompt-strategy-detail {
   display: grid;
-  gap: var(--ckqa-space-3);
-  padding: var(--ckqa-space-4);
+  grid-template-columns: minmax(160px, max-content) minmax(0, 1fr) minmax(180px, max-content);
+  align-items: center;
+  gap: var(--ckqa-space-4);
+  padding: var(--ckqa-space-4) var(--ckqa-space-5, 20px);
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
-  max-width: 768px;
-  margin-inline: auto;
 }
 
-.prompt-strategy-detail__primary {
-  margin: 0;
+.prompt-strategy-detail__title {
   font-weight: 700;
+  font-size: 15px;
   color: var(--ckqa-text);
+  white-space: nowrap;
 }
 
-.prompt-strategy-detail__secondary {
-  margin: 0;
+.prompt-strategy-detail__title--danger {
+  color: #c2413d;
+}
+
+.prompt-strategy-detail__title-hint {
+  font-weight: 500;
+  font-size: 12px;
   color: var(--ckqa-text-muted);
+  margin-left: 4px;
+}
+
+.prompt-strategy-detail__body {
   font-size: 13px;
   line-height: 1.6;
+  color: var(--ckqa-text-muted);
 }
 
 .prompt-strategy-detail__hint {
-  margin: 0;
-  margin-top: var(--ckqa-space-2);
-  padding-top: var(--ckqa-space-2);
-  border-top: 1px dashed var(--ckqa-border);
+  font-size: 12.5px;
+  color: var(--ckqa-text-muted);
+  font-style: italic;
+}
+
+.prompt-strategy-detail__hint-inline {
   font-size: 12.5px;
   color: var(--ckqa-text-muted);
 }
 
-.prompt-tune-progress__hint {
-  margin: 0;
-  font-size: 12.5px;
+.prompt-strategy-detail__action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 180px;
+}
+
+.prompt-tune-progress__action {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.prompt-tune-progress__logs {
+  margin-top: var(--ckqa-space-2);
+}
+
+.prompt-tune-progress__logs summary {
+  cursor: pointer;
+  font-size: 12px;
   color: var(--ckqa-text-muted);
+}
+
+.prompt-tune-progress__logs pre {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 11px;
+  background: var(--ckqa-surface, #fff);
+  padding: 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  margin-top: 4px;
+}
+
+// 窄屏（< 768px）回退为垂直布局
+@media (max-width: 768px) {
+  .prompt-strategy-detail {
+    grid-template-columns: 1fr;
+    gap: var(--ckqa-space-2);
+  }
+
+  .prompt-strategy-detail__action {
+    justify-content: flex-start;
+  }
+}
+
+// PromptTuneProgress 内部直接是 .prompt-tune-progress div，要让它继承 grid
+.prompt-tune-progress {
+  display: contents;
 }
 
 .inline-error {

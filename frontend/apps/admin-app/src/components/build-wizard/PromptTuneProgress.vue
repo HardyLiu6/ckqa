@@ -17,6 +17,9 @@ import {
  * - success：调优完成（含缓存命中）
  * - failed：失败
  * - cancelled：被取消（暂未启用）
+ *
+ * 模板与 PromptStrategyDetail 内联保持一致的 3 列布局：
+ * 标题（fixed） / 正文（flex 1） / 操作或进度条（fixed 240）。
  */
 const props = defineProps({
   state: { type: Object, default: null },
@@ -53,111 +56,90 @@ const primaryAction = computed(() => resolvePrimaryAction(status.value))
 
 <template>
   <div class="prompt-tune-progress" :data-status="status">
+    <!-- 未触发：标题 / 提示文案 / 开始按钮 -->
     <template v-if="status === 'not_started'">
-      <p class="prompt-tune-progress__primary">本次选材尚未生成自动调优提示词。</p>
-      <p class="prompt-tune-progress__secondary">点击下方按钮启动 GraphRAG 官方调优；通常需要 10-20 分钟。</p>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
-        :loading="triggering"
-        :disabled="disabled || triggering"
-        @click="$emit('trigger')"
-      >
-        {{ primaryAction?.label ?? '开始调优' }}
-      </el-button>
+      <div class="prompt-strategy-detail__title">✨ 已选「自动调优提示词」</div>
+      <div class="prompt-strategy-detail__body">
+        本次选材尚未生成调优产物。<br>
+        GraphRAG 会按 12 个阶段自动学习样本，约 15 分钟。
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          :loading="triggering"
+          :disabled="disabled || triggering"
+          @click="$emit('trigger')"
+        >
+          {{ primaryAction?.label ?? '开始调优' }}
+        </el-button>
+      </div>
     </template>
 
+    <!-- 进行中：标题 / 阶段文案 / 进度条 -->
     <template v-else-if="status === 'pending' || status === 'running'">
-      <p class="prompt-tune-progress__primary">
-        正在为本次选材生成自动调优提示词…
-      </p>
-      <p class="prompt-tune-progress__secondary">
-        {{ stageLabel }}
-        <span v-if="lastHeartbeat"> · 最近心跳 {{ lastHeartbeat }}</span>
-      </p>
-      <el-progress
-        :percentage="progressPercentage"
-        :status="status === 'pending' ? null : 'success'"
-      />
-      <details v-if="latestLogTail.length" class="prompt-tune-progress__logs">
-        <summary>查看最近日志</summary>
-        <pre>{{ latestLogTail.join('\n') }}</pre>
-      </details>
+      <div class="prompt-strategy-detail__title">✨ 正在生成调优产物</div>
+      <div class="prompt-strategy-detail__body">
+        当前：{{ stageLabel }}<span v-if="lastHeartbeat"><br>心跳 {{ lastHeartbeat }}</span>
+        <details v-if="latestLogTail.length" class="prompt-tune-progress__logs">
+          <summary>查看最近日志</summary>
+          <pre>{{ latestLogTail.join('\n') }}</pre>
+        </details>
+      </div>
+      <div class="prompt-strategy-detail__action prompt-tune-progress__action">
+        <el-progress
+          :percentage="progressPercentage"
+          :status="status === 'pending' ? null : 'success'"
+          :stroke-width="10"
+        />
+      </div>
     </template>
 
+    <!-- 成功：标题 / 完成时间 + hint / 重新生成 -->
     <template v-else-if="status === 'success'">
-      <p class="prompt-tune-progress__primary">
-        ✅ 已生成自动调优提示词
-        <span v-if="cacheHit">（复用历史缓存，无需重新生成）</span>
-      </p>
-      <p class="prompt-tune-progress__secondary">
-        <span v-if="finishedAt">完成于 {{ finishedAt }}</span>
-      </p>
-      <p class="prompt-tune-progress__hint">点击「确认提示词策略」即可使用本次产物。</p>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--ghost"
-        :loading="triggering"
-        :disabled="disabled || triggering"
-        @click="$emit('regenerate')"
-      >
-        {{ primaryAction?.label ?? '重新生成' }}
-      </el-button>
+      <div class="prompt-strategy-detail__title">
+        ✓ 已生成调优产物
+        <span v-if="cacheHit" class="prompt-strategy-detail__title-hint">（命中缓存）</span>
+      </div>
+      <div class="prompt-strategy-detail__body">
+        <span v-if="finishedAt">完成于 {{ finishedAt }}</span><br>
+        <span class="prompt-strategy-detail__hint-inline">点击「确认提示词策略」即可使用本次产物</span>
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          :loading="triggering"
+          :disabled="disabled || triggering"
+          @click="$emit('regenerate')"
+        >
+          {{ primaryAction?.label ?? '重新生成' }}
+        </el-button>
+      </div>
     </template>
 
+    <!-- 失败：标题 / 错误信息 / 重试 -->
     <template v-else-if="status === 'failed'">
-      <p class="prompt-tune-progress__primary">❌ 自动调优失败</p>
-      <p class="prompt-tune-progress__secondary">
+      <div class="prompt-strategy-detail__title prompt-strategy-detail__title--danger">
+        ❌ 自动调优失败
+      </div>
+      <div class="prompt-strategy-detail__body">
         {{ props.state?.errorMessage ?? '请查看后端日志获取详细错误' }}
-      </p>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
-        :loading="triggering"
-        :disabled="disabled || triggering"
-        @click="$emit('retry')"
-      >
-        {{ primaryAction?.label ?? '重试' }}
-      </el-button>
-      <details v-if="latestLogTail.length" class="prompt-tune-progress__logs">
-        <summary>查看最近日志</summary>
-        <pre>{{ latestLogTail.join('\n') }}</pre>
-      </details>
+        <details v-if="latestLogTail.length" class="prompt-tune-progress__logs">
+          <summary>查看最近日志</summary>
+          <pre>{{ latestLogTail.join('\n') }}</pre>
+        </details>
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          :loading="triggering"
+          :disabled="disabled || triggering"
+          @click="$emit('retry')"
+        >
+          {{ primaryAction?.label ?? '重试' }}
+        </el-button>
+      </div>
     </template>
   </div>
 </template>
-
-<style scoped>
-.prompt-tune-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.prompt-tune-progress__primary {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.prompt-tune-progress__secondary {
-  font-size: 12px;
-  color: var(--ckqa-text-secondary, #606266);
-  margin: 0;
-}
-
-.prompt-tune-progress__logs summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--ckqa-text-secondary, #606266);
-}
-
-.prompt-tune-progress__logs pre {
-  max-height: 160px;
-  overflow: auto;
-  font-size: 11px;
-  background: var(--ckqa-surface-2, #f5f7fa);
-  padding: 8px;
-  border-radius: 4px;
-  white-space: pre-wrap;
-}
-</style>

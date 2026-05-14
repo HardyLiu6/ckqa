@@ -31,15 +31,19 @@ const draftSummary = computed(() => {
 
 <template>
   <div class="prompt-strategy-detail" :data-variant="variant">
+    <!-- 默认策略：3 列横向（标题 / 正文 / hint） -->
     <template v-if="variant === 'default'">
-      <p class="prompt-strategy-detail__primary">⚙ 已选「默认提示词」</p>
-      <p class="prompt-strategy-detail__secondary">
+      <div class="prompt-strategy-detail__title">⚙ 已选「默认提示词」</div>
+      <div class="prompt-strategy-detail__body">
         点击「确认提示词策略」即可进入索引构建。<br>
         graphrag 会按通用模板抽取实体与关系。
-      </p>
-      <p class="prompt-strategy-detail__hint">无需额外操作。</p>
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <span class="prompt-strategy-detail__hint">无需额外操作</span>
+      </div>
     </template>
 
+    <!-- 自动调优策略：内部组件自带 3 列布局 -->
     <template v-else-if="variant === 'graphrag_tuned'">
       <PromptTuneProgress
         :state="promptTuneState"
@@ -51,35 +55,41 @@ const draftSummary = computed(() => {
       />
     </template>
 
+    <!-- 手动调优 · 未构建 -->
     <template v-else-if="variant === 'custom_pipeline_empty'">
-      <p class="prompt-strategy-detail__primary">🛠 已选「手动调优提示词」</p>
-      <p class="prompt-strategy-detail__secondary">
-        尚未构建草稿。本次构建专属，不复用历史。<br>
+      <div class="prompt-strategy-detail__title">🛠 已选「手动调优提示词」</div>
+      <div class="prompt-strategy-detail__body">
+        尚未构建草稿，本次构建专属、不复用历史。<br>
         从默认或自动调优为种子继续编辑实体抽取规则。
-      </p>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--primary"
-        type="primary"
-        :disabled="disabled"
-        @click="$emit('goto-builder')"
-      >
-        前往构建
-      </el-button>
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--primary"
+          type="primary"
+          :disabled="disabled"
+          @click="$emit('goto-builder')"
+        >
+          前往构建
+        </el-button>
+      </div>
     </template>
 
+    <!-- 手动调优 · 已构建 -->
     <template v-else-if="variant === 'custom_pipeline_ready'">
-      <p class="prompt-strategy-detail__primary">🛠 已构建手动调优提示词</p>
-      <p class="prompt-strategy-detail__secondary">
-        上次保存于 {{ draftSummary?.updated ?? '未知时间' }} · 已修改 1 个提示词块（实体抽取）
-      </p>
-      <p class="prompt-strategy-detail__hint">点击「确认提示词策略」即可使用本草稿。</p>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--ghost"
-        :disabled="disabled"
-        @click="$emit('goto-builder')"
-      >
-        编辑提示词
-      </el-button>
+      <div class="prompt-strategy-detail__title">🛠 已构建手动调优提示词</div>
+      <div class="prompt-strategy-detail__body">
+        上次保存于 {{ draftSummary?.updated ?? '未知时间' }}<br>
+        已修改 1 个提示词块（实体抽取）<span class="prompt-strategy-detail__hint-inline">· 点击「确认提示词策略」即可使用本草稿</span>
+      </div>
+      <div class="prompt-strategy-detail__action">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--ghost"
+          :disabled="disabled"
+          @click="$emit('goto-builder')"
+        >
+          编辑提示词
+        </el-button>
+      </div>
     </template>
   </div>
 </template>

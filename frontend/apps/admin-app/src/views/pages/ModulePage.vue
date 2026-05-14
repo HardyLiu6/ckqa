@@ -3760,8 +3760,10 @@ onBeforeUnmount(() => {
           v-for="chip in buildSummaryChips"
           :key="chip.label"
           :type="chip.tone === 'warn' ? 'warning' : (chip.tone === 'ok' ? 'success' : 'info')"
-          size="small"
-          effect="plain"
+          size="default"
+          effect="light"
+          round
+          class="build-step-stage__header-chip"
         >
           {{ chip.label }} {{ chip.value }}
         </el-tag>
