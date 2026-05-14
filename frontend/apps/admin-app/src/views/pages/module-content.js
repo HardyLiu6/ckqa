@@ -251,7 +251,8 @@ const configs = {
         label: '运行状态',
         columnIndex: 1,
         options: [
-          { label: '全部状态', value: '' },
+          { label: '未归档', value: '' },
+          { label: '全部状态', value: 'all' },
           { label: '待开始', value: 'pending' },
           { label: '运行中', value: 'running' },
           { label: '已完成', value: 'success' },

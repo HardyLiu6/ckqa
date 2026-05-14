@@ -360,7 +360,7 @@ function resolveProgressTone(cell) {
           v-if="hasRowActions"
           label="操作"
           fixed="right"
-          width="390"
+          min-width="140"
           class-name="ckqa-el-table__action-column"
           header-class-name="ckqa-el-table__action-column"
         >
