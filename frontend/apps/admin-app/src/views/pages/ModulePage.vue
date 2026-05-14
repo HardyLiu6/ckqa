@@ -49,6 +49,7 @@ import {
   createBuildRunIndexRun,
   createKnowledgeBase,
   deleteKnowledgeBase,
+  listKnowledgeBaseBuildRuns,
   runBuildRunQaSmoke,
   syncBuildRunGraphInput,
   updateKnowledgeBase,
@@ -84,6 +85,7 @@ import BuildStepMaterial from '../../components/build-wizard/BuildStepMaterial.v
 import BuildStepParse from '../../components/build-wizard/BuildStepParse.vue'
 import BuildStepPrompt from '../../components/build-wizard/BuildStepPrompt.vue'
 import BuildStepQaCheck from '../../components/build-wizard/BuildStepQaCheck.vue'
+import ResumeBuildDialog from '../../components/knowledge-base/ResumeBuildDialog.vue'
 import {
   LONG_TASK_LIMITS,
   createLongTaskController,
@@ -127,6 +129,7 @@ import {
   resolveOperationFeedback,
 } from './module-page-model.js'
 import { validateCourseMaterialFile } from './material-file-model.js'
+import { pickResumableBuildRuns, toResumeCard } from './resume-build-model.js'
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
@@ -209,6 +212,15 @@ const knowledgeBaseActionState = ref('idle')
 const knowledgeBaseActionError = ref(null)
 const knowledgeBaseActionTarget = ref(null)
 const knowledgeBaseEditForm = ref(createKnowledgeBaseEditForm())
+// 构建按钮的「继续 / 新建」对话框：lazy fetch 未完成 buildRun，仅在点击时拉取
+const resumeBuildDialog = ref({
+  visible: false,
+  knowledgeBaseId: null,
+  knowledgeBaseName: '',
+  candidates: [],
+  loading: false,
+  fallbackTo: '',
+})
 const memberActionDialog = ref('')
 const memberActionState = ref('idle')
 const memberActionError = ref(null)
@@ -1079,9 +1091,79 @@ function handleKnowledgeBaseRowAction(row, action) {
     openKnowledgeBaseDeleteDialog(knowledgeBase)
   }
 
+  if (action?.key === 'open-build') {
+    void openResumeBuildDialog(knowledgeBase)
+    return
+  }
+
   if (action?.key === 'delete-build-run') {
     void handleDeleteBuildRun(row)
     return
+  }
+}
+
+// 「构建」按钮入口：先 lazy fetch buildRun 列表，按未完成数量决定弹对话框还是直接进入新建
+async function openResumeBuildDialog(knowledgeBase = {}) {
+  const knowledgeBaseId = knowledgeBase?.id
+  if (!knowledgeBaseId) {
+    return
+  }
+  const fallbackTo = `/app/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/build`
+  resumeBuildDialog.value = {
+    visible: true,
+    knowledgeBaseId,
+    knowledgeBaseName: knowledgeBase.name ?? knowledgeBase.kbName ?? '',
+    candidates: [],
+    loading: true,
+    fallbackTo,
+  }
+
+  try {
+    // 拉一页就够了，分页大小 20，足以覆盖常见未完成场景；按 updatedAt 倒序由后端排序
+    const page = await listKnowledgeBaseBuildRuns(knowledgeBaseId, { page: 1, size: 20 })
+    const items = Array.isArray(page?.items) ? page.items : []
+    const candidates = pickResumableBuildRuns(items, 5).map((buildRun) => toResumeCard(knowledgeBaseId, buildRun))
+    if (resumeBuildDialog.value.knowledgeBaseId !== knowledgeBaseId) {
+      // 用户在加载完成前点了别的知识库，丢弃过期结果
+      return
+    }
+    if (candidates.length === 0) {
+      // 没有未完成构建：关闭对话框直接进入新建向导，体验和原先一致
+      resumeBuildDialog.value = {
+        ...resumeBuildDialog.value,
+        visible: false,
+        loading: false,
+      }
+      await router.push(fallbackTo)
+      return
+    }
+    resumeBuildDialog.value = {
+      ...resumeBuildDialog.value,
+      candidates,
+      loading: false,
+    }
+  } catch (error) {
+    // 拉取失败兜底：直接放行到新建向导，避免因为可继续检测把用户挡住
+    resumeBuildDialog.value = {
+      ...resumeBuildDialog.value,
+      visible: false,
+      loading: false,
+    }
+    ElMessage.warning('未能检测未完成的构建，已直接进入新建流程')
+    await router.push(fallbackTo)
+  }
+}
+
+async function handleResumeBuildSelected(card) {
+  if (card?.to) {
+    await router.push(card.to)
+  }
+}
+
+async function handleResumeBuildStartNew() {
+  const fallbackTo = resumeBuildDialog.value.fallbackTo
+  if (fallbackTo) {
+    await router.push(fallbackTo)
   }
 }
 
@@ -3531,6 +3613,16 @@ onBeforeUnmount(() => {
       </div>
     </section>
   </div>
+
+  <ResumeBuildDialog
+    :visible="resumeBuildDialog.visible"
+    :knowledge-base-name="resumeBuildDialog.knowledgeBaseName"
+    :candidates="resumeBuildDialog.candidates"
+    :loading="resumeBuildDialog.loading"
+    @update:visible="(value) => (resumeBuildDialog.visible = value)"
+    @resume="handleResumeBuildSelected"
+    @start-new="handleResumeBuildStartNew"
+  />
 
   <div v-if="memberActionDialog === 'add'" class="dialog-backdrop" role="presentation">
     <section

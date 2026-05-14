@@ -805,7 +805,9 @@ function mapKnowledgeBaseRow(knowledgeBase = {}) {
       ? [
           { label: '详情', to: `/app/knowledge-bases/${id}` },
           { label: '编辑', key: 'edit-knowledge-base', icon: 'edit', variant: 'primary' },
-          ...(!archived ? [{ label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' }] : []),
+          // 构建动作改为受控 key：点击时由 ModulePage 检测未完成 buildRun，
+          // 决定直接进入新建向导还是弹出「继续 / 新建」选择对话框
+          ...(!archived ? [{ label: '构建', key: 'open-build', icon: 'parse', variant: 'primary' }] : []),
           { label: '删除', key: 'delete-knowledge-base', icon: 'delete', variant: 'danger' },
         ]
       : [],
