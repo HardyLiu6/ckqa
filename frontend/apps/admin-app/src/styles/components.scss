@@ -1482,6 +1482,16 @@ textarea.text-input {
   overflow-wrap: anywhere;
 }
 
+.field-tile__link {
+  font-weight: 700;
+  color: var(--ckqa-accent);
+  text-decoration: none;
+}
+
+.field-tile__link:hover {
+  text-decoration: underline;
+}
+
 .material-detail-grid {
   align-items: stretch;
 }

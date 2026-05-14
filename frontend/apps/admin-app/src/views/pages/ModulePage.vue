@@ -4269,7 +4269,10 @@ onBeforeUnmount(() => {
           class="field-tile"
         >
           <span>{{ renderFactLabel(field) }}</span>
-          <strong>{{ renderFactValue(field) }}</strong>
+          <RouterLink v-if="field.to" :to="field.to" class="field-tile__link">
+            {{ renderFactValue(field) }}
+          </RouterLink>
+          <strong v-else>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
     </article>

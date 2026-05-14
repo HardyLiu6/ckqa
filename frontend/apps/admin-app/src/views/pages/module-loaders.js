@@ -1925,6 +1925,7 @@ function buildKnowledgeBaseFacts(knowledgeBase = {}) {
     { label: '激活索引', value: knowledgeBase.activeIndexRunId ? `#${knowledgeBase.activeIndexRunId}` : '需先构建索引' },
     { label: '索引运行数', value: formatCount(knowledgeBase.indexRunCount) },
     { label: '更新时间', value: knowledgeBase.updatedAt ?? '-' },
+    { label: '构建历史', value: '查看全部 →', to: `/app/knowledge-bases/${knowledgeBase.id}/build-runs` },
   ]
 }
 
