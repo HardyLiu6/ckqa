@@ -1052,6 +1052,12 @@ function handleTableRowAction({ row, action } = {}) {
     return
   }
 
+  if (route.name === 'knowledge-base-build-runs') {
+    // 构建历史列表的删除按钮走同一个 handler，避免直接 fallthrough 到 courses 分支
+    handleKnowledgeBaseRowAction(row, action)
+    return
+  }
+
   if (route.name !== 'courses') {
     return
   }

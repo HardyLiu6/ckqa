@@ -47,6 +47,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -130,8 +131,14 @@ public class KnowledgeBaseBuildRunService {
         knowledgeBasesService.getRequiredById(knowledgeBaseId);
         long current = page == null || page < 1 ? 1 : page;
         long pageSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        // 列表语义：status 为空时默认排除 archived（用户视角等同于已删除），传 status=archived 才显式查
         List<BuildRunSummaryResponse> allItems = buildRunsStore.listByKnowledgeBaseId(knowledgeBaseId).stream()
-                .filter(run -> !StringUtils.hasText(status) || status.equals(run.getStatus()))
+                .filter(run -> {
+                    if (!StringUtils.hasText(status)) {
+                        return !"archived".equalsIgnoreCase(run.getStatus());
+                    }
+                    return status.equalsIgnoreCase(run.getStatus());
+                })
                 .map(BuildRunSummaryResponse::fromEntity)
                 .toList();
         long total = allItems.size();
@@ -170,11 +177,16 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse archiveBuildRun(Long id, boolean deleteWorkspace) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
-        if ("running".equals(buildRun.getStatus())) {
-            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "运行中的构建流水线不能归档");
+        // 真实运行判定：只有当前阶段是 index/qa_smoke 且对应后台任务确实在运行时才拒绝归档。
+        // material_selection / parse / graph_input_export / prompt 这些纯前端操作阶段
+        // 无论 status 是什么都允许归档，避免用户中途离开后留下的"运行中"草稿无法清理。
+        if (isBuildRunActuallyRunning(buildRun)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "构建流水线正在运行后台任务，无法删除，请等待任务结束或先取消任务");
         }
         if (deleteWorkspace && buildRun.getActiveIndexRunId() != null) {
-            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "激活索引构建工作区不能删除");
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "该构建承载了当前激活索引，请先切换激活索引再删除");
         }
 
         boolean workspaceDeleted = deleteWorkspace && deleteWorkspace(buildRun.getWorkspaceUri());
@@ -186,6 +198,36 @@ public class KnowledgeBaseBuildRunService {
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+    }
+
+    /**
+     * 判定 buildRun 是否真正有后台进程在跑。
+     *
+     * <p>规则：
+     * - status != "running" → 一定不在跑
+     * - currentStage 不在 (index, qa_smoke) → 是用户向导操作的中间态，不在跑
+     * - currentStage = "index" → 检查关联 indexRun 是否仍在 running 且未 stale
+     * - currentStage = "qa_smoke" → 检查 qaStatus 是否仍在 running 且未 stale</p>
+     */
+    private boolean isBuildRunActuallyRunning(KnowledgeBaseBuildRuns buildRun) {
+        if (!"running".equalsIgnoreCase(buildRun.getStatus())) {
+            return false;
+        }
+        String stage = buildRun.getCurrentStage();
+        if (!"index".equalsIgnoreCase(stage) && !"qa_smoke".equalsIgnoreCase(stage)) {
+            // 纯用户向导阶段，把残留的 running 视为已中断（让归档放行）
+            return false;
+        }
+        // 主动恢复一次 stale 索引任务，避免历史卡死的 indexRun 让归档无法进行
+        Duration staleThreshold = Duration.ofSeconds(properties.getTimeout().getIndexStaleSeconds());
+        indexRunsService.recoverStaleRunningRuns(buildRun.getKnowledgeBaseId(), staleThreshold);
+        if ("index".equalsIgnoreCase(stage)) {
+            return indexRunsService.findActiveRunningByKnowledgeBaseId(buildRun.getKnowledgeBaseId())
+                    .filter(run -> buildRun.getId().equals(run.getBuildRunId()))
+                    .isPresent();
+        }
+        // qa_smoke：QA 任务时长一般在分钟级，未做单独 stale 扫描；这里直接看 qaStatus
+        return "running".equalsIgnoreCase(buildRun.getQaStatus());
     }
 
     @Transactional
@@ -237,6 +279,40 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse markIndexSuccessDone(Long buildRunId, String qaStatus) {
         return markIndexSuccessDone(buildRunId, qaStatus, null, null, null);
+    }
+
+    /**
+     * 标记 buildRun 进入"真实运行"状态（仅供 IndexWorkflowService 在 GraphRAG 索引进程
+     * 启动前调用）。会同时把 currentStage 推进到 index 并写入 stage 元数据，避免 status
+     * 与 stage 不一致。
+     */
+    @Transactional
+    public BuildRunDetailResponse markIndexStarted(Long buildRunId) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
+        buildRun.setStatus("running");
+        buildRun.setCurrentStage("index");
+        buildRun.setBuildMetadata(stageMetadata("index", Map.of("indexStarted", true)));
+        if (buildRun.getStartedAt() == null) {
+            buildRun.setStartedAt(LocalDateTime.now());
+        }
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(buildRunId));
+    }
+
+    /**
+     * 标记 buildRun 因索引执行失败/异常进入失败终态。
+     */
+    @Transactional
+    public BuildRunDetailResponse markIndexFailed(Long buildRunId, String errorSummary) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
+        buildRun.setStatus("failed");
+        buildRun.setBuildMetadata(stageMetadata(buildRun.getCurrentStage() == null ? "index" : buildRun.getCurrentStage(),
+                Map.of("indexFailed", true, "error", errorSummary == null ? "" : errorSummary)));
+        buildRun.setFinishedAt(LocalDateTime.now());
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(buildRunId));
     }
 
     @Transactional
@@ -387,6 +463,9 @@ public class KnowledgeBaseBuildRunService {
         String mode = defaultText(request == null ? null : request.getMode(), "basic");
         writeQaSmokeRequest(buildRun, question, mode, smokeIndexRunId);
 
+        // qa_smoke 真正会触发 QA 工作流后台任务，显式标记 buildRun.status=running，
+        // 让"是否真在跑"的判定能准确识别出这条记录还在占用后台资源。
+        buildRun.setStatus("running");
         buildRun.setCurrentStage("qa_smoke");
         buildRun.setQaStatus("running");
         buildRun.setBuildMetadata(stageMetadata("qa_smoke", Map.of(
@@ -507,8 +586,18 @@ public class KnowledgeBaseBuildRunService {
         }
     }
 
+    /**
+     * 推进 buildRun 的工作流阶段。
+     *
+     * <p>注意：此方法只更新 currentStage / metadata / 时间戳，
+     * 不会改 status。原因是 material_selection / parse / graph_input_export / prompt
+     * 这些阶段都是用户在向导中点确认按钮，没有任何后台进程在跑，把 status 设成 "running" 会
+     * 误导列表显示，也让"运行中不能归档"的硬约束阻挡用户清理草稿记录。</p>
+     *
+     * <p>真正会启动后台进程的阶段（index / qa_smoke）由各自的 service 显式 setStatus("running")，
+     * 完成后写入 success / failed。</p>
+     */
     private void updateStage(KnowledgeBaseBuildRuns buildRun, String stage, String metadata) {
-        buildRun.setStatus("running");
         buildRun.setCurrentStage(stage);
         buildRun.setBuildMetadata(metadata);
         if (buildRun.getStartedAt() == null) {

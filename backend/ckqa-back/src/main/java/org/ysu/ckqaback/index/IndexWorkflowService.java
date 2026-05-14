@@ -236,6 +236,9 @@ public class IndexWorkflowService {
         String indexVersion = ENGINE + "-" + INDEX_VERSION_FORMATTER.format(LocalDateTime.now());
         IndexRuns run = indexRunsService.createPendingRun(knowledgeBase.getId(), buildRunId, indexVersion);
         indexRunsService.markRunning(run.getId());
+        // 真正后台进程即将启动：把 buildRun 显式标记成 running，让前端列表与 archiveBuildRun
+        // 判定能识别"这条记录确实在跑"。同时推进 currentStage 到 index。
+        buildRunService.markIndexStarted(buildRunId);
         Path workspaceRoot = workspaceService.resolve(buildRun.getWorkspaceUri());
 
         try {
@@ -267,6 +270,8 @@ public class IndexWorkflowService {
                                 false
                         )
                 );
+                buildRunService.markIndexFailed(buildRunId,
+                        indexResult.isTimedOut() ? "索引命令执行超时" : defaultErrorSummary(indexResult.getStderr(), "索引构建失败"));
                 throw new BusinessException(ApiResultCode.INDEX_RUN_EXECUTION_FAILED, HttpStatus.INTERNAL_SERVER_ERROR, "索引构建失败");
             }
 
@@ -310,11 +315,17 @@ public class IndexWorkflowService {
                     fallbackReason
             );
             return IndexRunResponse.fromEntity(indexRunsService.getRequiredById(run.getId()));
+        } catch (BusinessException exception) {
+            // BusinessException 来自 prepareIndexInput / 索引执行失败分支，已经 markFailed 过 indexRun，
+            // 这里统一回收 buildRun 状态，避免遗留 running 阻挡归档
+            buildRunService.markIndexFailed(buildRunId, exception.getMessage());
+            throw exception;
         } catch (IOException exception) {
             indexRunsService.markFailed(
                     run.getId(),
                     toMetadataJson(INDEX_COMMAND, null, null, defaultErrorSummary(exception.getMessage(), "索引任务执行异常"), false)
             );
+            buildRunService.markIndexFailed(buildRunId, defaultErrorSummary(exception.getMessage(), "索引任务执行异常"));
             throw exception;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -322,6 +333,7 @@ public class IndexWorkflowService {
                     run.getId(),
                     toMetadataJson(INDEX_COMMAND, null, null, "索引任务被中断", false)
             );
+            buildRunService.markIndexFailed(buildRunId, "索引任务被中断");
             throw exception;
         }
     }
