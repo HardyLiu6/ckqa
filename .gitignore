@@ -154,6 +154,7 @@ graphrag_pipeline/results/extraction_eval/runs/
 graphrag_pipeline/results/extraction_raw/
 graphrag_pipeline/results/errors/
 graphrag_pipeline/results/reports/extraction_scoring/
+graphrag_pipeline/results/prompt_tune_runs/
 
 # LanceDB
 graphrag_pipeline/**/lancedb/
