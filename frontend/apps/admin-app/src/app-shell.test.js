@@ -2739,7 +2739,7 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(knowledgeBases.primaryAction.title, '创建知识库')
   assert.equal(knowledgeBases.secondaryAction, null)
   assert.equal(knowledgeBaseDetail.dataSource, 'live')
-  assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看索引运行')
+  assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看构建历史')
   assert.equal(materialDetail.dataSource, 'live')
   assert.equal(materialDetail.eyebrow, '')
   assert.equal(parseResults.dataSource, 'live')

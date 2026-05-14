@@ -117,12 +117,7 @@ export function buildConsoleBreadcrumbItems(route = {}) {
   items.push(...resolveCourseParents(route))
 
   if (route.name === 'knowledge-base-build-runs') {
-    items.push({
-      label: '知识库列表',
-      name: 'knowledge-bases',
-      to: '/app/knowledge-bases',
-      kind: 'link',
-    })
+    // 顶部已经按 navGroup 推过「知识库列表」，这里只追加「知识库详情」父级，避免重复
     const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
     if (detailParent) {
       items.push(detailParent)

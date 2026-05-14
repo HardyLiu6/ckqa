@@ -4,7 +4,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   BookOpen,
   Brain,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Check,
   DatabaseZap,
   Download,
@@ -12,6 +14,7 @@ import {
   Pencil,
   Archive,
   Hammer,
+  History,
   ImagePlus,
   Play,
   Plus,
@@ -476,6 +479,7 @@ const primaryActionIcon = computed(() => {
 })
 const secondaryActionIcon = computed(() => {
   if (route.name === 'material-detail') return UploadCloud
+  if (route.name === 'knowledge-base-detail') return History
   return DatabaseZap
 })
 const creationDialogTitle = computed(() => creationDialog.value === 'knowledge-base' ? '新建知识库' : '新建课程')
@@ -532,6 +536,25 @@ const parseResultGroups = computed(() => {
 })
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+// 索引运行卡片折叠：超过阈值时默认收起，本地状态由本组件维护，列表切换刷新会自然 reset
+const INDEX_RUN_COLLAPSE_THRESHOLD = 12
+const indexRunsExpanded = ref(false)
+const indexRunsTotal = computed(() => indexRunsBlock.value?.items?.length ?? 0)
+const indexRunsCanCollapse = computed(() => indexRunsTotal.value > INDEX_RUN_COLLAPSE_THRESHOLD)
+const visibleIndexRuns = computed(() => {
+  const items = indexRunsBlock.value?.items ?? []
+  if (!indexRunsCanCollapse.value || indexRunsExpanded.value) {
+    return items
+  }
+  return items.slice(0, INDEX_RUN_COLLAPSE_THRESHOLD)
+})
+function toggleIndexRunsExpanded() {
+  indexRunsExpanded.value = !indexRunsExpanded.value
+}
+// 切换知识库或刷新数据时，把折叠状态恢复成默认收起，避免不同库之间的状态串扰
+watch(indexRunsBlock, () => {
+  indexRunsExpanded.value = false
+})
 const materialParseProgress = computed(() => (
   resolveMaterialParseProgress(streamedMaterialItem.value, {
     active: activeOperationKey.value === 'material-parse',
@@ -965,6 +988,11 @@ async function handleBuildPrimaryAction() {
 async function handleSecondaryAction() {
   if (route.name === 'course-detail') {
     await router.push(`/app/courses/${encodeURIComponent(String(route.params.courseId ?? ''))}/members`)
+    return
+  }
+
+  if (route.name === 'knowledge-base-detail') {
+    await router.push(`/app/knowledge-bases/${encodeURIComponent(String(route.params.kbId ?? ''))}/build-runs`)
     return
   }
 
@@ -2678,6 +2706,24 @@ function renderFactLabel(field) {
   return typeof field === 'string' ? field : field.label
 }
 
+// 索引运行卡片的时间副文本：将 ISO 时间格式化成 yyyy-MM-dd HH:mm，否则原样返回
+function formatIndexRunDetail(value) {
+  if (!value) {
+    return '时间未知'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const pad = (n) => String(n).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hour = pad(date.getHours())
+  const minute = pad(date.getMinutes())
+  return `${year}-${month}-${day} ${hour}:${minute}`
+}
+
 function handleInlineImageError(event) {
   event.currentTarget.style.display = 'none'
 }
@@ -4253,18 +4299,26 @@ onBeforeUnmount(() => {
     </article>
   </section>
 
-  <section v-else-if="knowledgeBaseBlock || config.blocks?.indexRun" class="content-grid two-columns">
-    <article class="panel">
-      <div class="panel-heading">
-        <h2>{{ knowledgeBaseBlock ? '知识库概览' : '索引运行概览' }}</h2>
+  <!-- 知识库详情页：上下分区卡片式布局
+       上分区：知识库概览（panel + field-grid）
+       下分区：索引运行（panel + index-run-grid 响应式卡片网格） -->
+  <section v-else-if="knowledgeBaseBlock" class="kb-detail-stack">
+    <article class="panel kb-overview-panel">
+      <header class="panel-heading kb-overview-heading">
+        <div class="kb-overview-heading__title">
+          <h2>知识库概览</h2>
+          <p v-if="knowledgeBaseBlock.item?.name" class="kb-overview-heading__name">
+            {{ knowledgeBaseBlock.item.name }}
+          </p>
+        </div>
         <StatusBadge
-          :status="knowledgeBaseBlock?.item?.status ?? config.blocks?.indexRun?.item?.status"
-          :label="knowledgeBaseBlock ? resolveKnowledgeBaseStatusLabel(knowledgeBaseBlock.item?.status) : ''"
+          :status="knowledgeBaseBlock.item?.status"
+          :label="resolveKnowledgeBaseStatusLabel(knowledgeBaseBlock.item?.status)"
         />
-      </div>
-      <div class="field-grid">
+      </header>
+      <div class="field-grid kb-overview-grid">
         <div
-          v-for="field in (knowledgeBaseBlock?.facts ?? config.blocks?.indexRun?.facts)"
+          v-for="field in knowledgeBaseBlock.facts"
           :key="field.label"
           class="field-tile"
         >
@@ -4277,28 +4331,92 @@ onBeforeUnmount(() => {
       </div>
     </article>
 
-    <article v-if="indexRunsBlock" class="panel">
-      <div class="panel-heading">
-        <h2>索引运行</h2>
-      </div>
-      <!-- list-stagger：索引运行时间线逐条渐入，Requirements 4.2 -->
+    <article v-if="indexRunsBlock" class="panel index-run-panel">
+      <header class="panel-heading index-run-heading">
+        <div class="index-run-heading__title">
+          <h2>索引运行</h2>
+          <span v-if="indexRunsBlock.items?.length" class="index-run-heading__count">
+            共 {{ indexRunsBlock.items.length }} 条
+          </span>
+        </div>
+        <RouterLink
+          v-if="knowledgeBaseBlock.item?.id"
+          :to="`/app/knowledge-bases/${knowledgeBaseBlock.item.id}/build-runs`"
+          class="panel-heading__link"
+        >
+          查看完整构建历史 →
+        </RouterLink>
+      </header>
+      <!-- list-stagger：索引运行卡片逐条渐入，Requirements 4.2 -->
       <TransitionGroup
+        v-if="indexRunsBlock.items?.length"
         name="list-stagger"
-        tag="ol"
-        class="timeline-list"
+        tag="div"
+        class="index-run-grid"
         appear
       >
-        <li
-          v-for="(item, index) in indexRunsBlock.items"
+        <RouterLink
+          v-for="(item, index) in visibleIndexRuns"
           :key="item.id"
+          :to="item.to"
+          class="index-run-card"
+          :data-status="item.meta"
           :style="{ '--stagger-index': index }"
         >
-          <StatusBadge :status="item.meta" />
-          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
-          <small>{{ item.detail }}</small>
-        </li>
+          <div class="index-run-card__head">
+            <StatusBadge :status="item.meta" />
+            <span class="index-run-card__id">#{{ item.id }}</span>
+          </div>
+          <div class="index-run-card__body">
+            <strong>{{ item.title }}</strong>
+            <small>{{ formatIndexRunDetail(item.detail) }}</small>
+          </div>
+          <span class="index-run-card__foot">查看详情 →</span>
+        </RouterLink>
       </TransitionGroup>
-      <p v-if="indexRunsBlock.state === 'empty'">暂无索引运行。</p>
+      <!-- 超过阈值时显示「展开剩余 N 条 / 收起」按钮，避免页面被拉得过长 -->
+      <div v-if="indexRunsCanCollapse" class="index-run-toggle">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          @click="toggleIndexRunsExpanded"
+        >
+          <component
+            :is="indexRunsExpanded ? ChevronUp : ChevronDown"
+            class="button-icon"
+            :size="15"
+            aria-hidden="true"
+          />
+          {{
+            indexRunsExpanded
+              ? '收起'
+              : `展开剩余 ${indexRunsTotal - INDEX_RUN_COLLAPSE_THRESHOLD} 条`
+          }}
+        </el-button>
+      </div>
+      <p v-if="!indexRunsBlock.items?.length" class="index-run-empty">暂无索引运行。触发首次构建后，这里会显示运行卡片。</p>
+    </article>
+  </section>
+
+  <section v-else-if="config.blocks?.indexRun" class="content-grid two-columns">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>索引运行概览</h2>
+        <StatusBadge :status="config.blocks?.indexRun?.item?.status" />
+      </div>
+      <div class="field-grid">
+        <div
+          v-for="field in config.blocks?.indexRun?.facts"
+          :key="field.label"
+          class="field-tile"
+        >
+          <span>{{ renderFactLabel(field) }}</span>
+          <RouterLink v-if="field.to" :to="field.to" class="field-tile__link">
+            {{ renderFactValue(field) }}
+          </RouterLink>
+          <strong v-else>{{ renderFactValue(field) }}</strong>
+        </div>
+      </div>
     </article>
   </section>
 

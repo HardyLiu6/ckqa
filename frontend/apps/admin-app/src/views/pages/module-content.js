@@ -272,7 +272,7 @@ const configs = {
     eyebrow: 'Knowledge Base Detail',
     summary: '知识库详情突出当前激活版本、文档映射、索引运行、问答验证与运行日志。',
     primaryAction: { label: '进入构建向导', permission: 'kb:write' },
-    secondaryAction: { label: '查看索引运行', permission: 'kb:read' },
+    secondaryAction: { label: '查看构建历史', permission: 'kb:read' },
     facts: ['概览', '文档映射', '索引运行', '问答验证', '运行日志'],
     timeline: [
       { label: '文档映射', state: 'ready', detail: '等待真实文档列表接入' },

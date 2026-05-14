@@ -1916,8 +1916,9 @@ function buildMaterialFacts(material = {}) {
 }
 
 function buildKnowledgeBaseFacts(knowledgeBase = {}) {
+  // 概览只保留 7 个核心字段，确保宽屏一行排开；
+  // 知识库 ID 和构建历史入口分别由顶部 hero 和「查看构建历史」按钮承担
   return [
-    { label: '知识库 ID', value: knowledgeBase.id ?? '-' },
     { label: '知识库编码', value: knowledgeBase.kbCode ?? '-' },
     { label: '名称', value: knowledgeBase.name ?? '-' },
     { label: '所属课程', value: knowledgeBase.courseId ?? '-' },
@@ -1925,7 +1926,6 @@ function buildKnowledgeBaseFacts(knowledgeBase = {}) {
     { label: '激活索引', value: knowledgeBase.activeIndexRunId ? `#${knowledgeBase.activeIndexRunId}` : '需先构建索引' },
     { label: '索引运行数', value: formatCount(knowledgeBase.indexRunCount) },
     { label: '更新时间', value: knowledgeBase.updatedAt ?? '-' },
-    { label: '构建历史', value: '查看全部 →', to: `/app/knowledge-bases/${knowledgeBase.id}/build-runs` },
   ]
 }
 
