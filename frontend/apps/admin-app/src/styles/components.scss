@@ -2949,12 +2949,16 @@ textarea.text-input {
   background: var(--ckqa-surface-muted);
 }
 
-.artifact-row header,
-.prompt-confirm-panel {
+.artifact-row header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--ckqa-space-3);
+}
+
+.prompt-confirm-panel {
+  display: grid;
+  gap: var(--ckqa-space-4);
 }
 
 .artifact-cells {
@@ -3109,10 +3113,10 @@ textarea.text-input {
 }
 
 .prompt-strategy-card {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--ckqa-space-3);
+  min-height: 220px;
   padding: var(--ckqa-space-4);
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-md);
@@ -3156,19 +3160,61 @@ textarea.text-input {
   font-size: 18px;
 }
 
-.prompt-strategy-card__body {
-  display: grid;
-  gap: 4px;
-}
-
 .prompt-strategy-card__title {
   font-weight: 800;
   font-size: 14px;
 }
 
-.prompt-strategy-card__desc {
+.prompt-strategy-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--ckqa-space-3);
+}
+
+.prompt-strategy-card__tagline {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--ckqa-text-muted);
+}
+
+.prompt-strategy-card__pros,
+.prompt-strategy-card__cons {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.prompt-strategy-card__pros li {
+  color: var(--ckqa-success-text, #0f766e);
+}
+
+.prompt-strategy-card__cons li {
+  color: var(--ckqa-text-muted);
+}
+
+.prompt-strategy-card__pros li > span,
+.prompt-strategy-card__cons li > span {
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.prompt-strategy-card__best-for {
+  margin: 0;
+  margin-top: auto;
+  padding-top: var(--ckqa-space-2);
+  border-top: 1px dashed var(--ckqa-border);
+  color: var(--ckqa-text-muted);
+}
+
+.prompt-strategy-card__best-for small {
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -3179,6 +3225,8 @@ textarea.text-input {
   border: 1px solid var(--ckqa-border);
   border-radius: var(--ckqa-radius-md);
   background: var(--ckqa-surface-muted);
+  max-width: 768px;
+  margin-inline: auto;
 }
 
 .prompt-strategy-detail__primary {
@@ -3192,6 +3240,21 @@ textarea.text-input {
   color: var(--ckqa-text-muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.prompt-strategy-detail__hint {
+  margin: 0;
+  margin-top: var(--ckqa-space-2);
+  padding-top: var(--ckqa-space-2);
+  border-top: 1px dashed var(--ckqa-border);
+  font-size: 12.5px;
+  color: var(--ckqa-text-muted);
+}
+
+.prompt-tune-progress__hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ckqa-text-muted);
 }
 
 .inline-error {
