@@ -190,3 +190,10 @@ graphrag_pipeline/results/qa_eval/runs/*/judge_raw/
 graphrag_pipeline/results/qa_eval/runs/*/rule_scoring.json
 graphrag_pipeline/results/qa_eval/runs/*/judge_scoring.json
 graphrag_pipeline/results/qa_eval/runs/*/scoring*.json
+
+# QA eval optional third-party outputs
+graphrag_pipeline/results/qa_eval/runs/*/ragas_raw/
+graphrag_pipeline/results/qa_eval/runs/*/ragas_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/factuality_raw/
+graphrag_pipeline/results/qa_eval/runs/*/factuality_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/algorithmic_scoring.json

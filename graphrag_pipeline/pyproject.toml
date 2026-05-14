@@ -64,8 +64,28 @@ scraper = [
     "beautifulsoup4>=4.12.0",
     "html2text>=2024.2.26",
 ]
+eval = [
+    # QA baseline algorithmic evaluation
+    "FlagEmbedding>=1.2.10",
+    "rouge-score>=0.1.2",
+    "jieba>=0.42.1",
+    "ir-measures>=0.3.5",
+    "scikit-learn>=1.5.0",
+]
+semantic-compat = [
+    # Optional compatibility metric for historical BERTScore reports
+    "bert-score>=0.3.13",
+]
+ragas = [
+    # Optional RAG evaluation compatibility layer
+    "ragas>=0.2.0",
+]
+factuality-extra = [
+    # SCALE has a PyPI package; SummaC / AlignScore are usually installed from their upstream repos.
+    "scale-score>=0.2.0",
+]
 all = [
-    "graphrag-pipeline[ml,graph,scraper]",
+    "graphrag-pipeline[ml,graph,scraper,eval]",
 ]
 
 [build-system]
