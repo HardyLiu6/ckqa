@@ -14,10 +14,12 @@ import {
   listParseResults,
 } from '../../api/materials.js'
 import {
+  deleteBuildRun,
   getBuildRun,
   getIndexRun,
   getKnowledgeBase,
   listIndexRuns,
+  listKnowledgeBaseBuildRuns,
   listKnowledgeBases,
 } from '../../api/knowledge-bases.js'
 import {
@@ -30,6 +32,11 @@ import {
   resolvePromptConfirmState,
 } from './module-content.js'
 import { resolveBuildRunIdQuery, resolveBuildSelectionFromQuery } from './module-page-model.js'
+import {
+  BUILD_RUN_COLUMNS,
+  buildBuildRunListParams,
+  mapBuildRunRow,
+} from './build-run-list-model.js'
 
 export const DEFAULT_COURSE_COVER_URL = '/api/v1/course-covers/default-course-cover.svg'
 
@@ -128,6 +135,7 @@ const defaultServices = {
   getBuildRun,
   listIndexRuns,
   listKnowledgeBases,
+  listKnowledgeBaseBuildRuns,
 }
 
 export async function loadModulePage(route, query = {}, services = defaultServices) {
@@ -141,6 +149,10 @@ export async function loadModulePage(route, query = {}, services = defaultServic
 
   if (route.name === 'knowledge-base-build') {
     return loadKnowledgeBaseBuild(route, query, services)
+  }
+
+  if (route.name === 'knowledge-base-build-runs') {
+    return loadKnowledgeBaseBuildRunList(route, query, services)
   }
 
   if (route.name === 'index-run-detail') {
@@ -2147,4 +2159,71 @@ function resolveMaterialActions(material = {}, parseResults = [], options = {}) 
 
 function formatCount(value) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : '-'
+}
+
+async function loadKnowledgeBaseBuildRunList(route, query, services) {
+  const kbId = route.params?.kbId
+  if (!kbId) {
+    return {
+      source: 'live',
+      requestState: 'error',
+      refreshedAt: '',
+      columns: BUILD_RUN_COLUMNS,
+      rows: [],
+      pagination: null,
+      facts: [],
+      workflowSteps: [],
+      blocks: {},
+      error: createApiError({ message: '缺少知识库 ID' }),
+      raw: null,
+    }
+  }
+  try {
+    const [knowledgeBaseResult, pageResult] = await Promise.allSettled([
+      services.getKnowledgeBase(kbId),
+      services.listKnowledgeBaseBuildRuns(kbId, buildBuildRunListParams(query)),
+    ])
+    // 🔴 修复 review #1：pageResult rejected 时必须走 error 分支，不能静默 fallback 成 empty
+    if (pageResult.status === 'rejected') {
+      throw pageResult.reason
+    }
+    const pageData = pageResult.value
+    const rows = (pageData.items ?? []).map((buildRun) => mapBuildRunRow(kbId, buildRun))
+    const knowledgeBase = knowledgeBaseResult.status === 'fulfilled'
+      ? knowledgeBaseResult.value
+      : null
+    return {
+      source: 'live',
+      requestState: rows.length > 0 ? 'success' : 'empty',
+      refreshedAt: new Date().toISOString(),
+      columns: BUILD_RUN_COLUMNS,
+      rows,
+      pagination: pageData.pagination ?? null,
+      facts: knowledgeBase
+        ? [
+            knowledgeBase.name ?? knowledgeBase.kbCode ?? `知识库 ${kbId}`,
+            knowledgeBase.courseId ? `课程 ${knowledgeBase.courseId}` : '',
+          ].filter(Boolean)
+        : [],
+      workflowSteps: [],
+      blocks: {
+        knowledgeBase: { state: knowledgeBase ? 'success' : 'empty', item: knowledgeBase },
+      },
+      raw: pageData.raw,
+    }
+  } catch (error) {
+    return {
+      source: 'live',
+      requestState: 'error',
+      refreshedAt: '',
+      columns: BUILD_RUN_COLUMNS,
+      rows: [],
+      pagination: null,
+      facts: [],
+      workflowSteps: [],
+      blocks: {},
+      error: createApiError(error),
+      raw: error?.raw ?? error,
+    }
+  }
 }
