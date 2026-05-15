@@ -91,6 +91,11 @@ public enum ApiResultCode {
     PROMPT_TUNE_RUN_NOT_FOUND(4050, "提示词自动调优记录不存在"),
 
     /**
+     * 标注样本不存在。
+     */
+    AUDIT_SAMPLE_NOT_FOUND(4051, "标注样本不存在"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
@@ -146,6 +151,11 @@ public enum ApiResultCode {
     PROMPT_TUNE_ALREADY_RUNNING(4102, "相同选材的自动调优正在执行，请稍候"),
 
     /**
+     * 当前 build run 存在已被人工标注的样本，强制重新生成会清空当前进度。
+     */
+    BUILD_RUN_HAS_ANNOTATED_SAMPLES(4103, "当前构建已有人工标注，确认覆盖请重试并设置 force=true"),
+
+    /**
      * 课程资料已存在。
      */
     COURSE_MATERIAL_EXISTS(4100, "课程资料已存在"),
@@ -164,6 +174,11 @@ public enum ApiResultCode {
      * 索引任务执行失败。
      */
     INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败"),
+
+    /**
+     * 标注流水线执行失败（build_prompt_tuning_samples / build_audit_extraction_set）。
+     */
+    AUDIT_PIPELINE_FAILED(5005, "标注流水线执行失败"),
 
     /**
      * 接口尚未实现（占位）。
