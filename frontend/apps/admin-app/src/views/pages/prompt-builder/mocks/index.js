@@ -30,3 +30,6 @@ export const MOCK_COURSE_NAME = '操作系统'
 
 // Phase 1b：标注 IDE 所需的 audit 样本 mock
 export { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './audit-samples.js'
+
+// Phase 1c：候选勾选所需的候选 mock
+export { MOCK_CANDIDATES } from './candidates.js'
