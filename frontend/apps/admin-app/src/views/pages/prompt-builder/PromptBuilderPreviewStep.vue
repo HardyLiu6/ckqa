@@ -1,3 +1,8 @@
+<!--
+  DEPRECATED in Phase 1a（2026-05-15）
+  本组件原为旧版 3 步向导的"预览"步骤，已被 PromptBuilderSaveStep 替代。
+  Phase 1e 会用 PromptDisplay 实现完整 prompt 预览；届时本文件被删除。
+-->
 <script setup>
 import { ref, computed } from 'vue'
 

@@ -1,3 +1,9 @@
+<!--
+  DEPRECATED in Phase 1a（2026-05-15）
+  本组件原为旧版 3 步向导的"分块编辑"步骤，已被 5 步骨架替代。
+  Phase 1b 会用 AnnotationWorkArea / AnnotationEntityCard 等新组件实现等价能力。
+  在 Phase 1b 接入完成前请勿引用本文件；接入后将被删除。
+-->
 <script setup>
 import { computed, ref } from 'vue'
 import { utf8ByteLength, formatBytes } from './byte-counter.js'
