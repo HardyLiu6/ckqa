@@ -5314,3 +5314,312 @@ textarea.text-input {
 .scoring-bottom-bar__info { color: var(--ckqa-text-muted); font-size: 13px; }
 .scoring-bottom-bar__info strong { color: var(--ckqa-text); font-family: var(--ckqa-font-mono, ui-monospace, monospace); }
 .scoring-bottom-bar__actions { display: flex; gap: 10px; }
+
+// ─── PromptDisplay 三视图 ─────────────────────────────────────────────────────
+.prompt-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-md);
+  background: var(--ckqa-surface);
+  overflow: hidden;
+}
+
+.prompt-display__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ckqa-space-3);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ckqa-border);
+  background: var(--ckqa-surface-muted);
+}
+
+.prompt-display__view-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-bg);
+
+  button {
+    padding: 4px 12px;
+    border: none;
+    border-radius: calc(var(--ckqa-radius-sm) - 2px);
+    background: transparent;
+    color: var(--ckqa-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover:not(:disabled) { background: var(--ckqa-surface); color: var(--ckqa-text); }
+    &.active { background: var(--ckqa-surface); color: var(--ckqa-accent-strong); box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+  }
+}
+
+.prompt-display__copy {
+  padding: 4px 10px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  background: var(--ckqa-surface);
+  color: var(--ckqa-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+
+  &:hover { background: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface)); color: var(--ckqa-accent-strong); }
+}
+
+.prompt-display__body {
+  padding: 16px;
+  overflow: auto;
+  max-height: 520px;
+}
+
+.prompt-display__split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.prompt-display__pane {
+  overflow: auto;
+  max-height: 520px;
+  padding: 16px;
+
+  &--left { border-right: 1px solid var(--ckqa-border); }
+  &--right { background: #1e1e2e; }
+}
+
+// ─── PromptDisplayRich 章节卡片 ───────────────────────────────────────────────
+.prompt-display-rich {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prompt-display-rich__section {
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-sm);
+  overflow: hidden;
+
+  &.is-fallback { border-style: dashed; }
+}
+
+.prompt-display-rich__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ckqa-space-3);
+  padding: 10px 14px;
+  background: var(--ckqa-surface-muted);
+  cursor: pointer;
+  user-select: none;
+
+  &:hover { background: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface-muted)); }
+}
+
+.prompt-display-rich__icon {
+  font-size: 18px;
+  line-height: 1;
+  margin-right: 8px;
+}
+
+.prompt-display-rich__title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+
+  strong { font-size: 13px; font-weight: 700; color: var(--ckqa-text); }
+  small { display: block; font-size: 11px; color: var(--ckqa-text-muted); margin-top: 1px; }
+}
+
+.prompt-display-rich__toggle {
+  font-size: 11px;
+  color: var(--ckqa-text-muted);
+  white-space: nowrap;
+}
+
+.prompt-display-rich__body {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ckqa-text);
+
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  code { font-family: var(--ckqa-font-mono); font-size: 12px; background: var(--ckqa-surface-muted); padding: 1px 4px; border-radius: 3px; }
+}
+
+// placeholder 高亮
+.prompt-display-placeholder {
+  background: rgb(250 204 21 / 22%);
+  color: #92400e;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--ckqa-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+// ─── PromptDisplayRaw 暗色 IDE ────────────────────────────────────────────────
+.prompt-display-raw {
+  display: block;
+  margin: 0;
+  padding: 12px 0;
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-family: var(--ckqa-font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-x: auto;
+  white-space: pre;
+  border-radius: var(--ckqa-radius-sm);
+}
+
+.prompt-display-raw__line {
+  display: flex;
+  min-height: 20px;
+  padding: 0 14px;
+
+  &:hover { background: rgb(255 255 255 / 4%); }
+}
+
+.prompt-display-raw__lineno {
+  display: inline-block;
+  width: 36px;
+  flex: 0 0 36px;
+  text-align: right;
+  padding-right: 12px;
+  color: #585b70;
+  user-select: none;
+}
+
+.prompt-display-raw__text {
+  flex: 1;
+  min-width: 0;
+
+  .raw-section { color: #f9e2af; font-weight: 700; }
+  .raw-placeholder { color: #a6e3a1; background: rgb(166 227 161 / 12%); padding: 0 3px; border-radius: 2px; }
+}
+
+// ─── 05 步完整版布局 ──────────────────────────────────────────────────────────
+.prompt-builder-save-step--full {
+  .prompt-builder-step__header {
+    display: flex;
+    align-items: center;
+    gap: var(--ckqa-space-3);
+    margin-bottom: var(--ckqa-space-5);
+  }
+}
+
+.save-step-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: var(--ckqa-space-5);
+  align-items: start;
+}
+
+.save-step-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-3);
+}
+
+.save-step-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.save-step-preview__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ckqa-text);
+  margin: 0;
+}
+
+.save-step-preview__sub {
+  font-size: 13px;
+  color: var(--ckqa-text-muted);
+  margin: 0 0 4px;
+}
+
+.save-step-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-4);
+  padding: var(--ckqa-space-5);
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-md);
+  background: var(--ckqa-surface);
+}
+
+.save-step-form__icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.save-step-form__source {
+  display: grid;
+  gap: 6px;
+
+  > div {
+    display: flex;
+    align-items: center;
+    gap: var(--ckqa-space-3);
+    padding: 8px 12px;
+    border: 1px solid var(--ckqa-border);
+    border-radius: var(--ckqa-radius-sm);
+    background: var(--ckqa-surface-muted);
+    font-size: 13px;
+
+    span { color: var(--ckqa-text-muted); min-width: 64px; }
+    strong { color: var(--ckqa-text); font-weight: 600; }
+  }
+}
+
+.save-step-form__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ckqa-space-3);
+  margin-top: var(--ckqa-space-2);
+}
+
+// 保存范围 radio 覆盖
+.save-step-form .el-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-step-form .el-radio {
+  height: auto;
+  white-space: normal;
+}
+
+// ─── ann-pill 金色变体 ────────────────────────────────────────────────────────
+.ann-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--ckqa-radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--ckqa-surface-muted);
+  color: var(--ckqa-text-muted);
+  border: 1px solid var(--ckqa-border);
+}
+
+.ann-pill--gold {
+  color: #92400e;
+  background: rgb(250 204 21 / 14%);
+  border-color: rgb(250 204 21 / 30%);
+}
