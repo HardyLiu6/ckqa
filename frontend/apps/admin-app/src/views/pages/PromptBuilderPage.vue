@@ -9,6 +9,7 @@ import RetryPanel from '../../components/common/RetryPanel.vue'
 import PromptBuilderSeedStep from './prompt-builder/PromptBuilderSeedStep.vue'
 import PromptBuilderPlaceholderStep from './prompt-builder/PromptBuilderPlaceholderStep.vue'
 import PromptBuilderPrepareStep from './prompt-builder/PromptBuilderPrepareStep.vue'
+import PromptBuilderCandidatesStep from './prompt-builder/PromptBuilderCandidatesStep.vue'
 import PromptBuilderSaveStep from './prompt-builder/PromptBuilderSaveStep.vue'
 import {
   BUILDER_STEPS,
@@ -216,12 +217,10 @@ function returnToWizard() {
         <PromptBuilderPrepareStep
           v-else-if="activeStepKey === 'prepare'"
         />
-        <PromptBuilderPlaceholderStep
+        <PromptBuilderCandidatesStep
           v-else-if="activeStepKey === 'candidates'"
-          step-key="candidates"
-          title="生成候选提示词"
-          description="基于校准集生成多版候选提示词，挑选要参与评分的候选。"
-          phase="Phase 1c"
+          @start-scoring="gotoStep('scoring')"
+          @back="gotoPrev"
         />
         <PromptBuilderPlaceholderStep
           v-else-if="activeStepKey === 'scoring'"
