@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 04 步从占位组件升级为完整评分 UI：评分进行中显示候选矩阵（实时进度），评分完成后显示排行榜 + 详情抽屉。所有数据来自 mock，"评分中"用前端 setTimeout 推进进度模拟一个长任务（所有候选并发抽取+评分，约 6 秒跑完 4 候选）。
+**Goal:** 把 04 步从占位组件升级为完整评分 UI：评分进行中显示候选矩阵（实时进度），评分完成后显示排行榜 + 详情抽屉。所有数据来自 mock，"评分中"用前端 setTimeout 推进进度模拟一个长任务（流水线模式：一个候选进入评分后下一个立即开始抽取，约 21 秒跑完 4 候选）。
 
 **Architecture:** 04 步主壳 `PromptBuilderScoringStep.vue` 内含两态：`running`（候选矩阵）和 `done`（排行榜）。可测核心是评分进度模拟器 `scoring-progress-model.js`（已在 spec 范围内，本期实现），返回每个候选当前的状态与进度。组件用 `setInterval` 每 250ms 调用一次 `advanceProgress(initial, elapsedMs)` 重新渲染矩阵。完成后切换到排行榜表格 + 候选 row 点击触发详情抽屉（`<el-drawer>`）。"选定"动作用独立"操作列"按钮，与"看详情"分离，符合 spec § 04 修正。
 

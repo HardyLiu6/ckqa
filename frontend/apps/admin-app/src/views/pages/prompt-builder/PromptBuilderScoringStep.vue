@@ -56,17 +56,16 @@ onBeforeUnmount(() => {
 const elapsedSec = computed(() => Math.floor(elapsedMs.value / 1000))
 const tokensUsedEstimate = computed(() => finishedCalls.value * 5000)
 const totalTokensEstimate = computed(() => totalCalls.value * 5000)
-// 并发模式：所有候选同时跑，总时长 ≈ 单候选时长（~6s），不是 N × 单候选时长
+// 流水线模式：总时长 ≈ N × extractDuration + scoringDuration
+// 用已完成的抽取样本数推算整体进度比例
 const remainingMin = computed(() => {
   if (finishedCalls.value === 0) return '?'
-  // 并发时用"最慢候选的剩余进度"估算
-  const maxExtractDone = Math.max(...progress.value.map((p) => p.extractDone))
-  const progressRatio = maxExtractDone / TOTAL_SAMPLES_PER_CANDIDATE
-  if (progressRatio >= 1) return '< 1' // 已在 scoring 阶段
+  const progressRatio = finishedCalls.value / totalCalls.value
   const elapsedSec = elapsedMs.value / 1000
   const estimatedTotalSec = elapsedSec / Math.max(progressRatio, 0.01)
   const remainingSec = Math.max(0, estimatedTotalSec - elapsedSec)
-  return Math.max(1, Math.ceil(remainingSec / 60))
+  if (remainingSec < 60) return '< 1'
+  return Math.ceil(remainingSec / 60)
 })
 
 const reportCandidates = MOCK_SCORING_REPORT.candidates
