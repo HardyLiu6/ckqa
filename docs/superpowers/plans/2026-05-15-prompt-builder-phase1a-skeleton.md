@@ -913,30 +913,42 @@ git commit -m "feat(prompt-builder): 01 步种子组件接入 mock 历史草稿 
 **Files:**
 - Modify: `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue`
 
-- [ ] **Step 0: 验证依赖接口存在**
+- [ ] **Step 0: 验证依赖接口存在（grep 断言式，全部需返回非空）**
 
-Run（4 条命令分别确认）：
+每条命令必须有匹配输出（exit 0），否则停止报告并不要继续。这样 agentic worker 不需要人工判断 cat 内容。
 
 ```bash
-# WorkflowStepper 必须接受 active-key / steps / @update:active-key，且识别 status: 'blocked'
-cat frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
-# 期望：defineProps 中有 steps（Array）和 activeKey（String），emits 含 'update:activeKey'，
-# 模板里读 step.status，识别 'blocked' / 'ready' / 'done'
+# 1. WorkflowStepper 必须有 activeKey 或 active-key prop
+grep -nE "activeKey|active-key" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配（位于 defineProps 或 template 中）
 
-# getBuildRun API 已导出
+# 2. WorkflowStepper 必须能 emit update:activeKey
+grep -nE "update:activeKey|update:active-key" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配
+
+# 3. WorkflowStepper 必须识别 status: 'blocked'
+grep -nE "'blocked'|\"blocked\"" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配（在 template 模板中按 step.status === 'blocked' 控制视觉）
+
+# 4. getBuildRun API 已导出
 grep -n "export async function getBuildRun" frontend/apps/admin-app/src/api/knowledge-bases.js
-# 期望：行 50 左右
+# 期望：至少 1 行匹配（行 50 左右）
 
-# 路由名 knowledge-base-build 存在
+# 5. 路由名 knowledge-base-build 存在
 grep -n "name: 'knowledge-base-build'" frontend/apps/admin-app/src/router/routes.js
-# 期望：至少一行匹配
+# 期望：至少 1 行匹配
 
-# 路由 params 是 :kbId（不是 id 或 knowledgeBaseId）
+# 6. 路由 params 是 :kbId（不是 id 或 knowledgeBaseId）
 grep -nE "knowledge-bases/:kbId/build" frontend/apps/admin-app/src/router/routes.js
-# 期望：至少一行匹配
+# 期望：至少 1 行匹配
 ```
 
-如果任一项不符合期望，停下来报告，**不要**直接执行 Step 1。这是防止运行时静默失效的硬验证。
+**任一 grep 命令返回 exit 1（无匹配）就停下来报告，不要执行 Step 1。** 这是防止运行时静默失效的硬验证。
+
+如果某条 grep 失败，说明假设的接口与现状不符，需要先 cat 看实际接口名再决定：
+- WorkflowStepper 接口不符：在 Step 1 模板中调整 prop / emit 名
+- API 不存在：在 import 处先实现
+- 路由不符：先在 routes.js 调整或在 Step 1 用实际路由名替代
 
 - [ ] **Step 1: 完整替换 PromptBuilderPage.vue**
 
