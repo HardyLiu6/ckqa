@@ -48,6 +48,7 @@ import {
   selectNone,
   selectBaselineOnly,
   computeSummary,
+  formatTokens,
   TOTAL_AUDIT_SAMPLES,
 } from '../../views/pages/prompt-builder/candidates-selection-model.js'
 
@@ -112,6 +113,16 @@ describe('candidates-selection-model', () => {
     assert.equal(s.totalCalls, 20)
     assert.equal(s.estimatedTokens, 60_000)
   })
+
+  it('formatTokens handles 0 / sub-thousand / thousand+ ranges', () => {
+    assert.equal(formatTokens(0), '0')
+    assert.equal(formatTokens(undefined), '0')
+    assert.equal(formatTokens(500), '500')
+    assert.equal(formatTokens(999), '999')
+    assert.equal(formatTokens(1000), '~1k')
+    assert.equal(formatTokens(60_000), '~60k')
+    assert.equal(formatTokens(408_000), '~408k')
+  })
 })
 ```
 
@@ -119,7 +130,7 @@ describe('candidates-selection-model', () => {
 
 Run: `cd frontend/apps/admin-app && pnpm test src/__tests__/unit/prompt-builder-candidates-selection.test.js`
 
-Expected: 9 个 it FAIL（模块不存在）
+Expected: 10 个 it FAIL（模块不存在）
 
 - [ ] **Step 3: 实现模型**
 
@@ -128,6 +139,11 @@ Expected: 9 个 it FAIL（模块不存在）
 //
 // Phase 1c：候选勾选状态管理 + 摘要计算。
 // Phase 1a 估算依据：spec 提到 80 次调用约 18 min → 13.5 s/call，Phase 1c 用 13 s 简化估算。
+//
+// TOTAL_AUDIT_SAMPLES = 20 是「校准集预期规模」（spec § 03 假设值），不是 Phase 1b mock
+// 实际数量。Phase 1b 的 MOCK_AUDIT_SAMPLES 只有 5 条，仅用于 02 步 IDE 演示；03 步在
+// 估算调用次数 / token 消耗 / 时长时按生产规模 20 来算，避免 mock 数据假到失去演示价值。
+// Phase 2+ 接真实 API 后，这个常量会被 GET /audit-samples?count 的真实计数替换。
 
 export const TOTAL_AUDIT_SAMPLES = 20
 const SECONDS_PER_CALL = 13
@@ -163,11 +179,22 @@ export function computeSummary(selectedIds, candidates) {
   const estimatedMinutes = totalCalls === 0 ? 0 : Math.ceil(totalCalls * SECONDS_PER_CALL / 60)
   return { candidateCount, totalCalls, estimatedTokens, estimatedMinutes }
 }
+
+// 摘要 / 底部操作条共用的 token 数字格式化：
+//   0     → '0'
+//   <1000 → 原数字（避免 ~0k 误导）
+//   ≥1000 → ~Xk（千以下四舍五入）
+// 提取到 model 层避免 SummaryBar 与底部操作条各写一份且行为不一致。
+export function formatTokens(n) {
+  if (!n) return '0'
+  if (n < 1000) return String(n)
+  return `~${Math.round(n / 1000)}k`
+}
 ```
 
 - [ ] **Step 4: 跑测试，确认通过**
 
-Expected: 9 个 it PASS
+Expected: 10 个 it PASS
 
 - [ ] **Step 5: 提交**
 
@@ -270,11 +297,38 @@ export const MOCK_CANDIDATES = [
 ]
 ```
 
-- [ ] **Step 2: 修改 mocks/index.js 末尾追加**
+- [ ] **Step 2: 修改 mocks/index.js 末尾追加重导出**
 
-```javascript
-export * from './candidates.js'
+⚠️ 这里是 **追加** 而非替换。Phase 1a 已定义 `MOCK_HISTORY_DRAFTS` / `MOCK_COURSE_NAME`，Phase 1b 已追加 `export * from './audit-samples.js'`，必须保留。
+
+操作步骤：
+
+1. 先读取文件确认尾部内容：
+
+```bash
+cat frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+cat -A frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js | tail -3
 ```
+
+预期：文件以 `export * from './audit-samples.js'` 这一行结束（Phase 1b 追加）。`cat -A` 显示行尾 `$` 与制表符，用于确认是否有额外空行 / 末尾无换行 —— 据此调整下面 str_replace 的 oldStr。
+
+2. 用 str_replace 在 Phase 1b 追加的那一行后再追加新的重导出，确保不动 Phase 1a / Phase 1b 已有内容：
+
+- oldStr：
+  ```javascript
+  // Phase 1b：标注 IDE 所需的 audit 样本 mock
+  export * from './audit-samples.js'
+  ```
+- newStr：
+  ```javascript
+  // Phase 1b：标注 IDE 所需的 audit 样本 mock
+  export * from './audit-samples.js'
+
+  // Phase 1c：候选勾选所需的候选 mock
+  export * from './candidates.js'
+  ```
+
+3. 再次 `cat` 确认 `MOCK_HISTORY_DRAFTS` / `MOCK_COURSE_NAME` 与 audit-samples 重导出仍在，且新增了 `export * from './candidates.js'`。
 
 - [ ] **Step 3: 提交**
 
@@ -401,6 +455,7 @@ git commit -m "feat(prompt-builder): 新增候选卡片组件 (Phase 1c)"
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/CandidateSummaryBar.vue -->
 <script setup>
 import { computed } from 'vue'
+import { formatTokens } from './candidates-selection-model.js'
 
 const props = defineProps({
   totalCandidates:    { type: Number, required: true },
@@ -410,11 +465,7 @@ const props = defineProps({
   estimatedMinutes:   { type: Number, required: true },
 })
 
-const formattedTokens = computed(() => {
-  if (props.estimatedTokens === 0) return '0'
-  if (props.estimatedTokens >= 1000) return `~${Math.round(props.estimatedTokens / 1000)}k`
-  return `${props.estimatedTokens}`
-})
+const formattedTokens = computed(() => formatTokens(props.estimatedTokens))
 </script>
 
 <template>
@@ -474,6 +525,7 @@ import {
   selectNone,
   selectBaselineOnly,
   computeSummary,
+  formatTokens,
 } from './candidates-selection-model.js'
 
 const emit = defineEmits(['start-scoring', 'back'])
@@ -490,6 +542,8 @@ function handleToggle(id) {
 }
 
 function handleSelectAll()  { selectedIds.value = selectAll(candidates) }
+// 行为是「全部取消勾选」（selectNone()=[]），按钮标签使用「清空」更准确；
+// 通用 UI 里「反选」一般指「翻转选中状态」，避免与用户预期不一致。
 function handleSelectNone() { selectedIds.value = selectNone() }
 function handleSelectBaseline() {
   selectedIds.value = selectBaselineOnly(candidates)
@@ -527,9 +581,9 @@ function handleStart() {
 
     <div class="candidate-quick-actions">
       <button @click="handleSelectAll">全选</button>
-      <button @click="handleSelectNone">反选</button>
+      <button @click="handleSelectNone">清空</button>
       <button @click="handleSelectBaseline">仅选基线</button>
-      <span class="ann-text-muted" style="margin-left:auto">点击候选卡片切换勾选状态</span>
+      <span class="ann-text-muted candidate-quick-actions__hint">点击候选卡片切换勾选状态</span>
     </div>
 
     <div class="candidate-grid">
@@ -546,7 +600,7 @@ function handleStart() {
     <footer class="candidate-bottom-bar">
       <div class="candidate-bottom-bar__info">
         已选 <strong>{{ summary.candidateCount }}</strong> 个候选 ·
-        预估 <strong>{{ summary.estimatedTokens === 0 ? '0' : `~${Math.round(summary.estimatedTokens / 1000)}k` }}</strong> tokens ·
+        预估 <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
         约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
       </div>
       <div class="candidate-bottom-bar__actions">
@@ -564,7 +618,7 @@ function handleStart() {
       size="520px"
     >
       <div class="candidate-prompt-drawer">
-        <div class="ann-text-muted" style="margin-bottom:8px">
+        <div class="ann-text-muted candidate-prompt-drawer__hint">
           Phase 1e 会换成富文本三视图。当前展示为暗色 IDE 简版。
         </div>
         <pre class="candidate-prompt-drawer__pre">
@@ -635,6 +689,7 @@ git commit -m "feat(prompt-builder): 新增 03 步候选勾选主壳 (Phase 1c)"
 .candidate-quick-actions button:hover {
   background: color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
 }
+.candidate-quick-actions__hint { margin-left: auto; }
 
 // —— 候选网格 ——
 .candidate-grid {
@@ -892,7 +947,7 @@ Run: `cd frontend/apps/admin-app && pnpm dev`
 - 跳过 02 prepare，直接点 stepper 到 candidates
 
 Expected：
-- 顶部摘要条："已生成 4 个候选 / 本次将评分 4 个候选 · 80 次大模型调用 / 预估 token 消耗 ~480k / 预估时长 ~18 min"
+- 顶部摘要条："已生成 4 个候选 / 本次将评分 4 个候选 · 80 次大模型调用 / 预估 token 消耗 ~408k / 预估时长 ~18 min"
 - 候选网格 4 张卡片：
   - 默认基线（绿色 token 条）
   - GraphRAG 自动调优（绿色 token 条）
@@ -905,7 +960,7 @@ Expected：
 - 点 "默认基线" 卡 → 取消勾选，紫色高亮消失
 - 摘要条数字实时变化（已选变 3、calls 60、tokens 减少、minutes 减少）
 - 点 "全选" → 4 张卡都选中
-- 点 "反选" → 4 张卡都取消
+- 点 "清空" → 4 张卡都取消
 - 点 "仅选基线" → 仅 "默认基线" 选中，toast "已仅选基线（1 个）"
 - 点 "图谱感知 + 蒸馏样例" 的 "查看完整提示词 →" → 抽屉从右滑出
 - 抽屉关闭后再次操作正常
@@ -925,7 +980,7 @@ Expected：
 - [x] § 候选网格 流式 auto-fill → Task 6 CSS
 - [x] § 候选卡片：复选框 + 中文译名 + 标识符副标题 + 特性 chips + meta 表 + token 渐变条 → Task 3
 - [x] § 推荐徽章（紫色 ✦ 推荐）→ Task 3 / 6
-- [x] § 快捷动作（全选/反选/仅选基线）→ Task 5 + Task 1
+- [x] § 快捷动作（全选/清空/仅选基线）→ Task 5 + Task 1
 - [x] § 底部固定操作条 → Task 5
 - [x] § 查看完整 prompt 抽屉 → Task 5（简版，Phase 1e 替换）
 

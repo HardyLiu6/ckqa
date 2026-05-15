@@ -136,6 +136,8 @@ export function buildInitialProgress(candidateIds) {
     candidateId: id,
     status: i === 0 ? 'extracting' : 'queued',
     extractDone: 0,
+    // Phase 2+ 预留：记录评分阶段开始的绝对毫秒数，用于计算评分耗时。
+    // Phase 1d 仅赋值不读取。
     scoringStartedAtMs: null,
   }))
 }
@@ -147,7 +149,12 @@ export function advanceProgress(progress, elapsedMs, { tickRate = 4 } = {}) {
   for (let i = 0; i < next.length; i++) {
     const p = next[i]
     if (p.status === 'done') continue
-    if (p.status === 'queued') p.status = 'extracting'
+    // 只有还有剩余时间时才把 queued 提升为 extracting，
+    // 避免 remainingMs=0 时错误地把下一个候选从"排队"变成"抽取中 0/20"。
+    if (p.status === 'queued') {
+      if (remainingMs <= 0) return next
+      p.status = 'extracting'
+    }
 
     if (p.status === 'extracting') {
       const extractRemaining = TOTAL_SAMPLES_PER_CANDIDATE - p.extractDone
@@ -467,11 +474,38 @@ export const MOCK_SCORING_REPORT = {
 }
 ```
 
-- [ ] **Step 2: 修改 mocks/index.js 末尾追加**
+- [ ] **Step 2: 修改 mocks/index.js 末尾追加重导出**
 
-```javascript
-export * from './scoring-report.js'
+⚠️ 这里是 **追加** 而非替换。Phase 1a 已定义 `MOCK_HISTORY_DRAFTS` / `MOCK_COURSE_NAME`，Phase 1b 追加了 `export * from './audit-samples.js'`，Phase 1c 追加了 `export * from './candidates.js'`，必须保留。
+
+操作步骤：
+
+1. 先读取文件确认尾部内容：
+
+```bash
+cat frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+cat -A frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js | tail -3
 ```
+
+预期：文件以 Phase 1c 追加的 `export * from './candidates.js'` 这一行结束。
+
+2. 用 str_replace 在 Phase 1c 追加的那一行后再追加新的重导出：
+
+- oldStr：
+  ```javascript
+  // Phase 1c：候选勾选所需的候选 mock
+  export * from './candidates.js'
+  ```
+- newStr：
+  ```javascript
+  // Phase 1c：候选勾选所需的候选 mock
+  export * from './candidates.js'
+
+  // Phase 1d：评分报告 mock
+  export * from './scoring-report.js'
+  ```
+
+3. 再次 `cat` 确认所有已有导出仍在，且新增了 `export * from './scoring-report.js'`。
 
 - [ ] **Step 3: 提交**
 
@@ -976,7 +1010,7 @@ function handleEnterSave() {
           </div>
           <div class="ann-text-tiny">已消耗 token · 预估总量 {{ formatTokens(totalTokensEstimate) }}</div>
         </div>
-        <div style="margin-left:auto">
+        <div class="scoring-progress-summary__abort">
           <el-button @click="handleAbort">中止评分</el-button>
         </div>
       </div>
@@ -1064,6 +1098,7 @@ git commit -m "feat(prompt-builder): 新增 04 步评分主壳 (Phase 1d)"
 .scoring-progress-summary__divider {
   width: 1px; height: 40px; background: var(--ckqa-border);
 }
+.scoring-progress-summary__abort { margin-left: auto; }
 
 // —— 候选矩阵 ——
 .scoring-matrix {
@@ -1080,7 +1115,7 @@ git commit -m "feat(prompt-builder): 新增 04 步评分主壳 (Phase 1d)"
   align-items: center;
   padding: 14px 16px;
   background: var(--ckqa-bg);
-  border: 1 solid var(--ckqa-border);
+  border: 1px solid var(--ckqa-border);
   border-radius: 8px;
   transition: all 150ms;
 }
@@ -1120,6 +1155,10 @@ git commit -m "feat(prompt-builder): 新增 04 步评分主壳 (Phase 1d)"
 .ann-pill--running {
   background: color-mix(in srgb, #0ea5e9 12%, transparent);
   color: #0284c7;
+}
+.ann-pill--success {
+  background: color-mix(in srgb, #15803d 12%, transparent);
+  color: #15803d;
 }
 
 // —— 排行榜 ——
@@ -1386,6 +1425,8 @@ import PromptBuilderScoringStep from './prompt-builder/PromptBuilderScoringStep.
 并在 `<script setup>` 内加 selectedCandidateId 状态：
 
 ```javascript
+// Phase 1e 接入 PromptBuilderSaveStep 后会作为 prop 传入 save 步骤；
+// Phase 1d 仅在 Page 层存储，不传给子组件，lint 可能报 unused —— 属预期。
 const selectedCandidateId = ref('')
 ```
 
@@ -1459,6 +1500,9 @@ Expected：
 未覆盖：
 - 真实评分调用（属于 Phase 2-7）
 - "查看 20 条样本抽取详情"二级抽屉（Phase 2+）
+- 排行榜排序切换后 rank 重编与详情抽屉 rank 不一致：ScoringRankingTable 按当前排序维度重新计算 rank 并渲染奖牌，但 ScoringDetailDrawer 读的是 `reportCandidates` 原始 rank。切换排序后点击行打开抽屉，抽屉里的 rank / 奖牌可能与表格不一致。Phase 2+ 统一为"抽屉也接收排序后的 rank"或"抽屉始终显示综合分 rank 并标注排序维度"
+- 候选卡片（Phase 1c CandidateCard）和排行榜行缺少键盘无障碍：`<article>` / `<tr>` 没有 `tabindex` 或 `role="checkbox"` / `role="row"`，键盘用户无法操作。Phase 2+ 补 ARIA 属性和键盘事件处理
+- `formatTokens` 同名函数行为差异：Phase 1c 的 `candidates-selection-model.js` 版本返回带波浪号前缀（如 `~168k`），Phase 1d 的 `scoring-format-model.js` 版本不带波浪号（如 `168k`）。Phase 1d 进度摘要模板里手动加了 `~` 前缀来补偿。Phase 2+ 统一为单一 `formatTokens` 工具函数（建议放到共享 utils 层），通过参数控制是否带 `~` 前缀
 
 ### 占位扫描
 - 无 TBD / TODO

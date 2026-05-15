@@ -1440,6 +1440,7 @@ Expected：
 - 手动添加实体/关系的内联编辑器（Phase 2+；Phase 1b 卡片只暴露删除按钮，不渲染编辑按钮，避免点击后静默无响应）
 - 进度门控阻塞下一步（Phase 1a 解锁规则只看 seed，不看标注完成度）
 - 筛选 tab 切换后的 active 同步：当前 active 样本若不在新筛选结果中，左栏不会保留高亮、右栏也不切换，造成左右视觉短暂错位。Phase 1b 不修；Phase 2+ 引入"筛选切换 → 选中第一条可见样本 / 或保持当前样本但在列表里显示固定锚"的策略时一并处理
+- 删除/拒绝实体时不级联清理引用该实体的关系：`handleRejectEntity` 从 `aiSuggestedEntities` 移除一条 AI 实体后、`handleDeleteEntity` 从 `goldEntities` 移除一条已确认实体后，若 `goldRelations` 或 `aiSuggestedRelations` 仍持有指向该实体的 `sourceEntityId` / `targetEntityId`，关系卡会渲染为 `? → 关系类型 → 目标` 的孤儿状态。当前 mock（ar1 引用 e2）不触发，但 Phase 1c/1d 补 mock 或 Phase 2+ 接真实 API 时必须处理 —— 优先在后端做级联清理；若前端做，则在 reject/delete 实体后同步过滤掉两侧关系数组中引用该实体 id 的条目，并用 toast 告知"已联动移除 N 条相关关系"
 
 ### 占位扫描
 - 无 TBD / TODO
