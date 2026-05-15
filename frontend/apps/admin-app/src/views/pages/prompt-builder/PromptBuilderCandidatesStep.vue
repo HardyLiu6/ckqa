@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import CandidateCard from './CandidateCard.vue'
-import { MOCK_CANDIDATES } from './mocks/index.js'
+import PromptDisplay from './PromptDisplay.vue'
+import { MOCK_CANDIDATES, resolveCandidatePromptText } from './mocks/index.js'
 import {
   toggleCandidate,
   selectAll,
@@ -22,6 +23,8 @@ const candidates = MOCK_CANDIDATES
 const selectedIds = ref(selectAll(candidates))
 const drawerOpen = ref(false)
 const drawerCandidate = ref(null)
+
+const drawerPromptText = computed(() => drawerCandidate.value ? resolveCandidatePromptText(drawerCandidate.value.candidateId) : '')
 
 const summary = computed(() => computeSummary(selectedIds.value, candidates))
 
@@ -102,10 +105,8 @@ function handleStart() {
       size="520px"
     >
       <div class="candidate-prompt-drawer">
-        <div class="ann-text-muted candidate-prompt-drawer__hint">
-          Phase 1e 会换成富文本三视图。当前展示为暗色 IDE 简版。
-        </div>
-        <pre class="candidate-prompt-drawer__pre">{{ drawerCandidate?.basePromptSource ? `（mock）此处展示候选 ${drawerCandidate.candidateId} 的完整 prompt.txt 文本，Phase 1e 会接入 PromptDisplay 组件展示真实内容。` : '' }}</pre>
+        <PromptDisplay v-if="drawerPromptText" :text="drawerPromptText" default-mode="rich" />
+        <div v-else class="ann-text-muted">未找到该候选的提示词文本</div>
       </div>
     </el-drawer>
   </section>
