@@ -47,6 +47,8 @@
 
 新增两张表：`prompt_tune_audit_samples`（存储 02 步标注数据）和 `prompt_drafts`（存储 05 步历史草稿）。
 
+> **执行方式：** 与本仓库现有迁移一致，本脚本通过 `mysql -u <user> -p <db> < file.sql` 手工执行，不接入 Flyway/Liquibase。脚本内的 `PREPARE/EXECUTE` 动态 SQL 用于条件性创建外键，是 mysql CLI 直接执行的支持模式；如未来引入声明式迁移工具，需要拆分为独立子脚本。
+
 **Files:**
 - Create: `sql/migrations/20260515_prompt_tune_pipeline.sql`
 
@@ -505,8 +507,10 @@ public class PromptTuneAuditSamplesServiceImpl
     @Override
     public List<PromptTuneAuditSamples> listByBuildRunId(Long buildRunId) {
         LambdaQueryWrapper<PromptTuneAuditSamples> wrapper = new LambdaQueryWrapper<>();
+        // audit_priority 是 MySQL enum('high','medium','low')，按枚举定义索引值排序：
+        // high=1 < medium=2 < low=3，因此用 ASC 实现 "high 优先" 的业务语义。
         wrapper.eq(PromptTuneAuditSamples::getBuildRunId, buildRunId)
-                .orderByDesc(PromptTuneAuditSamples::getAuditPriority)
+                .orderByAsc(PromptTuneAuditSamples::getAuditPriority)
                 .orderByAsc(PromptTuneAuditSamples::getSourceSampleId);
         return list(wrapper);
     }
@@ -690,8 +694,17 @@ public class AuditSampleResponse {
     @Getter
     @Builder
     public static class ReusedFromInfo {
+        /** 复用来源构建 ID（即 {@code reused_from_build_run_id} 字段所指向的历史 build run）。 */
         private final Long buildRunId;
+
+        /** 复用来源构建的展示名，便于前端 02 步绿色 ♻ 横幅文案直接渲染。 */
         private final String buildRunName;
+
+        /**
+         * 本次复用操作发生的时间（即"该样本被本构建以复用方式落库时的快照时间"），
+         * 等价于本条 {@code prompt_tune_audit_samples} 记录的 {@code created_at}，
+         * 不是历史原始标注的创建时间。
+         */
         private final LocalDateTime reusedAt;
     }
 }
@@ -1391,13 +1404,19 @@ Run: `grep -c "^export async function" frontend/apps/admin-app/src/api/prompt-tu
 
 Expected: 输出 `13`（与后端 13 个端点一一对应）。
 
-- [ ] **Step 4: 表存在性复核**
+- [ ] **Step 4: 前端 import 解析自检（lint 不覆盖模块解析，单独 grep 防御）**
+
+Run: `grep -n "^export function unwrapApiResponse" frontend/apps/admin-app/src/api/client.js`
+
+Expected: 至少 1 行匹配。若为空说明 `client.js` 中未导出 `unwrapApiResponse`，本期 prompt-tune-pipeline.js 的 import 会在 build 阶段炸开，需先在 `client.js` 中补上导出再继续。
+
+- [ ] **Step 5: 表存在性复核**
 
 Run: `mysql -uroot -p ocqa -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('prompt_tune_audit_samples', 'prompt_drafts');"`
 
 Expected: 两行结果（与 Task 1 一致；如尚未在本地 MySQL 跑过迁移可重跑）。
 
-- [ ] **Step 5: 无新增 commit，仅记录验证完成**
+- [ ] **Step 6: 无新增 commit，仅记录验证完成**
 
 本步骤不产生新文件改动，无需 commit。验证通过后，Phase 2a 完结：
 
