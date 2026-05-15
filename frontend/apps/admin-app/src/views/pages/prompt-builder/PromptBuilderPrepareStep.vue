@@ -14,6 +14,9 @@ const samples = ref(
 const taskSummary = MOCK_TASK_SUMMARY
 const tasksExpanded = ref(false)
 
+// 全屏标注 IDE 模式
+const ideOpen = ref(false)
+
 const initialActiveId = samples.value.find((s) => s.status === 'in_progress')?.id
   ?? samples.value[0]?.id
   ?? ''
@@ -22,6 +25,22 @@ const activeSampleId = ref(initialActiveId)
 const activeSample = computed(() =>
   samples.value.find((s) => s.id === activeSampleId.value) ?? null
 )
+
+const doneCount = computed(() => samples.value.filter((s) => s.status === 'done').length)
+const totalCount = computed(() => samples.value.length)
+const progressPercent = computed(() =>
+  totalCount.value > 0 ? Math.round((doneCount.value / totalCount.value) * 100) : 0
+)
+
+function openIde() {
+  ideOpen.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+function closeIde() {
+  ideOpen.value = false
+  document.body.style.overflow = ''
+}
 
 function handleSelectSample(id) {
   activeSampleId.value = id
@@ -114,7 +133,7 @@ function sortSuggestionsByConfidence() {
   <section class="prompt-builder-step prompt-builder-prepare">
     <header class="prompt-builder-step__header">
       <h3>构建准备材料</h3>
-      <p>Phase 1b mock：所有数据都是假的，体验交互形态。</p>
+      <p>生成调优样本与校准集，并完成人工标注。</p>
     </header>
 
     <!-- 02.1 / 02.2 任务折叠条 -->
@@ -136,25 +155,83 @@ function sortSuggestionsByConfidence() {
       </div>
     </article>
 
-    <!-- 02.3 标注 IDE -->
-    <div class="annotation-board">
-      <AnnotationSampleList
-        :samples="samples"
-        :active-sample-id="activeSampleId"
-        @select-sample="handleSelectSample"
-      />
-      <AnnotationWorkArea
-        :sample="activeSample"
-        @finish-sample="handleFinishSample"
-        @skip-sample="handleSkipSample"
-        @accept-entity="handleAcceptEntity"
-        @reject-entity="handleRejectEntity"
-        @delete-entity="handleDeleteEntity"
-        @accept-relation="handleAcceptRelation"
-        @reject-relation="handleRejectRelation"
-        @delete-relation="handleDeleteRelation"
-        @sort-suggestions-by-confidence="sortSuggestionsByConfidence"
-      />
+    <!-- 02.3 校准集概览卡 + 进入标注入口 -->
+    <div class="prepare-overview-card">
+      <div class="prepare-overview-card__head">
+        <div class="prepare-overview-card__title">
+          <strong>校准集标注</strong>
+          <span class="ann-pill ann-pill--accent">{{ doneCount }} / {{ totalCount }}</span>
+        </div>
+        <div class="prepare-overview-card__progress">
+          <div :style="{ width: progressPercent + '%' }"></div>
+        </div>
+      </div>
+      <div class="prepare-overview-card__body">
+        <div class="prepare-overview-card__stats">
+          <div>
+            <span class="prepare-overview-card__stat-num">{{ totalCount }}</span>
+            <span class="prepare-overview-card__stat-label">总样本</span>
+          </div>
+          <div>
+            <span class="prepare-overview-card__stat-num">{{ doneCount }}</span>
+            <span class="prepare-overview-card__stat-label">已完成</span>
+          </div>
+          <div>
+            <span class="prepare-overview-card__stat-num">{{ totalCount - doneCount }}</span>
+            <span class="prepare-overview-card__stat-label">待处理</span>
+          </div>
+        </div>
+        <p class="prepare-overview-card__hint">
+          在标注 IDE 中逐条审阅校准样本，确认实体与关系标注。完成后可进入下一步。
+        </p>
+        <el-button type="primary" size="large" class="prepare-overview-card__enter" @click="openIde">
+          进入标注 IDE →
+        </el-button>
+      </div>
     </div>
   </section>
+
+  <!-- 全屏标注 IDE 覆盖层 -->
+  <Teleport to="body">
+    <Transition name="ide-fade">
+      <div v-if="ideOpen" class="annotation-ide-overlay">
+        <!-- 顶部工具栏 -->
+        <header class="annotation-ide-toolbar">
+          <button class="annotation-ide-toolbar__back" @click="closeIde">
+            ← 退出标注
+          </button>
+          <div class="annotation-ide-toolbar__center">
+            <span class="annotation-ide-toolbar__title">校准集标注</span>
+            <span class="ann-pill ann-pill--accent">{{ doneCount }} / {{ totalCount }}</span>
+          </div>
+          <div class="annotation-ide-toolbar__right">
+            <span v-if="activeSample" class="annotation-ide-toolbar__current">
+              当前：{{ activeSample.headingPath?.[activeSample.headingPath.length - 1] ?? '—' }}
+            </span>
+          </div>
+        </header>
+
+        <!-- 标注主体 -->
+        <div class="annotation-ide-body">
+          <AnnotationSampleList
+            :samples="samples"
+            :active-sample-id="activeSampleId"
+            @select-sample="handleSelectSample"
+          />
+          <AnnotationWorkArea
+            :sample="activeSample"
+            @finish-sample="handleFinishSample"
+            @skip-sample="handleSkipSample"
+            @accept-entity="handleAcceptEntity"
+            @reject-entity="handleRejectEntity"
+            @delete-entity="handleDeleteEntity"
+            @accept-relation="handleAcceptRelation"
+            @reject-relation="handleRejectRelation"
+            @delete-relation="handleDeleteRelation"
+            @sort-suggestions-by-confidence="sortSuggestionsByConfidence"
+          />
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
