@@ -128,7 +128,8 @@ function signalLabel(name) {
       <section>
         <header class="annotation-section-title">
           <strong>实体</strong>
-          <span class="ann-text-muted">{{ confirmedCount }} 已确认 · {{ aiCount }} 待审</span>
+          <span class="annotation-section-title__count">{{ confirmedCount }} 已确认 · {{ aiCount }} 待审</span>
+          <button class="annotation-section-title__add" @click="() => {}">+ 添加实体</button>
         </header>
         <div class="entity-chip-grid">
           <AnnotationEntityCard
@@ -139,7 +140,6 @@ function signalLabel(name) {
             @reject="$emit('reject-entity', $event)"
             @delete="$emit('delete-entity', $event)"
           />
-          <button class="entity-chip-grid__add">+ 添加实体</button>
         </div>
       </section>
 
@@ -147,8 +147,9 @@ function signalLabel(name) {
       <section>
         <header class="annotation-section-title">
           <strong>关系</strong>
-          <span class="ann-text-muted">{{ relConfirmedCount }} 已确认 · {{ relAiCount }} 待审</span>
+          <span class="annotation-section-title__count">{{ relConfirmedCount }} 已确认 · {{ relAiCount }} 待审</span>
           <span class="ann-text-tiny ann-text-tiny--accent annotation-section-title__hint-right">仅显示 schema 合法关系</span>
+          <button class="annotation-section-title__add" @click="() => {}">+ 添加关系</button>
         </header>
         <div class="annotation-list">
           <AnnotationRelationCard
@@ -160,7 +161,6 @@ function signalLabel(name) {
             @reject="$emit('reject-relation', $event)"
             @delete="$emit('delete-relation', $event)"
           />
-          <button class="annotation-add-row">+ 手动添加关系</button>
         </div>
       </section>
     </template>

@@ -4594,10 +4594,23 @@ textarea.text-input {
 .annotation-section-title {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-.annotation-section-title strong { font-weight: 600; }
+.annotation-section-title strong { font-weight: 600; font-size: 14px; }
+.annotation-section-title__count {
+  font-size: 13px; font-weight: 500; color: var(--ckqa-text-muted);
+}
 .annotation-section-title__hint-right { margin-left: auto; }
+.annotation-section-title__add {
+  margin-left: auto;
+  border: 0; background: transparent; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--ckqa-accent);
+  padding: 4px 10px; border-radius: 6px;
+  transition: all 120ms;
+}
+.annotation-section-title__add:hover {
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+}
 .annotation-list {
   display: flex; flex-direction: column; gap: 8px;
 }
@@ -4830,7 +4843,7 @@ textarea.text-input {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: flex-start;
+  align-items: stretch;
 }
 .entity-chip-grid__add {
   border: 1.5px dashed var(--ckqa-border); border-radius: 8px;
@@ -4849,8 +4862,7 @@ textarea.text-input {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 180px;
-  max-width: 280px;
+  width: 220px;
   padding: 10px 12px;
   background: var(--ckqa-surface);
   border: 1px solid var(--ckqa-border);
