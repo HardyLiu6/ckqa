@@ -33,3 +33,6 @@ export { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './audit-samples.js'
 
 // Phase 1c：候选勾选所需的候选 mock
 export { MOCK_CANDIDATES } from './candidates.js'
+
+// Phase 1d：评分报告 mock
+export { MOCK_SCORING_REPORT } from './scoring-report.js'
