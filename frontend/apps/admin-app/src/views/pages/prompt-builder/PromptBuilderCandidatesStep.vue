@@ -62,6 +62,20 @@ function handleStart() {
       :estimated-minutes="summary.estimatedMinutes"
     />
 
+    <footer class="candidate-bottom-bar">
+      <div class="candidate-bottom-bar__info">
+        已选 <strong>{{ summary.candidateCount }}</strong> 个候选 ·
+        预估 <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
+        约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
+      </div>
+      <div class="candidate-bottom-bar__actions">
+        <el-button @click="$emit('back')">← 返回 02</el-button>
+        <el-button type="primary" :disabled="summary.candidateCount === 0" @click="handleStart">
+          开始抽取评分 →
+        </el-button>
+      </div>
+    </footer>
+
     <div class="candidate-quick-actions">
       <button @click="handleSelectAll">全选</button>
       <button @click="handleSelectNone">清空</button>
@@ -79,20 +93,6 @@ function handleStart() {
         @view-prompt="handleViewPrompt"
       />
     </div>
-
-    <footer class="candidate-bottom-bar">
-      <div class="candidate-bottom-bar__info">
-        已选 <strong>{{ summary.candidateCount }}</strong> 个候选 ·
-        预估 <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
-        约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
-      </div>
-      <div class="candidate-bottom-bar__actions">
-        <el-button @click="$emit('back')">← 返回 02</el-button>
-        <el-button type="primary" :disabled="summary.candidateCount === 0" @click="handleStart">
-          开始抽取评分 →
-        </el-button>
-      </div>
-    </footer>
 
     <el-drawer
       v-model="drawerOpen"
