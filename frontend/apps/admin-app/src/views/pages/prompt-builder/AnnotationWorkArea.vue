@@ -130,7 +130,7 @@ function signalLabel(name) {
           <strong>实体</strong>
           <span class="ann-text-muted">{{ confirmedCount }} 已确认 · {{ aiCount }} 待审</span>
         </header>
-        <div class="annotation-list">
+        <div class="entity-chip-grid">
           <AnnotationEntityCard
             v-for="entity in mergedEntities"
             :key="`${entity.source}:${entity.id}`"
@@ -139,7 +139,7 @@ function signalLabel(name) {
             @reject="$emit('reject-entity', $event)"
             @delete="$emit('delete-entity', $event)"
           />
-          <button class="annotation-add-row">+ 手动添加实体</button>
+          <button class="entity-chip-grid__add">+ 添加实体</button>
         </div>
       </section>
 
