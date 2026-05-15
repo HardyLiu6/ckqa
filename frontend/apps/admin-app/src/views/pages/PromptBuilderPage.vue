@@ -8,6 +8,7 @@ import WorkflowStepper from '../../components/common/WorkflowStepper.vue'
 import RetryPanel from '../../components/common/RetryPanel.vue'
 import PromptBuilderSeedStep from './prompt-builder/PromptBuilderSeedStep.vue'
 import PromptBuilderPlaceholderStep from './prompt-builder/PromptBuilderPlaceholderStep.vue'
+import PromptBuilderPrepareStep from './prompt-builder/PromptBuilderPrepareStep.vue'
 import PromptBuilderSaveStep from './prompt-builder/PromptBuilderSaveStep.vue'
 import {
   BUILDER_STEPS,
@@ -212,12 +213,8 @@ function returnToWizard() {
           :history-drafts="MOCK_HISTORY_DRAFTS"
           @select-seed="handleSelectSeed"
         />
-        <PromptBuilderPlaceholderStep
+        <PromptBuilderPrepareStep
           v-else-if="activeStepKey === 'prepare'"
-          step-key="prepare"
-          title="构建准备材料"
-          description="生成调优样本与校准集，并完成人工标注。"
-          phase="Phase 1b"
         />
         <PromptBuilderPlaceholderStep
           v-else-if="activeStepKey === 'candidates'"
