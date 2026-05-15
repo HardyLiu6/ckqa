@@ -4,14 +4,20 @@ defineProps({
   title: { type: String, required: true },
   description: { type: String, required: true },
   phase: { type: String, default: 'Phase 1b' },
+  showBack: { type: Boolean, default: false },
 })
+
+defineEmits(['back'])
 </script>
 
 <template>
   <section class="prompt-builder-step prompt-builder-placeholder">
     <header class="prompt-builder-step__header">
-      <h3>{{ title }}</h3>
-      <p>{{ description }}</p>
+      <button v-if="showBack" class="step-back-btn" title="返回上一步" @click="$emit('back')">←</button>
+      <div>
+        <h3>{{ title }}</h3>
+        <p>{{ description }}</p>
+      </div>
     </header>
     <div class="prompt-builder-placeholder__body">
       <div class="prompt-builder-placeholder__chip">即将开放</div>

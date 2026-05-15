@@ -5,6 +5,8 @@ import AnnotationSampleList from './AnnotationSampleList.vue'
 import AnnotationWorkArea from './AnnotationWorkArea.vue'
 import { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './mocks/index.js'
 
+defineEmits(['back'])
+
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
 const samples = ref(
   MOCK_AUDIT_SAMPLES
@@ -132,8 +134,11 @@ function sortSuggestionsByConfidence() {
 <template>
   <section class="prompt-builder-step prompt-builder-prepare">
     <header class="prompt-builder-step__header">
-      <h3>构建准备材料</h3>
-      <p>生成调优样本与校准集，并完成人工标注。</p>
+      <button class="step-back-btn" title="返回上一步" @click="$emit('back')">←</button>
+      <div>
+        <h3>构建准备材料</h3>
+        <p>生成调优样本与校准集，并完成人工标注。</p>
+      </div>
     </header>
 
     <!-- 02.1 / 02.2 任务折叠条 -->

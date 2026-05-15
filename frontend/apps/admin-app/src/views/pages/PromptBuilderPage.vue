@@ -216,6 +216,7 @@ function returnToWizard() {
         />
         <PromptBuilderPrepareStep
           v-else-if="activeStepKey === 'prepare'"
+          @back="gotoPrev"
         />
         <PromptBuilderCandidatesStep
           v-else-if="activeStepKey === 'candidates'"
@@ -228,6 +229,8 @@ function returnToWizard() {
           title="抽取评分"
           description="在校准集上跑候选提示词，按综合分排序选出最佳候选。"
           phase="Phase 1d"
+          show-back
+          @back="gotoPrev"
         />
         <PromptBuilderSaveStep
           v-else-if="activeStepKey === 'save'"
@@ -241,7 +244,7 @@ function returnToWizard() {
         />
       </div>
 
-      <footer v-if="activeStepKey !== 'save' && activeStepKey !== 'candidates'" class="prompt-builder-page__actions">
+      <footer v-if="activeStepKey === 'seed' || activeStepKey === 'prepare' || activeStepKey === 'scoring'" class="prompt-builder-page__actions">
         <div class="prompt-builder-page__status">
           <el-tag v-if="dirty" type="warning" size="small" effect="light">已修改未保存</el-tag>
           <el-tag v-else type="success" size="small" effect="light">已是最新</el-tag>
