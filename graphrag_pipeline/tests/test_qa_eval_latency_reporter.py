@@ -64,3 +64,35 @@ def test_generate_latency_report_counts_success_errors_and_timeout_like_failures
     assert "graphrag-drift-search:latest" in (run_dir / "latency_breakdown.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_generate_latency_report_does_not_treat_timeout_kwarg_as_timeout(tmp_path: Path):
+    run_dir = tmp_path / "rid"
+    _write_json(
+        run_dir / "run_meta.json",
+        {
+            "run_id": "rid",
+            "modes": ["graphrag-global-search:latest"],
+            "total_items": 1,
+        },
+    )
+    _write_json(
+        run_dir / "raw" / "Q001.json",
+        {
+            "id": "Q001",
+            "category": "factual_lookup",
+            "modes": {
+                "graphrag-global-search:latest": {
+                    "error": "BadRequestError: Access denied Arrearage kwargs={'timeout': None}",
+                    "error_type": "CalledProcessError",
+                    "elapsed_seconds": 9.0,
+                },
+            },
+        },
+    )
+
+    payload = generate_latency_report(run_dir)
+
+    global_summary = payload["per_mode"]["graphrag-global-search:latest"]
+    assert global_summary["error_count"] == 1
+    assert global_summary["timeout_like_error_count"] == 0

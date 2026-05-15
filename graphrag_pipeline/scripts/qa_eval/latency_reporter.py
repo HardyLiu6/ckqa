@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -10,7 +11,9 @@ from statistics import mean
 from typing import Any
 
 
-TIMEOUT_ERROR_HINTS = ("timeout", "timed out", "readtimeout", "timeouterror")
+TIMEOUT_ERROR_PATTERN = re.compile(
+    r"\b(readtimeout|timeouterror|timeoutexpired)\b|\bread timed out\b|\btimed out\b"
+)
 
 
 def generate_latency_report(run_dir: Path | str) -> dict[str, Any]:
@@ -117,7 +120,7 @@ def _percentile(values: list[float], fraction: float) -> float:
 
 def _is_timeout_like(error: str, error_type: str) -> bool:
     text = f"{error_type} {error}".casefold()
-    return any(hint in text for hint in TIMEOUT_ERROR_HINTS)
+    return bool(TIMEOUT_ERROR_PATTERN.search(text))
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
