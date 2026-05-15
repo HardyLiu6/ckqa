@@ -36,3 +36,6 @@ export { MOCK_CANDIDATES } from './candidates.js'
 
 // Phase 1d：评分报告 mock
 export { MOCK_SCORING_REPORT } from './scoring-report.js'
+
+// Phase 1e：候选 prompt 文本 mock
+export { MOCK_PROMPT_TEXTS, resolveCandidatePromptText } from './prompt-texts.js'

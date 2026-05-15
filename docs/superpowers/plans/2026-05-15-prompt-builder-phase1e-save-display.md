@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Phase 1 收官：把 03 步抽屉、05 步保存的 prompt 文本展示统一升级为 `<PromptDisplay>` 三视图组件（rich / split / raw 切换），并把 05 步从 1a 简版升级为完整版（左 prompt 预览 + 右草稿名表单 + 保存范围 radio + 历史草稿入库 mock）。同时修复 Phase 1a 列出的 5 项已知局限。
+**Goal:** Phase 1 收官：把 03 步抽屉、05 步保存的 prompt 文本展示统一升级为 `<PromptDisplay>` 三视图组件（rich / split / raw 切换），并把 05 步从 1a 简版升级为完整版（左 prompt 预览 + 右草稿名表单 + 保存范围 radio + 历史草稿入库 mock）。同时修复 Phase 1a 列出的 1-4 项已知局限，并为第 5 项解锁规则细化记录 Phase 2 hook。
 
-**Architecture:** `PromptDisplay.vue` 作为通用组件接受 `text` + `title` props，内部维护 `mode = 'rich' | 'split' | 'raw'`。rich 模式用 `prompt-display-parser.js`（已在 spec 范围内，本期实现）按 `-Section Name-` 切章节，再用 `markdown-it` 渲染段落正文（兼容 list / inline code）；raw 模式用 `prismjs` 高亮，加暗色 IDE 风行号；split 模式左 rich 右 raw，用 `@vueuse/core` 的 `useScroll` 做同步滚动。05 步保存组件重写为左右两栏布局，`saveMode` 选项 + 历史草稿 mock 入库。
+**Architecture:** `PromptDisplay.vue` 作为通用组件接受 `text` prop，内部维护 `mode = 'rich' | 'split' | 'raw'`。rich 模式用 `prompt-display-parser.js`（已在 spec 范围内，本期实现）按 `-Section Name-` 切章节，再用 `markdown-it` 渲染段落正文（兼容 list / inline code）；raw 模式用手写轻量高亮（section 行染绿、placeholder 染橙、行号），加暗色 IDE 风；split 模式左 rich 右 raw，用 `ref` + 手动 scroll 事件做同步滚动。05 步保存组件重写为左右两栏布局，`saveMode` 选项 + 历史草稿 mock 入库。
 
-**Tech Stack:** Phase 1a 已装的 `markdown-it`、`prismjs`，本期首次引用。
+**Tech Stack:** Phase 1a 已装的 `markdown-it`；本期首次引用。不引入 `prismjs`（raw 模式用手写轻量高亮足够）。不引入 `@vueuse/core`（同步滚动用原生 scroll 事件 + ref 实现）。
 
 **关联 Spec:** `docs/superpowers/specs/2026-05-15-prompt-builder-redesign-design.md` § 提示词文本显示组件（M 组合方案） / § 05 预览保存
 
@@ -19,12 +19,12 @@
 | 路径 | 操作 | 责任 |
 | --- | --- | --- |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/prompt-display-parser.js` | 新建 | 章节解析 + 段落元信息映射 |
-| `frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js` | 大改 | 扩展 buildSaveDraftPayload 支持完整字段 + 新增 markUserModifiedDraftName 跟踪 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js` | 大改 | 扩展 buildSaveDraftPayload 支持完整字段（selectedCandidate / saveMode） |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/prompt-texts.js` | 新建 | 4 个候选的 mock prompt 文本 |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js` | 修改 | 重导出 |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplay.vue` | 新建 | 三视图主壳 + 模式切换 |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplayRich.vue` | 新建 | rich 子模式：章节卡片渲染 |
-| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplayRaw.vue` | 新建 | raw 子模式：暗色 IDE 风 + Prism 高亮 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplayRaw.vue` | 新建 | raw 子模式：暗色 IDE 风 + 手写轻量高亮 |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue` | 大改 | 替换为完整版（左预览右表单） |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderCandidatesStep.vue` | 修改 | 抽屉简版 pre 替换为 PromptDisplay |
 | `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue` | 删除 | 1a 已标记 deprecated，本期删 |
@@ -32,7 +32,7 @@
 | `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue` | 修改 | 修复 1a 5 项已知局限 |
 | `frontend/apps/admin-app/src/styles/components.scss` | 末尾追加 | PromptDisplay 三视图 + 05 完整版样式（约 480 行） |
 | `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-prompt-display-parser.test.js` | 新建 | Task 1 |
-| `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js` | 修改 | Task 5 扩展 |
+| `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js` | 修改 | Task 6 扩展 |
 
 ---
 
@@ -317,11 +317,38 @@ export function resolveCandidatePromptText(candidateId) {
 }
 ```
 
-- [ ] **Step 2: 修改 mocks/index.js 末尾追加**
+- [ ] **Step 2: 修改 mocks/index.js 末尾追加重导出**
 
-```javascript
-export * from './prompt-texts.js'
+⚠️ 这里是 **追加** 而非替换。Phase 1a-1d 已有内容必须保留。
+
+操作步骤：
+
+1. 先读取文件确认尾部内容：
+
+```bash
+cat frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+cat -A frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js | tail -3
 ```
+
+预期：文件以 Phase 1d 追加的 `export * from './scoring-report.js'` 这一行结束。
+
+2. 用 str_replace 在 Phase 1d 追加的那一行后再追加新的重导出：
+
+- oldStr：
+  ```javascript
+  // Phase 1d：评分报告 mock
+  export * from './scoring-report.js'
+  ```
+- newStr：
+  ```javascript
+  // Phase 1d：评分报告 mock
+  export * from './scoring-report.js'
+
+  // Phase 1e：候选 prompt 文本 mock
+  export * from './prompt-texts.js'
+  ```
+
+3. 再次 `cat` 确认所有已有导出仍在，且新增了 `export * from './prompt-texts.js'`。
 
 - [ ] **Step 3: 提交**
 
@@ -361,13 +388,15 @@ const sections = computed(() => parsePromptSections(props.text))
 const md = new MarkdownIt({ html: false, breaks: false, linkify: false })
 
 function renderBody(body) {
-  // 把 {input_text} 这种占位符高亮，再交给 markdown-it 渲染
-  // 渲染前先把占位符替换为占位 token，渲染后再替换回 HTML span
+  // 把 {input_text} 这种占位符高亮，再交给 markdown-it 渲染。
+  // 渲染前先把占位符替换为 Unicode 私有区 token（不会触发 Markdown 语法），
+  // 渲染后再替换回 HTML span。
+  // 注意：不能用 __xxx__ 作为 token，markdown-it 会把双下划线解析为 <strong>。
   const tokenMap = new Map()
   let counter = 0
   const placeholderPattern = /\{[a-zA-Z_][a-zA-Z0-9_]*\}/g
   const escaped = body.replace(placeholderPattern, (match) => {
-    const token = `__PROMPT_PLACEHOLDER_${counter++}__`
+    const token = `\uE000PH${counter++}\uE001`
     tokenMap.set(token, match)
     return token
   })
@@ -440,9 +469,8 @@ git commit -m "feat(prompt-builder): 新增 PromptDisplayRich 章节卡片视图
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplayRaw.vue -->
 <script setup>
 import { computed } from 'vue'
-import Prism from 'prismjs'
-// Prism 默认 markup/css/clike 三种语言；prompt 文本用 markdown 风格高亮足够
-import 'prismjs/components/prism-markdown.js'
+// 不使用 Prism：prompt 文本是自定义 -Section- 格式，不是真正的 Markdown，
+// Prism markdown 语法高亮反而会误染。手写轻量高亮（section 行 + placeholder）足够。
 
 const props = defineProps({
   text: { type: String, required: true },
@@ -509,8 +537,7 @@ git commit -m "feat(prompt-builder): 新增 PromptDisplayRaw 暗色 IDE 视图 (
 ```vue
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/PromptDisplay.vue -->
 <script setup>
-import { computed, ref, watch, useTemplateRef } from 'vue'
-import { useScroll } from '@vueuse/core'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import PromptDisplayRich from './PromptDisplayRich.vue'
 import PromptDisplayRaw from './PromptDisplayRaw.vue'
@@ -530,41 +557,42 @@ const fallbackToRaw = computed(() => {
 })
 
 watch(fallbackToRaw, (val) => {
-  if (val && mode.value === 'rich') {
+  if (val && mode.value !== 'raw') {
     mode.value = 'raw'
     ElMessage.warning('该提示词无法解析为文档视图，已切换到原文视图')
   }
 }, { immediate: true })
 
-// split 模式同步滚动
-const leftPaneRef = useTemplateRef('leftPaneRef')
-const rightPaneRef = useTemplateRef('rightPaneRef')
-const { y: leftY } = useScroll(leftPaneRef)
-const { y: rightY } = useScroll(rightPaneRef)
+// split 模式同步滚动（原生 scroll 事件 + ref，不依赖 @vueuse/core）
+const leftPaneRef = ref(null)
+const rightPaneRef = ref(null)
 let syncing = false
 
-watch(leftY, (val) => {
+function onLeftScroll() {
   if (mode.value !== 'split' || syncing) return
-  if (!rightPaneRef.value || !leftPaneRef.value) return
-  const leftMax = leftPaneRef.value.scrollHeight - leftPaneRef.value.clientHeight
-  const rightMax = rightPaneRef.value.scrollHeight - rightPaneRef.value.clientHeight
+  const left = leftPaneRef.value
+  const right = rightPaneRef.value
+  if (!left || !right) return
+  const leftMax = left.scrollHeight - left.clientHeight
+  const rightMax = right.scrollHeight - right.clientHeight
   if (leftMax <= 0 || rightMax <= 0) return
   syncing = true
-  rightPaneRef.value.scrollTop = (val / leftMax) * rightMax
-  // 给一帧让滚动事件触发再解锁
-  setTimeout(() => { syncing = false }, 0)
-})
+  right.scrollTop = (left.scrollTop / leftMax) * rightMax
+  requestAnimationFrame(() => { syncing = false })
+}
 
-watch(rightY, (val) => {
+function onRightScroll() {
   if (mode.value !== 'split' || syncing) return
-  if (!rightPaneRef.value || !leftPaneRef.value) return
-  const leftMax = leftPaneRef.value.scrollHeight - leftPaneRef.value.clientHeight
-  const rightMax = rightPaneRef.value.scrollHeight - rightPaneRef.value.clientHeight
+  const left = leftPaneRef.value
+  const right = rightPaneRef.value
+  if (!left || !right) return
+  const leftMax = left.scrollHeight - left.clientHeight
+  const rightMax = right.scrollHeight - right.clientHeight
   if (leftMax <= 0 || rightMax <= 0) return
   syncing = true
-  leftPaneRef.value.scrollTop = (val / rightMax) * leftMax
-  setTimeout(() => { syncing = false }, 0)
-})
+  left.scrollTop = (right.scrollTop / rightMax) * leftMax
+  requestAnimationFrame(() => { syncing = false })
+}
 
 async function copyText() {
   try {
@@ -580,7 +608,7 @@ async function copyText() {
   <article class="prompt-display">
     <header class="prompt-display__head">
       <div class="prompt-display__view-switch">
-        <button :class="{ active: mode === 'rich' }"  @click="mode = 'rich'">仅文档</button>
+        <button :class="{ active: mode === 'rich' }"  :disabled="fallbackToRaw" @click="mode = 'rich'">仅文档</button>
         <button :class="{ active: mode === 'split' }" :disabled="fallbackToRaw" @click="mode = 'split'">分屏</button>
         <button :class="{ active: mode === 'raw' }"   @click="mode = 'raw'">仅原文</button>
       </div>
@@ -592,10 +620,10 @@ async function copyText() {
     </div>
 
     <div v-else-if="mode === 'split'" class="prompt-display__split">
-      <div ref="leftPaneRef" class="prompt-display__pane prompt-display__pane--left">
+      <div ref="leftPaneRef" class="prompt-display__pane prompt-display__pane--left" @scroll="onLeftScroll">
         <PromptDisplayRich :text="text" />
       </div>
-      <div ref="rightPaneRef" class="prompt-display__pane prompt-display__pane--right">
+      <div ref="rightPaneRef" class="prompt-display__pane prompt-display__pane--right" @scroll="onRightScroll">
         <PromptDisplayRaw :text="text" />
       </div>
     </div>
@@ -748,7 +776,7 @@ git commit -m "feat(prompt-builder): 扩展保存模型支持候选+saveMode (Ph
 ```vue
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue -->
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import PromptDisplay from './PromptDisplay.vue'
 import {
   buildDefaultDraftName,
@@ -769,9 +797,19 @@ const props = defineProps({
   selectedCandidateId: { type: String, default: '' },
   saving: { type: Boolean, default: false },
   saveError: { type: String, default: '' },
+  /** Page 层持有的草稿名（v-if 卸载后不丢失） */
+  draftName: { type: String, default: '' },
+  /** Page 层持有的草稿说明 */
+  draftDescription: { type: String, default: '' },
+  /** 用户是否手动改过草稿名 */
+  draftNameTouched: { type: Boolean, default: false },
+  /** 用户是否手动改过说明 */
+  draftDescriptionTouched: { type: Boolean, default: false },
+  /** Page 层持有的保存范围（v-if 卸载后不丢失） */
+  saveMode: { type: String, default: 'build_run_with_history' },
 })
 
-const emit = defineEmits(['save', 'back', 'mark-dirty'])
+const emit = defineEmits(['save', 'back', 'mark-dirty', 'update:draftName', 'update:draftDescription', 'update:draftNameTouched', 'update:draftDescriptionTouched', 'update:saveMode'])
 
 // 候选元信息
 const candidateInfo = computed(() =>
@@ -784,7 +822,7 @@ const candidateScore = computed(() =>
 
 const promptText = computed(() => resolveCandidatePromptText(props.selectedCandidateId))
 
-// 默认草稿名以候选译名为准
+// 默认草稿名以课程名 + 种子为准；候选信息进入来源记录和 metadata
 const defaultName = computed(() =>
   buildDefaultDraftName({
     courseName: props.courseName,
@@ -792,40 +830,51 @@ const defaultName = computed(() =>
   })
 )
 
-// 1a 局限修复：用户改过名字就不再重置，即使 seed 切换
-const userModifiedName = ref(false)
-const draftName = ref(defaultName.value)
-
+// 草稿名状态由 Page 层持有（v-if 卸载后不丢失）。
+// 如果用户没手动改过，跟随 defaultName 自动更新。
 watch(defaultName, (val) => {
-  if (!userModifiedName.value) draftName.value = val
-})
+  if (!props.draftNameTouched) emit('update:draftName', val)
+}, { immediate: true })
 
-function onNameInput() {
-  userModifiedName.value = true
+function onNameInput(val) {
+  emit('update:draftName', val)
+  emit('update:draftNameTouched', true)
   emit('mark-dirty')
 }
 
-const draftDescription = ref(
+// 默认说明跟随候选变化（用户没手动改过时）
+const defaultDescription = computed(() =>
   candidateScore.value
     ? `经过 ${MOCK_SCORING_REPORT.totalSamples} 条校准集评估，召回率 ${Math.round(candidateScore.value.recall * 100)}%、准确率 ${Math.round(candidateScore.value.precision * 100)}%，综合分 ${candidateScore.value.compositeScore.toFixed(2)}。`
     : ''
 )
 
-function onDescriptionInput() {
+watch(defaultDescription, (val) => {
+  if (!props.draftDescriptionTouched) emit('update:draftDescription', val)
+}, { immediate: true })
+
+function onDescriptionInput(val) {
+  emit('update:draftDescription', val)
+  emit('update:draftDescriptionTouched', true)
   emit('mark-dirty')
 }
 
-const saveMode = ref('build_run_with_history')
-
-function onSaveModeChange() {
+function onSaveModeChange(val) {
+  emit('update:saveMode', val)
   emit('mark-dirty')
 }
 
 const validation = computed(() =>
-  validateSaveForm({ name: draftName.value, seed: props.seed })
+  validateSaveForm({ name: props.draftName, seed: props.seed })
 )
 
-const canSave = computed(() => validation.value.valid && !props.saving)
+// 保存按钮 disabled 条件：表单校验不过 / 正在保存 / 选了"入库历史草稿"但没有候选
+const hasCandidate = computed(() => !!props.selectedCandidateId && !!promptText.value)
+const canSave = computed(() =>
+  validation.value.valid &&
+  !props.saving &&
+  (props.saveMode !== 'build_run_with_history' || hasCandidate.value)
+)
 
 const seedLabel = computed(() => {
   if (props.seed === 'system_default') return '系统默认'
@@ -837,12 +886,12 @@ function handleSubmit() {
   if (!canSave.value) return
   const payload = buildSaveDraftPayload({
     seed: props.seed,
-    name: draftName.value,
-    description: draftDescription.value,
+    name: props.draftName,
+    description: props.draftDescription,
     selectedCandidate: props.selectedCandidateId || undefined,
     candidateDisplayName: candidateInfo.value?.displayNameZh,
     compositeScore: candidateScore.value?.compositeScore,
-    saveMode: saveMode.value,
+    saveMode: props.saveMode,
   })
   emit('save', payload)
 }
@@ -902,7 +951,7 @@ function handleSubmit() {
             草稿名
             <span class="form-row__optional">将出现在历史草稿列表</span>
           </label>
-          <el-input v-model="draftName" placeholder="如：操作系统 · 图谱感知 · 2026-05-14" @input="onNameInput" />
+          <el-input :model-value="draftName" placeholder="如：操作系统 · 图谱感知 · 2026-05-14" @input="onNameInput" />
           <p v-if="validation.errors.name" class="form-row__error">{{ validation.errors.name }}</p>
         </div>
 
@@ -911,7 +960,7 @@ function handleSubmit() {
             说明 <span class="form-row__optional">（选填）</span>
           </label>
           <el-input
-            v-model="draftDescription"
+            :model-value="draftDescription"
             type="textarea"
             :rows="3"
             placeholder="例如：经过 20 条校准集评估，准确率明显高于基线..."
@@ -934,7 +983,7 @@ function handleSubmit() {
 
         <div class="form-row">
           <label class="form-row__label">保存范围</label>
-          <el-radio-group v-model="saveMode" @change="onSaveModeChange">
+          <el-radio-group :model-value="saveMode" @change="onSaveModeChange">
             <el-radio value="build_run_with_history" border>
               <strong>仅本次构建 + 入库历史草稿</strong>
               <small>下次类似课程可在 01 步复用</small>
@@ -1021,12 +1070,50 @@ git commit -m "feat(prompt-builder): 03 抽屉换为 PromptDisplay (Phase 1e)"
 
 ---
 
-## Task 9：修复 Phase 1a 已知局限 1-5
+## Task 9：修复 Phase 1a 已知局限 1-4，并记录局限 5 的 Phase 2 hook
 
 **Files:**
 - Modify: `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue`
 
-- [ ] **Step 1: 修复局限 2 — dirty 标志覆盖**
+- [ ] **Step 1: 在 PromptBuilderPage 声明草稿名/说明状态（解决 v-if 卸载丢失问题）**
+
+```javascript
+// 草稿名/说明状态上提到 Page 层，避免 v-if 切换步骤时 SaveStep 卸载导致用户输入丢失
+const saveDraftName = ref('')
+const saveDraftNameTouched = ref(false)
+const saveDraftDescription = ref('')
+const saveDraftDescriptionTouched = ref(false)
+const saveMode = ref('build_run_with_history')
+```
+
+模板里 `<PromptBuilderSaveStep>` 的 props 加：
+
+```vue
+<PromptBuilderSaveStep
+  v-else-if="activeStepKey === 'save'"
+  :build-run-id="buildRunId"
+  :course-name="MOCK_COURSE_NAME"
+  :seed="seed"
+  :selected-candidate-id="selectedCandidateId"
+  :saving="saving"
+  :save-error="saveError"
+  :draft-name="saveDraftName"
+  :draft-description="saveDraftDescription"
+  :draft-name-touched="saveDraftNameTouched"
+  :draft-description-touched="saveDraftDescriptionTouched"
+  :save-mode="saveMode"
+  @update:draft-name="saveDraftName = $event"
+  @update:draft-description="saveDraftDescription = $event"
+  @update:draft-name-touched="saveDraftNameTouched = $event"
+  @update:draft-description-touched="saveDraftDescriptionTouched = $event"
+  @update:save-mode="saveMode = $event"
+  @mark-dirty="markDirty"
+  @save="handleSave"
+  @back="gotoPrev"
+/>
+```
+
+- [ ] **Step 2: 修复局限 2 — dirty 标志覆盖**
 
 `PromptBuilderSaveStep` 现已 emit `mark-dirty` 事件，主壳要监听并设 `dirty=true`。
 
@@ -1036,13 +1123,9 @@ git commit -m "feat(prompt-builder): 03 抽屉换为 PromptDisplay (Phase 1e)"
 function markDirty() { dirty.value = true }
 ```
 
-模板里 `<PromptBuilderSaveStep>` 的 props 中加：
+模板里 `<PromptBuilderSaveStep>` 的 `@mark-dirty="markDirty"` 已在 Step 1 加好。
 
-```vue
-@mark-dirty="markDirty"
-```
-
-- [ ] **Step 2: 修复局限 3 — history_draft 接入 mock**
+- [ ] **Step 3: 修复局限 3 — history_draft 接入 mock**
 
 把 1a 的 `if (seedKey === 'history_draft')` 分支改为支持 mock：
 
@@ -1073,7 +1156,7 @@ function handleSelectSeed(seedKey) {
 }
 ```
 
-- [ ] **Step 3: 修复局限 4 — handleSave mock 加入 saveMode 分支提示**
+- [ ] **Step 4: 修复局限 4 — handleSave mock 加入 saveMode 分支提示**
 
 ```javascript
 async function handleSave(payload) {
@@ -1107,21 +1190,21 @@ async function handleSave(payload) {
 }
 ```
 
-- [ ] **Step 4: 修复局限 1（draftName 重建）— 已在 Task 7 由 PromptBuilderSaveStep 自身的 userModifiedName ref 修复**
+- [ ] **Step 5: 修复局限 1（draftName 重建）— 已在 Step 1 由 Page 层状态上提解决**
 
-无需改 Page。
+草稿名/说明状态在 Page 层持有（`saveDraftName` / `saveDraftDescription`），v-if 切换步骤时不丢失。SaveStep 通过 props 接收、emit 更新。无需额外改动。
 
-- [ ] **Step 5: 修复局限 5（解锁规则只看 seed）**
+- [ ] **Step 6: 局限 5（解锁规则只看 seed）— 无需 Phase 1e 改，记录 Phase 2 hook**
 
 `isStepUnlocked` 在 1a 写得很简单。本期 mock 状态下，扩展为：candidates / scoring / save 仍然按 seed 解锁；prepare 也按 seed 解锁。**实际上 1a 已经是这样**。本局限主要是给 Phase 2-7 留 hook，无需 Phase 1e 改。文档里注明即可。
 
-- [ ] **Step 6: 跑 build + test**
+- [ ] **Step 7: 跑 build + test**
 
 Run: `cd frontend/apps/admin-app && pnpm build && pnpm test`
 
 Expected: 全部 PASS
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue
@@ -1426,6 +1509,7 @@ git commit -m "chore(prompt-builder): 删除 deprecated 的旧 EditStep/PreviewS
 }
 
 // el-radio-group 自定义：支持 strong + small 同时显示
+// 注意：这是全局 SCSS，不能用 :deep()（那是 Vue SFC scoped 样式的编译时指令）。
 .save-step-form .el-radio.is-bordered {
   width: 100%;
   margin: 0 0 8px;
@@ -1434,10 +1518,10 @@ git commit -m "chore(prompt-builder): 删除 deprecated 的旧 EditStep/PreviewS
   align-items: flex-start;
   white-space: normal;
 }
-.save-step-form .el-radio.is-bordered :deep(.el-radio__label) {
+.save-step-form .el-radio.is-bordered .el-radio__label {
   display: flex; flex-direction: column; gap: 2px;
 }
-.save-step-form .el-radio.is-bordered :deep(small) {
+.save-step-form .el-radio.is-bordered small {
   color: var(--ckqa-text-muted); font-size: 11px; font-weight: 400;
 }
 ```
@@ -1506,11 +1590,12 @@ Run: `cd frontend/apps/admin-app && pnpm dev`
 - [x] § 提示词文本显示组件 M 组合方案 → Task 1-5（rich / split / raw 三视图 + 容错降级）
 - [x] § rich 模式章节解析 + 占位符高亮 → Task 1 + Task 3
 - [x] § raw 模式暗色 IDE + 语法高亮 → Task 4
-- [x] § split 模式同步滚动 → Task 5（vueuse useScroll）
+- [x] § split 模式同步滚动 → Task 5（原生 scroll 事件 + ref）
 - [x] § 05 左 prompt 预览 + 右草稿名表单 → Task 7
 - [x] § 05 来源记录（5 行：课程 / 构建运行 / 种子 / 候选 / 评分 run）→ Task 7
 - [x] § 05 保存范围 radio（build_run_with_history / build_run_only）→ Task 7
-- [x] § Phase 1a 5 项已知局限修复 → Task 9（局限 1 由 Task 7 自带修复）
+- [x] § Phase 1a 局限 1-4 修复 → Task 7 + Task 9（局限 1 由 Page 层状态上提解决）
+- [ ] 局限 5 解锁规则细化 → Phase 2 hook
 
 未覆盖：
 - 真实 prompt-drafts 入库（属于 Phase 6 真实 API 接入）
