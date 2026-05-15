@@ -46,6 +46,11 @@ const dirty = ref(false)
 const saving = ref(false)
 const saveError = ref('')
 const selectedCandidateId = ref('')
+const saveDraftName = ref('')
+const saveDraftNameTouched = ref(false)
+const saveDraftDescription = ref('')
+const saveDraftDescriptionTouched = ref(false)
+const saveMode = ref('build_run_with_history')
 
 const activeStepKey = computed(() => resolveActiveStepKey(route.query))
 
@@ -128,9 +133,23 @@ function gotoPrev() {
   if (prev) gotoStep(prev)
 }
 
+function markDirty() { dirty.value = true }
+
 function handleSelectSeed(seedKey) {
   if (seedKey === 'history_draft') {
-    ElMessage.info('历史草稿入库将在 Phase 1e 开放')
+    // Phase 1e：从历史草稿列表中选取最新一条作为 mock 演示
+    const latest = MOCK_HISTORY_DRAFTS[0]
+    if (latest) {
+      seed.value = 'history_draft'
+      selectedCandidateId.value = latest.sourceCandidateId ?? ''
+      saveDraftName.value = latest.name
+      saveDraftDescription.value = latest.description ?? ''
+      saveDraftNameTouched.value = true
+      dirty.value = true
+      ElMessage.success(`已加载历史草稿「${latest.name}」`)
+    } else {
+      ElMessage.info('暂无可用的历史草稿')
+    }
     return
   }
   if (seed.value && seed.value !== seedKey && hasDownstreamProgress.value) {
@@ -154,9 +173,13 @@ async function handleSave(payload) {
     await new Promise((resolve) => setTimeout(resolve, 500))
     // 注意：本期不真发请求，控制台打印 payload 供调试
     // eslint-disable-next-line no-console
-    console.log('[Phase 1a mock] save payload', payload)
+    console.log('[Phase 1e mock] save payload', payload)
     dirty.value = false
-    ElMessage.success('已保存到本次构建（mock）')
+    if (payload.saveMode === 'build_run_with_history') {
+      ElMessage.success('已保存到本次构建并入库历史草稿（mock）')
+    } else {
+      ElMessage.success('已保存到本次构建（mock）')
+    }
     await router.push({
       name: 'knowledge-base-build',
       params: { kbId: kbId.value },
@@ -237,8 +260,20 @@ function returnToWizard() {
           :build-run-id="buildRunId"
           :course-name="courseName"
           :seed="seed"
+          :selected-candidate-id="selectedCandidateId"
           :saving="saving"
           :save-error="saveError"
+          :draft-name="saveDraftName"
+          :draft-description="saveDraftDescription"
+          :draft-name-touched="saveDraftNameTouched"
+          :draft-description-touched="saveDraftDescriptionTouched"
+          :save-mode="saveMode"
+          @update:draft-name="saveDraftName = $event"
+          @update:draft-description="saveDraftDescription = $event"
+          @update:draft-name-touched="saveDraftNameTouched = $event"
+          @update:draft-description-touched="saveDraftDescriptionTouched = $event"
+          @update:save-mode="saveMode = $event"
+          @mark-dirty="markDirty"
           @save="handleSave"
           @back="gotoPrev"
         />

@@ -149,7 +149,7 @@ function handleSubmit() {
             <div><span>课程</span><strong>{{ courseName || '—' }}</strong></div>
             <div><span>构建运行</span><strong>{{ buildRunId || '—' }}</strong></div>
             <div><span>选定种子</span><strong>{{ seedLabel }}</strong></div>
-            <div><span>选中候选</span><strong>{{ candidateInfo?.displayNameZh ?? selectedCandidateId || '—' }}</strong></div>
+            <div><span>选中候选</span><strong>{{ (candidateInfo?.displayNameZh ?? selectedCandidateId) || '—' }}</strong></div>
           </div>
           <p v-if="validation.errors.seed" class="form-row__error">{{ validation.errors.seed }}</p>
         </div>
