@@ -4331,3 +4331,39 @@ textarea.text-input {
   white-space: nowrap;
   border: 0;
 }
+
+// 手动调优向导 · Phase 1a 占位步骤
+.prompt-builder-placeholder__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ckqa-space-3);
+  min-height: 240px;
+  padding: var(--ckqa-space-5);
+  background: var(--ckqa-surface-muted);
+  border: 1px dashed var(--ckqa-border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.prompt-builder-placeholder__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
+  color: var(--ckqa-accent);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.prompt-builder-placeholder__hint {
+  margin: 0;
+  max-width: 520px;
+  color: var(--ckqa-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
