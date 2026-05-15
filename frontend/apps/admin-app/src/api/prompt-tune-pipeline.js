@@ -9,10 +9,16 @@ export async function triggerPromptTuneSamples(buildRunId, client = http) {
   ))
 }
 
-export async function generateAuditSet(buildRunId, client = http) {
-  return unwrapApiResponse(await client.post(
-    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/audit-set`,
-  ))
+export async function generateAuditSet(buildRunId, options = {}, client = http) {
+  // 向后兼容：旧签名 generateAuditSet(id, mockClient) 中第二参数是 axios 实例
+  if (options && typeof options.post === 'function') {
+    client = options
+    options = {}
+  }
+  const { force = false } = options
+  const url = `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/audit-set`
+                + (force ? '?force=true' : '')
+  return unwrapApiResponse(await client.post(url))
 }
 
 export async function listAuditSamples(buildRunId, client = http) {
