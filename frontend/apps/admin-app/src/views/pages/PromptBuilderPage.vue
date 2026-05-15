@@ -241,13 +241,12 @@ function returnToWizard() {
         />
       </div>
 
-      <footer v-if="activeStepKey !== 'save'" class="prompt-builder-page__actions">
+      <footer v-if="activeStepKey !== 'save' && activeStepKey !== 'candidates'" class="prompt-builder-page__actions">
         <div class="prompt-builder-page__status">
-          <span v-if="dirty" class="dirty">● 已修改未保存</span>
-          <span v-else>已是最新</span>
+          <el-tag v-if="dirty" type="warning" size="small" effect="light">已修改未保存</el-tag>
+          <el-tag v-else type="success" size="small" effect="light">已是最新</el-tag>
         </div>
         <div class="prompt-builder-page__buttons">
-          <el-button v-if="activeStepKey !== 'seed'" @click="gotoPrev">上一步</el-button>
           <el-button type="primary" @click="gotoNext">下一步</el-button>
         </div>
       </footer>

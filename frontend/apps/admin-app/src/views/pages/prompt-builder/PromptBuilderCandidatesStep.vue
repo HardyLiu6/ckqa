@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import CandidateCard from './CandidateCard.vue'
-import CandidateSummaryBar from './CandidateSummaryBar.vue'
 import { MOCK_CANDIDATES } from './mocks/index.js'
 import {
   toggleCandidate,
@@ -50,37 +49,31 @@ function handleStart() {
 <template>
   <section class="prompt-builder-step prompt-builder-candidates">
     <header class="prompt-builder-step__header">
-      <h3>生成候选提示词</h3>
-      <p>勾选要进入 04 步评分的候选 · 默认全选 · 长 prompt 候选 token 消耗显著高于基线</p>
+      <button class="step-back-btn" title="返回上一步" @click="$emit('back')">←</button>
+      <div>
+        <h3>生成候选提示词</h3>
+        <p>勾选要进入 04 步评分的候选 · 默认全选 · 长 prompt 候选 token 消耗显著高于基线</p>
+      </div>
     </header>
 
-    <CandidateSummaryBar
-      :total-candidates="candidates.length"
-      :candidate-count="summary.candidateCount"
-      :total-calls="summary.totalCalls"
-      :estimated-tokens="summary.estimatedTokens"
-      :estimated-minutes="summary.estimatedMinutes"
-    />
-
-    <footer class="candidate-bottom-bar">
-      <div class="candidate-bottom-bar__info">
-        已选 <strong>{{ summary.candidateCount }}</strong> 个候选 ·
-        预估 <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
+    <!-- 合并摘要 + 操作为一栏 -->
+    <div class="candidate-action-bar">
+      <div class="candidate-action-bar__stats">
+        已选 <strong>{{ summary.candidateCount }}</strong> / {{ candidates.length }} 个候选 ·
+        <strong>{{ summary.totalCalls }}</strong> 次调用 ·
+        <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
         约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
       </div>
-      <div class="candidate-bottom-bar__actions">
-        <el-button @click="$emit('back')">← 返回 02</el-button>
+      <div class="candidate-action-bar__right">
+        <div class="candidate-quick-actions">
+          <button @click="handleSelectAll">全选</button>
+          <button @click="handleSelectNone">清空</button>
+          <button @click="handleSelectBaseline">仅选基线</button>
+        </div>
         <el-button type="primary" :disabled="summary.candidateCount === 0" @click="handleStart">
           开始抽取评分 →
         </el-button>
       </div>
-    </footer>
-
-    <div class="candidate-quick-actions">
-      <button @click="handleSelectAll">全选</button>
-      <button @click="handleSelectNone">清空</button>
-      <button @click="handleSelectBaseline">仅选基线</button>
-      <span class="ann-text-muted candidate-quick-actions__hint">点击候选卡片切换勾选状态</span>
     </div>
 
     <div class="candidate-grid">

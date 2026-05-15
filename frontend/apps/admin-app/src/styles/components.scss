@@ -5121,3 +5121,45 @@ textarea.text-input {
   padding: 16px 18px; border-radius: 8px;
   white-space: pre-wrap; margin: 0;
 }
+
+// 手动调优向导 · 步骤标题左侧小圆形返回按钮
+.step-back-btn {
+  width: 32px; height: 32px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: 50%;
+  background: var(--ckqa-surface);
+  display: grid; place-items: center;
+  cursor: pointer;
+  font-size: 14px; color: var(--ckqa-text-muted);
+  flex-shrink: 0;
+  transition: all 120ms;
+}
+.step-back-btn:hover {
+  background: var(--ckqa-border);
+  color: var(--ckqa-text);
+}
+
+// 步骤 header 支持左侧返回按钮
+.prompt-builder-step__header {
+  display: flex; align-items: flex-start; gap: 12px;
+}
+
+// 03 步合并操作条
+.candidate-action-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+  gap: 16px;
+}
+.candidate-action-bar__stats {
+  font-size: 13px; color: var(--ckqa-text-muted);
+}
+.candidate-action-bar__stats strong {
+  color: var(--ckqa-accent);
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace);
+}
+.candidate-action-bar__right {
+  display: flex; align-items: center; gap: 12px;
+}
