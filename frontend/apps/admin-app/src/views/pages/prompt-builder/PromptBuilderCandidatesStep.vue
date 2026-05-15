@@ -12,6 +12,10 @@ import {
   formatTokens,
 } from './candidates-selection-model.js'
 
+const props = defineProps({
+  dirty: { type: Boolean, default: false },
+})
+
 const emit = defineEmits(['start-scoring', 'back'])
 
 const candidates = MOCK_CANDIDATES
@@ -58,11 +62,15 @@ function handleStart() {
 
     <!-- 合并摘要 + 操作为一栏 -->
     <div class="candidate-action-bar">
-      <div class="candidate-action-bar__stats">
-        已选 <strong>{{ summary.candidateCount }}</strong> / {{ candidates.length }} 个候选 ·
-        <strong>{{ summary.totalCalls }}</strong> 次调用 ·
-        <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
-        约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
+      <div class="candidate-action-bar__left">
+        <el-tag v-if="dirty" type="warning" size="small" effect="light">已修改未保存</el-tag>
+        <el-tag v-else type="success" size="small" effect="light">已是最新</el-tag>
+        <span class="candidate-action-bar__stats">
+          已选 <strong>{{ summary.candidateCount }}</strong> / {{ candidates.length }} 个候选 ·
+          <strong>{{ summary.totalCalls }}</strong> 次调用 ·
+          <strong>{{ formatTokens(summary.estimatedTokens) }}</strong> tokens ·
+          约 <strong>{{ summary.estimatedMinutes }}</strong> 分钟
+        </span>
       </div>
       <div class="candidate-action-bar__right">
         <div class="candidate-quick-actions">

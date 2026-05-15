@@ -5160,6 +5160,9 @@ textarea.text-input {
   color: var(--ckqa-accent);
   font-family: var(--ckqa-font-mono, ui-monospace, monospace);
 }
+.candidate-action-bar__left {
+  display: flex; align-items: center; gap: 12px;
+}
 .candidate-action-bar__right {
   display: flex; align-items: center; gap: 12px;
 }
