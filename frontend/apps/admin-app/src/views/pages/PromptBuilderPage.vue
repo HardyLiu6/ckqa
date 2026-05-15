@@ -45,6 +45,11 @@ const saveError = ref('')
 
 const activeStepKey = computed(() => resolveActiveStepKey(route.query))
 
+// 是否存在切换种子会丢失的下游进度。
+// Phase 1a：02/03/04 是占位、05 是 mock 保存，没有真实可丢失的进度，恒为 false。
+// Phase 1b/1c/1d 接入真实标注 / 候选 / 评分后，把对应状态接进来即可触发确认弹窗。
+const hasDownstreamProgress = computed(() => false)
+
 const stepStatuses = computed(() => {
   const idx = BUILDER_STEP_KEYS.indexOf(activeStepKey.value)
   return BUILDER_STEPS.map((step, i) => ({
@@ -124,7 +129,7 @@ function handleSelectSeed(seedKey) {
     ElMessage.info('历史草稿入库将在 Phase 1e 开放')
     return
   }
-  if (seed.value && seed.value !== seedKey) {
+  if (seed.value && seed.value !== seedKey && hasDownstreamProgress.value) {
     ElMessageBox.confirm('切换种子会重置后续步骤已有的进度，确定吗？', '切换种子', { type: 'warning' })
       .then(() => {
         seed.value = seedKey
