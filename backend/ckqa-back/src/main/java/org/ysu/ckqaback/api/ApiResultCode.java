@@ -163,7 +163,12 @@ public enum ApiResultCode {
     /**
      * 索引任务执行失败。
      */
-    INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败");
+    INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败"),
+
+    /**
+     * 接口尚未实现（占位）。
+     */
+    PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现");
 
     /**
      * 业务响应码。
