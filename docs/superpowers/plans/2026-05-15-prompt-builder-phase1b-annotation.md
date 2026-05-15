@@ -207,6 +207,16 @@ git commit -m "feat(prompt-builder): 新增关系类型过滤模型 (Phase 1b)"
 // frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/audit-samples.js
 //
 // 5 条 audit 样本：高优 2 + 中优 2 + 低优 1，覆盖典型场景。
+//
+// 命名约定（避免合并视图里 :key 冲突 / entityMap 互相覆盖）：
+//   - goldEntities.id      使用 'e1' / 'e2' / ...（已确认实体）
+//   - aiSuggestedEntities.id  使用 'ai1' / 'ai2' / ...（AI 候选实体）
+//   - goldRelations.id     使用 'r1' / 'r2' / ...
+//   - aiSuggestedRelations.id 使用 'ar1' / 'ar2' / ...
+//   - 采纳（handleAcceptEntity / handleAcceptRelation）保留原 id 不变，
+//     依赖上面前缀互不重叠保证唯一性。
+//   - 任何 aiSuggestedRelations 引用的 sourceEntityId / targetEntityId
+//     必须能在同一样本的 goldEntities ∪ aiSuggestedEntities 中找到。
 
 export const MOCK_AUDIT_SAMPLES = [
   {
@@ -315,9 +325,10 @@ export const MOCK_TASK_SUMMARY = {
 
 ```bash
 cat frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+cat -A frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js | tail -3
 ```
 
-预期：文件以 `export const MOCK_COURSE_NAME = '操作系统'` 这一行结束（可能带或不带末尾换行）。
+预期：文件以 `export const MOCK_COURSE_NAME = '操作系统'` 这一行结束。`cat -A` 会显示行尾 `$`（换行符）和制表符，用于确认末尾是否有额外空行或非换行字符 —— 如果末尾是 `'操作系统'$\n$`（多一行空行）或没有 `$`，需要据此调整下面 str_replace 的 oldStr。
 
 2. 用 str_replace 在 `MOCK_COURSE_NAME` 行后追加新的重导出，确保不动 Phase 1a 已有内容：
 
@@ -646,10 +657,15 @@ defineEmits([
   'sort-suggestions-by-confidence',
 ])
 
-// 实体合并：已确认（reused/manual）+ AI 候选标 source='ai_suggested'。
+// 实体合并：已确认（reused/manual/accepted）+ AI 候选标 source='ai_suggested'。
 // 注意：这里用展开式浅拷贝产生新对象，下面的 entityMap 仅作为关系卡 lookup 的
 // **只读**视图。所有写操作都必须发回父组件、改 sample.goldEntities /
 // sample.aiSuggestedEntities；不要在子组件里直接改 entityMap[id] 的字段。
+//
+// 模板 v-for :key 用 `${source}:${id}` 复合键（见模板段）：两个分支的 source
+// 集合互斥（已确认侧 = reused/manual/accepted，AI 侧固定为 ai_suggested），
+// 即使 goldEntities.id 与 aiSuggestedEntities.id 撞名也不会触发 Vue 重复 key
+// 警告。下方 mergedRelations 同理。
 const mergedEntities = computed(() => {
   if (!props.sample) return []
   const confirmed = props.sample.goldEntities.map((e) => ({ ...e }))
@@ -657,7 +673,8 @@ const mergedEntities = computed(() => {
   return [...confirmed, ...suggested]
 })
 
-// 关系合并
+// 关系合并：已确认 source 集合（manual/accepted）与 AI 候选 source 集合
+// （ai_schema_inferred/ai_suggested）互斥；模板 :key 同样用 `${source}:${id}`。
 const mergedRelations = computed(() => {
   if (!props.sample) return []
   const confirmed = props.sample.goldRelations.map((r) => ({ ...r }))
@@ -766,7 +783,7 @@ function signalLabel(name) {
         <div class="annotation-list">
           <AnnotationEntityCard
             v-for="entity in mergedEntities"
-            :key="entity.id"
+            :key="`${entity.source}:${entity.id}`"
             :entity="entity"
             @accept="$emit('accept-entity', $event)"
             @reject="$emit('reject-entity', $event)"
@@ -786,7 +803,7 @@ function signalLabel(name) {
         <div class="annotation-list">
           <AnnotationRelationCard
             v-for="relation in mergedRelations"
-            :key="relation.id"
+            :key="`${relation.source}:${relation.id}`"
             :relation="relation"
             :entity-map="entityMap"
             @accept="$emit('accept-relation', $event)"
@@ -832,7 +849,14 @@ import { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './mocks/index.js'
 // 返回的对象引用，对其属性的修改无需 computed 重新求值，依赖追踪发生在模板层。
 // 用 JSON.parse(JSON.stringify(...)) 而不是 structuredClone，避免对部署目标
 // 浏览器版本做隐式假设；mock 数据是纯 JSON，深拷贝够用。
-const samples = ref(MOCK_AUDIT_SAMPLES.map((s) => JSON.parse(JSON.stringify(s))))
+// 显式按 priority 排序（high → medium → low），让左栏视觉契约不依赖 mock 顺序，
+// 也方便 Phase 2+ 接真实 API 时直接复用同一份排序逻辑。
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
+const samples = ref(
+  MOCK_AUDIT_SAMPLES
+    .map((s) => JSON.parse(JSON.stringify(s)))
+    .sort((a, b) => (PRIORITY_ORDER[a.auditPriority] ?? 9) - (PRIORITY_ORDER[b.auditPriority] ?? 9))
+)
 const taskSummary = MOCK_TASK_SUMMARY
 const tasksExpanded = ref(false)
 
@@ -1347,7 +1371,15 @@ Expected: build + 所有测试 PASS
 
 - [ ] **Step 4: 提交**
 
-`PromptBuilderEditStep.vue` 的删除已在 Step 2 通过 `git rm` 暂存，这里只追加 PromptBuilderPage.vue 的修改：
+`PromptBuilderEditStep.vue` 的删除已在 Step 2 通过 `git rm` 暂存。在 commit 前先确认暂存状态没有被中间命令重置过：
+
+```bash
+git status | grep "deleted:.*PromptBuilderEditStep\.vue"
+# 期望：在 "Changes to be committed" 段下看到 deleted: ...PromptBuilderEditStep.vue
+# 若看不到（说明 git rm 暂存丢了），重新执行 Step 2 的 git rm 再继续
+```
+
+确认后追加 PromptBuilderPage.vue 的修改并提交：
 
 ```bash
 git add frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue
@@ -1366,7 +1398,7 @@ Run: `cd frontend/apps/admin-app && pnpm dev`
 
 Expected：
 - 顶部"已完成的脚本任务"折叠条可展开/收起
-- 左栏 5 条样本列表，按 priority 倒序，audit-0001 默认 active（in_progress）
+- 左栏 5 条样本列表，按 priority 排序为 high → medium → low（由 Page 层显式排序保障，与 mock 写入顺序无关），audit-0001 默认 active（in_progress）
 - 右栏显示 audit-0001 的工作区：
   - ♻ 历史复用横幅（绿色）写"发现来自 操作系统 · 上学期构建 的标注..."
   - ✨ AI 预填横幅（紫色）写"AI 助手已生成 2 个候选实体..."、附"按置信度排序"按钮
@@ -1384,7 +1416,7 @@ Expected：
 - 点 audit-0002 顶部"完成 ✓"→ toast "至少标注 1 个实体..."（因为 goldEntities 为空）
 - 点"跳过"→ toast "已跳过"，自动跳到 audit-0004
 - 筛选 tab "未标"→ 列表只剩 not_started 样本
-- 把所有 not_started 样本都"跳过"→ 完成或跳过最后一条时 toast "所有样本已处理完毕，可前往下一步"
+- 把所有 not_started 样本都"跳过"→ 完成或跳过最后一条时只弹一条 toast"已跳过 · 所有样本已处理完毕，可前往下一步"（不应同时弹"已跳过"和"所有样本已处理完毕"两条）
 - 左栏 priority pill 与筛选 tab 显示中文（高 / 中 / 低 / 全部 / 未标），与 mock 中的 `auditPriority='high'|'medium'|'low'` 解耦展示
 
 - [ ] **Step 4: 修 bug 并重新验证（如有）**
@@ -1407,6 +1439,7 @@ Expected：
 - 原文拖选成实体（Phase 2+ 接入真实 API 时一并做）
 - 手动添加实体/关系的内联编辑器（Phase 2+；Phase 1b 卡片只暴露删除按钮，不渲染编辑按钮，避免点击后静默无响应）
 - 进度门控阻塞下一步（Phase 1a 解锁规则只看 seed，不看标注完成度）
+- 筛选 tab 切换后的 active 同步：当前 active 样本若不在新筛选结果中，左栏不会保留高亮、右栏也不切换，造成左右视觉短暂错位。Phase 1b 不修；Phase 2+ 引入"筛选切换 → 选中第一条可见样本 / 或保持当前样本但在列表里显示固定锚"的策略时一并处理
 
 ### 占位扫描
 - 无 TBD / TODO
