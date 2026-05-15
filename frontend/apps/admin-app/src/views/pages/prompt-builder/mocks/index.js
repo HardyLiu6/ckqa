@@ -27,3 +27,6 @@ export const MOCK_HISTORY_DRAFTS = [
 ]
 
 export const MOCK_COURSE_NAME = '操作系统'
+
+// Phase 1b：标注 IDE 所需的 audit 样本 mock
+export { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './audit-samples.js'
