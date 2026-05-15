@@ -1,7 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import AnnotationEntityCard from './AnnotationEntityCard.vue'
 import AnnotationRelationCard from './AnnotationRelationCard.vue'
+import EntityEditor from './EntityEditor.vue'
+import RelationEditor from './RelationEditor.vue'
 
 const props = defineProps({
   sample: { type: Object, default: null },
@@ -17,7 +19,12 @@ defineEmits([
   'reject-relation',
   'delete-relation',
   'sort-suggestions-by-confidence',
+  'create-entity',
+  'create-relation',
 ])
+
+const showEntityEditor = ref(false)
+const showRelationEditor = ref(false)
 
 const mergedEntities = computed(() => {
   if (!props.sample) return []
@@ -129,7 +136,9 @@ function signalLabel(name) {
         <header class="annotation-section-title">
           <strong>实体</strong>
           <span class="annotation-section-title__count">{{ confirmedCount }} 已确认 · {{ aiCount }} 待审</span>
-          <button class="annotation-section-title__add" @click="() => {}">+ 添加实体</button>
+          <button class="annotation-section-title__add" @click="showEntityEditor = !showEntityEditor">
+            {{ showEntityEditor ? '收起 −' : '+ 添加实体' }}
+          </button>
         </header>
         <div class="entity-chip-grid">
           <AnnotationEntityCard
@@ -141,6 +150,12 @@ function signalLabel(name) {
             @delete="$emit('delete-entity', $event)"
           />
         </div>
+        <EntityEditor
+          v-if="showEntityEditor"
+          :existing-entities="mergedEntities"
+          @submit="(payload) => { $emit('create-entity', payload); showEntityEditor = false }"
+          @cancel="showEntityEditor = false"
+        />
       </section>
 
       <!-- 关系区 -->
@@ -149,7 +164,14 @@ function signalLabel(name) {
           <strong>关系</strong>
           <span class="annotation-section-title__count">{{ relConfirmedCount }} 已确认 · {{ relAiCount }} 待审</span>
           <span class="ann-text-tiny ann-text-tiny--accent annotation-section-title__hint-right">仅显示 schema 合法关系</span>
-          <button class="annotation-section-title__add" @click="() => {}">+ 添加关系</button>
+          <button
+            class="annotation-section-title__add"
+            :disabled="(sample?.goldEntities ?? []).length < 2"
+            :title="(sample?.goldEntities ?? []).length < 2 ? '至少需要 2 个已确认实体才能添加关系' : ''"
+            @click="showRelationEditor = !showRelationEditor"
+          >
+            {{ showRelationEditor ? '收起 −' : '+ 添加关系' }}
+          </button>
         </header>
         <div class="annotation-list">
           <AnnotationRelationCard
@@ -162,6 +184,12 @@ function signalLabel(name) {
             @delete="$emit('delete-relation', $event)"
           />
         </div>
+        <RelationEditor
+          v-if="showRelationEditor"
+          :entities="sample?.goldEntities ?? []"
+          @submit="(payload) => { $emit('create-relation', payload); showRelationEditor = false }"
+          @cancel="showRelationEditor = false"
+        />
       </section>
     </template>
   </main>
