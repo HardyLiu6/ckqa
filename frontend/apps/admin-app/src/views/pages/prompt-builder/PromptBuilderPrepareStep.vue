@@ -10,6 +10,7 @@ import {
   updateAuditSample,
 } from '../../../api/prompt-tune-pipeline.js'
 import { apiSampleToLocal, localSampleToUpdatePayload } from './prepare-step-api.js'
+import { generateEntityId, generateRelationId } from './entity-id-generator.js'
 
 defineEmits(['back'])
 
@@ -179,12 +180,28 @@ function handleRejectEntity(entityId) {
 async function handleDeleteEntity(entityId) {
   const sample = activeSample.value
   if (!sample) return
-  const removed = sample.goldEntities.find((e) => e.id === entityId)
+  const removedEntity = sample.goldEntities.find((e) => e.id === entityId)
+  // 级联删除：所有引用该实体的关系也一并删除
+  const removedRelations = sample.goldRelations.filter(
+    (r) => r.sourceEntityId === entityId || r.targetEntityId === entityId
+  )
   sample.goldEntities = sample.goldEntities.filter((e) => e.id !== entityId)
+  if (removedRelations.length > 0) {
+    sample.goldRelations = sample.goldRelations.filter(
+      (r) => r.sourceEntityId !== entityId && r.targetEntityId !== entityId
+    )
+  }
+  const fields = removedRelations.length > 0
+    ? ['goldEntities', 'goldRelations']
+    : ['goldEntities']
   try {
-    await persistFields(sample, { fields: ['goldEntities'] })
+    await persistFields(sample, { fields })
+    if (removedRelations.length > 0) {
+      ElMessage.info(`已删除实体及其 ${removedRelations.length} 条关联关系`)
+    }
   } catch {
-    if (removed) sample.goldEntities.push(removed)
+    if (removedEntity) sample.goldEntities.push(removedEntity)
+    if (removedRelations.length > 0) sample.goldRelations.push(...removedRelations)
   }
 }
 
@@ -269,6 +286,51 @@ function sortSuggestionsByConfidence() {
   activeSample.value.aiSuggestedEntities.sort(
     (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0)
   )
+}
+
+async function handleCreateEntity(payload) {
+  const sample = activeSample.value
+  if (!sample) return
+  const previousStatus = sample.status
+  const newEntity = {
+    id: generateEntityId(),
+    name: payload.name,
+    type: payload.type,
+    description: payload.description,
+    source: 'manual',
+  }
+  sample.goldEntities.push(newEntity)
+  if (sample.status === 'not_started') sample.status = 'in_progress'
+  try {
+    await persistFields(sample, { fields: ['goldEntities', 'status'] })
+    ElMessage.success('已添加实体')
+  } catch {
+    sample.status = previousStatus
+    sample.goldEntities = sample.goldEntities.filter((e) => e.id !== newEntity.id)
+  }
+}
+
+async function handleCreateRelation(payload) {
+  const sample = activeSample.value
+  if (!sample) return
+  const previousStatus = sample.status
+  const newRelation = {
+    id: generateRelationId(),
+    sourceEntityId: payload.sourceEntityId,
+    targetEntityId: payload.targetEntityId,
+    type: payload.type,
+    evidence: payload.evidence,
+    source: 'manual',
+  }
+  sample.goldRelations.push(newRelation)
+  if (sample.status === 'not_started') sample.status = 'in_progress'
+  try {
+    await persistFields(sample, { fields: ['goldRelations', 'status'] })
+    ElMessage.success('已添加关系')
+  } catch {
+    sample.status = previousStatus
+    sample.goldRelations = sample.goldRelations.filter((r) => r.id !== newRelation.id)
+  }
 }
 </script>
 
@@ -397,6 +459,8 @@ function sortSuggestionsByConfidence() {
             @reject-relation="handleRejectRelation"
             @delete-relation="handleDeleteRelation"
             @sort-suggestions-by-confidence="sortSuggestionsByConfidence"
+            @create-entity="handleCreateEntity"
+            @create-relation="handleCreateRelation"
           />
         </div>
       </div>
