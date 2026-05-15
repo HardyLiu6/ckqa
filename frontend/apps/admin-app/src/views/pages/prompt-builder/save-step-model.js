@@ -76,26 +76,48 @@ export function validateSaveForm({ name, seed }) {
 }
 
 /**
- * 构造保存草稿提交 payload（Phase 1a 简版）。
- *
- * Phase 1a 简版 payload。Phase 1e 会扩展加入 selectedCandidate / candidateDisplayName /
- * compositeScore / saveMode 等字段。
+ * 构造保存草稿的 payload。
+ * Phase 1a：支持简版字段（seed / name / description）；saveMode 缺省为 build_run_only。
+ * Phase 1e：新增 selectedCandidate / candidateDisplayName / compositeScore / saveMode。
  *
  * @param {object} args
  * @param {string} args.seed 起始种子 key，必填
  * @param {string} args.name 草稿名，trim 后必填
  * @param {string} [args.description] 草稿描述，可选；trim 后为空则不写入 metadata
- * @returns {{ seed: string, metadata: { draftName: string, draftDescription?: string } }}
- * @throws {Error} 当 seed 缺失或 name trim 后为空时
+ * @param {string} [args.selectedCandidate] 选中的候选 prompt key
+ * @param {string} [args.candidateDisplayName] 候选显示名
+ * @param {number} [args.compositeScore] 综合评分
+ * @param {string} [args.saveMode] 保存模式，缺省 'build_run_only'
+ * @returns {{ seed: string, saveMode: string, metadata: object, selectedCandidate?: string }}
+ * @throws {Error} 当 seed 缺失、name 为空、或 saveMode 为 build_run_with_history 但无 selectedCandidate 时
  */
-export function buildSaveDraftPayload({ seed, name, description }) {
+export function buildSaveDraftPayload({
+  seed,
+  name,
+  description,
+  selectedCandidate,
+  candidateDisplayName,
+  compositeScore,
+  saveMode = 'build_run_only',
+}) {
   if (!seed) throw new Error('seed is required')
   const trimmedName = String(name ?? '').trim()
   if (!trimmedName) throw new Error('name is required')
+  if (saveMode === 'build_run_with_history' && !selectedCandidate) {
+    throw new Error('selectedCandidate is required when saveMode is build_run_with_history')
+  }
 
   const metadata = { draftName: trimmedName }
   const trimmedDesc = String(description ?? '').trim()
   if (trimmedDesc) metadata.draftDescription = trimmedDesc
+  if (candidateDisplayName) {
+    metadata.candidateDisplayName = String(candidateDisplayName).trim()
+  }
+  if (typeof compositeScore === 'number') {
+    metadata.compositeScore = compositeScore
+  }
 
-  return { seed, metadata }
+  const payload = { seed, saveMode, metadata }
+  if (selectedCandidate) payload.selectedCandidate = selectedCandidate
+  return payload
 }

@@ -112,3 +112,46 @@ describe('buildSaveDraftPayload', () => {
     assert.equal(payload.metadata.draftDescription, undefined)
   })
 })
+
+describe('buildSaveDraftPayload (Phase 1e 扩展)', () => {
+  it('builds payload with selectedCandidate and saveMode', () => {
+    const payload = buildSaveDraftPayload({
+      seed: 'system_default',
+      name: '操作系统 · 图谱感知 + 蒸馏样例 · 2026-05-14',
+      description: '初版草稿',
+      selectedCandidate: 'schema_fewshot_distilled_v2_strict_tuple',
+      candidateDisplayName: '图谱感知 + 蒸馏样例',
+      compositeScore: 0.71,
+      saveMode: 'build_run_with_history',
+    })
+    assert.equal(payload.seed, 'system_default')
+    assert.equal(payload.selectedCandidate, 'schema_fewshot_distilled_v2_strict_tuple')
+    assert.equal(payload.saveMode, 'build_run_with_history')
+    assert.equal(payload.metadata.candidateDisplayName, '图谱感知 + 蒸馏样例')
+    assert.equal(payload.metadata.compositeScore, 0.71)
+  })
+
+  it('omits candidate fields when selectedCandidate is empty (向后兼容 1a 简版)', () => {
+    const payload = buildSaveDraftPayload({
+      seed: 'system_default',
+      name: '草稿',
+      description: '',
+    })
+    assert.equal(payload.seed, 'system_default')
+    assert.equal(payload.selectedCandidate, undefined)
+    assert.equal(payload.metadata.candidateDisplayName, undefined)
+    assert.equal(payload.metadata.compositeScore, undefined)
+    assert.equal(payload.saveMode, 'build_run_only')
+  })
+
+  it('saveMode "build_run_with_history" requires selectedCandidate', () => {
+    assert.throws(
+      () => buildSaveDraftPayload({
+        seed: 'system_default',
+        name: '草稿',
+        saveMode: 'build_run_with_history',
+      }),
+      /selectedCandidate/
+    )
+  })
+})
