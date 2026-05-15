@@ -1,28 +1,37 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import AnnotationSampleList from './AnnotationSampleList.vue'
 import AnnotationWorkArea from './AnnotationWorkArea.vue'
-import { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './mocks/index.js'
+import {
+  listAuditSamples,
+  generateAuditSet,
+  updateAuditSample,
+} from '../../../api/prompt-tune-pipeline.js'
+import { apiSampleToLocal, localSampleToUpdatePayload } from './prepare-step-api.js'
 
 defineEmits(['back'])
 
+const route = useRoute()
+
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 }
-const samples = ref(
-  MOCK_AUDIT_SAMPLES
-    .map((s) => JSON.parse(JSON.stringify(s)))
-    .sort((a, b) => (PRIORITY_ORDER[a.auditPriority] ?? 9) - (PRIORITY_ORDER[b.auditPriority] ?? 9))
-)
-const taskSummary = MOCK_TASK_SUMMARY
+const BUSINESS_CODE_HAS_ANNOTATED_SAMPLES = 4103
+
+const samples = ref([])
+const taskSummary = ref(null)
 const tasksExpanded = ref(false)
-
-// 全屏标注 IDE 模式
+const loading = ref(false)
+const errorMessage = ref('')
 const ideOpen = ref(false)
+const activeSampleId = ref('')
 
-const initialActiveId = samples.value.find((s) => s.status === 'in_progress')?.id
-  ?? samples.value[0]?.id
-  ?? ''
-const activeSampleId = ref(initialActiveId)
+const buildRunId = computed(() => {
+  const raw = route.query.buildRunId
+  if (!raw) return null
+  const num = Number(raw)
+  return Number.isFinite(num) && num > 0 ? num : null
+})
 
 const activeSample = computed(() =>
   samples.value.find((s) => s.id === activeSampleId.value) ?? null
@@ -33,6 +42,83 @@ const totalCount = computed(() => samples.value.length)
 const progressPercent = computed(() =>
   totalCount.value > 0 ? Math.round((doneCount.value / totalCount.value) * 100) : 0
 )
+
+onMounted(loadOrGenerateSamples)
+
+async function loadOrGenerateSamples() {
+  if (!buildRunId.value) {
+    errorMessage.value = '缺少 buildRunId，请从构建向导进入此页面'
+    return
+  }
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    let apiSamples = await listAuditSamples(buildRunId.value)
+    if (!Array.isArray(apiSamples) || apiSamples.length === 0) {
+      ElMessage.info('正在生成校准集，约 15 秒...')
+      apiSamples = await safeGenerateAuditSet({ allowForcePrompt: true })
+    }
+    if (Array.isArray(apiSamples)) applyApiSamples(apiSamples)
+  } catch (err) {
+    errorMessage.value = err?.message ?? '加载校准集失败'
+    ElMessage.error(errorMessage.value)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function safeGenerateAuditSet({ allowForcePrompt }) {
+  try {
+    return await generateAuditSet(buildRunId.value, { force: false })
+  } catch (err) {
+    if (err?.code === BUSINESS_CODE_HAS_ANNOTATED_SAMPLES && allowForcePrompt) {
+      try {
+        await ElMessageBox.confirm(
+          '当前构建已有人工标注，重新生成会清空当前进度。是否确认覆盖？',
+          '提示',
+          { confirmButtonText: '确认覆盖', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch {
+        return null
+      }
+      return await generateAuditSet(buildRunId.value, { force: true })
+    }
+    throw err
+  }
+}
+
+function applyApiSamples(apiSamples) {
+  const localSamples = (apiSamples ?? [])
+    .map(apiSampleToLocal)
+    .filter(Boolean)
+    .sort((a, b) =>
+      (PRIORITY_ORDER[a.auditPriority] ?? 9) - (PRIORITY_ORDER[b.auditPriority] ?? 9)
+    )
+  samples.value = localSamples
+  taskSummary.value = computeTaskSummary(localSamples)
+  const initialActive =
+    localSamples.find((s) => s.status === 'in_progress') ??
+    localSamples.find((s) => s.status === 'not_started') ??
+    localSamples[0]
+  activeSampleId.value = initialActive?.id ?? ''
+}
+
+function computeTaskSummary(localSamples) {
+  const buckets = { high: 0, medium: 0, low: 0 }
+  for (const s of localSamples) {
+    buckets[s.auditPriority] = (buckets[s.auditPriority] ?? 0) + 1
+  }
+  return {
+    samplesBuilt: { count: localSamples.length, types: 0, durationSec: null },
+    auditSampled: {
+      high: buckets.high,
+      medium: buckets.medium,
+      low: buckets.low,
+      total: localSamples.length,
+      durationSec: null,
+    },
+  }
+}
 
 function openIde() {
   ideOpen.value = true
@@ -48,15 +134,40 @@ function handleSelectSample(id) {
   activeSampleId.value = id
 }
 
-function handleAcceptEntity(entityId) {
+function findSample(sampleId) {
+  return samples.value.find((s) => s.id === sampleId) ?? null
+}
+
+async function persistFields(sample, { fields = [], clearFields = [] } = {}) {
+  if (!buildRunId.value || !sample) return
+  const payload = localSampleToUpdatePayload(sample, { fields, clearFields })
+  if (Object.keys(payload).length === 0) return
+  try {
+    const updated = await updateAuditSample(buildRunId.value, sample.id, payload)
+    Object.assign(sample, apiSampleToLocal(updated))
+  } catch (err) {
+    ElMessage.error(err?.message ?? '保存失败，请重试')
+    throw err
+  }
+}
+
+async function handleAcceptEntity(entityId) {
   const sample = activeSample.value
   if (!sample) return
   const idx = sample.aiSuggestedEntities.findIndex((e) => e.id === entityId)
   if (idx < 0) return
+  const previousStatus = sample.status
   const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
   sample.goldEntities.push({ ...picked, source: 'accepted' })
   if (sample.status === 'not_started') sample.status = 'in_progress'
-  ElMessage.success('已采纳')
+  try {
+    await persistFields(sample, { fields: ['goldEntities', 'status'] })
+    ElMessage.success('已采纳')
+  } catch {
+    sample.status = previousStatus
+    sample.aiSuggestedEntities.splice(idx, 0, picked)
+    sample.goldEntities = sample.goldEntities.filter((e) => e.id !== picked.id)
+  }
 }
 
 function handleRejectEntity(entityId) {
@@ -65,20 +176,32 @@ function handleRejectEntity(entityId) {
   sample.aiSuggestedEntities = sample.aiSuggestedEntities.filter((e) => e.id !== entityId)
 }
 
-function handleDeleteEntity(entityId) {
+async function handleDeleteEntity(entityId) {
   const sample = activeSample.value
   if (!sample) return
+  const removed = sample.goldEntities.find((e) => e.id === entityId)
   sample.goldEntities = sample.goldEntities.filter((e) => e.id !== entityId)
+  try {
+    await persistFields(sample, { fields: ['goldEntities'] })
+  } catch {
+    if (removed) sample.goldEntities.push(removed)
+  }
 }
 
-function handleAcceptRelation(relationId) {
+async function handleAcceptRelation(relationId) {
   const sample = activeSample.value
   if (!sample) return
   const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === relationId)
   if (idx < 0) return
   const [picked] = sample.aiSuggestedRelations.splice(idx, 1)
   sample.goldRelations.push({ ...picked, source: 'accepted' })
-  ElMessage.success('已采纳')
+  try {
+    await persistFields(sample, { fields: ['goldRelations'] })
+    ElMessage.success('已采纳')
+  } catch {
+    sample.aiSuggestedRelations.splice(idx, 0, picked)
+    sample.goldRelations = sample.goldRelations.filter((r) => r.id !== picked.id)
+  }
 }
 
 function handleRejectRelation(relationId) {
@@ -87,39 +210,57 @@ function handleRejectRelation(relationId) {
   sample.aiSuggestedRelations = sample.aiSuggestedRelations.filter((r) => r.id !== relationId)
 }
 
-function handleDeleteRelation(relationId) {
+async function handleDeleteRelation(relationId) {
   const sample = activeSample.value
   if (!sample) return
+  const removed = sample.goldRelations.find((r) => r.id === relationId)
   sample.goldRelations = sample.goldRelations.filter((r) => r.id !== relationId)
+  try {
+    await persistFields(sample, { fields: ['goldRelations'] })
+  } catch {
+    if (removed) sample.goldRelations.push(removed)
+  }
 }
 
-function handleFinishSample(sampleId) {
-  const sample = samples.value.find((s) => s.id === sampleId)
+async function handleFinishSample(sampleId) {
+  const sample = findSample(sampleId)
   if (!sample) return
   if (sample.goldEntities.length === 0) {
     ElMessage.warning('至少标注 1 个实体后才能完成；如确实无可抽取实体，请点"跳过"')
     return
   }
+  const previousStatus = sample.status
   sample.status = 'done'
-  const nextSample = samples.value.find((s) => s.status === 'not_started')
-  if (nextSample) {
-    activeSampleId.value = nextSample.id
-    ElMessage.success('已完成')
-  } else {
-    ElMessage.success('已完成 · 所有样本已处理完毕，可前往下一步')
+  try {
+    await persistFields(sample, { fields: ['status'] })
+    const nextSample = samples.value.find((s) => s.status === 'not_started')
+    if (nextSample) {
+      activeSampleId.value = nextSample.id
+      ElMessage.success('已完成')
+    } else {
+      ElMessage.success('已完成 · 所有样本已处理完毕，可前往下一步')
+    }
+  } catch {
+    sample.status = previousStatus
   }
 }
 
-function handleSkipSample(sampleId) {
-  const sample = samples.value.find((s) => s.id === sampleId)
+async function handleSkipSample(sampleId) {
+  const sample = findSample(sampleId)
   if (!sample) return
+  const previousStatus = sample.status
   sample.status = 'skipped'
-  const nextSample = samples.value.find((s) => s.status === 'not_started')
-  if (nextSample) {
-    activeSampleId.value = nextSample.id
-    ElMessage.info('已跳过')
-  } else {
-    ElMessage.success('已跳过 · 所有样本已处理完毕，可前往下一步')
+  try {
+    await persistFields(sample, { fields: ['status'] })
+    const nextSample = samples.value.find((s) => s.status === 'not_started')
+    if (nextSample) {
+      activeSampleId.value = nextSample.id
+      ElMessage.info('已跳过')
+    } else {
+      ElMessage.success('已跳过 · 所有样本已处理完毕，可前往下一步')
+    }
+  } catch {
+    sample.status = previousStatus
   }
 }
 
@@ -149,16 +290,38 @@ function sortSuggestionsByConfidence() {
         <span class="prepare-task-summary__toggle">{{ tasksExpanded ? '收起 ▴' : '展开 ▾' }}</span>
       </header>
       <div v-if="tasksExpanded" class="prepare-task-summary__body">
-        <div>
+        <div v-if="taskSummary">
           <span>02.1 调优样本集</span>
-          <strong>{{ taskSummary.samplesBuilt.count }} 条 · {{ taskSummary.samplesBuilt.types }} 类型 · 用时 {{ taskSummary.samplesBuilt.durationSec }} 秒</strong>
+          <strong>
+            {{ taskSummary.samplesBuilt.count }} 条
+            <template v-if="taskSummary.samplesBuilt.types">
+              · {{ taskSummary.samplesBuilt.types }} 类型
+            </template>
+            <template v-if="taskSummary.samplesBuilt.durationSec != null">
+              · 用时 {{ taskSummary.samplesBuilt.durationSec }} 秒
+            </template>
+          </strong>
         </div>
-        <div>
+        <div v-if="taskSummary">
           <span>02.2 校准集采样</span>
-          <strong>分层抽样 {{ taskSummary.auditSampled.total }} 条 · high {{ taskSummary.auditSampled.high }} / medium {{ taskSummary.auditSampled.medium }} / low {{ taskSummary.auditSampled.low }} · 用时 {{ taskSummary.auditSampled.durationSec }} 秒</strong>
+          <strong>
+            分层抽样 {{ taskSummary.auditSampled.total }} 条 · high {{ taskSummary.auditSampled.high }} / medium {{ taskSummary.auditSampled.medium }} / low {{ taskSummary.auditSampled.low }}
+            <template v-if="taskSummary.auditSampled.durationSec != null">
+              · 用时 {{ taskSummary.auditSampled.durationSec }} 秒
+            </template>
+          </strong>
         </div>
       </div>
     </article>
+
+    <!-- 加载 / 错误状态 -->
+    <div v-if="loading" class="prepare-loading">
+      <span>正在加载校准集...</span>
+    </div>
+    <div v-else-if="errorMessage" class="prepare-error">
+      <span>{{ errorMessage }}</span>
+      <el-button size="small" @click="loadOrGenerateSamples">重试</el-button>
+    </div>
 
     <!-- 02.3 校准集概览卡 + 进入标注入口 -->
     <div class="prepare-overview-card">
@@ -240,3 +403,20 @@ function sortSuggestionsByConfidence() {
     </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+.prepare-loading {
+  padding: 32px;
+  text-align: center;
+  color: var(--ckqa-text-muted, #78716c);
+}
+.prepare-error {
+  padding: 24px;
+  text-align: center;
+  color: var(--ckqa-danger, #dc2626);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+</style>
