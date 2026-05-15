@@ -4948,3 +4948,176 @@ textarea.text-input {
   background: transparent; color: var(--ckqa-text-muted);
 }
 .entity-chip__btn--delete:hover { background: var(--ckqa-border); color: var(--ckqa-text); }
+
+// 手动调优向导 · 03 候选勾选 (Phase 1c)
+.prompt-builder-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-3);
+}
+
+.candidate-summary-bar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 16px 20px;
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+}
+.candidate-summary-bar__label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ckqa-text-muted);
+}
+.candidate-summary-bar__value {
+  font-size: 18px; font-weight: 600; color: var(--ckqa-text);
+  margin-top: 2px;
+}
+.candidate-summary-bar__value strong { color: var(--ckqa-accent); }
+.candidate-summary-bar__divider {
+  width: 1px; height: 32px; background: var(--ckqa-border);
+}
+
+.candidate-quick-actions {
+  display: flex; gap: 8px; align-items: center;
+  font-size: 13px;
+}
+.candidate-quick-actions button {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--ckqa-accent); font-weight: 500;
+  padding: 4px 10px; border-radius: 4px;
+  font-size: 13px;
+}
+.candidate-quick-actions button:hover {
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+}
+.candidate-quick-actions__hint { margin-left: auto; }
+
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 16px;
+}
+
+.candidate-card {
+  position: relative;
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex; flex-direction: column; gap: 14px;
+  cursor: pointer;
+  transition: all 150ms;
+}
+.candidate-card:hover {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 38%, var(--ckqa-border));
+}
+.candidate-card.is-selected {
+  border-color: var(--ckqa-accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ckqa-accent) 4%, var(--ckqa-surface)), var(--ckqa-surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
+}
+
+.candidate-card__rec-badge {
+  position: absolute; top: -8px; left: 16px;
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: white; font-size: 10px; font-weight: 600;
+  padding: 3px 10px; border-radius: 6px; letter-spacing: 0.05em;
+}
+
+.candidate-card__head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+}
+.candidate-card__title { flex: 1; min-width: 0; }
+.candidate-card__title h4 { margin: 0; font-size: 15px; font-weight: 600; }
+.candidate-card__id {
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace);
+  font-size: 11px; color: var(--ckqa-text-muted);
+  display: block; margin-top: 4px; word-break: break-all;
+}
+.candidate-card__checkbox {
+  width: 22px; height: 22px;
+  border: 2px solid var(--ckqa-border);
+  border-radius: 6px;
+  display: grid; place-items: center;
+  background: var(--ckqa-surface);
+  flex-shrink: 0; font-size: 13px;
+  transition: all 120ms;
+}
+.candidate-card__checkbox.checked {
+  background: var(--ckqa-accent);
+  border-color: var(--ckqa-accent);
+  color: white;
+}
+
+.candidate-card__desc { margin: 0; font-size: 12px; color: var(--ckqa-text-muted); }
+
+.candidate-card__traits { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.cand-pill {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, transparent);
+  color: var(--ckqa-accent);
+  border-radius: 999px; font-size: 11px; font-weight: 500;
+}
+
+.candidate-card__meta {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px 16px; padding: 10px 12px;
+  background: var(--ckqa-bg); border-radius: 8px;
+  margin: 0; font-size: 12px;
+}
+.candidate-card__meta > div { display: flex; justify-content: space-between; margin: 0; }
+.candidate-card__meta dt { color: var(--ckqa-text-muted); margin: 0; }
+.candidate-card__meta dd {
+  color: var(--ckqa-text); font-weight: 500;
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace); margin: 0;
+}
+
+.candidate-card__token {
+  display: flex; align-items: center; gap: 12px;
+  padding-top: 10px; border-top: 1px dashed var(--ckqa-border);
+}
+.candidate-card__token-bar {
+  flex: 1; height: 6px;
+  background: var(--ckqa-border); border-radius: 3px; overflow: hidden;
+}
+.candidate-card__token-bar .fill { height: 100%; border-radius: 3px; }
+.candidate-card__token-bar .fill--green  { background: linear-gradient(90deg, #15803d, #22c55e); }
+.candidate-card__token-bar .fill--yellow { background: linear-gradient(90deg, #15803d, #fbbf24); }
+.candidate-card__token-bar .fill--red    { background: linear-gradient(90deg, #15803d, #fbbf24, #ef4444); }
+.candidate-card__token-value {
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace); font-size: 11px;
+}
+.candidate-card__token-value.is-green  { color: #15803d; }
+.candidate-card__token-value.is-yellow { color: #b45309; }
+.candidate-card__token-value.is-red    { color: #dc2626; }
+
+.candidate-card__view-btn {
+  background: transparent; border: 1px solid var(--ckqa-border);
+  border-radius: 6px; padding: 6px 12px; font-size: 12px;
+  color: var(--ckqa-text-muted); cursor: pointer; align-self: flex-start;
+}
+.candidate-card__view-btn:hover { background: var(--ckqa-bg); color: var(--ckqa-text); }
+
+.candidate-bottom-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+}
+.candidate-bottom-bar__info { font-size: 13px; color: var(--ckqa-text-muted); }
+.candidate-bottom-bar__info strong {
+  color: var(--ckqa-accent);
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace);
+}
+.candidate-bottom-bar__actions { display: flex; gap: 10px; }
+
+.candidate-prompt-drawer { padding: 0 20px; }
+.candidate-prompt-drawer__hint { margin-bottom: 12px; }
+.candidate-prompt-drawer__pre {
+  background: #1e1e1e; color: #d4d4d4;
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace);
+  font-size: 12.5px; line-height: 1.7;
+  padding: 16px 18px; border-radius: 8px;
+  white-space: pre-wrap; margin: 0;
+}
