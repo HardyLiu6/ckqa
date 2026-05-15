@@ -305,13 +305,35 @@ export const MOCK_TASK_SUMMARY = {
 }
 ```
 
-- [ ] **Step 2: 修改 mocks/index.js 重导出**
+- [ ] **Step 2: 修改 mocks/index.js 末尾追加重导出**
 
-替换 `frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js` 末尾追加：
+⚠️ 这里是 **追加** 而非替换。Phase 1a 已在该文件中定义了 `MOCK_HISTORY_DRAFTS` 和 `MOCK_COURSE_NAME`，必须保留。
 
-```javascript
-export * from './audit-samples.js'
+操作步骤：
+
+1. 先读取文件确认尾部内容：
+
+```bash
+cat frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
 ```
+
+预期：文件以 `export const MOCK_COURSE_NAME = '操作系统'` 这一行结束（可能带或不带末尾换行）。
+
+2. 用 str_replace 在 `MOCK_COURSE_NAME` 行后追加新的重导出，确保不动 Phase 1a 已有内容：
+
+- oldStr：
+  ```javascript
+  export const MOCK_COURSE_NAME = '操作系统'
+  ```
+- newStr：
+  ```javascript
+  export const MOCK_COURSE_NAME = '操作系统'
+
+  // Phase 1b：标注 IDE 所需的 audit 样本 mock
+  export * from './audit-samples.js'
+  ```
+
+3. 再次 `cat` 确认 `MOCK_HISTORY_DRAFTS` / `MOCK_COURSE_NAME` 仍在，且新增了一行 `export * from './audit-samples.js'`。
 
 - [ ] **Step 3: 提交**
 
@@ -341,7 +363,8 @@ const props = defineProps({
   entity: { type: Object, required: true },
 })
 
-defineEmits(['accept', 'reject', 'edit', 'delete'])
+// Phase 1b 暂不实现内联编辑（见自检"未覆盖"），edit 事件留待 Phase 2+ 接入。
+defineEmits(['accept', 'reject', 'delete'])
 
 const isReused    = computed(() => props.entity.source === 'reused')
 const isSuggested = computed(() => props.entity.source === 'ai_suggested')
@@ -382,7 +405,6 @@ const typeLabel = computed(() => {
         <button class="ann-btn ann-btn--reject" @click="$emit('reject', entity.id)">拒绝</button>
       </template>
       <template v-else>
-        <button class="ann-btn ann-btn--icon" title="编辑" @click="$emit('edit', entity.id)">✎</button>
         <button class="ann-btn ann-btn--icon" title="删除" @click="$emit('delete', entity.id)">×</button>
       </template>
     </div>
@@ -418,7 +440,8 @@ const props = defineProps({
   entityMap: { type: Object, required: true },
 })
 
-defineEmits(['accept', 'reject', 'edit', 'delete'])
+// Phase 1b 暂不实现内联编辑（见自检"未覆盖"），edit 事件留待 Phase 2+ 接入。
+defineEmits(['accept', 'reject', 'delete'])
 
 const isSuggested = computed(() => props.relation.source === 'ai_schema_inferred' || props.relation.source === 'ai_suggested')
 
@@ -454,7 +477,6 @@ const typeLabelZh = computed(() => {
         <button class="ann-btn ann-btn--reject" @click="$emit('reject', relation.id)">拒绝</button>
       </template>
       <template v-else>
-        <button class="ann-btn ann-btn--icon" title="编辑" @click="$emit('edit', relation.id)">✎</button>
         <button class="ann-btn ann-btn--icon" title="删除" @click="$emit('delete', relation.id)">×</button>
       </template>
     </div>
@@ -524,7 +546,7 @@ function statusLabel(status) {
 }
 
 function priorityLabel(p) {
-  return ({ high: 'high', medium: 'medium', low: 'low' })[p] ?? p
+  return ({ high: '高', medium: '中', low: '低' })[p] ?? p
 }
 </script>
 
@@ -539,14 +561,14 @@ function priorityLabel(p) {
         <div :style="{ width: counters.progress + '%' }"></div>
       </div>
       <div class="annotation-sample-rail__counter">
-        high {{ counters.high_done }}/{{ counters.high }} · medium {{ counters.medium_done }}/{{ counters.medium }} · low {{ counters.low_done }}/{{ counters.low }}
+        高 {{ counters.high_done }}/{{ counters.high }} · 中 {{ counters.medium_done }}/{{ counters.medium }} · 低 {{ counters.low_done }}/{{ counters.low }}
       </div>
     </header>
 
     <nav class="annotation-sample-rail__filter">
       <button :class="{ active: filter === 'all' }" @click="filter = 'all'">全部</button>
-      <button :class="{ active: filter === 'high' }" @click="filter = 'high'">high</button>
-      <button :class="{ active: filter === 'medium' }" @click="filter = 'medium'">medium</button>
+      <button :class="{ active: filter === 'high' }" @click="filter = 'high'">高</button>
+      <button :class="{ active: filter === 'medium' }" @click="filter = 'medium'">中</button>
       <button :class="{ active: filter === 'not_started' }" @click="filter = 'not_started'">未标</button>
     </nav>
 
@@ -624,7 +646,10 @@ defineEmits([
   'sort-suggestions-by-confidence',
 ])
 
-// 实体合并：已确认（reused/manual）+ AI 候选标 source='ai_suggested'
+// 实体合并：已确认（reused/manual）+ AI 候选标 source='ai_suggested'。
+// 注意：这里用展开式浅拷贝产生新对象，下面的 entityMap 仅作为关系卡 lookup 的
+// **只读**视图。所有写操作都必须发回父组件、改 sample.goldEntities /
+// sample.aiSuggestedEntities；不要在子组件里直接改 entityMap[id] 的字段。
 const mergedEntities = computed(() => {
   if (!props.sample) return []
   const confirmed = props.sample.goldEntities.map((e) => ({ ...e }))
@@ -640,7 +665,7 @@ const mergedRelations = computed(() => {
   return [...confirmed, ...suggested]
 })
 
-// 实体 id → 对象 映射，关系卡 lookup 用
+// 实体 id → 对象 映射，关系卡 lookup 用（只读）
 const entityMap = computed(() => {
   const m = {}
   for (const e of mergedEntities.value) m[e.id] = e
@@ -658,7 +683,7 @@ const breadcrumb = computed(() => {
 })
 
 function priorityLabel(p) {
-  return ({ high: 'high', medium: 'medium', low: 'low' })[p] ?? p
+  return ({ high: '高', medium: '中', low: '低' })[p] ?? p
 }
 
 function signalLabel(name) {
@@ -756,7 +781,7 @@ function signalLabel(name) {
         <header class="annotation-section-title">
           <strong>关系</strong>
           <span class="ann-text-muted">{{ relConfirmedCount }} 已确认 · {{ relAiCount }} 待审</span>
-          <span class="ann-text-tiny ann-text-tiny--accent" style="margin-left:auto">仅显示 schema 合法关系</span>
+          <span class="ann-text-tiny ann-text-tiny--accent annotation-section-title__hint-right">仅显示 schema 合法关系</span>
         </header>
         <div class="annotation-list">
           <AnnotationRelationCard
@@ -801,8 +826,13 @@ import AnnotationSampleList from './AnnotationSampleList.vue'
 import AnnotationWorkArea from './AnnotationWorkArea.vue'
 import { MOCK_AUDIT_SAMPLES, MOCK_TASK_SUMMARY } from './mocks/index.js'
 
-// Phase 1b mock：直接复用 MOCK_AUDIT_SAMPLES，对其做 ref 包装让交互可改
-const samples = ref(MOCK_AUDIT_SAMPLES.map((s) => structuredClone(s)))
+// Phase 1b mock：直接复用 MOCK_AUDIT_SAMPLES，对其做 ref 包装让交互可改。
+// 注意：samples 是 ref(对象数组)，Vue 3 默认深响应式 proxy，对内部数组做
+// splice / 整体赋值都能正确派发依赖到模板和子组件。activeSample 是 computed
+// 返回的对象引用，对其属性的修改无需 computed 重新求值，依赖追踪发生在模板层。
+// 用 JSON.parse(JSON.stringify(...)) 而不是 structuredClone，避免对部署目标
+// 浏览器版本做隐式假设；mock 数据是纯 JSON，深拷贝够用。
+const samples = ref(MOCK_AUDIT_SAMPLES.map((s) => JSON.parse(JSON.stringify(s))))
 const taskSummary = MOCK_TASK_SUMMARY
 const tasksExpanded = ref(false)
 
@@ -819,14 +849,17 @@ function handleSelectSample(id) {
   activeSampleId.value = id
 }
 
-// 实体：采纳 AI 候选 → 把它从 aiSuggestedEntities 移到 goldEntities，source='accepted'
+// 实体：采纳 AI 候选 → 把它从 aiSuggestedEntities 移到 goldEntities，source='accepted'。
+// 关键约定：保留原 id 不变，避免后续 phase 在 aiSuggestedRelations 里通过 ai 实体 id
+// 引用本实体时，因采纳后 id 漂移导致 entityMap lookup 断链。AI 实体 id（如 'ai1'）
+// 与 reused / manual 实体 id（如 'e1'）天生不冲突，无需前缀。
 function handleAcceptEntity(entityId) {
   const sample = activeSample.value
   if (!sample) return
   const idx = sample.aiSuggestedEntities.findIndex((e) => e.id === entityId)
   if (idx < 0) return
   const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
-  sample.goldEntities.push({ ...picked, source: 'accepted', id: `acc_${picked.id}` })
+  sample.goldEntities.push({ ...picked, source: 'accepted' })
   if (sample.status === 'not_started') sample.status = 'in_progress'
   ElMessage.success('已采纳')
 }
@@ -849,7 +882,8 @@ function handleAcceptRelation(relationId) {
   const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === relationId)
   if (idx < 0) return
   const [picked] = sample.aiSuggestedRelations.splice(idx, 1)
-  sample.goldRelations.push({ ...picked, source: 'accepted', id: `acc_${picked.id}` })
+  // 同 handleAcceptEntity：保留原 id，避免下游引用断链。
+  sample.goldRelations.push({ ...picked, source: 'accepted' })
   ElMessage.success('已采纳')
 }
 
@@ -873,19 +907,27 @@ function handleFinishSample(sampleId) {
     return
   }
   sample.status = 'done'
-  ElMessage.success('已完成')
-  // 自动跳到下一条未开始
+  // 自动跳到下一条未开始；若已无未开始样本，提示标注集已全部处理完毕（避免双 toast 叠出）
   const nextSample = samples.value.find((s) => s.status === 'not_started')
-  if (nextSample) activeSampleId.value = nextSample.id
+  if (nextSample) {
+    activeSampleId.value = nextSample.id
+    ElMessage.success('已完成')
+  } else {
+    ElMessage.success('已完成 · 所有样本已处理完毕，可前往下一步')
+  }
 }
 
 function handleSkipSample(sampleId) {
   const sample = samples.value.find((s) => s.id === sampleId)
   if (!sample) return
   sample.status = 'skipped'
-  ElMessage.info('已跳过')
   const nextSample = samples.value.find((s) => s.status === 'not_started')
-  if (nextSample) activeSampleId.value = nextSample.id
+  if (nextSample) {
+    activeSampleId.value = nextSample.id
+    ElMessage.info('已跳过')
+  } else {
+    ElMessage.success('已跳过 · 所有样本已处理完毕，可前往下一步')
+  }
 }
 
 function sortSuggestionsByConfidence() {
@@ -1148,6 +1190,7 @@ git commit -m "feat(prompt-builder): 新增 02 步标注 IDE 主壳 (Phase 1b)"
   margin-bottom: 8px;
 }
 .annotation-section-title strong { font-weight: 600; }
+.annotation-section-title__hint-right { margin-left: auto; }
 .annotation-list {
   display: flex; flex-direction: column; gap: 8px;
 }
@@ -1290,7 +1333,11 @@ import PromptBuilderPrepareStep from './prompt-builder/PromptBuilderPrepareStep.
 
 - [ ] **Step 2: 删除 deprecated 的 PromptBuilderEditStep.vue**
 
-Run: `rm frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue`
+用 `git rm` 一步完成"工作树删除 + 暂存为 deletion"，避免 `rm` + 后续 `git add` 顺序错位的风险：
+
+```bash
+git rm frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue
+```
 
 - [ ] **Step 3: 跑 build 验证**
 
@@ -1300,9 +1347,10 @@ Expected: build + 所有测试 PASS
 
 - [ ] **Step 4: 提交**
 
+`PromptBuilderEditStep.vue` 的删除已在 Step 2 通过 `git rm` 暂存，这里只追加 PromptBuilderPage.vue 的修改：
+
 ```bash
-git add frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue \
-        frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue
+git add frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue
 git commit -m "feat(prompt-builder): 主壳接入 02 标注 IDE 并删除旧 EditStep (Phase 1b)"
 ```
 
@@ -1330,12 +1378,14 @@ Expected：
 
 - 点 AI 候选实体的"采纳"→ 卡片消失，已确认列表新增一条，toast"已采纳"
 - 点 AI 候选实体的"拒绝"→ 卡片消失，无新增
-- 点已确认实体的"×"→ 卡片消失
+- 点已确认实体的"×"→ 卡片消失（Phase 1b 已确认实体只暴露删除按钮，无编辑按钮）
 - 点"按置信度排序"→ AI 候选按 confidence 倒序
 - 点左栏 audit-0002 → 右栏切换为该样本视图（无横幅、无候选）
 - 点 audit-0002 顶部"完成 ✓"→ toast "至少标注 1 个实体..."（因为 goldEntities 为空）
 - 点"跳过"→ toast "已跳过"，自动跳到 audit-0004
 - 筛选 tab "未标"→ 列表只剩 not_started 样本
+- 把所有 not_started 样本都"跳过"→ 完成或跳过最后一条时 toast "所有样本已处理完毕，可前往下一步"
+- 左栏 priority pill 与筛选 tab 显示中文（高 / 中 / 低 / 全部 / 未标），与 mock 中的 `auditPriority='high'|'medium'|'low'` 解耦展示
 
 - [ ] **Step 4: 修 bug 并重新验证（如有）**
 
@@ -1355,7 +1405,7 @@ Expected：
 
 未覆盖：
 - 原文拖选成实体（Phase 2+ 接入真实 API 时一并做）
-- 手动添加实体/关系的内联编辑器（Phase 2+；Phase 1b 仅展示 + 按钮，点击不展开 form）
+- 手动添加实体/关系的内联编辑器（Phase 2+；Phase 1b 卡片只暴露删除按钮，不渲染编辑按钮，避免点击后静默无响应）
 - 进度门控阻塞下一步（Phase 1a 解锁规则只看 seed，不看标注完成度）
 
 ### 占位扫描
