@@ -10,6 +10,7 @@ import PromptBuilderSeedStep from './prompt-builder/PromptBuilderSeedStep.vue'
 import PromptBuilderPlaceholderStep from './prompt-builder/PromptBuilderPlaceholderStep.vue'
 import PromptBuilderPrepareStep from './prompt-builder/PromptBuilderPrepareStep.vue'
 import PromptBuilderCandidatesStep from './prompt-builder/PromptBuilderCandidatesStep.vue'
+import PromptBuilderScoringStep from './prompt-builder/PromptBuilderScoringStep.vue'
 import PromptBuilderSaveStep from './prompt-builder/PromptBuilderSaveStep.vue'
 import {
   BUILDER_STEPS,
@@ -44,6 +45,7 @@ const courseName = ref(MOCK_COURSE_NAME)
 const dirty = ref(false)
 const saving = ref(false)
 const saveError = ref('')
+const selectedCandidateId = ref('')
 
 const activeStepKey = computed(() => resolveActiveStepKey(route.query))
 
@@ -224,14 +226,11 @@ function returnToWizard() {
           @start-scoring="gotoStep('scoring')"
           @back="gotoPrev"
         />
-        <PromptBuilderPlaceholderStep
+        <PromptBuilderScoringStep
           v-else-if="activeStepKey === 'scoring'"
-          step-key="scoring"
-          title="抽取评分"
-          description="在校准集上跑候选提示词，按综合分排序选出最佳候选。"
-          phase="Phase 1d"
-          show-back
+          @enter-save="(candidateId) => { selectedCandidateId = candidateId; gotoStep('save') }"
           @back="gotoPrev"
+          @select-candidate="(candidateId) => { selectedCandidateId = candidateId }"
         />
         <PromptBuilderSaveStep
           v-else-if="activeStepKey === 'save'"
