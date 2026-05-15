@@ -10,11 +10,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
+import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.index.AuditSampleService;
 import org.ysu.ckqaback.index.dto.AuditSampleResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleUpdateRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
@@ -46,10 +49,17 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PromptTunePipelineController {
 
+    private final AuditSampleService auditSampleService;
+
     // ------------------------------------------------------------
     // 02 步：构建准备材料
     // ------------------------------------------------------------
 
+    /**
+     * 触发"仅 02.1 生成调优样本集"。本期不实现：
+     * 前端始终通过 {@link #generateAuditSet} 串跑 02.1+02.2，
+     * 该端点暂保留 501 占位以维持 API 兼容。
+     */
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/prompt-tune-samples")
     public ApiResponse<PipelineStepResponse> triggerPromptTuneSamples(
             @PathVariable @Positive(message = "id必须大于0") Long id
@@ -59,27 +69,31 @@ public class PromptTunePipelineController {
 
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/audit-set")
     public ApiResponse<List<AuditSampleResponse>> generateAuditSet(
-            @PathVariable @Positive(message = "id必须大于0") Long id
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
+            @RequestParam(name = "force", defaultValue = "false") boolean force
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(auditSampleService.regenerateAuditSet(buildRunId, force));
     }
 
     @GetMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/audit-samples")
     public ApiResponse<List<AuditSampleResponse>> listAuditSamples(
-            @PathVariable @Positive(message = "id必须大于0") Long id
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(auditSampleService.listSamples(buildRunId));
     }
 
     @PutMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/audit-samples/{sampleId}")
     public ApiResponse<AuditSampleResponse> updateAuditSample(
-            @PathVariable @Positive(message = "id必须大于0") Long id,
-            @PathVariable @Positive(message = "sampleId必须大于0") Long sampleId,
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
+            @PathVariable("sampleId") @Positive(message = "sampleId必须大于0") Long sampleId,
             @Valid @RequestBody AuditSampleUpdateRequest request
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(auditSampleService.updateSample(buildRunId, sampleId, request));
     }
 
+    /**
+     * AI 预填实体/关系候选（智能能力 A）。Phase 3 落地，本期保留 501 占位。
+     */
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/audit-samples/{sampleId}/ai-suggestions")
     public ApiResponse<Map<String, Object>> requestAuditSampleAiSuggestions(
             @PathVariable @Positive(message = "id必须大于0") Long id,
