@@ -5623,3 +5623,9 @@ textarea.text-input {
   background: rgb(250 204 21 / 14%);
   border-color: rgb(250 204 21 / 30%);
 }
+
+// 步骤标题行右侧区域（放 tag 等）
+.prompt-builder-step__header-right {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+}

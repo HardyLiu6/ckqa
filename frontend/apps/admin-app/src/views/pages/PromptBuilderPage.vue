@@ -251,6 +251,7 @@ function returnToWizard() {
         />
         <PromptBuilderScoringStep
           v-else-if="activeStepKey === 'scoring'"
+          :dirty="dirty"
           @enter-save="(candidateId) => { selectedCandidateId = candidateId; gotoStep('save') }"
           @back="gotoPrev"
           @select-candidate="(candidateId) => { selectedCandidateId = candidateId }"
@@ -279,7 +280,7 @@ function returnToWizard() {
         />
       </div>
 
-      <footer v-if="activeStepKey === 'seed' || activeStepKey === 'prepare' || activeStepKey === 'scoring'" class="prompt-builder-page__actions">
+      <footer v-if="activeStepKey === 'seed' || activeStepKey === 'prepare'" class="prompt-builder-page__actions">
         <div class="prompt-builder-page__status">
           <el-tag v-if="dirty" type="warning" size="small" effect="light">已修改未保存</el-tag>
           <el-tag v-else type="success" size="small" effect="light">已是最新</el-tag>

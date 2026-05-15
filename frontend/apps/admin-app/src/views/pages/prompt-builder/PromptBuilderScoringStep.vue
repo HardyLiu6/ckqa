@@ -13,6 +13,10 @@ import {
 import { formatTokens, formatDuration } from './scoring-format-model.js'
 import { MOCK_CANDIDATES, MOCK_SCORING_REPORT } from './mocks/index.js'
 
+const props = defineProps({
+  dirty: { type: Boolean, default: false },
+})
+
 const emit = defineEmits(['enter-save', 'back', 'select-candidate'])
 
 const candidates = MOCK_CANDIDATES
@@ -109,6 +113,10 @@ function handleEnterSave() {
         <h3>抽取评分</h3>
         <p>在校准集上跑候选提示词，按综合分排序选出最佳候选。</p>
       </div>
+      <div class="prompt-builder-step__header-right">
+        <el-tag v-if="dirty" type="warning" size="small" effect="light">已修改未保存</el-tag>
+        <el-tag v-else type="success" size="small" effect="light">已是最新</el-tag>
+      </div>
     </header>
 
     <template v-if="view === 'running'">
@@ -166,7 +174,7 @@ function handleEnterSave() {
           <template v-else>尚未选定候选</template>
         </div>
         <div class="scoring-bottom-bar__actions">
-          <el-button type="primary" :disabled="!selectedId" @click="handleEnterSave">进入 05 →</el-button>
+          <el-button type="primary" :disabled="!selectedId" @click="handleEnterSave">进入预览 →</el-button>
         </div>
       </footer>
     </template>
