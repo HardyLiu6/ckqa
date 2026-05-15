@@ -1,18 +1,28 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ChevronLeft } from 'lucide-vue-next'
 
 import WorkflowStepper from '../../components/common/WorkflowStepper.vue'
 import RetryPanel from '../../components/common/RetryPanel.vue'
-import StatusBadge from '../../components/common/StatusBadge.vue'
 import PromptBuilderSeedStep from './prompt-builder/PromptBuilderSeedStep.vue'
-import PromptBuilderEditStep from './prompt-builder/PromptBuilderEditStep.vue'
-import PromptBuilderPreviewStep from './prompt-builder/PromptBuilderPreviewStep.vue'
-import { utf8ByteLength } from './prompt-builder/byte-counter.js'
+import PromptBuilderPlaceholderStep from './prompt-builder/PromptBuilderPlaceholderStep.vue'
+import PromptBuilderSaveStep from './prompt-builder/PromptBuilderSaveStep.vue'
+import {
+  BUILDER_STEPS,
+  BUILDER_STEP_KEYS,
+  resolveActiveStepKey,
+  resolveNextStepKey,
+  resolvePrevStepKey,
+  isStepUnlocked,
+} from './prompt-builder/builder-step-model.js'
+import {
+  MOCK_HISTORY_DRAFTS,
+  MOCK_COURSE_NAME,
+} from './prompt-builder/mocks/index.js'
 
-import { getBuildRun, saveBuildRunCustomPromptDraft } from '../../api/knowledge-bases.js'
+import { getBuildRun } from '../../api/knowledge-bases.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,40 +35,27 @@ const kbId = computed(() => String(route.params.kbId ?? ''))
 
 const loading = ref(true)
 const error = ref(null)
+
 const seed = ref(null)
-const drafts = ref({ extract_graph: '' })
-const templates = ref({ extract_graph: '' })  // 已知限制：本期种子内容未从后端拉取，"还原至模板"等价于"清空内容"。后续版本接入种子内容后再做真正还原。
-const activeStep = ref('seed')
+const courseName = ref(MOCK_COURSE_NAME)
+
 const dirty = ref(false)
 const saving = ref(false)
-const saveError = ref(null)
+const saveError = ref('')
 
-const BUILDER_STEPS = [
-  { key: 'seed',    label: '选模板',    detail: '从模板或现有版本起步' },
-  { key: 'edit',    label: '分块编辑',  detail: '编辑提示词内容' },
-  { key: 'preview', label: '预览 + 保存', detail: '确认后回到构建向导' },
-]
+const activeStepKey = computed(() => resolveActiveStepKey(route.query))
 
 const stepStatuses = computed(() => {
-  const order = ['seed', 'edit', 'preview']
-  const currentIdx = order.indexOf(activeStep.value)
-  return BUILDER_STEPS.map((step, idx) => ({
+  const idx = BUILDER_STEP_KEYS.indexOf(activeStepKey.value)
+  return BUILDER_STEPS.map((step, i) => ({
     ...step,
-    status: idx < currentIdx ? 'done' : idx === currentIdx ? 'ready' : 'blocked',
+    status: i < idx
+      ? 'done'
+      : i === idx
+        ? 'ready'
+        : (isStepUnlocked(step.key, { seed: seed.value }) ? 'ready' : 'blocked'),
   }))
 })
-
-const canGoNext = computed(() => {
-  if (activeStep.value === 'seed') return Boolean(seed.value) && seed.value !== 'history_draft'
-  if (activeStep.value === 'edit') return drafts.value.extract_graph?.trim().length > 0
-        && utf8ByteLength(drafts.value.extract_graph) <= 32 * 1024
-  return true
-})
-
-const canSave = computed(() => dirty.value && !saving.value && canGoNext.value)
-const canReturn = computed(() => !saving.value && canGoNext.value)  // 已有草稿未修改时也允许返回
-
-const promptTitle = '手动调优提示词'
 
 onMounted(async () => {
   if (!buildRunId.value) {
@@ -71,11 +68,7 @@ onMounted(async () => {
     let meta = {}
     try { meta = buildRun?.buildMetadata ? JSON.parse(buildRun.buildMetadata) : {} } catch {}
     const draft = meta.customPromptDraft
-    if (draft) {
-      seed.value = draft.seed ?? null
-      drafts.value.extract_graph = draft.prompts?.extract_graph?.content ?? ''
-      activeStep.value = 'edit'
-    }
+    if (draft?.seed) seed.value = draft.seed
     dirty.value = false
   } catch (e) {
     error.value = { message: e?.message ?? '加载草稿失败' }
@@ -106,13 +99,35 @@ onBeforeRouteLeave(async (to, from, next) => {
   }
 })
 
+async function gotoStep(stepKey) {
+  if (!BUILDER_STEP_KEYS.includes(stepKey)) return
+  if (!isStepUnlocked(stepKey, { seed: seed.value })) {
+    ElMessage.warning('请先在 01 步选择起始模板')
+    return
+  }
+  if (route.query.step === stepKey) return
+  await router.replace({ query: { ...route.query, step: stepKey } })
+}
+
+function gotoNext() {
+  const next = resolveNextStepKey(activeStepKey.value)
+  if (next) gotoStep(next)
+}
+
+function gotoPrev() {
+  const prev = resolvePrevStepKey(activeStepKey.value)
+  if (prev) gotoStep(prev)
+}
+
 function handleSelectSeed(seedKey) {
-  if (seedKey === 'history_draft') return
-  if (drafts.value.extract_graph && seed.value !== seedKey) {
-    ElMessageBox.confirm('切换种子会清空当前编辑，确定吗？', '切换种子', { type: 'warning' })
+  if (seedKey === 'history_draft') {
+    ElMessage.info('历史草稿入库将在 Phase 1e 开放')
+    return
+  }
+  if (seed.value && seed.value !== seedKey) {
+    ElMessageBox.confirm('切换种子会重置后续步骤已有的进度，确定吗？', '切换种子', { type: 'warning' })
       .then(() => {
         seed.value = seedKey
-        drafts.value.extract_graph = ''
         dirty.value = true
       })
       .catch(() => {})
@@ -122,60 +137,29 @@ function handleSelectSeed(seedKey) {
   dirty.value = true
 }
 
-function handleEditContent(value) {
-  drafts.value.extract_graph = value
-  dirty.value = true
-}
-
-function gotoStep(stepKey) {
-  if (!BUILDER_STEPS.some((s) => s.key === stepKey)) return
-  activeStep.value = stepKey
-}
-
-function gotoNext() {
-  const order = ['seed', 'edit', 'preview']
-  const idx = order.indexOf(activeStep.value)
-  if (idx >= 0 && idx < order.length - 1 && canGoNext.value) {
-    activeStep.value = order[idx + 1]
-  }
-}
-
-function gotoPrev() {
-  const order = ['seed', 'edit', 'preview']
-  const idx = order.indexOf(activeStep.value)
-  if (idx > 0) activeStep.value = order[idx - 1]
-}
-
-async function saveDraft({ navigateBack }) {
-  if (!canSave.value) return
+async function handleSave(payload) {
   saving.value = true
-  saveError.value = null
+  saveError.value = ''
   try {
-    await saveBuildRunCustomPromptDraft(buildRunId.value, {
-      seed: seed.value,
-      prompts: { extract_graph: { content: drafts.value.extract_graph } },
+    // Phase 1a 用 mock：500ms 延迟模拟保存请求
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    // 注意：本期不真发请求，控制台打印 payload 供调试
+    // eslint-disable-next-line no-console
+    console.log('[Phase 1a mock] save payload', payload)
+    dirty.value = false
+    ElMessage.success('已保存到本次构建（mock）')
+    await router.push({
+      name: 'knowledge-base-build',
+      params: { kbId: kbId.value },
+      query: {
+        buildRunId: buildRunId.value,
+        step: 'prompt',
+        promptStrategy: 'custom_pipeline',
+      },
     })
-    if (navigateBack) {
-      dirty.value = false  // 导航前清 dirty，避免 onBeforeRouteLeave 拦截
-      try {
-        await router.push({
-          name: 'knowledge-base-build',
-          params: { kbId: kbId.value },
-          query: {
-            buildRunId: buildRunId.value,
-            step: 'prompt',
-            promptStrategy: 'custom_pipeline',
-          },
-        })
-      } catch (navErr) {
-        dirty.value = true  // 导航失败时恢复 dirty 状态
-        throw navErr
-      }
-    } else {
-      dirty.value = false  // 仅暂存时，保存成功后清 dirty
-    }
   } catch (e) {
     saveError.value = e?.message ?? '保存失败，请重试'
+    ElMessage.error(saveError.value)
   } finally {
     saving.value = false
   }
@@ -188,105 +172,82 @@ function returnToWizard() {
     query: { buildRunId: buildRunId.value, step: 'prompt' },
   })
 }
-
-function returnToWizardWithStrategy() {
-  // 已有草稿未修改时，直接返回向导并携带 promptStrategy，确保策略不丢失
-  router.push({
-    name: 'knowledge-base-build',
-    params: { kbId: kbId.value },
-    query: {
-      buildRunId: buildRunId.value,
-      step: 'prompt',
-      promptStrategy: 'custom_pipeline',
-    },
-  })
-}
 </script>
 
 <template>
   <section class="prompt-builder-page">
     <header class="prompt-builder-page__header">
       <div>
-        <h2>{{ promptTitle }}</h2>
-        <p v-if="buildRunId">为本次构建（Build Run ID：{{ buildRunId }}）设计提示词。</p>
+        <h2>手动调优提示词</h2>
+        <p v-if="buildRunId">为本次构建（构建运行 ID：{{ buildRunId }}）设计提示词。</p>
       </div>
-      <el-button
-        class="ckqa-el-button ckqa-el-button--ghost"
-        type="default"
-        @click="returnToWizard"
-      >
-        <ChevronLeft class="button-icon" :size="16" aria-hidden="true" />
+      <el-button class="ckqa-el-button ckqa-el-button--ghost" @click="returnToWizard">
+        <ChevronLeft :size="16" aria-hidden="true" />
         返回构建向导
       </el-button>
     </header>
 
-    <RetryPanel
-      v-if="error"
-      :error="error"
-      @retry="returnToWizard"
-    />
+    <RetryPanel v-if="error" :error="error" @retry="returnToWizard" />
 
-    <template v-else-if="!loading">
+    <div v-else-if="loading" class="prompt-builder-page__loading">
+      <el-skeleton :rows="6" animated />
+    </div>
+
+    <template v-else>
       <WorkflowStepper
-        :active-key="activeStep"
+        :active-key="activeStepKey"
         :steps="stepStatuses"
         @update:active-key="gotoStep"
       />
 
       <div class="prompt-builder-page__body">
         <PromptBuilderSeedStep
-          v-if="activeStep === 'seed'"
+          v-if="activeStepKey === 'seed'"
           :seed="seed"
+          :history-drafts="MOCK_HISTORY_DRAFTS"
           @select-seed="handleSelectSeed"
         />
-        <PromptBuilderEditStep
-          v-else-if="activeStep === 'edit'"
-          :extract-graph-content="drafts.extract_graph"
-          :template-content="templates.extract_graph"
-          @update:extract-graph-content="handleEditContent"
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'prepare'"
+          step-key="prepare"
+          title="构建准备材料"
+          description="生成调优样本与校准集，并完成人工标注。"
+          phase="Phase 1b"
         />
-        <PromptBuilderPreviewStep
-          v-else-if="activeStep === 'preview'"
-          :extract-graph-content="drafts.extract_graph"
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'candidates'"
+          step-key="candidates"
+          title="生成候选提示词"
+          description="基于校准集生成多版候选提示词，挑选要参与评分的候选。"
+          phase="Phase 1c"
+        />
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'scoring'"
+          step-key="scoring"
+          title="抽取评分"
+          description="在校准集上跑候选提示词，按综合分排序选出最佳候选。"
+          phase="Phase 1d"
+        />
+        <PromptBuilderSaveStep
+          v-else-if="activeStepKey === 'save'"
           :build-run-id="buildRunId"
+          :course-name="courseName"
+          :seed="seed"
+          :saving="saving"
+          :save-error="saveError"
+          @save="handleSave"
+          @back="gotoPrev"
         />
       </div>
 
-      <footer class="prompt-builder-page__actions">
+      <footer v-if="activeStepKey !== 'save'" class="prompt-builder-page__actions">
         <div class="prompt-builder-page__status">
           <span v-if="dirty" class="dirty">● 已修改未保存</span>
-          <span v-else-if="saving">保存中…</span>
-          <span v-else-if="saveError" class="error">{{ saveError }}</span>
           <span v-else>已是最新</span>
         </div>
         <div class="prompt-builder-page__buttons">
-          <el-button v-if="activeStep !== 'seed'" class="ckqa-el-button" @click="gotoPrev">上一步</el-button>
-          <el-button
-            v-if="activeStep === 'edit'"
-            class="ckqa-el-button ckqa-el-button--ghost"
-            :disabled="!canSave"
-            @click="saveDraft({ navigateBack: false })"
-          >
-            暂存草稿
-          </el-button>
-          <el-button
-            v-if="activeStep !== 'preview'"
-            class="ckqa-el-button ckqa-el-button--primary"
-            type="primary"
-            :disabled="!canGoNext"
-            @click="gotoNext"
-          >
-            下一步
-          </el-button>
-          <el-button
-            v-if="activeStep === 'preview'"
-            class="ckqa-el-button ckqa-el-button--primary"
-            type="primary"
-            :disabled="!canReturn"
-            @click="dirty ? saveDraft({ navigateBack: true }) : returnToWizardWithStrategy()"
-          >
-            {{ dirty ? '保存并返回' : '返回向导' }}
-          </el-button>
+          <el-button v-if="activeStepKey !== 'seed'" @click="gotoPrev">上一步</el-button>
+          <el-button type="primary" @click="gotoNext">下一步</el-button>
         </div>
       </footer>
     </template>
