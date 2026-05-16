@@ -364,7 +364,7 @@ async function handleRequestAiSuggestions(sampleId) {
   if (!sample) return
   if (aiSuggestionLoadingSampleId.value === sampleId) return  // 防重复点击同一样本
   aiSuggestionLoadingSampleId.value = sampleId
-  ElMessage.info('AI 候选生成中，约 10-30 秒...')
+  ElMessage.info('AI 候选生成中，约 1-2 分钟...')
   try {
     const response = await requestAuditSampleAiSuggestions(buildRunId.value, sample.id)
     // response 形态：{ entities: [...], relations: [...] }
