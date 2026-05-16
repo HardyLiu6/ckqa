@@ -413,25 +413,45 @@ public class KnowledgeBaseBuildRunService {
         validateDraftRequest(request);
 
         String seed = request.getSeed().trim();
-        String content = request.getPrompts().get("extract_graph").getContent();
-
         String existingMetadata = buildRun.getBuildMetadata();
+
+        // 部分更新：当请求未携带 prompts 时，复用 build run 中已有的 extract_graph content；
+        // 旧 draft 也无 content 时保持 null（仅写 seed，不落盘 prompts 字段）。
+        boolean hasIncomingPrompts = request.getPrompts() != null
+                && request.getPrompts().get("extract_graph") != null
+                && request.getPrompts().get("extract_graph").getContent() != null;
+        String content = hasIncomingPrompts
+                ? request.getPrompts().get("extract_graph").getContent()
+                : readDraftExtractGraphContent(existingMetadata);
+
         String previousSeed = readDraftSeed(existingMetadata);
         String previousSeedSnapshotAt = readDraftSeedSnapshotAt(existingMetadata);
+        String previousModifiedAt = readDraftExtractGraphModifiedAt(existingMetadata);
+        String previousBaseHash = readDraftExtractGraphBaseHash(existingMetadata);
 
         String nowIso = LocalDateTime.now().toString();
-
-        Map<String, Object> extractGraph = new LinkedHashMap<>();
-        extractGraph.put("content", content);
-        extractGraph.put("modifiedAt", nowIso);
-        extractGraph.put("baseHash", computeSeedBaseHash(seed));
+        boolean seedChanged = !seed.equals(previousSeed);
 
         Map<String, Object> draft = new LinkedHashMap<>();
         draft.put("seed", seed);
-        boolean seedChanged = !seed.equals(previousSeed);
         draft.put("seedSnapshotAt", seedChanged || previousSeedSnapshotAt == null ? nowIso : previousSeedSnapshotAt);
         draft.put("updatedAt", nowIso);
-        draft.put("prompts", Map.of("extract_graph", extractGraph));
+
+        // prompts 子节点仅在确实有内容时写入，避免 null 字段污染 metadata
+        if (content != null) {
+            Map<String, Object> extractGraph = new LinkedHashMap<>();
+            extractGraph.put("content", content);
+            // 部分更新（未传 prompts）：保留旧 modifiedAt / baseHash，反映 prompts 内容未变化
+            // 全量更新（传了 prompts）：刷新 modifiedAt 与 baseHash
+            if (hasIncomingPrompts) {
+                extractGraph.put("modifiedAt", nowIso);
+                extractGraph.put("baseHash", computeSeedBaseHash(seed));
+            } else {
+                extractGraph.put("modifiedAt", previousModifiedAt == null ? nowIso : previousModifiedAt);
+                extractGraph.put("baseHash", previousBaseHash == null ? computeSeedBaseHash(seed) : previousBaseHash);
+            }
+            draft.put("prompts", Map.of("extract_graph", extractGraph));
+        }
 
         Map<String, Object> extras = new LinkedHashMap<>();
         extras.put("customPromptDraft", draft);
@@ -516,8 +536,11 @@ public class KnowledgeBaseBuildRunService {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
                     "未知的种子模板: " + request.getSeed());
         }
-        if (request.getPrompts() == null
-                || request.getPrompts().get("extract_graph") == null
+        // prompts 为 null 时走部分更新路径（仅刷新 seed），跳过 content 校验
+        if (request.getPrompts() == null) {
+            return;
+        }
+        if (request.getPrompts().get("extract_graph") == null
                 || request.getPrompts().get("extract_graph").getContent() == null) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
                     "extract_graph 提示词内容必填");
@@ -580,6 +603,30 @@ public class KnowledgeBaseBuildRunService {
                     .path("prompts")
                     .path("extract_graph")
                     .path("content");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String readDraftExtractGraphModifiedAt(String metadataJson) {
+        return readDraftExtractGraphField(metadataJson, "modifiedAt");
+    }
+
+    private String readDraftExtractGraphBaseHash(String metadataJson) {
+        return readDraftExtractGraphField(metadataJson, "baseHash");
+    }
+
+    private String readDraftExtractGraphField(String metadataJson, String field) {
+        if (!StringUtils.hasText(metadataJson)) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft")
+                    .path("prompts")
+                    .path("extract_graph")
+                    .path(field);
             return node.isTextual() ? node.asText() : null;
         } catch (JsonProcessingException e) {
             return null;

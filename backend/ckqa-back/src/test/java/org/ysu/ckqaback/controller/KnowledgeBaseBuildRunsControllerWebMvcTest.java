@@ -179,4 +179,25 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
                         .content(body))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void putCustomPromptDraft_acceptsSeedOnlyForPartialUpdate() throws Exception {
+        // Phase 4.5：用户切 seed 时前端只发 seed，不再要求附带 prompts
+        given(buildRunService.saveCustomPromptDraft(eq(1L), any(BuildRunCustomPromptDraftRequest.class)))
+                .willReturn(BuildRunDetailResponse.builder()
+                        .id(1L)
+                        .status("running")
+                        .currentStage("prompt")
+                        .build());
+
+        String body = """
+                {"seed":"system_default"}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
 }

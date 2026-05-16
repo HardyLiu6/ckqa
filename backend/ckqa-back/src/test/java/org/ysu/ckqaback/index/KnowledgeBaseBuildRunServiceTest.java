@@ -619,6 +619,89 @@ class KnowledgeBaseBuildRunServiceTest {
                 .hasMessageContaining("32");
     }
 
+    @Test
+    void saveCustomPromptDraft_partialUpdateSeedOnly_preservesPrompts() throws Exception {
+        // 已有完整 draft，PUT 仅传 seed → 旧 prompts.extract_graph.content 保留，seed 被刷新
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"customPromptDraft\":{\"seed\":\"system_default\","
+            + "\"seedSnapshotAt\":\"2026-05-17T10:00:00\",\"updatedAt\":\"2026-05-17T10:00:00\","
+            + "\"prompts\":{\"extract_graph\":{\"content\":\"-Goal-\\nKeep me.\","
+            + "\"modifiedAt\":\"2026-05-17T10:00:00\",\"baseHash\":\"sha256:legacyhash\"}}}}"
+        );
+
+        BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
+        req.setSeed("graphrag_tuned");
+        // 故意不调 setPrompts → 部分更新
+
+        service.saveCustomPromptDraft(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode draft = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(updated.getBuildMetadata())
+                .get("customPromptDraft");
+        assertThat(draft.get("seed").asText()).isEqualTo("graphrag_tuned");
+        // seed 变化时 seedSnapshotAt 必须刷新
+        assertThat(draft.get("seedSnapshotAt").asText()).isNotEqualTo("2026-05-17T10:00:00");
+        // prompts 内容保留
+        com.fasterxml.jackson.databind.JsonNode extract = draft.get("prompts").get("extract_graph");
+        assertThat(extract.get("content").asText()).isEqualTo("-Goal-\nKeep me.");
+        // 部分更新时 modifiedAt / baseHash 保持旧值，反映 prompts 实质未变
+        assertThat(extract.get("modifiedAt").asText()).isEqualTo("2026-05-17T10:00:00");
+        assertThat(extract.get("baseHash").asText()).isEqualTo("sha256:legacyhash");
+    }
+
+    @Test
+    void saveCustomPromptDraft_partialUpdateSeedOnly_noPriorPrompts() throws Exception {
+        // build run 中没有 customPromptDraft，PUT 仅传 seed → 写入仅含 seed 的 draft，不报错
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"promptStrategy\":\"default\"}"
+        );
+
+        BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
+        req.setSeed("system_default");
+
+        service.saveCustomPromptDraft(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(updated.getBuildMetadata());
+        com.fasterxml.jackson.databind.JsonNode draft = node.get("customPromptDraft");
+        assertThat(draft.get("seed").asText()).isEqualTo("system_default");
+        assertThat(draft.get("seedSnapshotAt").isTextual()).isTrue();
+        assertThat(draft.get("updatedAt").isTextual()).isTrue();
+        // 既无旧 prompts 又无新 prompts，draft.prompts 不应落盘
+        assertThat(draft.has("prompts")).isFalse();
+        // 当前阶段键仍正常写入
+        assertThat(node.get("promptStrategy").asText()).isEqualTo("custom_pipeline");
+        assertThat(node.get("promptConfirmed").asBoolean()).isFalse();
+    }
+
+    @Test
+    void saveCustomPromptDraft_fullUpdateOverwritesPrompts() throws Exception {
+        // 已有完整 draft，PUT 同时传 seed 和 prompts → 新 content 覆盖旧 content（保持 Phase 1 行为）
+        KnowledgeBaseBuildRuns buildRun = newBuildRunPersistedWithMetadata(
+            "{\"stage\":\"prompt\",\"customPromptDraft\":{\"seed\":\"system_default\","
+            + "\"seedSnapshotAt\":\"2026-05-17T10:00:00\",\"updatedAt\":\"2026-05-17T10:00:00\","
+            + "\"prompts\":{\"extract_graph\":{\"content\":\"-Goal-\\nOLD.\","
+            + "\"modifiedAt\":\"2026-05-17T10:00:00\",\"baseHash\":\"sha256:legacyhash\"}}}}"
+        );
+
+        BuildRunCustomPromptDraftRequest req = newDraftRequest("graphrag_tuned", "-Goal-\nNEW.");
+
+        service.saveCustomPromptDraft(buildRun.getId(), req);
+
+        KnowledgeBaseBuildRuns updated = buildRunsStore.getRequiredById(buildRun.getId());
+        com.fasterxml.jackson.databind.JsonNode extract = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(updated.getBuildMetadata())
+                .get("customPromptDraft").get("prompts").get("extract_graph");
+        assertThat(extract.get("content").asText()).isEqualTo("-Goal-\nNEW.");
+        // 全量更新时 modifiedAt 必须刷新
+        assertThat(extract.get("modifiedAt").asText()).isNotEqualTo("2026-05-17T10:00:00");
+        // 全量更新时 baseHash 跟随 seed 重算（这里 seed=graphrag_tuned）
+        assertThat(extract.get("baseHash").asText()).isNotEqualTo("sha256:legacyhash");
+        assertThat(extract.get("baseHash").asText()).startsWith("sha256:");
+    }
+
     private BuildRunCustomPromptDraftRequest newDraftRequest(String seed, String content) {
         BuildRunCustomPromptDraftRequest req = new BuildRunCustomPromptDraftRequest();
         req.setSeed(seed);
