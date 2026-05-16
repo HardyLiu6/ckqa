@@ -58,6 +58,13 @@ export async function listCandidates(buildRunId, client = http) {
   ))
 }
 
+export async function getCandidatePromptText(buildRunId, candidateId, client = http) {
+  // 抽屉懒加载某个候选的 prompt 全文（~30KB）。candidateId 服务端会校验白名单。
+  return unwrapApiResponse(await client.get(
+    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/candidates/${encodeURIComponent(candidateId)}/prompt`,
+  ))
+}
+
 // ----- 04 步：抽取评分 -----
 
 export async function startExtractionEval(buildRunId, payload, client = http) {
