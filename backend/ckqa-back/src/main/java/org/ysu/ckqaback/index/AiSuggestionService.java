@@ -137,14 +137,34 @@ public class AiSuggestionService {
     }
 
     /**
-     * 决定使用哪个 prompt 文件：本期固定使用 GraphRAG 默认 {@code prompts/extract_graph.txt}。
+     * 决定使用哪个 prompt 文件。
      * <p>
-     * Build run 的 customPromptDraft 暂未读取——它当前以 JSON 字符串形式存在 build_metadata 中，
-     * 把它落到临时文件的逻辑随 Phase 6 一起做。
+     * 本期固定指向 {@code prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt}：
+     * <ul>
+     *   <li>这是 manifest.json 中标记为 {@code production_status: frozen_v1} 的当前激活版本；</li>
+     *   <li>该 prompt 完整对齐新课程 schema（11 种实体类型 + 9 种关系类型），LLM 输出能直接命中
+     *       canonical 命名（{@code KnowledgePoint}/{@code Concept}/...），不再退化到 OS 课旧命名空间
+     *       （{@code OPERATING SYSTEM COMPONENT} 等）；</li>
+     *   <li>关系 description 带 {@code [type=...]} 前缀，{@code run_native_extraction} 的
+     *       {@code _extract_relation_type_from_description} 能直接解析出 schema 关系类型。</li>
+     * </ul>
+     * <p>
+     * GraphRAG 主链路用的 {@code prompts/extract_graph.txt} 故意保留为 OS 课遗留 prompt，
+     * 避免影响 {@code graphrag index} 的 baseline 评估；AI 预填走独立的 candidate prompt 路径，
+     * 两者解耦。
+     * </p>
+     * <p>
+     * Phase 6 后改为读 {@code prompts/final/active_prompt.json} 拿到当前激活的 candidate
+     * 路径，而不是硬编码到 {@code schema_fewshot_distilled_v2_strict_tuple}。Build run 自身的
+     * {@code customPromptDraft} 也是在 Phase 6 落到磁盘。
      * </p>
      */
     private Path resolvePromptFile(KnowledgeBaseBuildRuns buildRun) {
-        return Path.of(properties.getGraphrag().getRoot()).resolve("prompts").resolve("extract_graph.txt");
+        return Path.of(properties.getGraphrag().getRoot())
+                .resolve("prompts")
+                .resolve("candidates")
+                .resolve("schema_fewshot_distilled_v2_strict_tuple")
+                .resolve("prompt.txt");
     }
 
     private List<Map<String, Object>> markEntitiesAsAiSuggested(List<Map<String, Object>> entities) {

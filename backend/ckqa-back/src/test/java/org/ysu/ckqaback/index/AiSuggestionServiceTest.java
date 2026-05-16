@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiSuggestionServiceTest {
@@ -217,6 +218,36 @@ class AiSuggestionServiceTest {
         assertThat(response.getEntities().get(0)).containsEntry("type", "");
         assertThat(response.getEntities().get(0)).doesNotContainKey("typeOutOfSchema");
         assertThat(response.getEntities().get(1)).doesNotContainKey("typeOutOfSchema");
+    }
+
+    @Test
+    void usesSchemaAwarePromptForAiSuggestion() throws Exception {
+        // 验证 AI 预填使用的是新 schema 对齐的 candidate prompt（frozen_v1），
+        // 而不是 GraphRAG 主链路用的 prompts/extract_graph.txt（OS 课遗留命名空间）
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/tmp/ws"));
+
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of()).relations(List.of()).build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        service.generate(10L, 99L);
+
+        org.mockito.ArgumentCaptor<java.nio.file.Path> promptCaptor =
+                org.mockito.ArgumentCaptor.forClass(java.nio.file.Path.class);
+        verify(orchestrator).runSingleExtract(any(), any(), promptCaptor.capture(), any(), any());
+        java.nio.file.Path promptFile = promptCaptor.getValue();
+        // setUp 里 graphrag.root = "/tmp/graphrag-test"
+        assertThat(promptFile).isEqualTo(java.nio.file.Path.of(
+                "/tmp/graphrag-test",
+                "prompts",
+                "candidates",
+                "schema_fewshot_distilled_v2_strict_tuple",
+                "prompt.txt"
+        ));
     }
 
     private PromptTuneAuditSamples newSample(Long id, Long buildRunId) {
