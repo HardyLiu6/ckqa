@@ -59,6 +59,16 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!--
+            jsr310：让 Jackson 2.x ObjectMapper 能序列化 OffsetDateTime / LocalDateTime 等 Java 8 时间类型。
+            Spring Boot 4.x 的 spring-boot-starter-jackson 已切到 tools.jackson 3.x 新命名空间，
+            不再传递 fasterxml 命名空间下的 jsr310，因此本项目的 com.fasterxml ObjectMapper 必须显式引入。
+            版本由 spring-boot-dependencies 统一管理。
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
