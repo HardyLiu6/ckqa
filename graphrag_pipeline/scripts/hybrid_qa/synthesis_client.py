@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import requests
 
@@ -34,7 +35,7 @@ class OpenAICompatibleSynthesisClient:
             raise ValueError("Hybrid synthesis requires GRAPHRAG_QUERY_MODEL.")
 
     def complete(self, prompt: str) -> str:
-        url = f"{self.config.api_base.rstrip('/')}/v1/chat/completions"
+        url = f"{_normalize_api_base(self.config.api_base or '')}/v1/chat/completions"
         response = requests.post(
             url,
             headers={
@@ -54,3 +55,10 @@ class OpenAICompatibleSynthesisClient:
             return str(payload["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as exc:
             raise RuntimeError("OpenAI-compatible synthesis response is missing choices[0].message.content") from exc
+
+
+def _normalize_api_base(api_base: str) -> str:
+    normalized = api_base.rstrip("/")
+    if urlparse(normalized).path.rstrip("/").endswith("/v1"):
+        return normalized[:-3]
+    return normalized
