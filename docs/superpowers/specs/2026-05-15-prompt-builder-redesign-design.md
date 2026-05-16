@@ -392,6 +392,10 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
    - **并发场景**：`prompt_tune_audit_samples` 没有 `version` 字段，多标签页同时编辑同一样本时"最后写入获胜"。缓解：留到 Phase 8 加 `@Version` 乐观锁。
    - **build run 归档**：外键 `fk_audit_samples_build_run` 是 `ON DELETE RESTRICT`，归档/删除 build run 时会被 audit 样本阻塞。缓解：留到 Phase 8 决策"软归档" vs "导出后清理"。
    - **后端长耗时同步阻塞**：`regenerateAuditSet` 在 controller 线程内同步等 ≤5 分钟（Python 子进程超时上限），并发请求高时会撑满线程池。缓解：留到 Phase 8 仿照 `PromptTuneWorker` 拆成异步任务 + 状态轮询。
+7. **AI 候选与已采纳实体重复**（Phase 3 持久化方案落地后暴露的边界）：
+   - 用户点"重新生成"或"AI 候选去重已采纳实体"未启用时，原文里被反复抽出的同一实体会作为新候选再次出现，与已采纳的 goldEntities 视觉上重复。
+   - 当前 Phase 3 的边界是"用户可以手动拒绝重复候选"，候选与 gold 是两条独立卡片，行为正确但体验略冗余。
+   - 缓解：留到 Phase 7 加"AI 候选去重已采纳实体"——后端在 `markEntitiesAsAiSuggested` 之后过滤掉与 sample.goldEntities 同名（或 name+type）已存在的候选，并对关系做相同处理。详见 Phase 7 落地计划。
 
 
 ## 实施分期
@@ -444,6 +448,13 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 这需要把当前 emit/reset 的同步关系改成 promise/callback 链路（编辑器 props 接收 `onSubmit: async (payload) => boolean`）。
 - **离线标注会话恢复脚本：**
   - 提供"清理本地暂存"和"导出本地暂存为 JSON"两个开发者工具入口（在样本列表右上角"⋯"菜单里），用于排障。
+
+- **AI 候选去重已采纳实体（spec § 风险 #7）：**
+  - 现状：Phase 3 持久化方案落地后，"重新生成"或自动复用历史 build run 的候选时，被用户已采纳进 goldEntities 的实体会作为新候选再次出现，视觉冗余。
+  - 后端 `AiSuggestionService.markEntitiesAsAiSuggested` 在生成候选最后一步加过滤：`sample.goldEntities` 已存在同名（或同名 + 同类型）的实体直接从候选数组剔除；同时把使用该实体名作为 source/target 的关系候选也剔除。
+  - 是否按 `name + type` 双键匹配可配置（默认 `name` 单键，避免 LLM 抖动改了类型导致漏过滤；用户在偏好设置开启严格模式后切到双键）。
+  - 测试：单测覆盖"已采纳实体过滤"、"关系两端引用已采纳实体仍保留"、"已采纳实体名称改变后不再误过滤"三条路径。
+  - 这一步落在 Phase 7 而不是 Phase 3 的原因：Phase 3 的核心是把 AI 候选链路打通（端到端 + 持久化），去重属于体验优化；过早做去重会让"我刚才采纳的怎么不见了"的回归测试变复杂。
 
 #### Phase 8：并发安全与 build run 生命周期
 
