@@ -6,6 +6,15 @@ import { filterRelationTypesByEndpoints, tryReverseRelation } from './relation-t
 const props = defineProps({
   /** 当前样本的实体列表，用于源/目标下拉 */
   entities: { type: Array, default: () => [] },
+  /**
+   * 预填关系对象（编辑 AI 候选 / 拖动调换两端等场景）：
+   * { sourceEntityId, targetEntityId, type, evidence }，缺字段相当于不预填。
+   * AI 候选用 originalSource/originalTarget（实体名字符串）时，由父组件先把名字
+   * 解析成 entityId 再传进来，避免 RelationEditor 内部依赖 ai 字段语义。
+   */
+  prefilledRelation: { type: Object, default: null },
+  /** 编辑模式标志：用于按钮文案"添加" → "保存修改" */
+  editMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['submit', 'cancel'])
@@ -15,6 +24,25 @@ const targetEntityId = ref('')
 const type = ref('')
 const evidence = ref('')
 const submitAttempted = ref(false)
+
+// 初始化预填字段
+function applyPrefill() {
+  const r = props.prefilledRelation
+  if (r) {
+    sourceEntityId.value = r.sourceEntityId ?? ''
+    targetEntityId.value = r.targetEntityId ?? ''
+    type.value = r.type ?? ''
+    evidence.value = r.evidence ?? ''
+  } else {
+    sourceEntityId.value = ''
+    targetEntityId.value = ''
+    type.value = ''
+    evidence.value = ''
+  }
+  submitAttempted.value = false
+}
+applyPrefill()
+watch(() => props.prefilledRelation, applyPrefill, { deep: true })
 
 const sourceEntity = computed(() => props.entities.find((e) => e.id === sourceEntityId.value))
 const targetEntity = computed(() => props.entities.find((e) => e.id === targetEntityId.value))
@@ -171,7 +199,7 @@ function swapDirection() {
     <div class="relation-editor__actions">
       <el-button size="small" @click="handleCancel">取消</el-button>
       <el-button type="primary" size="small" native-type="submit" :disabled="!canSubmit">
-        添加
+        {{ editMode ? '保存修改' : '添加' }}
       </el-button>
     </div>
   </form>

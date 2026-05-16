@@ -43,7 +43,8 @@ const typeLabelZh = computed(() => {
     :class="{ 'is-suggested': isSuggested }"
   >
     <span v-if="isSuggested" class="annotation-relation-card__badge" aria-hidden="true">✨</span>
-    <div class="annotation-relation-card__main">
+    <!-- 第一行：流程 + 操作按钮（同一行右对齐）-->
+    <div class="annotation-relation-card__line">
       <div class="annotation-relation-card__flow">
         <span
           class="annotation-relation-card__entity"
@@ -59,19 +60,29 @@ const typeLabelZh = computed(() => {
           :title="targetInfo.linked ? '' : '尚未采纳此实体'"
         >{{ targetInfo.name }}</span>
       </div>
-      <p v-if="relation.evidence" class="annotation-relation-card__evidence">
-        证据：{{ relation.evidence }}
-      </p>
+      <div class="annotation-relation-card__actions">
+        <template v-if="isSuggested">
+          <button class="annotation-relation-card__icon-btn annotation-relation-card__icon-btn--edit"
+                  title="编辑后采纳" @click="$emit('edit', relation.id)">✎</button>
+          <button class="annotation-relation-card__icon-btn annotation-relation-card__icon-btn--accept"
+                  title="采纳" @click="$emit('accept', relation.id)">✓</button>
+          <button class="annotation-relation-card__icon-btn annotation-relation-card__icon-btn--reject"
+                  title="拒绝" @click="$emit('reject', relation.id)">✕</button>
+        </template>
+        <template v-else>
+          <button class="annotation-relation-card__icon-btn annotation-relation-card__icon-btn--delete"
+                  title="删除" @click="$emit('delete', relation.id)">×</button>
+        </template>
+      </div>
     </div>
-    <div class="annotation-relation-card__actions">
-      <template v-if="isSuggested">
-        <button class="ann-btn ann-btn--icon" title="编辑后采纳" @click="$emit('edit', relation.id)">✎</button>
-        <button class="ann-btn ann-btn--accept" @click="$emit('accept', relation.id)">采纳</button>
-        <button class="ann-btn ann-btn--reject" @click="$emit('reject', relation.id)">拒绝</button>
-      </template>
-      <template v-else>
-        <button class="ann-btn ann-btn--icon" title="删除" @click="$emit('delete', relation.id)">×</button>
-      </template>
-    </div>
+    <!-- 第二行：证据。无证据时占灰色 placeholder 保持卡片高度统一 -->
+    <p
+      class="annotation-relation-card__evidence"
+      :class="{ 'is-empty': !relation.evidence }"
+      :title="relation.evidence ?? ''"
+    >
+      <span class="annotation-relation-card__evidence-label">证据：</span>
+      <span class="annotation-relation-card__evidence-text">{{ relation.evidence || '无证据描述' }}</span>
+    </p>
   </div>
 </template>

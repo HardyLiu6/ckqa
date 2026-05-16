@@ -7,9 +7,17 @@ import { findDuplicateEntity } from './entity-id-generator.js'
 const props = defineProps({
   /** 当前样本中已有的实体列表，用于重名检测 */
   existingEntities: { type: Array, default: () => [] },
-  /** 拖选预填的实体名（来自原文选区） */
+  /**
+   * 预填实体对象，新建/编辑两个场景共用：
+   * - 拖选场景：{ name, spanStart, spanEnd }（缺 type/description 时各 fallback 到默认值）
+   * - 编辑 AI 候选场景：{ name, type, description, spanStart, spanEnd, ... }
+   * - null：纯新建，全部清空
+   *
+   * 兼容老 props（prefilledName / prefilledSpan）作为更细粒度的预填入口，
+   * 但当 prefilledEntity 非空时优先使用它。
+   */
+  prefilledEntity: { type: Object, default: null },
   prefilledName: { type: String, default: '' },
-  /** 拖选预填的字符位置 [spanStart, spanEnd]，提交时透传到 payload */
   prefilledSpan: {
     type: Object,
     default: null,
@@ -17,18 +25,46 @@ const props = defineProps({
       Number.isInteger(val.spanStart) && Number.isInteger(val.spanEnd)
     ),
   },
+  /** 编辑模式标志：用于按钮文案"添加" → "保存修改" */
+  editMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['submit', 'cancel'])
 
-const name = ref(props.prefilledName ?? '')
+const name = ref('')
 const type = ref('Concept')
 const description = ref('')
+const spanStart = ref(null)
+const spanEnd = ref(null)
 const submitAttempted = ref(false)
 
-watch(() => props.prefilledName, (val) => {
-  if (val) name.value = val
-})
+// 初始化预填字段：prefilledEntity 优先，没有则 fallback 到细粒度 props
+function applyPrefill() {
+  const e = props.prefilledEntity
+  if (e) {
+    name.value = e.name ?? ''
+    type.value = e.type || 'Concept'
+    description.value = e.description ?? ''
+    spanStart.value = Number.isInteger(e.spanStart) ? e.spanStart : null
+    spanEnd.value = Number.isInteger(e.spanEnd) ? e.spanEnd : null
+  } else {
+    name.value = props.prefilledName ?? ''
+    type.value = 'Concept'
+    description.value = ''
+    if (props.prefilledSpan) {
+      spanStart.value = props.prefilledSpan.spanStart
+      spanEnd.value = props.prefilledSpan.spanEnd
+    } else {
+      spanStart.value = null
+      spanEnd.value = null
+    }
+  }
+  submitAttempted.value = false
+}
+applyPrefill()
+
+// prefill 变化时重置表单（场景：dialog 关闭重开传入新候选）
+watch(() => [props.prefilledEntity, props.prefilledName, props.prefilledSpan], applyPrefill, { deep: true })
 
 const trimmedName = computed(() => name.value.trim())
 
@@ -46,9 +82,9 @@ function handleSubmit() {
     type: type.value,
     description: description.value.trim() || undefined,
   }
-  if (props.prefilledSpan) {
-    payload.spanStart = props.prefilledSpan.spanStart
-    payload.spanEnd = props.prefilledSpan.spanEnd
+  if (Number.isInteger(spanStart.value) && Number.isInteger(spanEnd.value)) {
+    payload.spanStart = spanStart.value
+    payload.spanEnd = spanEnd.value
   }
   emit('submit', payload)
   reset()
@@ -63,6 +99,8 @@ function reset() {
   name.value = ''
   type.value = 'Concept'
   description.value = ''
+  spanStart.value = null
+  spanEnd.value = null
   submitAttempted.value = false
 }
 </script>
@@ -109,7 +147,7 @@ function reset() {
     <div class="entity-editor__actions">
       <el-button size="small" @click="handleCancel">取消</el-button>
       <el-button type="primary" size="small" native-type="submit" :disabled="!canSubmit">
-        添加
+        {{ editMode ? '保存修改' : '添加' }}
       </el-button>
     </div>
   </form>

@@ -12,7 +12,7 @@ const props = defineProps({
   aiSuggestionLoadingSampleId: { type: [String, Number], default: null },
 })
 
-defineEmits([
+const emit = defineEmits([
   'finish-sample',
   'skip-sample',
   'accept-entity',
@@ -37,6 +37,16 @@ defineEmits([
 
 const showEntityEditor = ref(false)
 const showRelationEditor = ref(false)
+
+// 编辑器预填数据：完整对象，新建/编辑场景共用
+// 新建：null（编辑器内部 fallback 到默认值或 prefilledName/prefilledSpan）
+// 编辑：完整 entity / relation 对象
+const entityEditorPrefill = ref(null)
+const relationEditorPrefill = ref(null)
+
+// 编辑模式标志：true 时编辑器按钮显示"保存修改"，提交时主组件做"拒绝原候选 + 新建"
+const entityEditorMode = ref('create') // 'create' | 'edit-suggestion'
+const relationEditorMode = ref('create') // 'create' | 'edit-suggestion'
 
 // 批量选择状态：候选区 / 已确认区独立维护
 // Set<string> 存被勾选的 id；切样本时由 watch 清空
@@ -118,12 +128,8 @@ function signalLabel(name) {
   })[name] ?? name
 }
 
-const entityEditorPrefill = ref({ name: '', span: null })
-
-function handleRequestAddEntity({ name, spanStart, spanEnd }) {
-  entityEditorPrefill.value = { name, span: { spanStart, spanEnd } }
-  showEntityEditor.value = true
-}
+const entityEditorPrefillName = ref('')
+const entityEditorPrefillSpan = ref(null)
 
 // ─── 多选切换 ─────────────────────────────────────────────────────────
 
@@ -143,29 +149,109 @@ function clearSelection(set) {
   set.value = new Set()
 }
 
-// ─── 编辑 AI 候选：唤起 Editor 预填 ────────────────────────────────────
+function handleRequestAddEntity({ name, spanStart, spanEnd }) {
+  // 拖选场景：纯新建，只预填 name + span
+  entityEditorPrefill.value = null
+  entityEditorPrefillName.value = name
+  entityEditorPrefillSpan.value = { spanStart, spanEnd }
+  entityEditorMode.value = 'create'
+  editingSuggestedEntityId.value = null
+  showEntityEditor.value = true
+}
+
+function openCreateEntityDialog() {
+  // 纯新建（顶部"+ 添加实体"按钮）
+  entityEditorPrefill.value = null
+  entityEditorPrefillName.value = ''
+  entityEditorPrefillSpan.value = null
+  entityEditorMode.value = 'create'
+  editingSuggestedEntityId.value = null
+  showEntityEditor.value = true
+}
+
+function openCreateRelationDialog() {
+  relationEditorPrefill.value = null
+  relationEditorMode.value = 'create'
+  editingSuggestedRelationId.value = null
+  showRelationEditor.value = true
+}
+
+// ─── 编辑 AI 候选：唤起 Editor 完整预填 ────────────────────────────────────
 
 function handleEditSuggestedEntity(entityId) {
   const entity = props.sample?.aiSuggestedEntities?.find((e) => e.id === entityId)
   if (!entity) return
-  // 唤起 EntityEditor，预填 name + 拒绝原候选 + 提交后写新实体
-  entityEditorPrefill.value = {
-    name: entity.name ?? '',
-    span: Number.isInteger(entity.spanStart) && Number.isInteger(entity.spanEnd)
-      ? { spanStart: entity.spanStart, spanEnd: entity.spanEnd }
-      : null,
-    type: entity.type ?? '',
-    description: entity.description ?? '',
-  }
+  // 编辑场景：把候选完整 spread 到 prefill，type/description/spanStart/spanEnd 一并预填
+  // 用户改完点'保存修改' → 父组件做'拒绝原候选 + 新建带修改的实体'
+  entityEditorPrefill.value = { ...entity }
+  entityEditorPrefillName.value = ''
+  entityEditorPrefillSpan.value = null
+  entityEditorMode.value = 'edit-suggestion'
   editingSuggestedEntityId.value = entityId
   showEntityEditor.value = true
 }
 
 function handleEditSuggestedRelation(relationId) {
-  // 关系候选编辑：本期简化为"拒绝候选 + 唤起 RelationEditor 让用户重新建"
-  // 完整预填两端实体 + type + evidence 留到下一次迭代
+  const relation = props.sample?.aiSuggestedRelations?.find((r) => r.id === relationId)
+  if (!relation) return
+  // 关系候选预填：把 originalSource/originalTarget（实体名）解析成 entityId
+  // 已采纳的同名实体 → 取其 id；未采纳 → 留空让用户手选
+  const sourceEntityId = relation.sourceEntityId
+    ?? confirmedEntities.value.find((e) => e.name === relation.originalSource)?.id
+    ?? ''
+  const targetEntityId = relation.targetEntityId
+    ?? confirmedEntities.value.find((e) => e.name === relation.originalTarget)?.id
+    ?? ''
+  relationEditorPrefill.value = {
+    sourceEntityId,
+    targetEntityId,
+    type: relation.type ?? '',
+    evidence: relation.evidence ?? '',
+  }
+  relationEditorMode.value = 'edit-suggestion'
   editingSuggestedRelationId.value = relationId
   showRelationEditor.value = true
+}
+
+// ─── Dialog 的 submit / close 收口 ──────────────────────────────────
+
+function handleEntityEditorSubmit(payload) {
+  if (entityEditorMode.value === 'edit-suggestion' && editingSuggestedEntityId.value) {
+    // 编辑 AI 候选：把原候选拒绝 + 新建带修改的实体
+    const oldId = editingSuggestedEntityId.value
+    emit('reject-entity', oldId)
+    emit('create-entity', payload)
+  } else {
+    emit('create-entity', payload)
+  }
+  closeEntityEditor()
+}
+
+function closeEntityEditor() {
+  showEntityEditor.value = false
+  entityEditorPrefill.value = null
+  entityEditorPrefillName.value = ''
+  entityEditorPrefillSpan.value = null
+  entityEditorMode.value = 'create'
+  editingSuggestedEntityId.value = null
+}
+
+function handleRelationEditorSubmit(payload) {
+  if (relationEditorMode.value === 'edit-suggestion' && editingSuggestedRelationId.value) {
+    const oldId = editingSuggestedRelationId.value
+    emit('reject-relation', oldId)
+    emit('create-relation', payload)
+  } else {
+    emit('create-relation', payload)
+  }
+  closeRelationEditor()
+}
+
+function closeRelationEditor() {
+  showRelationEditor.value = false
+  relationEditorPrefill.value = null
+  relationEditorMode.value = 'create'
+  editingSuggestedRelationId.value = null
 }
 </script>
 
@@ -260,8 +346,8 @@ function handleEditSuggestedRelation(relationId) {
         <header class="annotation-section-title">
           <strong>实体</strong>
           <span class="annotation-section-title__count">{{ confirmedCount }} 已确认 · {{ aiCount }} 待审</span>
-          <button class="annotation-section-title__add" @click="showEntityEditor = !showEntityEditor">
-            {{ showEntityEditor ? '收起 −' : '+ 添加实体' }}
+          <button class="annotation-section-title__add" @click="openCreateEntityDialog">
+            + 添加实体
           </button>
         </header>
 
@@ -345,27 +431,7 @@ function handleEditSuggestedRelation(relationId) {
           </div>
         </div>
 
-        <EntityEditor
-          v-if="showEntityEditor"
-          :existing-entities="mergedEntities"
-          :prefilled-name="entityEditorPrefill.name"
-          :prefilled-span="entityEditorPrefill.span"
-          @submit="(payload) => {
-            $emit('create-entity', payload)
-            // 编辑 AI 候选场景：提交后还要把原候选拒绝掉
-            if (editingSuggestedEntityId) {
-              $emit('reject-entity', editingSuggestedEntityId)
-              editingSuggestedEntityId = null
-            }
-            showEntityEditor = false
-            entityEditorPrefill = { name: '', span: null }
-          }"
-          @cancel="() => {
-            showEntityEditor = false
-            entityEditorPrefill = { name: '', span: null }
-            editingSuggestedEntityId = null
-          }"
-        />
+        <!-- EntityEditor 在 el-dialog 中渲染（见模板末尾），不再以行内方式插在卡片下方 -->
       </section>
 
       <!-- 关系区 -->
@@ -378,9 +444,9 @@ function handleEditSuggestedRelation(relationId) {
             class="annotation-section-title__add"
             :disabled="(sample?.goldEntities ?? []).length < 2"
             :title="(sample?.goldEntities ?? []).length < 2 ? '至少需要 2 个已确认实体才能添加关系' : ''"
-            @click="showRelationEditor = !showRelationEditor"
+            @click="openCreateRelationDialog"
           >
-            {{ showRelationEditor ? '收起 −' : '+ 添加关系' }}
+            + 添加关系
           </button>
         </header>
 
@@ -466,23 +532,46 @@ function handleEditSuggestedRelation(relationId) {
           </div>
         </div>
 
-        <RelationEditor
-          v-if="showRelationEditor"
-          :entities="sample?.goldEntities ?? []"
-          @submit="(payload) => {
-            $emit('create-relation', payload)
-            if (editingSuggestedRelationId) {
-              $emit('reject-relation', editingSuggestedRelationId)
-              editingSuggestedRelationId = null
-            }
-            showRelationEditor = false
-          }"
-          @cancel="() => {
-            showRelationEditor = false
-            editingSuggestedRelationId = null
-          }"
-        />
+        <!-- RelationEditor 在 el-dialog 中渲染（见模板末尾） -->
       </section>
     </template>
   </main>
+
+  <!-- 实体编辑器对话框：新建 + 编辑共用 -->
+  <el-dialog
+    v-model="showEntityEditor"
+    :title="entityEditorMode === 'edit-suggestion' ? '编辑 AI 候选实体' : '添加实体'"
+    width="640px"
+    :close-on-click-modal="false"
+    @close="closeEntityEditor"
+  >
+    <EntityEditor
+      v-if="showEntityEditor"
+      :existing-entities="mergedEntities"
+      :prefilled-entity="entityEditorPrefill"
+      :prefilled-name="entityEditorPrefillName"
+      :prefilled-span="entityEditorPrefillSpan"
+      :edit-mode="entityEditorMode === 'edit-suggestion'"
+      @submit="handleEntityEditorSubmit"
+      @cancel="closeEntityEditor"
+    />
+  </el-dialog>
+
+  <!-- 关系编辑器对话框：新建 + 编辑共用 -->
+  <el-dialog
+    v-model="showRelationEditor"
+    :title="relationEditorMode === 'edit-suggestion' ? '编辑 AI 候选关系' : '添加关系'"
+    width="640px"
+    :close-on-click-modal="false"
+    @close="closeRelationEditor"
+  >
+    <RelationEditor
+      v-if="showRelationEditor"
+      :entities="sample?.goldEntities ?? []"
+      :prefilled-relation="relationEditorPrefill"
+      :edit-mode="relationEditorMode === 'edit-suggestion'"
+      @submit="handleRelationEditorSubmit"
+      @cancel="closeRelationEditor"
+    />
+  </el-dialog>
 </template>

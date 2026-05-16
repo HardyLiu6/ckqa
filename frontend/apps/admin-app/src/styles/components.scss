@@ -4646,11 +4646,17 @@ textarea.text-input {
   border: 1px solid var(--ckqa-border);
   border-radius: 8px;
   padding: 12px 14px;
-  display: grid; gap: 12px; align-items: center;
   transition: border-color 120ms;
 }
-.annotation-entity-card { grid-template-columns: 18px 1fr auto; }
-.annotation-relation-card { grid-template-columns: 1fr auto; }
+.annotation-entity-card {
+  display: grid; gap: 12px; align-items: center;
+  grid-template-columns: 18px 1fr auto;
+}
+// Phase 3：关系卡改 flex column 内部 2 行布局
+.annotation-relation-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 6px;
+}
 .annotation-entity-card:hover,
 .annotation-relation-card:hover { border-color: var(--ckqa-accent); }
 .annotation-entity-card.is-suggested,
@@ -4681,18 +4687,85 @@ textarea.text-input {
 }
 .annotation-entity-card__conf { color: #a855f7; }
 
+// Phase 3 重构：关系卡 2 行紧凑布局（第一行 流程+按钮；第二行 证据）
+// 旧 __main 不再使用；保留是为了向后兼容（其它视图引用时不报错）
 .annotation-relation-card__main { display: flex; flex-direction: column; gap: 6px; }
+.annotation-relation-card__line {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-width: 0;
+}
 .annotation-relation-card__flow {
-  display: flex; align-items: center; gap: 10px; font-size: 13px;
-  flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  flex: 1; min-width: 0;
+  flex-wrap: nowrap;  // 关键：单行不换行；溢出由内部 ellipsis 兜
 }
 .annotation-relation-card__entity {
   background: color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
   color: var(--ckqa-accent);
   padding: 4px 10px; border-radius: 6px; font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  max-width: 130px;
+  flex-shrink: 1;
 }
-.annotation-relation-card__arrow { color: var(--ckqa-text-soft, #a8a29e); }
-.annotation-relation-card__evidence { font-size: 12px; color: var(--ckqa-text-muted); margin: 0; }
+.annotation-relation-card__arrow {
+  color: var(--ckqa-text-soft, #a8a29e);
+  flex-shrink: 0;
+}
+.annotation-relation-card__type-tag {
+  flex-shrink: 0;
+}
+.annotation-relation-card__evidence {
+  font-size: 12px; color: var(--ckqa-text-muted); margin: 0;
+  display: flex; gap: 4px;
+  white-space: nowrap; overflow: hidden;
+  cursor: help;
+}
+.annotation-relation-card__evidence-label {
+  flex-shrink: 0;
+}
+.annotation-relation-card__evidence-text {
+  overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0;
+}
+.annotation-relation-card__evidence.is-empty {
+  color: color-mix(in srgb, var(--ckqa-text-muted) 60%, transparent);
+  font-style: italic;
+}
+
+// 关系卡操作按钮：统一符号化 32×24 圆角 hover
+.annotation-relation-card__actions {
+  display: flex; gap: 4px; flex-shrink: 0;
+}
+.annotation-relation-card__icon-btn {
+  width: 28px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 5px;
+  background: transparent; color: var(--ckqa-text-muted);
+  font-size: 13px; line-height: 1;
+  cursor: pointer; transition: all 100ms;
+  padding: 0;
+}
+.annotation-relation-card__icon-btn--accept {
+  color: #15803d;
+  background: color-mix(in srgb, #15803d 10%, transparent);
+}
+.annotation-relation-card__icon-btn--accept:hover { background: #15803d; color: white; }
+.annotation-relation-card__icon-btn--reject {
+  color: #dc2626;
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+}
+.annotation-relation-card__icon-btn--reject:hover { background: #dc2626; color: white; }
+.annotation-relation-card__icon-btn--edit {
+  color: var(--ckqa-accent);
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, transparent);
+}
+.annotation-relation-card__icon-btn--edit:hover {
+  background: var(--ckqa-accent); color: white;
+}
+.annotation-relation-card__icon-btn--delete:hover {
+  background: var(--ckqa-border);
+}
 
 .annotation-entity-card__actions,
 .annotation-relation-card__actions {
