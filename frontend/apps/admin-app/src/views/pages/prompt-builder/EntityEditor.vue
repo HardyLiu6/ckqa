@@ -1,20 +1,34 @@
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/EntityEditor.vue -->
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ENTITY_TYPES } from './relation-types-model.js'
 import { findDuplicateEntity } from './entity-id-generator.js'
 
 const props = defineProps({
   /** 当前样本中已有的实体列表，用于重名检测 */
   existingEntities: { type: Array, default: () => [] },
+  /** 拖选预填的实体名（来自原文选区） */
+  prefilledName: { type: String, default: '' },
+  /** 拖选预填的字符位置 [spanStart, spanEnd]，提交时透传到 payload */
+  prefilledSpan: {
+    type: Object,
+    default: null,
+    validator: (val) => val === null || (
+      Number.isInteger(val.spanStart) && Number.isInteger(val.spanEnd)
+    ),
+  },
 })
 
 const emit = defineEmits(['submit', 'cancel'])
 
-const name = ref('')
+const name = ref(props.prefilledName ?? '')
 const type = ref('Concept')
 const description = ref('')
 const submitAttempted = ref(false)
+
+watch(() => props.prefilledName, (val) => {
+  if (val) name.value = val
+})
 
 const trimmedName = computed(() => name.value.trim())
 
@@ -27,11 +41,16 @@ const canSubmit = computed(() => trimmedName.value.length > 0)
 function handleSubmit() {
   submitAttempted.value = true
   if (!canSubmit.value) return
-  emit('submit', {
+  const payload = {
     name: trimmedName.value,
     type: type.value,
     description: description.value.trim() || undefined,
-  })
+  }
+  if (props.prefilledSpan) {
+    payload.spanStart = props.prefilledSpan.spanStart
+    payload.spanEnd = props.prefilledSpan.spanEnd
+  }
+  emit('submit', payload)
   reset()
 }
 
