@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 03 步从纯 mock 切到真实 API：后端实现 `POST /candidates` 触发 `generate_candidate_prompts.py`、`GET /candidates` 读 manifest 并按 build run 隔离输出；前端把 `MOCK_CANDIDATES` 替换成真实接口数据，加载 / 错误 / 空态三态健全。
+**Goal:** 把 03 步从纯 mock 切到真实 API：后端实现 `POST /candidates` 触发 `generate_candidate_prompts.py`、`GET /candidates` 读 manifest 并按 build run 隔离输出；前端把 `MOCK_CANDIDATES` 替换成真实接口数据，loading / error / blocked-by-gate / empty / ready 五态健全。
 
 **Architecture:**
 - 候选输出按 build run 隔离，目录约定 `<workspace>/prompt/candidates/`，避免不同 build run 的 distilled fewshot 互相覆盖。
@@ -154,6 +154,7 @@
    - POST 路径（CandidateService.generate）：脚本跑完后校验 manifest 中所有候选 id 必须 ∈ 白名单，发现未知候选抛 `CANDIDATE_GENERATION_FAILED`
    两条路径策略不同，统一在 Task 8 / Task 3 的实现里。Task 8 单测覆盖。
 7. **后端 4104 必须真正落地**（不能只定义不使用）：审阅意见 #1 指出，前端门控不能替代后端门控。`CandidateService.generate(buildRunId)` 必须在第一行过滤 completed 样本，0 条时抛 `CANDIDATE_REQUIRES_AUDIT_COMPLETED`。Task 8 单测必须覆盖此场景。
+8. **缺 id 的 relation 不自动修复**（审阅意见 B）：Task 4 `AuditWithGoldExporter.normalizeEntity` 在 entity 缺 id 时会生成 `auto_e_<sampleId>_<idx>`，让 entity 有稳定 `entity_id` 让脚本能建 entity_by_id map。但**relation 的 `sourceEntityId` / `targetEntityId` 如果与已存在的 entity id 不一致**（例如 DB 数据损坏 / relation 写入时 entity id 已变），自动 id 生成不会修复这种引用断裂——脚本 `_select_fewshot_gold_items` 仍会跳过这条 relation。本期接受此边界：缺 id 通常是早期实验数据或数据损坏，不应该常态出现；正常 02 步标注流程 entity 总有 id。如需更强保护，留到 Phase 7+ 加"relation 引用 entity id 一致性自检"任务。
 
 ---
 
@@ -177,7 +178,7 @@
 
 ### 前端
 - 修改 `frontend/apps/admin-app/src/api/prompt-tune-pipeline.js`（加 `getCandidatePromptText`）
-- 修改 `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderCandidatesStep.vue`（去 mock + 加门控 + 加载错误三态）
+- 修改 `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderCandidatesStep.vue`（去 mock + 五态机 + 进入门控 + 重新生成按钮）
 - 修改 `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue`（透传 buildRunId）
 - 测试 `frontend/apps/admin-app/src/api/__tests__/prompt-tune-pipeline-candidates.test.js`
 
@@ -206,8 +207,16 @@ Expected：脚本输出帮助文档，含 `--samples_file / --audit_file / --out
 
 **确认 `--samples_file` 是否必填**（审阅意见 5.A）：
 
+先准备一个最小可用的空 audit 文件再试，这样能干净区分"参数缺失"和"audit_file 路径无效"两种错误：
+
 ```bash
-cd graphrag_pipeline && python -m scripts.prompt_tuning.generate_candidate_prompts --audit_file /tmp/nonexistent.json --output_dir /tmp/test_out 2>&1 | tail -20
+mkdir -p /tmp/p4-task0
+printf '{"audit_samples":[]}' > /tmp/p4-task0/audit_empty.json
+
+cd graphrag_pipeline && python -m scripts.prompt_tuning.generate_candidate_prompts \
+  --audit_file /tmp/p4-task0/audit_empty.json \
+  --output_dir /tmp/p4-task0/out \
+  --overwrite 2>&1 | tail -20
 ```
 
 预期之一：
@@ -2847,6 +2856,8 @@ import {
   getCandidatePromptText,
   listAuditSamples,
 } from '../../../api/prompt-tune-pipeline.js'
+//      ^^^^^^^^^^ 三个 ../，从 src/views/pages/prompt-builder/ 上溯到 src/api/
+//      （审阅意见 #1：markdown 渲染时连续点可能视觉上丢字符，请按字面 3 个 ../ 抄）
 
 const props = defineProps({
   dirty: { type: Boolean, default: false },
@@ -3164,6 +3175,8 @@ grep -n "gotoStep" frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue
 function gotoStep(stepKey) {
   router.push({
     query: { ...route.query, step: stepKey },
+    //       ^^^ 三个点的 spread 操作符（审阅意见 #2：markdown 渲染时连续点可能视觉上丢字符，
+    //       请按字面 ECMAScript spread `...` 抄写，不是单个 `.`）
   })
 }
 ```
@@ -3680,112 +3693,6 @@ git commit -m "docs(spec): Phase 4 标记完成 + 风险 #3/#5 缓解备注 (Pha
 ```bash
 git push origin feature/prompt-confirmation-step
 ```
-
----
-
-1. 在 admin-app 新建一个**空** build run（不进入 02 步标注），URL 含 `?buildRunId=<id>&step=candidates`。
-2. 直接访问 03 步 URL。
-
-预期：页面显示空态卡片"请先在 02 步完成至少 1 条样本的审阅"+ "返回 02 步标注"按钮。
-
-- [ ] **Step 3：未生成态验证（empty）**
-
-1. 在已有 build run 中 02 步完成 1 条样本审阅。
-2. 进入 03 步。
-
-预期：页面显示空态"本次构建尚未生成候选 Prompt" + "立即生成候选"按钮（紫色）。
-
-- [ ] **Step 4：生成候选 + ready 态**
-
-点击"立即生成候选"按钮。
-
-预期：
-- toast 一闪 success "已生成 4 个候选 Prompt"
-- 页面切到 ready 态，显示 4 张候选卡片
-- 每张卡片显示中文译名、ID 副标题、特性 chips、token 估算条（绿/黄/红）
-- `schema_fewshot_distilled_v2_strict_tuple` 卡片左上角紫色 ✦ 推荐角标
-- 顶部摘要条显示"已选 4 / 4 · 80 次调用 · ~Yk tokens · 约 Z 分钟"
-
-- [ ] **Step 5：build run 隔离验证**
-
-1. 在 build run A 完成 02 步 + 03 步候选生成。
-2. 检查 `<workspace_A>/prompt/candidates/manifest.json` 存在。
-3. 在 build run B 完成 02 步（标注内容**不同**）+ 03 步候选生成。
-4. 检查 `<workspace_B>/prompt/candidates/manifest.json` 存在，且与 A 不同。
-
-Run:
-```bash
-diff /home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/user_0/kb_<KB>/build_<A>/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt /home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/user_0/kb_<KB>/build_<B>/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt
-```
-
-Expected：diff 输出在 fewshot 微示例处不同（含各自 build run 的 audit gold）。
-
-- [ ] **Step 6：抽屉预览**
-
-点击候选卡片底部"查看完整提示词 →"按钮。
-
-预期：
-- 右侧抽屉滑出（520px 宽）
-- 标题显示候选译名 + ID
-- 抽屉内 PromptDisplay 渲染 prompt 文本（rich 模式默认）
-- 关闭抽屉、再次打开不同候选 → 显示新候选的 prompt（懒加载）
-
-- [ ] **Step 7：快捷动作验证**
-
-依次点击：
-- "全选" → 4 个全勾选
-- "清空" → 0 个勾选，"开始抽取评分"按钮 disabled
-- "仅选基线" → 只勾 default
-
-Expected：摘要条数字实时更新。
-
-- [ ] **Step 8：覆盖式生成验证**
-
-1. 02 步**新增** 1 条 gold 标注（之前没标过的样本）。
-2. 返回 03 步页面（不强制刷新，直接 router.push 切回 candidates）。
-3. 当前 ready 态会显示**旧候选**——这是预期（list 是只读，不会自动重跑）。
-4. 用户必须刷新页面 / 通过页面上某个"重新生成"按钮触发重跑。**本期没暴露 UI**，可以通过 DevTools 直接调 POST 测试：
-
-```javascript
-// 在浏览器 console
-fetch('/api/v1/knowledge-base-build-runs/<ID>/candidates', { method: 'POST', headers: { Authorization: 'Bearer ' + token } })
-  .then(r => r.json())
-  .then(console.log)
-```
-
-预期：响应 200 + 4 个候选；磁盘上 `schema_fewshot_distilled_v2_strict_tuple/prompt.txt` 内容更新（包含新 gold 的 fewshot 微示例）。
-
-- [ ] **Step 9：错误态验证**
-
-模拟后端崩溃或网络断开，刷新 03 步页面。
-
-预期：error 卡片显示中文错误 + "重试"按钮；点重试触发 loadCandidates。
-
-- [ ] **Step 10：Phase 3 fallback 验证**
-
-1. 在已经跑过 03 步的 build run 中，进入 02 步点"生成候选"（AI 单样本抽取）。
-2. 后端日志应显示 `prompt=<workspace>/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt`，**不是** `prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt`（仓库根）。
-
-Run:
-```bash
-grep "prompt=" /var/log/ckqa-backend.log | tail -3
-```
-
-或直接看 IDE console 日志。
-
-预期：路径前缀含 `runtime/kb-build-runs/user_<uid>/kb_<kbid>/build_<rid>`。
-
-3. 在还未跑 03 步的另一个 build run 中点"生成 AI 候选"。
-
-预期：路径回退到仓库根 `<GRAPHRAG_ROOT>/prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt`。
-
-- [ ] **Step 11：关闭 dev server**
-
-按 Ctrl+C。
-
-- [ ] **Step 12：不需要 commit**
-
-Phase 4 完结。
 
 ---
 
