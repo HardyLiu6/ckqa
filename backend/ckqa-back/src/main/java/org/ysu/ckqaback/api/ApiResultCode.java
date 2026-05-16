@@ -201,6 +201,12 @@ public enum ApiResultCode {
     CANDIDATES_NOT_GENERATED(4105, "本次构建尚未生成候选 Prompt，请先调用生成接口"),
 
     /**
+     * 用户选择 graphrag_tuned 但当前 build run 选材对应的自动调优产物不存在或失效。
+     * 由 Phase 4.5 引入。
+     */
+    SEED_AUTO_TUNED_UNAVAILABLE(4109, "当前选材的自动调优产物不可用，请重新选择种子或先触发自动调优"),
+
+    /**
      * 接口尚未实现（占位）。
      */
     PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现");

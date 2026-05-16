@@ -44,6 +44,14 @@ public class CandidateResponse {
     private final String basePromptSource;
     private final LocalDateTime generationTime;
 
+    /**
+     * 本组候选生成时使用的种子（system_default / graphrag_tuned / null）。
+     * <p>仅 schema_aware_directional_v2 / schema_fewshot_distilled_v2_strict_tuple 实际受 seed 影响；
+     * default 与 auto_tuned 候选不依赖 seed，本字段在所有候选上取相同值，
+     * 表示“本次生成时整组候选所基于的种子”。</p>
+     */
+    private final String seed;
+
     @Getter
     @Builder
     public static class TraitInfo {
