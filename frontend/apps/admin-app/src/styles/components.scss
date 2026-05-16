@@ -4656,6 +4656,9 @@ textarea.text-input {
 .annotation-relation-card {
   position: relative;
   display: flex; flex-direction: column; gap: 6px;
+  // 1 行流程时大约 64px，2 行时 88px。统一按 88px 起，让所有卡对齐
+  min-height: 88px;
+  justify-content: center;
 }
 .annotation-entity-card:hover,
 .annotation-relation-card:hover { border-color: var(--ckqa-accent); }
@@ -4691,22 +4694,23 @@ textarea.text-input {
 // 旧 __main 不再使用；保留是为了向后兼容（其它视图引用时不报错）
 .annotation-relation-card__main { display: flex; flex-direction: column; gap: 6px; }
 .annotation-relation-card__line {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: flex-start; gap: 12px;
   width: 100%; min-width: 0;
 }
 .annotation-relation-card__flow {
-  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  display: flex; align-items: center; gap: 6px; font-size: 13px;
   flex: 1; min-width: 0;
-  flex-wrap: nowrap;  // 关键：单行不换行；溢出由内部 ellipsis 兜
+  flex-wrap: wrap;  // 长实体名时整个流程换行成 2 行，避免单边截断
+  row-gap: 4px;
+  line-height: 1.6;
 }
 .annotation-relation-card__entity {
   background: color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
   color: var(--ckqa-accent);
-  padding: 4px 10px; border-radius: 6px; font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
-  max-width: 130px;
-  flex-shrink: 1;
+  padding: 3px 8px; border-radius: 6px; font-weight: 500;
+  // 不再固定 max-width / ellipsis：让实体名完整显示，超长时由 wrap 整行折下
+  word-break: break-all;
+  max-width: 100%;
 }
 .annotation-relation-card__arrow {
   color: var(--ckqa-text-soft, #a8a29e);
@@ -4714,6 +4718,7 @@ textarea.text-input {
 }
 .annotation-relation-card__type-tag {
   flex-shrink: 0;
+  white-space: nowrap;
 }
 .annotation-relation-card__evidence {
   font-size: 12px; color: var(--ckqa-text-muted); margin: 0;
@@ -4736,6 +4741,8 @@ textarea.text-input {
 // 关系卡操作按钮：统一符号化 32×24 圆角 hover
 .annotation-relation-card__actions {
   display: flex; gap: 4px; flex-shrink: 0;
+  align-self: flex-start;  // 流程行换行时按钮顶对齐而非垂直居中
+  padding-top: 1px;
 }
 .annotation-relation-card__icon-btn {
   width: 28px; height: 22px;
@@ -5091,10 +5098,10 @@ textarea.text-input {
 }
 .annotation-subgroup__icon { color: #a855f7; font-size: 14px; }
 
-// 关系网格：双列自适应，单个关系不再占整行
+// 关系网格：双列自适应（440px 起），让窄一些的实体名也能完整显示
 .annotation-relation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
   gap: 8px;
   align-items: stretch;
 }
