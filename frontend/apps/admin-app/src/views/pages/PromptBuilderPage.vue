@@ -25,7 +25,8 @@ import {
   MOCK_COURSE_NAME,
 } from './prompt-builder/mocks/index.js'
 
-import { getBuildRun } from '../../api/knowledge-bases.js'
+import { getBuildRun, saveBuildRunCustomPromptDraft } from '../../api/knowledge-bases.js'
+import { getSeedAvailability } from '../../api/prompt-tune-pipeline.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +41,7 @@ const loading = ref(true)
 const error = ref(null)
 
 const seed = ref(null)
+const seedAvailability = ref(null)  // Phase 4.5：3 个种子选项的可用状态
 const courseName = ref(MOCK_COURSE_NAME)
 
 const dirty = ref(false)
@@ -83,6 +85,16 @@ onMounted(async () => {
     try { meta = buildRun?.buildMetadata ? JSON.parse(buildRun.buildMetadata) : {} } catch {}
     const draft = meta.customPromptDraft
     if (draft?.seed) seed.value = draft.seed
+
+    // Phase 4.5：拉种子可用性，01 步据此决定哪些选项可点
+    try {
+      seedAvailability.value = await getSeedAvailability(buildRunId.value)
+    } catch (availErr) {
+      // 不阻塞主流程：拉失败时所有种子按"未知"处理，前端给保守回退
+      // eslint-disable-next-line no-console
+      console.warn('[seed-availability] 加载失败', availErr)
+    }
+
     dirty.value = false
   } catch (e) {
     error.value = { message: e?.message ?? '加载草稿失败' }
@@ -135,6 +147,22 @@ function gotoPrev() {
 
 function markDirty() { dirty.value = true }
 
+async function persistSeedToBuildRun(seedKey) {
+  // Phase 4.5：把 seed 持久化到 build run metadata.customPromptDraft.seed，
+  // 让 03 步后端拿到正确的种子用于决定 baseOverride。
+  // 仅写 seed 子字段，不影响 prompts.extract_graph.content。
+  try {
+    const buildRun = await getBuildRun(buildRunId.value)
+    let meta = {}
+    try { meta = buildRun?.buildMetadata ? JSON.parse(buildRun.buildMetadata) : {} } catch {}
+    const nextDraft = { ...(meta.customPromptDraft ?? {}), seed: seedKey }
+    await saveBuildRunCustomPromptDraft(buildRunId.value, nextDraft)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[seed] 持久化失败，将由 05 步保存补救', err)
+  }
+}
+
 function handleSelectSeed(seedKey) {
   if (seedKey === 'history_draft') {
     // Phase 1e：从历史草稿列表中选取最新一条作为 mock 演示
@@ -161,8 +189,14 @@ function handleSelectSeed(seedKey) {
       .catch(() => {})
     return
   }
+  // Phase 4.5：种子切换 → 提示当前候选已失效（不清空数据；下次进 03 步会触发覆盖式重生成）
+  const seedSwitched = seed.value && seed.value !== seedKey
   seed.value = seedKey
   dirty.value = true
+  persistSeedToBuildRun(seedKey)
+  if (seedSwitched) {
+    ElMessage.info('种子已切换，当前候选将失效，需要重新生成')
+  }
 }
 
 async function handleSave(payload) {
@@ -236,6 +270,7 @@ function returnToWizard() {
         <PromptBuilderSeedStep
           v-if="activeStepKey === 'seed'"
           :seed="seed"
+          :seed-availability="seedAvailability"
           :history-drafts="MOCK_HISTORY_DRAFTS"
           @select-seed="handleSelectSeed"
         />

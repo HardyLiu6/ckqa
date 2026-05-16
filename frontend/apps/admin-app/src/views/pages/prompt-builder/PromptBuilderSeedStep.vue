@@ -5,6 +5,12 @@ const props = defineProps({
   seed: { type: String, default: null },
   graphragTunedSummary: { type: Object, default: null },
   historyDrafts: { type: Array, default: () => [] },
+  /**
+   * Phase 4.5：来自 GET /seed-availability 的响应。
+   * 形状 { currentSeed, options: [{ key, available, reason, summary }, ...] }。
+   * 缺失（接口失败）时所有 seed 视为可用，由后端兜底校验。
+   */
+  seedAvailability: { type: Object, default: null },
 })
 
 const emit = defineEmits(['select-seed'])
@@ -31,7 +37,37 @@ function metaFor(option) {
   return ''
 }
 
-const isOptionDisabled = (option) => option.key === 'history_draft'
+function findAvailabilityOption(key) {
+  const opts = props.seedAvailability?.options ?? []
+  return opts.find((o) => o.key === key)
+}
+
+function isOptionDisabled(option) {
+  // Phase 4.5：先检查 availability；缺失时只禁 history_draft
+  const match = findAvailabilityOption(option.key)
+  if (match) return !match.available
+  return option.key === 'history_draft'
+}
+
+function disabledReasonFor(option) {
+  const match = findAvailabilityOption(option.key)
+  if (!match || match.available) return ''
+  switch (match.reason) {
+    case 'auto_tuned_not_started':
+      return '请先在知识库构建向导触发自动调优'
+    case 'auto_tuned_running':
+    case 'auto_tuned_pending':
+      return '自动调优正在执行，请稍候'
+    case 'auto_tuned_failed':
+      return '上次自动调优失败，请重新触发'
+    case 'phase_6_not_implemented':
+      return '历史草稿入口将在后续版本开放'
+    case 'evaluation_failed':
+      return '无法评估自动调优产物状态'
+    default:
+      return match.summary ?? '当前不可选'
+  }
+}
 </script>
 
 <template>
@@ -53,6 +89,7 @@ const isOptionDisabled = (option) => option.key === 'history_draft'
         class="seed-card"
         :data-selected="seed === option.key ? 'true' : 'false'"
         :data-disabled="isOptionDisabled(option) ? 'true' : 'false'"
+        :title="isOptionDisabled(option) ? disabledReasonFor(option) : ''"
         @click="!isOptionDisabled(option) && emit('select-seed', option.key)"
       >
         <strong>{{ option.title }}</strong>
