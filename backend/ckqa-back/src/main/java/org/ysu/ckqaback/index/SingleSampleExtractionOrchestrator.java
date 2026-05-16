@@ -94,7 +94,7 @@ public class SingleSampleExtractionOrchestrator {
                 properties.getGraphrag().getPython(),
                 properties.getGraphrag().getManagedApi().getCondaEnv()
         ));
-        argv.add("scripts/extraction_eval/run_native_extraction.py");
+        argv.add("scripts/run_native_extraction.py");
         argv.add("--samples-file");
         argv.add(samplesFile.toAbsolutePath().toString());
         argv.add("--prompt");
