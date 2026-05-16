@@ -17,7 +17,9 @@ import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.index.AiSuggestionService;
 import org.ysu.ckqaback.index.AuditSampleService;
+import org.ysu.ckqaback.index.dto.AiSuggestionResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleUpdateRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
@@ -50,6 +52,7 @@ import java.util.Map;
 public class PromptTunePipelineController {
 
     private final AuditSampleService auditSampleService;
+    private final AiSuggestionService aiSuggestionService;
 
     // ------------------------------------------------------------
     // 02 步：构建准备材料
@@ -92,14 +95,19 @@ public class PromptTunePipelineController {
     }
 
     /**
-     * AI 预填实体/关系候选（智能能力 A）。Phase 3 落地，本期保留 501 占位。
+     * AI 预填实体/关系候选（Phase 3 智能能力 A）。
+     * <p>
+     * 同步调用 GraphRAG 单样本抽取（典型耗时 10-30 秒），返回候选实体/关系。
+     * 候选不入 DB——前端落到 sample.aiSuggestedEntities/aiSuggestedRelations 局部状态，
+     * 用户逐条审阅，被采纳后才进 goldEntities/goldRelations。
+     * </p>
      */
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/audit-samples/{sampleId}/ai-suggestions")
-    public ApiResponse<Map<String, Object>> requestAuditSampleAiSuggestions(
-            @PathVariable @Positive(message = "id必须大于0") Long id,
-            @PathVariable @Positive(message = "sampleId必须大于0") Long sampleId
+    public ApiResponse<AiSuggestionResponse> requestAuditSampleAiSuggestions(
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
+            @PathVariable("sampleId") @Positive(message = "sampleId必须大于0") Long sampleId
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(aiSuggestionService.generate(buildRunId, sampleId));
     }
 
     // ------------------------------------------------------------
