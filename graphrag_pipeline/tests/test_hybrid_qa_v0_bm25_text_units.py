@@ -39,3 +39,20 @@ def test_text_unit_bm25_reuses_cache_on_rebuild(tmp_path):
     assert first.size == 3
     assert second.size == 3
     assert (cache_dir / "text_unit_bm25.pkl").exists()
+
+
+def test_text_unit_bm25_expands_file_system_query_to_directory_terms(tmp_path):
+    parquet_path = tmp_path / "text_units.parquet"
+    pd.DataFrame(
+        [
+            {"id": "tu-filesystem", "text": "文件系统提供普通文件访问接口。"},
+            {"id": "tu-fcb", "text": "文件控制块和索引结点用于描述文件目录结构。"},
+            {"id": "tu-process", "text": "进程调度根据优先级分配处理机。"},
+            {"id": "tu-memory", "text": "虚拟存储器通过页面置换管理内存。"},
+        ]
+    ).to_parquet(parquet_path)
+
+    index = build_text_unit_bm25(parquet_path, cache_dir=tmp_path / "cache")
+    results = index.search("文件系统", top_k=2)
+
+    assert results[0].ref == "tu-fcb"

@@ -229,7 +229,7 @@ def _get_hybrid_v0_orchestrator():
         EvidenceGuardrailConfig,
         check_answer_supported_by_evidence,
     )
-    from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import fuse_basic_and_bm25_evidence
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import EvidenceFusionConfig, fuse_basic_and_bm25_evidence
     from graphrag_pipeline.scripts.hybrid_qa.orchestrator_v0 import HybridFallbackPolicy, HybridV0Orchestrator
     from graphrag_pipeline.scripts.hybrid_qa.synthesis_client import OpenAICompatibleSynthesisClient
     from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import load_data_citation_lookup, load_text_unit_lookup
@@ -249,6 +249,9 @@ def _get_hybrid_v0_orchestrator():
         bge_use_fp16=_parse_bool_env(os.environ.get("CKQA_BGE_M3_FP16"), default=False),
         bge_batch_size=_parse_int_env(os.environ.get("CKQA_BGE_M3_BATCH_SIZE"), default=8),
     )
+    fusion_config = EvidenceFusionConfig(
+        bm25_anchor_top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_ANCHOR_TOP_K"), default=2),
+    )
     _HYBRID_V0_ORCHESTRATOR = HybridV0Orchestrator(
         bm25=build_text_unit_bm25(text_units_path, cache_dir=OUTPUT_DIR / ".hybrid_v0_cache"),
         graph_client=graph_client,
@@ -266,6 +269,7 @@ def _get_hybrid_v0_orchestrator():
                 bm25_candidates=bm25_candidates,
                 text_unit_lookup=text_unit_lookup,
                 citation_ref_resolver=citation_ref_resolver,
+                config=fusion_config,
             )
         ),
         fallback_policy=HybridFallbackPolicy(

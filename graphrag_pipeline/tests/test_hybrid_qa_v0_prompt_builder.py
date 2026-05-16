@@ -68,5 +68,6 @@ def test_default_prompt_does_not_force_text_unit_citation_rewrites():
 
     assert "[Data: Text Units (" not in prompt
     assert "优先引用低层证据中的 Text Unit Ref" not in prompt
-    assert "不要为了统一格式改写引用类型" in prompt
+    assert "[Data: Hybrid(ref1, ref2)]" in prompt
+    assert "不要改写为 Text Units" in prompt
     assert "Text Unit Ref: d244f9016ac8abcdef" in prompt

@@ -150,6 +150,23 @@ def test_score_run_algorithmically_writes_outputs(tmp_path: Path):
     assert (run_dir / "algorithmic_scoring.md").exists()
 
 
+def test_score_run_algorithmically_scores_hybrid_data_citations(tmp_path: Path):
+    run_dir, test_set = _write_run(tmp_path)
+    raw_path = run_dir / "raw" / "Q001.json"
+    payload = json.loads(raw_path.read_text(encoding="utf-8"))
+    payload["modes"]["graphrag-local-search:latest"][
+        "answer"
+    ] = "DBSCAN 的核心参数是 eps 和 MinPts。[Data: Hybrid(d244f9016ac8)]"
+    raw_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    with _patched_semantic():
+        summary = score_run_algorithmically(run_dir, test_set_path=test_set)
+
+    row = summary["rows"][0]
+    assert row["citation_recall_at_3"] == 1.0
+    assert row["citation_rr"] == 1.0
+
+
 def test_score_run_algorithmically_surfaces_hybrid_diagnostics(tmp_path: Path):
     test_set = tmp_path / "qa_test_set.jsonl"
     _write_test_set(test_set)

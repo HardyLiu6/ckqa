@@ -23,6 +23,7 @@ class EvidenceFusionConfig:
     rrf_k: int = 60
     bm25_weight: float = 1.0
     basic_citation_weight: float = 1.2
+    bm25_anchor_top_k: int = 0
     fused_top_k: int = 8
     max_text_chars: int = 700
 
@@ -77,15 +78,21 @@ def fuse_basic_and_bm25_evidence(
             text=text,
         )
 
-    ordered = sorted(
+    scored_order = sorted(
         contributions.items(),
         key=lambda item: (-float(item[1]["score"]), int(item[1]["best_rank"]), item[0]),
-    )[: max(config.fused_top_k, 0)]
+    )
+    anchor_refs = _bm25_anchor_refs(bm25_candidates, config.bm25_anchor_top_k)
+    ordered_refs = [
+        *[ref for ref in anchor_refs if ref in contributions],
+        *[ref for ref, _ in scored_order if ref not in anchor_refs],
+    ][: max(config.fused_top_k, 0)]
 
     candidates: list[EvidenceCandidate] = []
     source_counts: dict[str, int] = defaultdict(int)
     fusion_debug: list[dict[str, Any]] = []
-    for ref, payload in ordered:
+    for ref in ordered_refs:
+        payload = contributions[ref]
         sources = sorted(payload["sources"])
         for source in sources:
             source_counts[source] += 1
@@ -118,6 +125,20 @@ def fuse_basic_and_bm25_evidence(
         source_counts=dict(source_counts),
         fusion_debug=fusion_debug,
     )
+
+
+def _bm25_anchor_refs(
+    bm25_candidates: Sequence[EvidenceCandidate],
+    limit: int,
+) -> list[str]:
+    refs: list[str] = []
+    if limit <= 0:
+        return refs
+    for candidate in bm25_candidates:
+        _append_ref(refs, candidate.ref)
+        if len(refs) >= limit:
+            break
+    return refs
 
 
 def _add_contribution(

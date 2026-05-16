@@ -80,3 +80,27 @@ def test_missing_citation_resolver_returns_bm25_only():
 
     assert pack.refs == ["bm25aaa11111"]
     assert pack.source_counts == {"bm25": 1}
+
+
+def test_bm25_anchor_top_k_keeps_lexical_hits_ahead_of_basic_only_refs():
+    bm25 = [
+        EvidenceCandidate("bm25", "bm25gold1111", "BM25 命中的关键证据", 9.0, HybridLayer.LOW),
+        EvidenceCandidate("bm25", "bm25gold2222", "BM25 命中的第二段关键证据", 8.0, HybridLayer.LOW),
+    ]
+    lookup = _Lookup(
+        {
+            "basic111111": "Basic 第一段引用",
+            "basic222222": "Basic 第二段引用",
+        }
+    )
+
+    pack = fuse_basic_and_bm25_evidence(
+        question="文件系统如何组织目录？",
+        basic_answer="[Data: Text Units (basic111111xxxx, basic222222xxxx)]",
+        bm25_candidates=bm25,
+        text_unit_lookup=lookup,
+        citation_ref_resolver=None,
+        config=EvidenceFusionConfig(bm25_anchor_top_k=2, fused_top_k=4),
+    )
+
+    assert pack.refs[:2] == ["bm25gold1111", "bm25gold2222"]

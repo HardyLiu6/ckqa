@@ -75,7 +75,7 @@ class TextUnitBm25:
         return len(self.refs)
 
     def search(self, query: str, top_k: int = 10) -> list[EvidenceCandidate]:
-        query_tokens = _tokenize(query)
+        query_tokens = _tokenize(_expand_query(query))
         if top_k <= 0 or not query_tokens:
             return []
 
@@ -155,6 +155,34 @@ def _tokenize(text: str) -> list[str]:
             continue
         tokens.append(normalized)
     return tokens
+
+
+_QUERY_EXPANSIONS = (
+    (
+        ("文件系统", "文件管理", "文件"),
+        "文件目录 文件控制块 索引结点 文件分配 文件存储空间 目录结构 "
+        "文件目录 文件控制块 索引结点 文件分配 文件存储空间 目录结构",
+    ),
+    (
+        ("i/o", "io", "输入输出", "设备管理"),
+        "设备管理 设备分配 缓冲 设备处理 I/O系统 输入输出系统",
+    ),
+    (
+        ("磁盘调度", "磁盘", "调度"),
+        "寻道时间 旋转延迟 传输时间 磁盘调度算法 磁盘I/O速度",
+    ),
+)
+
+
+def _expand_query(query: str) -> str:
+    normalized = (query or "").casefold()
+    additions: list[str] = []
+    for triggers, expansion in _QUERY_EXPANSIONS:
+        if any(trigger in normalized for trigger in triggers):
+            additions.append(expansion)
+    if not additions:
+        return query
+    return f"{query}\n{' '.join(additions)}"
 
 
 def _is_punctuation(token: str) -> bool:
