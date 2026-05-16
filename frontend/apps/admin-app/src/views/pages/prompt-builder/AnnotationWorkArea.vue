@@ -4,6 +4,7 @@ import AnnotationEntityCard from './AnnotationEntityCard.vue'
 import AnnotationRelationCard from './AnnotationRelationCard.vue'
 import EntityEditor from './EntityEditor.vue'
 import RelationEditor from './RelationEditor.vue'
+import AnnotationTextCard from './AnnotationTextCard.vue'
 
 const props = defineProps({
   sample: { type: Object, default: null },
@@ -21,6 +22,8 @@ defineEmits([
   'sort-suggestions-by-confidence',
   'create-entity',
   'create-relation',
+  'request-ai-suggestions',
+  'dismiss-reused-from',
 ])
 
 const showEntityEditor = ref(false)
@@ -69,6 +72,13 @@ function signalLabel(name) {
     assignment_signal: '作业信号',
   })[name] ?? name
 }
+
+const entityEditorPrefill = ref({ name: '', span: null })
+
+function handleRequestAddEntity({ name, spanStart, spanEnd }) {
+  entityEditorPrefill.value = { name, span: { spanStart, spanEnd } }
+  showEntityEditor.value = true
+}
 </script>
 
 <template>
@@ -108,28 +118,43 @@ function signalLabel(name) {
           <strong>{{ sample.reusedFrom.buildRunName }}</strong>
           的标注，已为你预填。
         </div>
+        <div class="annotation-banner__actions">
+          <button class="ann-btn ann-btn--soft" @click="$emit('dismiss-reused-from', sample.id)">
+            隐藏复用提示
+          </button>
+        </div>
       </div>
 
       <!-- A 智能：AI 预填横幅 -->
-      <div v-if="aiCount > 0" class="annotation-banner annotation-banner--ai">
+      <div class="annotation-banner annotation-banner--ai">
         <span class="annotation-banner__icon">✨</span>
-        <div class="annotation-banner__text">
-          AI 助手已生成 <strong>{{ aiCount }} 个候选实体</strong>，请逐条审阅。
-        </div>
-        <div class="annotation-banner__actions">
-          <button class="ann-btn ann-btn--soft" @click="$emit('sort-suggestions-by-confidence')">按置信度排序</button>
-        </div>
+        <template v-if="aiCount > 0">
+          <div class="annotation-banner__text">
+            AI 助手已生成 <strong>{{ aiCount }} 个候选实体</strong>，请逐条审阅。
+          </div>
+          <div class="annotation-banner__actions">
+            <button class="ann-btn ann-btn--soft" @click="$emit('sort-suggestions-by-confidence')">按置信度排序</button>
+            <button class="ann-btn ann-btn--soft" @click="$emit('request-ai-suggestions', sample.id)">重新生成</button>
+          </div>
+        </template>
+        <template v-else>
+          <div class="annotation-banner__text">
+            可用 AI 助手抽取一遍，作为标注起点（约 10-30 秒，所有候选都需逐条审阅）。
+          </div>
+          <div class="annotation-banner__actions">
+            <button class="ann-btn ann-btn--accent" @click="$emit('request-ai-suggestions', sample.id)">
+              生成候选
+            </button>
+          </div>
+        </template>
       </div>
 
-      <!-- 原文卡 -->
-      <article class="annotation-text-card">
-        <header class="annotation-text-card__head">
-          <span class="ann-text-tiny">原文</span>
-        </header>
-        <div class="annotation-text-card__body">
-          {{ sample.text }}
-        </div>
-      </article>
+      <!-- 原文卡（含选区监听 + 实体高亮） -->
+      <AnnotationTextCard
+        :text="sample.text"
+        :entities="sample.goldEntities"
+        @request-add-entity="handleRequestAddEntity"
+      />
 
       <!-- 实体区 -->
       <section>
@@ -153,8 +178,17 @@ function signalLabel(name) {
         <EntityEditor
           v-if="showEntityEditor"
           :existing-entities="mergedEntities"
-          @submit="(payload) => { $emit('create-entity', payload); showEntityEditor = false }"
-          @cancel="showEntityEditor = false"
+          :prefilled-name="entityEditorPrefill.name"
+          :prefilled-span="entityEditorPrefill.span"
+          @submit="(payload) => {
+            $emit('create-entity', payload)
+            showEntityEditor = false
+            entityEditorPrefill = { name: '', span: null }
+          }"
+          @cancel="() => {
+            showEntityEditor = false
+            entityEditorPrefill = { name: '', span: null }
+          }"
         />
       </section>
 
