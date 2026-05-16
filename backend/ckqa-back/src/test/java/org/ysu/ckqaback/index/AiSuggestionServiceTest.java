@@ -138,6 +138,87 @@ class AiSuggestionServiceTest {
         assertThat(rel).containsEntry("description", "结构包含");
     }
 
+    @Test
+    void normalizesEntityTypeWithSpaces() throws Exception {
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/tmp/ws"));
+
+        // LLM 抖动：schema 内类型但加了空格——必须规范化为 canonical 命名
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of(
+                                Map.of("name", "进程概念", "type", "KNOWLEDGE POINT"),
+                                Map.of("name", "勾股定理", "type", "FORMULA OR DEFINITION"),
+                                Map.of("name", "Concept 实体", "type", "CONCEPT")
+                        ))
+                        .relations(List.of())
+                        .build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        AiSuggestionResponse response = service.generate(10L, 99L);
+
+        assertThat(response.getEntities()).hasSize(3);
+        assertThat(response.getEntities().get(0)).containsEntry("type", "KnowledgePoint");
+        assertThat(response.getEntities().get(0)).doesNotContainKey("typeOutOfSchema");
+        assertThat(response.getEntities().get(1)).containsEntry("type", "FormulaOrDefinition");
+        assertThat(response.getEntities().get(2)).containsEntry("type", "Concept");
+    }
+
+    @Test
+    void fallsBackToConceptForOutOfSchemaType() throws Exception {
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/tmp/ws"));
+
+        // schema 外类型——兜底为 Concept，保留原值，加 typeOutOfSchema 标志
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of(
+                                Map.of("name", "操作系统用户接口", "type", "OPERATING SYSTEM COMPONENT")
+                        ))
+                        .relations(List.of())
+                        .build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        AiSuggestionResponse response = service.generate(10L, 99L);
+
+        Map<String, Object> ent = response.getEntities().get(0);
+        assertThat(ent).containsEntry("type", "Concept");
+        assertThat(ent).containsEntry("originalType", "OPERATING SYSTEM COMPONENT");
+        assertThat(ent).containsEntry("typeOutOfSchema", true);
+    }
+
+    @Test
+    void preservesEmptyOrMissingType() throws Exception {
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/tmp/ws"));
+
+        // type 为空字符串或缺失时——不强制兜底，避免误标 typeOutOfSchema（可能是上游 bug）
+        java.util.Map<String, Object> entWithEmpty = new java.util.LinkedHashMap<>();
+        entWithEmpty.put("name", "X");
+        entWithEmpty.put("type", "");
+        java.util.Map<String, Object> entWithoutType = new java.util.LinkedHashMap<>();
+        entWithoutType.put("name", "Y");
+
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of(entWithEmpty, entWithoutType))
+                        .relations(List.of())
+                        .build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        AiSuggestionResponse response = service.generate(10L, 99L);
+
+        assertThat(response.getEntities().get(0)).containsEntry("type", "");
+        assertThat(response.getEntities().get(0)).doesNotContainKey("typeOutOfSchema");
+        assertThat(response.getEntities().get(1)).doesNotContainKey("typeOutOfSchema");
+    }
+
     private PromptTuneAuditSamples newSample(Long id, Long buildRunId) {
         PromptTuneAuditSamples e = new PromptTuneAuditSamples();
         e.setId(id);

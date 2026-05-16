@@ -40,6 +40,34 @@ public class AiSuggestionService {
             "Course,Chapter,Section,KnowledgePoint,Concept,Term,FormulaOrDefinition,"
             + "AlgorithmOrMethod,Experiment,Assignment,ToolOrPlatform";
 
+    /**
+     * 11 种实体类型的"无空格大写 → canonical"查表，用于规范化 LLM 输出。
+     * <p>
+     * LLM 实际输出可能带空格（如 "KNOWLEDGE POINT"）或全大写（"CONCEPT"），
+     * Python 端 {@code _canonicalize_entity_type} 只对全大写无空格做映射，
+     * 不处理带空格变体。这里在 service 层做更宽容的匹配，让"同义变体"都能落到 schema 内。
+     * </p>
+     */
+    private static final Map<String, String> ENTITY_TYPE_LOOKUP = buildEntityTypeLookup();
+
+    /** schema 外的兜底类型（schema 内最通用、最常用的类型）。 */
+    private static final String FALLBACK_ENTITY_TYPE = "Concept";
+
+    private static Map<String, String> buildEntityTypeLookup() {
+        Map<String, String> lookup = new LinkedHashMap<>();
+        for (String t : DEFAULT_ENTITY_TYPES.split(",")) {
+            String canonical = t.trim();
+            if (canonical.isEmpty()) continue;
+            lookup.put(normalizeTypeKey(canonical), canonical);
+        }
+        return Map.copyOf(lookup);
+    }
+
+    /** 把一个 type 字符串规范化为查表 key：去空格 + 全大写。 */
+    private static String normalizeTypeKey(String raw) {
+        return raw.replaceAll("\\s+", "").toUpperCase();
+    }
+
     private final PromptTuneAuditSamplesService samplesStore;
     private final KnowledgeBaseBuildRunsService buildRunsStore;
     private final SingleSampleExtractionOrchestrator orchestrator;
@@ -121,12 +149,42 @@ public class AiSuggestionService {
 
     private List<Map<String, Object>> markEntitiesAsAiSuggested(List<Map<String, Object>> entities) {
         return entities.stream()
+                .map(this::normalizeEntityType)
                 .map(e -> {
                     Map<String, Object> copy = new LinkedHashMap<>(e);
                     copy.put("suggestionSource", "ai_suggested");
                     return copy;
                 })
                 .toList();
+    }
+
+    /**
+     * 把 LLM 输出的 entity type 规范化到 schema 内的 11 种之一。
+     * <ul>
+     *   <li>schema 内（含带空格变体如 "KNOWLEDGE POINT"）：标准化为 canonical 命名（"KnowledgePoint"）</li>
+     *   <li>schema 外（如 "OPERATING SYSTEM COMPONENT"）：兜底为 {@value #FALLBACK_ENTITY_TYPE}，
+     *       同时塞入 {@code originalType} 与 {@code typeOutOfSchema=true}，前端用于显示警告 badge</li>
+     *   <li>type 为空或非字符串：原样透传</li>
+     * </ul>
+     */
+    Map<String, Object> normalizeEntityType(Map<String, Object> entity) {
+        Object raw = entity.get("type");
+        if (!(raw instanceof String s) || s.isBlank()) {
+            return entity;
+        }
+        String key = normalizeTypeKey(s);
+        String canonical = ENTITY_TYPE_LOOKUP.get(key);
+        Map<String, Object> copy = new LinkedHashMap<>(entity);
+        if (canonical != null) {
+            // schema 内：把可能的空格变体统一为 canonical
+            copy.put("type", canonical);
+        } else {
+            // schema 外：兜底 + 标志位 + 保留原值
+            copy.put("type", FALLBACK_ENTITY_TYPE);
+            copy.put("originalType", s);
+            copy.put("typeOutOfSchema", true);
+        }
+        return copy;
     }
 
     /**

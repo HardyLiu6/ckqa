@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { ENTITY_TYPES } from './relation-types-model.js'
 
 const props = defineProps({
-  /** 实体对象，含 id / name / type / description / source / confidence */
+  /** 实体对象，含 id / name / type / description / source / confidence / originalType / typeOutOfSchema */
   entity: { type: Object, required: true },
 })
 
@@ -16,6 +16,16 @@ const typeLabel = computed(() => {
   const found = ENTITY_TYPES.find((e) => e.name === props.entity.type)
   return found ? found.label_zh : props.entity.type
 })
+
+// AI 候选场景：当后端发现 LLM 输出的 type 不在 schema 11 种内时，
+// 会兜底为 Concept 并塞入 typeOutOfSchema:true + originalType:'<原始类型>'
+// 用户可以直接采纳（接受 Concept 兜底）或进 EntityEditor 改类型再采纳
+const isTypeOutOfSchema = computed(() => isSuggested.value && props.entity.typeOutOfSchema === true)
+const typeWarningTitle = computed(() =>
+  isTypeOutOfSchema.value
+    ? `AI 原始类型 "${props.entity.originalType}" 不在 schema 11 种内，已兜底为 Concept`
+    : ''
+)
 </script>
 
 <template>
@@ -31,6 +41,11 @@ const typeLabel = computed(() => {
       <span v-else-if="isSuggested" class="entity-chip__badge entity-chip__badge--ai" aria-hidden="true">✨</span>
       <span class="entity-chip__name">{{ entity.name }}</span>
       <span class="entity-chip__type">{{ typeLabel }}</span>
+      <span
+        v-if="isTypeOutOfSchema"
+        class="entity-chip__type-warning"
+        :title="typeWarningTitle"
+      >⚠ 类型已兜底</span>
     </div>
     <div v-if="entity.description || (isSuggested && entity.confidence != null)" class="entity-chip__meta">
       <span v-if="entity.description">{{ entity.description }}</span>
