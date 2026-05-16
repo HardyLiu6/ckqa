@@ -46,14 +46,25 @@ public class SingleSampleExtractionOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(SingleSampleExtractionOrchestrator.class);
 
     /**
-     * 单样本抽取的最长执行时长。一次 LLM 调用通常 10-30 秒，预留 2 分钟兜底网络抖动。
+     * 单样本抽取的最长执行时长。
+     * <p>
+     * 实际观察：deepseek-v4-flash 单次原生抽取（含 1 轮 gleaning）需要 90-150 秒，单次 LLM
+     * 调用 ~55 秒，gleaning 后再追加一次。设 5 分钟兜底网络抖动 / backoff 重试，避免
+     * 504 误杀已成功的子进程。Phase 8 异步化后这一行可改为更短的"轮询窗口超时"。
+     * </p>
      */
-    private static final Duration EXTRACT_TIMEOUT = Duration.ofMinutes(2);
+    private static final Duration EXTRACT_TIMEOUT = Duration.ofMinutes(5);
 
     /**
      * 输出文件 candidate 名（与 --candidate-name 参数一致），固定为 ai_suggestion。
      */
     private static final String CANDIDATE_NAME = "ai_suggestion";
+
+    /**
+     * extraction_eval/extraction_raw/logs 三个 base 目录下的 run 子目录前缀。
+     * 与 {@code scripts/extraction_eval/result_writer._run_subdir} 行为一致。
+     */
+    private static final String RUNS_SUBDIR = "runs";
 
     private final CkqaIntegrationProperties properties;
     private final ProcessRunner processRunner;
@@ -140,10 +151,12 @@ public class SingleSampleExtractionOrchestrator {
             );
         }
 
-        // 3. 读输出文件——固定路径 <GRAPHRAG_ROOT>/results/extraction_eval/<runId>/ai_suggestion.json
+        // 3. 读输出文件——固定路径 <GRAPHRAG_ROOT>/results/extraction_eval/runs/<runId>/ai_suggestion.json
+        // result_writer._run_subdir 始终在 base 下加一层 "runs/<runId>/"
         Path outputFile = scriptRoot
                 .resolve("results")
                 .resolve("extraction_eval")
+                .resolve(RUNS_SUBDIR)
                 .resolve(runId)
                 .resolve(CANDIDATE_NAME + ".json");
         if (!Files.exists(outputFile)) {
@@ -160,38 +173,51 @@ public class SingleSampleExtractionOrchestrator {
     private ExtractionResult parseExtractionOutput(Path outputFile) throws IOException {
         String json = Files.readString(outputFile, StandardCharsets.UTF_8);
         Map<String, Object> root = objectMapper.readValue(json, new TypeReference<>() {});
-        // run_native_extraction 输出结构：
-        // { "samples": [ { "id": "...", "extraction": { "entities": [...], "relations": [...] } } ] }
-        Object samplesNode = root.get("samples");
-        if (!(samplesNode instanceof List<?> samplesList) || samplesList.isEmpty()) {
-            return ExtractionResult.builder()
-                    .entities(List.of())
-                    .relations(List.of())
-                    .build();
+        // run_native_extraction.write_candidate_outputs 输出结构：
+        // {
+        //   "task": "...", "candidate": "...", "summary": {...},
+        //   "results": [
+        //     {
+        //       "sample_id": "...", "candidate": "...", "status": "success",
+        //       "entities": [{"id","title","type","alias","definition_text","description","evidence"}, ...],
+        //       "relationships": [{"source","target","type","description","evidence"}, ...]
+        //     }
+        //   ]
+        // }
+        Object resultsNode = root.get("results");
+        if (!(resultsNode instanceof List<?> resultsList) || resultsList.isEmpty()) {
+            return ExtractionResult.builder().entities(List.of()).relations(List.of()).build();
         }
-        Object first = samplesList.get(0);
+        Object first = resultsList.get(0);
         if (!(first instanceof Map<?, ?> firstMap)) {
             return ExtractionResult.builder().entities(List.of()).relations(List.of()).build();
         }
         @SuppressWarnings("unchecked")
-        Map<String, Object> firstSample = (Map<String, Object>) firstMap;
-        Object extraction = firstSample.get("extraction");
-        if (!(extraction instanceof Map<?, ?> extractionRaw)) {
-            return ExtractionResult.builder().entities(List.of()).relations(List.of()).build();
-        }
-        @SuppressWarnings("unchecked")
-        Map<String, Object> extractionMap = (Map<String, Object>) extractionRaw;
+        Map<String, Object> sample = (Map<String, Object>) firstMap;
 
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> entities = (List<Map<String, Object>>)
-                extractionMap.getOrDefault("entities", List.of());
+        List<Map<String, Object>> entitiesRaw = (List<Map<String, Object>>)
+                sample.getOrDefault("entities", List.of());
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> relations = (List<Map<String, Object>>)
-                extractionMap.getOrDefault("relations", List.of());
+        List<Map<String, Object>> relationsRaw = (List<Map<String, Object>>)
+                sample.getOrDefault("relationships", List.of());
+
+        // entity 字段映射：title -> name（前端 EntityCard 期望 name 字段）
+        // 同时保留原 title 以便回溯调试。
+        List<Map<String, Object>> entities = entitiesRaw.stream()
+                .map(e -> {
+                    Map<String, Object> copy = new LinkedHashMap<>(e);
+                    Object title = copy.get("title");
+                    if (title != null && !copy.containsKey("name")) {
+                        copy.put("name", title);
+                    }
+                    return copy;
+                })
+                .toList();
 
         return ExtractionResult.builder()
                 .entities(entities)
-                .relations(relations)
+                .relations(relationsRaw)
                 .build();
     }
 
