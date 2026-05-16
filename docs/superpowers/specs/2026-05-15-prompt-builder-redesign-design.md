@@ -387,18 +387,124 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 3. **候选译名硬编码与候选数量增长**：本设计把 4 个候选的中文译名硬编码在前端，但后端 `manifest.json.candidates` 的数量未来可能扩展到 6+。缓解：在 manifest 中新增 `display_name_zh` 字段，前端显示时优先读 manifest，退化到本地 hardcode 表。
 4. **04 评分时长不可预测**：full 模式 80 次大模型调用，慢的话 30+ 分钟。如果用户中途关浏览器，前端状态丢失，但后端任务仍在跑。缓解：评分启动后端立即写 task 状态到 build run，刷新页面后能从 `extraction-eval/status` 恢复进度；离开页面前 onbeforeunload 弹窗确认。
 5. **prompt parser 容错不足**：rich 模式的 parser 对非标准 prompt 文本会渲染怪样。缓解：parser 检测段落数 < 2 / 单段超长时回退到 raw，且头部加提示。
+6. **当前进度持久化未覆盖离线 / 并发 / 长事务**（Phase 2b/2c-pre 已落地的现状）：
+   - **离线场景**：`persistFields` 失败时会回滚本地状态 + toast，用户输入会丢；`EntityEditor` / `RelationEditor` 提交后立即 reset，PUT 失败时表单内容也丢。缓解：留到 Phase 7 用 IndexedDB 暂存 + 编辑器持久化成功后再 reset。
+   - **并发场景**：`prompt_tune_audit_samples` 没有 `version` 字段，多标签页同时编辑同一样本时"最后写入获胜"。缓解：留到 Phase 8 加 `@Version` 乐观锁。
+   - **build run 归档**：外键 `fk_audit_samples_build_run` 是 `ON DELETE RESTRICT`，归档/删除 build run 时会被 audit 样本阻塞。缓解：留到 Phase 8 决策"软归档" vs "导出后清理"。
+   - **后端长耗时同步阻塞**：`regenerateAuditSet` 在 controller 线程内同步等 ≤5 分钟（Python 子进程超时上限），并发请求高时会撑满线程池。缓解：留到 Phase 8 仿照 `PromptTuneWorker` 拆成异步任务 + 状态轮询。
+
 
 ## 实施分期
 
 > 本设计文档专注 What 而非 How，分期建议供后续 writing-plans 阶段参考。
+>
+> **状态标记说明：** ✅ 已落地 / 🟡 部分落地 / ⏸ 未开始
 
-- **Phase 1**：路由 / 5 步骨架 / 01 沿用现状 / 05 命名入库（仅"本次构建"模式，跳过历史草稿入库）。
-- **Phase 2**：02 步标注 IDE 主体（无智能能力）+ 后端样本/校准集 API。
-- **Phase 3**：02 步智能能力 A（AI 预填）/ C（关系候选）/ D（历史复用）。
-- **Phase 4**：03 步候选生成 + 勾选 + 抽屉预览。
-- **Phase 5**：04 步候选矩阵 + 排行榜 + 详情抽屉。
-- **Phase 6**：05 步历史草稿入库 + 01 步历史草稿种子打通 + `<PromptDisplay>` M 组合方案。
-- **Phase 7**：错误处理与边界、E2E 测试、文案与视觉打磨。
+### 已完成阶段
+
+- **Phase 1（✅）：路由 / 5 步骨架 / 01 沿用现状 / 05 命名入库（仅"本次构建"模式，跳过历史草稿入库）。**
+- **Phase 2a（✅）：DB 迁移（`prompt_tune_audit_samples` + `prompt_drafts` 表）+ Java Entity/Mapper/Service 骨架 + Controller 501 占位 + 前端 API 桩。**
+- **Phase 2b（✅）：02 步标注 API 后端实现（`/audit-set` / `/audit-samples` GET、PUT）+ 前端去 mock 接入真实 API + 跨 build run 历史标注复用合并（数据层 silent 完成）+ force 防误删。**
+- **Phase 2c-pre（✅）：02 步实体/关系手动新建（`EntityEditor` + `RelationEditor` 组件）+ 关系类型动态过滤（C 智能能力的同步部分）+ 删除实体级联清理关系 + 自环禁止。**
+
+### 进行中 / 计划阶段
+
+- **Phase 3（⏸）：02 步剩余智能能力**
+  - **A. AI 预填实体/关系**：实现 `POST /audit-samples/{sampleId}/ai-suggestions` 端点，前端紫色 ✨ 横幅 + AI 候选卡片审阅交互；候选实体扩展 `spanStart`/`spanEnd` 字段。
+  - **D. 历史复用 banner UI**：把 Phase 2b 已经入库的 `reused_from_build_run_id` 渲染成 02 步绿色 ♻ 横幅"发现 N 条已有标注来自 <buildRunName>"。
+  - **拖选原文添加实体**：原文卡的 `mouseup` 选区监听 + 浮动按钮"添加为实体"；选区计算 spanStart/spanEnd 写入实体；已确认实体在原文中渲染紫色高亮。
+  - **关系自动反向**：A→B 在 schema 中只允许 B→A 时，UI 自动调换源/目标并提示。
+
+- **Phase 4（⏸）：03 步候选生成 + 勾选 + 抽屉预览**
+  - 实现 `POST /candidates` / `GET /candidates` 端点（包装 `generate_candidate_prompts.py`）。
+  - 前端候选网格、token 估算、推荐徽章、`<PromptDisplay>` 抽屉预览。
+
+- **Phase 5（⏸）：04 步候选矩阵 + 排行榜 + 详情抽屉**
+  - 实现 `POST /extraction-eval` / `/status` / `/report` 端点（包装 `run_native_extraction.py` + `score_extraction_results.py`）。
+  - 前端候选评分矩阵（实时进度）+ 排行榜（金银铜牌）+ 详情抽屉（指标 + 质量门控）+ 选定候选交互。
+
+- **Phase 6（⏸）：05 步历史草稿入库 + 01 步种子打通 + `<PromptDisplay>` 组件**
+  - 实现 `POST /finalize` / `GET /knowledge-bases/{kbId}/prompt-drafts` 端点。
+  - 前端 05 步保存表单 + 草稿入库；01 步从历史草稿列表选种子。
+  - `<PromptDisplay>` 三视图（rich / split / raw）+ markdown-it + prismjs。
+
+### 鲁棒性与扩展阶段（Phase 7+）
+
+#### Phase 7：进度持久化与离线鲁棒性
+
+把当前的"触发即 PUT、刷新即 GET、失败本地回滚"基础升级为对网络抖动和长时间标注会话稳健的体验。
+
+- **IndexedDB 离线暂存（spec § 错误处理已记）：**
+  - 库名 `ckqa-prompt-annotation-drafts`，主键 `${buildRunId}:${sampleId}`，字段 `{gold_entities, gold_relations, annotation_notes, savedAt}`。
+  - `persistFields` 失败时（Phase 2b 当前是 toast + 回滚本地状态），改为：toast + **保留本地编辑** + 写 IndexedDB 暂存 + 自动重试 3 次。
+  - 进入页面时先拉服务端样本，再用 IndexedDB 暂存覆盖未上传字段，样本卡顶部展示"本地有未同步修改"提示和"重试上传"按钮。
+- **EntityEditor / RelationEditor 提交后表单持久化：**
+  - 当前 Phase 2c-pre 提交即 reset 表单，PUT 失败时用户输入丢失。
+  - 改为：父组件 `handleCreateEntity` / `handleCreateRelation` 持久化成功后再 emit `clear` 让编辑器 reset；失败时编辑器保留输入并显示重试按钮。
+  - 这需要把当前 emit/reset 的同步关系改成 promise/callback 链路（编辑器 props 接收 `onSubmit: async (payload) => boolean`）。
+- **离线标注会话恢复脚本：**
+  - 提供"清理本地暂存"和"导出本地暂存为 JSON"两个开发者工具入口（在样本列表右上角"⋯"菜单里），用于排障。
+
+#### Phase 8：并发安全与 build run 生命周期
+
+当前 DB 隔离假设单用户、单标签页操作，需要补齐多端并发与 build run 归档。
+
+- **样本级乐观锁：**
+  - `prompt_tune_audit_samples` 表新增 `version` 字段（`@Version` 注解），`updateById` 由 MyBatis-Plus 自动带 WHERE `version = ?` 子句。
+  - PUT `/audit-samples/{id}` 收到 stale version 时返回 4104 `AUDIT_SAMPLE_VERSION_CONFLICT`，前端提示"该样本已被其他人/其他标签页修改，请刷新查看最新内容"。
+- **`hasNonPendingSamples` + `replaceForBuildRun` 同事务化：**
+  - 当前两步分开，理论上有"读到 false 但写前刚被标注"的窗口（毫秒级）。
+  - 把 force 检查移到 `AuditSamplePersistenceService.replaceForBuildRun` 内部，与删除/插入同一事务。
+- **Build run 归档级联策略：**
+  - `fk_audit_samples_build_run` 当前是 `ON DELETE RESTRICT`，会阻塞 build run 删除。
+  - 在 `KnowledgeBaseBuildRunService.archiveBuildRun` 中新增"软归档 audit 样本"逻辑：归档时把 `prompt_tune_audit_samples` 的 `build_run_id` 写到独立 `archived_build_run_id` 字段，外键改为 ON DELETE SET NULL；或者保留 RESTRICT 但归档时强制把样本表数据导出为 JSON 后清除。需要决策。
+- **后端长耗时 API 异步化：**
+  - 当前 `regenerateAuditSet` 在 controller 线程内同步等 5 分钟（`AuditPipelineOrchestrator.STEP_TIMEOUT`）。
+  - 仿照 `PromptTuneWorker` 拆成 `pending → running → success/failed` 异步任务，前端轮询 `GET /audit-set/status`；同样适用于 Phase 5 的 04 步评分（80 次大模型调用，30+ 分钟）。
+
+#### Phase 9：错误处理边界、E2E、文案与视觉打磨
+
+把分散在前面 phase 里"风险已识别但未做"的边界统一收口。
+
+- **02.1 / 02.2 流水线失败前端 UI：**
+  - spec § 错误处理已描述"折叠头部转红色 + 重新运行按钮"，当前简化为 toast。补齐红色错误条 + "查看错误详情"按钮（展开 stderr 摘要）。
+- **AI 预填 PR review 验证（Phase 3 风险 #1）：**
+  - 在 Phase 3 落地后单独跑一次"AI 预填会不会污染 gold"的回归测试：抽 10 条已人工标注样本，跑 AI 预填，对比 AI 候选与 gold 的 IoU 和置信度分布。
+- **prompt parser 容错（spec § 风险 #5）：**
+  - 在 Phase 6 `<PromptDisplay>` 落地后补"段落数 < 2 / 单段超长 → 回退 raw"路径的单测。
+- **End-to-End Playwright 测试：**
+  - 完整 5 步流程的浏览器自动化（含失败路径：刷新中断、并发修改、network 抖动）。
+- **文案与视觉一致性扫一遍：**
+  - 中文标点、空格、按钮文案动词时态对齐 spec § 视觉基调（"添加" / "采纳" / "已添加" 等的统一）。
+
+#### Phase 10（可选）：Schema 后端化与 v2 评分可视化
+
+低优先级，等业务真的需要再做。
+
+- **`GET /api/v1/relation-schemas` 真实实现：**
+  - 当前 controller 端点是 501 占位，前端用 hardcode `relation-types-model.js`。改为后端读 `graphrag_pipeline/config/schema/*.json` 返回，前端有缓存 + 1 小时 TTL。
+- **候选间评分多指标雷达图：**
+  - spec § 第三方依赖选型已说"如果将来需要展示候选间的多指标雷达图对比，再考虑引入 vue-echarts"。等用户在 04 步排行榜反馈"想横向对比 6 个候选的 6 个指标"再做。
+
+## 已完成阶段的关键产物索引
+
+执行 spec 时这些路径已经存在，新增功能不应重新发明：
+
+- `frontend/apps/admin-app/src/views/pages/prompt-builder/`
+  - `PromptBuilderPrepareStep.vue`（02 步主壳）
+  - `AnnotationWorkArea.vue` / `AnnotationSampleList.vue` / `AnnotationEntityCard.vue` / `AnnotationRelationCard.vue`（02 步组件）
+  - `EntityEditor.vue` / `RelationEditor.vue`（02 步行内编辑器，Phase 2c-pre）
+  - `relation-types-model.js`（schema hardcode + filterRelationTypesByEndpoints）
+  - `entity-id-generator.js`（本地 ID + 重名检测）
+  - `prepare-step-api.js`（API ↔ 本地形态转换 + 三态 PATCH payload 构造）
+- `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/`
+  - `AuditPipelineOrchestrator.java`（Python 脚本包装）
+  - `AuditSamplePersistenceService.java`（事务边界 + 历史复用合并）
+  - `AuditSampleService.java`（业务编排）
+  - `AuditSampleResponseMapper.java`（Entity → DTO）
+- `backend/ckqa-back/src/main/java/org/ysu/ckqaback/controller/PromptTunePipelineController.java`（13 个端点，3 个真实实现 + 10 个 501）
+- `sql/migrations/20260515_prompt_tune_pipeline.sql`（两张表）
+
 
 ## 引用
 
