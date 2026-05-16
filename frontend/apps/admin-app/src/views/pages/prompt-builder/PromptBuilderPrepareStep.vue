@@ -8,6 +8,7 @@ import {
   listAuditSamples,
   generateAuditSet,
   updateAuditSample,
+  requestAuditSampleAiSuggestions,
 } from '../../../api/prompt-tune-pipeline.js'
 import { apiSampleToLocal, localSampleToUpdatePayload } from './prepare-step-api.js'
 import { generateEntityId, generateRelationId } from './entity-id-generator.js'
@@ -26,6 +27,17 @@ const loading = ref(false)
 const errorMessage = ref('')
 const ideOpen = ref(false)
 const activeSampleId = ref('')
+
+// 当前正在生成 AI 候选的 sampleId（null 表示无任务）。
+// 选这种"单标量"形态而非 Map 是因为本期单端用户单标签页基本不会同时点多个 sample。
+// 如果未来需要"多 sample 并行生成"（多标签页 / 团队协作），可以改为 ref({}) 形态：
+//   aiSuggestionLoadingBySampleId.value[sampleId] = true/false
+// 这是 Phase 7+ 优化方向，本期 YAGNI。
+const aiSuggestionLoadingSampleId = ref(null)
+
+// 已采纳 AI 候选实体的本地映射：originalName -> goldEntityId
+// AI 关系候选用实体名引用 source/target，采纳关系时优先查这个 map 取 id
+const aiEntityNameToGoldId = ref(new Map())
 
 const buildRunId = computed(() => {
   const raw = route.query.buildRunId
@@ -159,15 +171,27 @@ async function handleAcceptEntity(entityId) {
   if (idx < 0) return
   const previousStatus = sample.status
   const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
-  sample.goldEntities.push({ ...picked, source: 'accepted' })
+  // 注意 source 字段语义：AI 候选用 suggestionSource 标记来源；落到 goldEntities 时
+  // source 字段表示"采纳来源"。剥掉 suggestionSource 保持 entity shape 干净。
+  const acceptedEntity = { ...picked, source: 'accepted' }
+  delete acceptedEntity.suggestionSource
+  sample.goldEntities.push(acceptedEntity)
   if (sample.status === 'not_started') sample.status = 'in_progress'
+
+  // 记录 originalName → 新 entity id 映射，供后续采纳 AI 关系候选使用
+  const originalName = picked.name
+  if (originalName) {
+    aiEntityNameToGoldId.value.set(originalName, acceptedEntity.id)
+  }
+
   try {
     await persistFields(sample, { fields: ['goldEntities', 'status'] })
     ElMessage.success('已采纳')
   } catch {
     sample.status = previousStatus
     sample.aiSuggestedEntities.splice(idx, 0, picked)
-    sample.goldEntities = sample.goldEntities.filter((e) => e.id !== picked.id)
+    sample.goldEntities = sample.goldEntities.filter((e) => e.id !== acceptedEntity.id)
+    if (originalName) aiEntityNameToGoldId.value.delete(originalName)
   }
 }
 
@@ -210,14 +234,61 @@ async function handleAcceptRelation(relationId) {
   if (!sample) return
   const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === relationId)
   if (idx < 0) return
-  const [picked] = sample.aiSuggestedRelations.splice(idx, 1)
-  sample.goldRelations.push({ ...picked, source: 'accepted' })
+  const picked = sample.aiSuggestedRelations[idx]
+
+  // AI 候选关系用 originalSource/originalTarget（实体名字符串），需要找 entity id：
+  // 1. 优先查 aiEntityNameToGoldId（用户已采纳的 AI 实体记录的 originalName→id 映射）
+  // 2. fallback 按 name 查 sample.goldEntities（手动添加的实体或先于 AI 实体存在的同名实体）
+  // 3. fallback 命中多个同名实体时取第一个并提示——同名同类型在 Phase 2c-pre 已经有重名警告，
+  //    此场景概率低，不做严格 type 校验（GraphRAG 输出的 relation 不带 source_type/target_type）
+  let sourceEntityId = picked.sourceEntityId
+  let targetEntityId = picked.targetEntityId
+  let ambiguousMatch = false
+  if (!sourceEntityId && picked.originalSource) {
+    sourceEntityId = aiEntityNameToGoldId.value.get(picked.originalSource)
+    if (!sourceEntityId) {
+      const matches = sample.goldEntities.filter((e) => e.name === picked.originalSource)
+      if (matches.length > 1) ambiguousMatch = true
+      sourceEntityId = matches[0]?.id
+    }
+  }
+  if (!targetEntityId && picked.originalTarget) {
+    targetEntityId = aiEntityNameToGoldId.value.get(picked.originalTarget)
+    if (!targetEntityId) {
+      const matches = sample.goldEntities.filter((e) => e.name === picked.originalTarget)
+      if (matches.length > 1) ambiguousMatch = true
+      targetEntityId = matches[0]?.id
+    }
+  }
+  if (!sourceEntityId || !targetEntityId) {
+    ElMessage.warning(
+      `请先采纳两端实体（缺少：${!sourceEntityId ? picked.originalSource : ''}${
+        !sourceEntityId && !targetEntityId ? '、' : ''
+      }${!targetEntityId ? picked.originalTarget : ''}）`
+    )
+    return
+  }
+  if (ambiguousMatch) {
+    ElMessage.warning('两端实体存在同名候选，已绑定第一个匹配项；如果不正确请删除后重新建立关系')
+  }
+
+  sample.aiSuggestedRelations.splice(idx, 1)
+  const newRelation = {
+    id: picked.id,
+    sourceEntityId,
+    targetEntityId,
+    type: picked.type,
+    evidence: picked.evidence,
+    description: picked.description,
+    source: 'accepted',
+  }
+  sample.goldRelations.push(newRelation)
   try {
     await persistFields(sample, { fields: ['goldRelations'] })
     ElMessage.success('已采纳')
   } catch {
     sample.aiSuggestedRelations.splice(idx, 0, picked)
-    sample.goldRelations = sample.goldRelations.filter((r) => r.id !== picked.id)
+    sample.goldRelations = sample.goldRelations.filter((r) => r.id !== newRelation.id)
   }
 }
 
@@ -288,6 +359,49 @@ function sortSuggestionsByConfidence() {
   )
 }
 
+async function handleRequestAiSuggestions(sampleId) {
+  const sample = findSample(sampleId)
+  if (!sample) return
+  if (aiSuggestionLoadingSampleId.value === sampleId) return  // 防重复点击同一样本
+  aiSuggestionLoadingSampleId.value = sampleId
+  ElMessage.info('AI 候选生成中，约 10-30 秒...')
+  try {
+    const response = await requestAuditSampleAiSuggestions(buildRunId.value, sample.id)
+    // response 形态：{ entities: [...], relations: [...] }
+    // 实体：每条带 suggestionSource: 'ai_suggested'，name/type/confidence 等领域字段保留
+    // 关系：每条带 suggestionSource: 'ai_suggested'、originalSource/originalTarget（实体名）、type
+    //
+    // 注意 unwrapApiResponse 的形态：CKQA api/client.js 在业务成功时直接返回 body.data，
+    // 所以 response 就是 AiSuggestionResponse 内容（{entities, relations}），不需要再 .data
+    sample.aiSuggestedEntities = (response?.entities ?? []).map((e, idx) => ({
+      ...e,
+      id: e.id ?? `ai_e_${Date.now()}_${idx}`,  // 临时本地 id（不持久化）
+    }))
+    sample.aiSuggestedRelations = (response?.relations ?? []).map((r, idx) => ({
+      ...r,
+      id: r.id ?? `ai_r_${Date.now()}_${idx}`,
+    }))
+    ElMessage.success(
+      `生成完成：${sample.aiSuggestedEntities.length} 个实体、${sample.aiSuggestedRelations.length} 个关系候选`
+    )
+  } catch (err) {
+    ElMessage.error(err?.message ?? 'AI 候选生成失败')
+  } finally {
+    if (aiSuggestionLoadingSampleId.value === sampleId) {
+      aiSuggestionLoadingSampleId.value = null
+    }
+  }
+}
+
+function handleDismissReusedFrom(sampleId) {
+  const sample = findSample(sampleId)
+  if (sample) {
+    // 仅隐藏复用提示横幅，不删除已预填的 gold 数据。
+    // 用户如需删除某条预填实体/关系，使用 EntityCard/RelationCard 上的删除按钮。
+    sample.reusedFrom = null
+  }
+}
+
 async function handleCreateEntity(payload) {
   const sample = activeSample.value
   if (!sample) return
@@ -298,6 +412,11 @@ async function handleCreateEntity(payload) {
     type: payload.type,
     description: payload.description,
     source: 'manual',
+  }
+  // 拖选场景：把 spanStart/spanEnd 写入 entity，原文卡才能渲染紫色高亮
+  if (Number.isInteger(payload.spanStart) && Number.isInteger(payload.spanEnd)) {
+    newEntity.spanStart = payload.spanStart
+    newEntity.spanEnd = payload.spanEnd
   }
   sample.goldEntities.push(newEntity)
   if (sample.status === 'not_started') sample.status = 'in_progress'
@@ -461,6 +580,8 @@ async function handleCreateRelation(payload) {
             @sort-suggestions-by-confidence="sortSuggestionsByConfidence"
             @create-entity="handleCreateEntity"
             @create-relation="handleCreateRelation"
+            @request-ai-suggestions="handleRequestAiSuggestions"
+            @dismiss-reused-from="handleDismissReusedFrom"
           />
         </div>
       </div>
