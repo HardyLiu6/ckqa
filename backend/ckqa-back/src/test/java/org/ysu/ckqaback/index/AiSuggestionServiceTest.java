@@ -251,6 +251,66 @@ class AiSuggestionServiceTest {
     }
 
     @Test
+    void prefersBuildRunCandidateWhenAvailable(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) throws Exception {
+        // 当 build_run workspace 下有 schema_fewshot_distilled_v2_strict_tuple 候选时，
+        // AI 抽取应该用本 build_run 的 prompt（含本次 audit gold 的 fewshot）
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        KnowledgeBaseBuildRuns buildRun = newBuildRun(10L);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(buildRun);
+        when(workspaceService.resolve(any())).thenReturn(tmp);
+
+        // 准备 build_run 自己的候选 prompt
+        java.nio.file.Path buildRunCandidate = tmp.resolve("prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt");
+        java.nio.file.Files.createDirectories(buildRunCandidate.getParent());
+        java.nio.file.Files.writeString(buildRunCandidate, "build run specific prompt");
+
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of()).relations(List.of()).build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        service.generate(10L, 99L);
+
+        org.mockito.ArgumentCaptor<java.nio.file.Path> promptCaptor =
+                org.mockito.ArgumentCaptor.forClass(java.nio.file.Path.class);
+        verify(orchestrator).runSingleExtract(any(), any(), promptCaptor.capture(), any(), any());
+
+        // 用了 build_run 自己的 candidate 路径
+        assertThat(promptCaptor.getValue()).isEqualTo(buildRunCandidate);
+    }
+
+    @Test
+    void fallsBackToRepoRootCandidateWhenBuildRunMissing() throws Exception {
+        // build_run 还没跑过 03 步，候选文件不存在 → fallback 到仓库根 frozen_v1
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        // workspace 指向不存在的目录
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/nonexistent-workspace"));
+
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of()).relations(List.of()).build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        service.generate(10L, 99L);
+
+        org.mockito.ArgumentCaptor<java.nio.file.Path> promptCaptor =
+                org.mockito.ArgumentCaptor.forClass(java.nio.file.Path.class);
+        verify(orchestrator).runSingleExtract(any(), any(), promptCaptor.capture(), any(), any());
+
+        // setUp 里 graphrag.root = "/tmp/graphrag-test"
+        assertThat(promptCaptor.getValue()).isEqualTo(java.nio.file.Path.of(
+                "/tmp/graphrag-test",
+                "prompts",
+                "candidates",
+                "schema_fewshot_distilled_v2_strict_tuple",
+                "prompt.txt"
+        ));
+    }
+
+    @Test
     void persistsSuggestionsToSampleAndAssignsStableIds() throws Exception {
         // 验证 generate 完成后会把候选写回 ai_suggested_*，并给每个候选分配
         // 基于 sampleId + 索引的稳定 id（ai_e_<sid>_<i> / ai_r_<sid>_<i>）

@@ -60,6 +60,9 @@ public class AiSuggestionService {
     /** schema 外的兜底类型（schema 内最通用、最常用的类型）。 */
     private static final String FALLBACK_ENTITY_TYPE = "Concept";
 
+    /** 候选标识符常量，与 CandidateMetadataLookup / CandidateService 保持一致。 */
+    private static final String DEFAULT_CANDIDATE_ID = "schema_fewshot_distilled_v2_strict_tuple";
+
     private static Map<String, String> buildEntityTypeLookup() {
         Map<String, String> lookup = new LinkedHashMap<>();
         for (String t : DEFAULT_ENTITY_TYPES.split(",")) {
@@ -181,34 +184,27 @@ public class AiSuggestionService {
     }
 
     /**
-     * 决定使用哪个 prompt 文件。
-     * <p>
-     * 本期固定指向 {@code prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt}：
-     * <ul>
-     *   <li>这是 manifest.json 中标记为 {@code production_status: frozen_v1} 的当前激活版本；</li>
-     *   <li>该 prompt 完整对齐新课程 schema（11 种实体类型 + 9 种关系类型），LLM 输出能直接命中
-     *       canonical 命名（{@code KnowledgePoint}/{@code Concept}/...），不再退化到 OS 课旧命名空间
-     *       （{@code OPERATING SYSTEM COMPONENT} 等）；</li>
-     *   <li>关系 description 带 {@code [type=...]} 前缀，{@code run_native_extraction} 的
-     *       {@code _extract_relation_type_from_description} 能直接解析出 schema 关系类型。</li>
-     * </ul>
-     * <p>
-     * GraphRAG 主链路用的 {@code prompts/extract_graph.txt} 故意保留为 OS 课遗留 prompt，
-     * 避免影响 {@code graphrag index} 的 baseline 评估；AI 预填走独立的 candidate prompt 路径，
-     * 两者解耦。
-     * </p>
-     * <p>
-     * Phase 6 后改为读 {@code prompts/final/active_prompt.json} 拿到当前激活的 candidate
-     * 路径，而不是硬编码到 {@code schema_fewshot_distilled_v2_strict_tuple}。Build run 自身的
-     * {@code customPromptDraft} 也是在 Phase 6 落到磁盘。
-     * </p>
+     * 决定使用哪个 prompt 文件：
+     * <ol>
+     *   <li>build run workspace 下的 candidate（{@code <workspace>/prompt/candidates/{cid}/prompt.txt}）
+     *       存在 → 用它（含本次 audit gold 的 fewshot 蒸馏，更准确）</li>
+     *   <li>否则 fallback 到仓库根 frozen_v1（{@code <GRAPHRAG_ROOT>/prompts/candidates/{cid}/prompt.txt}）
+     *       —— 用户还没跑 03 步时的兼容路径</li>
+     * </ol>
+     *
+     * <p>Phase 6 后改为读 {@code prompts/final/active_prompt.json} 拿到当前激活的 candidate 路径。
+     * 详见 spec § Phase 6。</p>
      */
     private Path resolvePromptFile(KnowledgeBaseBuildRuns buildRun) {
+        Path buildRunCandidate = workspaceService.resolve(buildRun.getWorkspaceUri())
+                .resolve("prompt").resolve("candidates")
+                .resolve(DEFAULT_CANDIDATE_ID).resolve("prompt.txt");
+        if (java.nio.file.Files.exists(buildRunCandidate)) {
+            return buildRunCandidate;
+        }
         return Path.of(properties.getGraphrag().getRoot())
-                .resolve("prompts")
-                .resolve("candidates")
-                .resolve("schema_fewshot_distilled_v2_strict_tuple")
-                .resolve("prompt.txt");
+                .resolve("prompts").resolve("candidates")
+                .resolve(DEFAULT_CANDIDATE_ID).resolve("prompt.txt");
     }
 
     private List<Map<String, Object>> markEntitiesAsAiSuggested(List<Map<String, Object>> entities) {
