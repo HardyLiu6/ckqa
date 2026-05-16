@@ -181,6 +181,11 @@ public enum ApiResultCode {
     AUDIT_PIPELINE_FAILED(5005, "标注流水线执行失败"),
 
     /**
+     * AI 预填候选生成失败（单样本 GraphRAG 抽取超时或异常）。
+     */
+    AI_SUGGESTION_FAILED(5006, "AI 候选生成失败"),
+
+    /**
      * 接口尚未实现（占位）。
      */
     PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现");
