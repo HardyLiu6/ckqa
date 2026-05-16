@@ -72,6 +72,10 @@ eval = [
     "ir-measures>=0.3.5",
     "scikit-learn>=1.5.0",
 ]
+hybrid = [
+    # Hybrid QA v0 sparse retrieval
+    "rank-bm25>=0.2.2",
+]
 semantic-compat = [
     # Optional compatibility metric for historical BERTScore reports
     "bert-score>=0.3.13",
@@ -85,7 +89,7 @@ factuality-extra = [
     "scale-score>=0.2.0",
 ]
 all = [
-    "graphrag-pipeline[ml,graph,scraper,eval]",
+    "graphrag-pipeline[ml,graph,scraper,eval,hybrid]",
 ]
 
 [build-system]

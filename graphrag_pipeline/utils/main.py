@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 import time
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -40,6 +41,9 @@ logger = logging.getLogger(__name__)
 
 APP_CONFIG = load_api_runtime_config()
 GRAPHRAG_ROOT = PROJECT_ROOT
+PACKAGE_PARENT = GRAPHRAG_ROOT.parent
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
 OUTPUT_DIR = APP_CONFIG.output_dir
 INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
@@ -50,7 +54,9 @@ SUPPORTED_QUERY_MODELS: dict[str, str] = {
     "graphrag-global-search:latest": "global",
     "graphrag-drift-search:latest": "drift",
     "graphrag-basic-search:latest": "basic",
+    "graphrag-hybrid-v0-search:latest": "hybrid_v0",
 }
+_HYBRID_V0_ORCHESTRATOR = None
 
 
 def _should_bypass_env_proxy(api_base: str | None) -> bool:
@@ -150,6 +156,139 @@ async def run_graphrag_query_cli(method: str, prompt: str) -> str:
     return "\n".join(lines)
 
 
+class _CliGraphRagDraftClient:
+    """为 Hybrid v0 提供同步 GraphRAG 草稿查询客户端。"""
+
+    def __init__(self, *, timeout_seconds: float = 240.0) -> None:
+        self.timeout_seconds = timeout_seconds
+
+    def query_basic(self, question: str):
+        return self._query("basic", question)
+
+    def query_local(self, question: str):
+        return self._query("local", question)
+
+    def _query(self, mode: str, prompt: str):
+        from graphrag_pipeline.scripts.hybrid_qa.basic_local_client import GraphRagDraft
+
+        request = QueryTaskRequest(mode, prompt, None, None, None)
+        started_at = time.perf_counter()
+        try:
+            process = subprocess.run(
+                _build_query_cmd(request),
+                cwd=str(GRAPHRAG_ROOT),
+                env=_build_query_env(request),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed_seconds = time.perf_counter() - started_at
+            return GraphRagDraft(
+                mode=mode,
+                answer="",
+                elapsed_seconds=elapsed_seconds,
+                error=f"graphrag query 超时(method={mode}, timeout={self.timeout_seconds}s): {exc}",
+            )
+        elapsed_seconds = time.perf_counter() - started_at
+        stdout = (process.stdout or "").strip()
+        stderr = (process.stderr or "").strip()
+        if process.returncode != 0:
+            error = f"graphrag query 执行失败(method={mode}): {stderr or stdout}"
+            return GraphRagDraft(mode=mode, answer="", elapsed_seconds=elapsed_seconds, error=error)
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        return GraphRagDraft(mode=mode, answer="\n".join(lines), elapsed_seconds=elapsed_seconds)
+
+
+def _parse_bool_env(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_int_env(value: str | None, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        logger.warning("忽略无效整数环境变量值: %s", value)
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _get_hybrid_v0_orchestrator():
+    """按需构建 Hybrid v0 orchestrator，避免 API 启动时加载重依赖。"""
+    global _HYBRID_V0_ORCHESTRATOR
+    if _HYBRID_V0_ORCHESTRATOR is not None:
+        return _HYBRID_V0_ORCHESTRATOR
+
+    from graphrag_pipeline.scripts.hybrid_qa.bm25_text_units import build_text_unit_bm25
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_guardrail import (
+        EvidenceGuardrailConfig,
+        check_answer_supported_by_evidence,
+    )
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import fuse_basic_and_bm25_evidence
+    from graphrag_pipeline.scripts.hybrid_qa.orchestrator_v0 import HybridFallbackPolicy, HybridV0Orchestrator
+    from graphrag_pipeline.scripts.hybrid_qa.synthesis_client import OpenAICompatibleSynthesisClient
+    from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import load_data_citation_lookup, load_text_unit_lookup
+
+    text_units_path = OUTPUT_DIR / "text_units.parquet"
+    if not text_units_path.exists():
+        raise FileNotFoundError(f"Hybrid v0 需要 text_units.parquet，但未找到: {text_units_path}")
+    data_citation_lookup = load_data_citation_lookup(text_units_path)
+    text_unit_lookup = load_text_unit_lookup(text_units_path)
+
+    graph_client = _CliGraphRagDraftClient(
+        timeout_seconds=float(_parse_int_env(os.environ.get("CKQA_HYBRID_V0_CLI_TIMEOUT_SECONDS"), default=240))
+    )
+    guardrail_config = EvidenceGuardrailConfig(
+        bge_m3_model=os.environ.get("CKQA_BGE_M3_MODEL") or None,
+        bge_device=os.environ.get("CKQA_BGE_M3_DEVICE") or None,
+        bge_use_fp16=_parse_bool_env(os.environ.get("CKQA_BGE_M3_FP16"), default=False),
+        bge_batch_size=_parse_int_env(os.environ.get("CKQA_BGE_M3_BATCH_SIZE"), default=8),
+    )
+    _HYBRID_V0_ORCHESTRATOR = HybridV0Orchestrator(
+        bm25=build_text_unit_bm25(text_units_path, cache_dir=OUTPUT_DIR / ".hybrid_v0_cache"),
+        graph_client=graph_client,
+        guardrail=lambda answer, evidence: check_answer_supported_by_evidence(
+            answer,
+            evidence,
+            config=guardrail_config,
+        ),
+        llm_complete=lambda prompt: OpenAICompatibleSynthesisClient().complete(prompt),
+        citation_ref_resolver=data_citation_lookup.resolve_answer_refs,
+        evidence_fusion=lambda question, basic_answer, bm25_candidates, citation_ref_resolver: (
+            fuse_basic_and_bm25_evidence(
+                question=question,
+                basic_answer=basic_answer,
+                bm25_candidates=bm25_candidates,
+                text_unit_lookup=text_unit_lookup,
+                citation_ref_resolver=citation_ref_resolver,
+            )
+        ),
+        fallback_policy=HybridFallbackPolicy(
+            enable_local_fallback=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK"),
+                default=False,
+            )
+        ),
+    )
+    return _HYBRID_V0_ORCHESTRATOR
+
+
+async def _run_hybrid_v0_answer(prompt: str):
+    """运行 Hybrid v0 查询并保留答案诊断信息。"""
+    return await asyncio.to_thread(_get_hybrid_v0_orchestrator().answer, prompt)
+
+
+async def _run_hybrid_v0_query(prompt: str) -> str:
+    """运行 Hybrid v0 查询并返回答案文本。"""
+    result = await _run_hybrid_v0_answer(prompt)
+    return result.answer
+
+
 class Message(BaseModel):
     role: str
     content: str
@@ -197,6 +336,7 @@ class ChatCompletionResponse(BaseModel):
     choices: List[ChatCompletionResponseChoice]
     usage: Usage
     system_fingerprint: Optional[str] = None
+    hybrid_diagnostics: Optional[dict[str, Any]] = None
 
 
 def format_response(response: str) -> str:
@@ -302,7 +442,13 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             prompt = request.messages[-1].content
             logger.info("处理提示: %s...", prompt[:100])
 
-            formatted_response = await _resolve_query_response(request.model, prompt)
+            hybrid_diagnostics: dict[str, Any] | None = None
+            if SUPPORTED_QUERY_MODELS.get(request.model) == "hybrid_v0":
+                hybrid_result = await _run_hybrid_v0_answer(prompt)
+                formatted_response = format_response(hybrid_result.answer)
+                hybrid_diagnostics = hybrid_result.diagnostics.to_dict()
+            else:
+                formatted_response = await _resolve_query_response(request.model, prompt)
             logger.info("搜索完成，响应长度: %s", len(formatted_response))
 
             if request.stream:
@@ -359,6 +505,7 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                     completion_tokens=len(formatted_response.split()),
                     total_tokens=len(prompt.split()) + len(formatted_response.split()),
                 ),
+                hybrid_diagnostics=hybrid_diagnostics,
             )
             return JSONResponse(content=response.model_dump())
         except HTTPException:
@@ -398,6 +545,12 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                 "id": "graphrag-basic-search:latest",
                 "object": "model",
                 "created": current_time - 85000,
+                "owned_by": "graphrag",
+            },
+            {
+                "id": "graphrag-hybrid-v0-search:latest",
+                "object": "model",
+                "created": current_time - 80000,
                 "owned_by": "graphrag",
             },
         ]
@@ -440,6 +593,8 @@ async def _resolve_query_response(model: str, prompt: str) -> str:
     method = SUPPORTED_QUERY_MODELS.get(model)
     if method is None:
         raise ValueError(f"不支持的模型: {model}")
+    if method == "hybrid_v0":
+        return format_response(await _run_hybrid_v0_query(prompt))
     return format_response(await run_graphrag_query_cli(method, prompt))
 
 

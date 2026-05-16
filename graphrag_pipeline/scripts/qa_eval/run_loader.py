@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ class RawModeAnswer:
     error_count: int
     error_type: str = ""
     error_message: str = ""
+    hybrid_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 def safe_mode(mode: str) -> str:
@@ -54,12 +55,14 @@ def load_raw_mode_answer(run_dir: Path, question_id: str, mode: str) -> RawModeA
             )
         mode_payload = modes.get(mode, {})
         error = str(mode_payload.get("error", "") or "")
+        hybrid_diagnostics = _extract_hybrid_diagnostics(mode_payload)
         return RawModeAnswer(
             answer=str(mode_payload.get("answer", "")),
             elapsed_seconds=float(mode_payload.get("elapsed_seconds") or 0.0),
             error_count=1 if error else 0,
             error_type=str(mode_payload.get("error_type", "") or ("error" if error else "")),
             error_message=error,
+            hybrid_diagnostics=hybrid_diagnostics,
         )
 
     legacy_path = run_dir / "raw" / f"{question_id}_{safe_mode(mode)}.json"
@@ -79,7 +82,18 @@ def load_raw_mode_answer(run_dir: Path, question_id: str, mode: str) -> RawModeA
         error_count=1 if error else 0,
         error_type=str(payload.get("error_type", "") or ("error" if error else "")),
         error_message=error,
+        hybrid_diagnostics=_extract_hybrid_diagnostics(payload),
     )
+
+
+def _extract_hybrid_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    direct = payload.get("hybrid_diagnostics")
+    if isinstance(direct, dict):
+        return dict(direct)
+    raw = payload.get("raw")
+    if isinstance(raw, dict) and isinstance(raw.get("hybrid_diagnostics"), dict):
+        return dict(raw["hybrid_diagnostics"])
+    return {}
 
 
 def infer_question_ids_from_raw(run_dir: Path) -> list[str]:

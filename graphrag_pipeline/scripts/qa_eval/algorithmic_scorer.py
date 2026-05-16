@@ -35,6 +35,71 @@ def _negative_hit(answer: str, terms: list[str]) -> float:
     return 1.0 if any(term and term in answer for term in terms) else 0.0
 
 
+def _hybrid_diagnostic_columns(diagnostics: dict[str, Any]) -> dict[str, Any]:
+    if not diagnostics:
+        return {
+            "hybrid_used_local_fallback": None,
+            "hybrid_guardrail_score": None,
+            "hybrid_low_evidence_count": None,
+            "hybrid_high_evidence_count": None,
+            "hybrid_synthesis_attempted": None,
+            "hybrid_fallback_reasons": None,
+            "hybrid_fused_evidence_refs": None,
+            "hybrid_fused_evidence_sources": None,
+            "hybrid_synthesis_reason": None,
+            "hybrid_local_fallback_enabled": None,
+        }
+    fallback_reasons = diagnostics.get("fallback_reasons") or []
+    fused_refs = diagnostics.get("fused_evidence_refs") or []
+    return {
+        "hybrid_used_local_fallback": diagnostics.get("used_local_fallback"),
+        "hybrid_guardrail_score": diagnostics.get("guardrail_score"),
+        "hybrid_low_evidence_count": diagnostics.get("low_evidence_count"),
+        "hybrid_high_evidence_count": diagnostics.get("high_evidence_count"),
+        "hybrid_synthesis_attempted": diagnostics.get("synthesis_attempted"),
+        "hybrid_fallback_reasons": ",".join(str(reason) for reason in fallback_reasons),
+        "hybrid_fused_evidence_refs": ",".join(str(ref) for ref in fused_refs),
+        "hybrid_fused_evidence_sources": _format_source_counts(diagnostics.get("fused_evidence_sources")),
+        "hybrid_synthesis_reason": diagnostics.get("synthesis_reason"),
+        "hybrid_local_fallback_enabled": diagnostics.get("local_fallback_enabled"),
+    }
+
+
+def _selected_evidence_columns(
+    *,
+    question_id: str,
+    diagnostics: dict[str, Any],
+    gold_refs: list[str],
+) -> dict[str, float | None]:
+    refs = [str(ref) for ref in diagnostics.get("fused_evidence_refs") or [] if str(ref).strip()]
+    if not refs:
+        return {
+            "selected_evidence_recall_at_3": None,
+            "selected_evidence_rr": None,
+            "selected_evidence_ndcg_at_5": None,
+        }
+    scores = score_ranked_citations(
+        question_id=question_id,
+        ranked_refs=refs,
+        gold_refs=gold_refs,
+        cutoffs=[3, 5],
+    )
+    return {
+        "selected_evidence_recall_at_3": float(scores["citation_recall_at_3"]),
+        "selected_evidence_rr": float(scores["citation_rr"]),
+        "selected_evidence_ndcg_at_5": float(scores["citation_ndcg_at_5"]),
+    }
+
+
+def _format_source_counts(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    preferred = ["bm25", "basic-citation"]
+    ordered = [key for key in preferred if key in value]
+    ordered.extend(key for key in sorted(value) if key not in ordered)
+    return ",".join(f"{key}={value[key]}" for key in ordered)
+
+
 def _effective_score_experimental(row: dict[str, Any]) -> float:
     quality = (
         0.42 * float(row["semantic_coverage_f1"])
@@ -106,6 +171,12 @@ def score_run_algorithmically(
                 "error_count": raw.error_count,
                 "error_type": raw.error_type,
                 "error_message": raw.error_message,
+                **_hybrid_diagnostic_columns(raw.hybrid_diagnostics),
+                **_selected_evidence_columns(
+                    question_id=item.id,
+                    diagnostics=raw.hybrid_diagnostics,
+                    gold_refs=item.gold_text_unit_ids,
+                ),
                 **semantic,
                 **{key: value for key, value in ir.items() if key != "question_id"},
             }

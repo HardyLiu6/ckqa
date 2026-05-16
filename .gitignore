@@ -197,3 +197,5 @@ graphrag_pipeline/results/qa_eval/runs/*/ragas_scoring.json
 graphrag_pipeline/results/qa_eval/runs/*/factuality_raw/
 graphrag_pipeline/results/qa_eval/runs/*/factuality_scoring.json
 graphrag_pipeline/results/qa_eval/runs/*/algorithmic_scoring.json
+graphrag_pipeline/results/qa_eval/runs/hybrid-v0-*/
+graphrag_pipeline/results/qa_eval/runs/global-repair-high-timeout-*/

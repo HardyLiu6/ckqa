@@ -150,6 +150,80 @@ def test_score_run_algorithmically_writes_outputs(tmp_path: Path):
     assert (run_dir / "algorithmic_scoring.md").exists()
 
 
+def test_score_run_algorithmically_surfaces_hybrid_diagnostics(tmp_path: Path):
+    test_set = tmp_path / "qa_test_set.jsonl"
+    _write_test_set(test_set)
+    run_dir = tmp_path / "run"
+    raw_dir = run_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    mode = "graphrag-hybrid-v0-search:latest"
+    (run_dir / "run_meta.json").write_text(
+        json.dumps({"modes": [mode], "test_set_path": str(test_set), "question_ids": ["Q001"]}),
+        encoding="utf-8",
+    )
+    (raw_dir / "Q001.json").write_text(
+        json.dumps(
+            {
+                "question_id": "Q001",
+                "modes": {
+                    mode: {
+                        "answer": "DBSCAN 的核心参数是 eps 和 MinPts。[Data: Text Units (d244f9016ac8)]",
+                        "elapsed_seconds": 1.5,
+                        "hybrid_diagnostics": {
+                            "used_local_fallback": True,
+                            "guardrail_score": 0.42,
+                            "low_evidence_count": 3,
+                            "high_evidence_count": 2,
+                            "synthesis_attempted": True,
+                            "fallback_reasons": ["basic_missing_data_citation"],
+                            "fused_evidence_refs": ["d244f9016ac8", "xxxxxxxxxxxx"],
+                            "fused_evidence_sources": {"bm25": 2, "basic-citation": 1},
+                            "synthesis_reason": "basic_missing_data_citation",
+                            "local_fallback_enabled": False,
+                        },
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with _patched_semantic():
+        summary = score_run_algorithmically(run_dir, test_set_path=test_set)
+
+    row = summary["rows"][0]
+    assert row["hybrid_used_local_fallback"] is True
+    assert row["hybrid_guardrail_score"] == 0.42
+    assert row["hybrid_low_evidence_count"] == 3
+    assert row["hybrid_high_evidence_count"] == 2
+    assert row["hybrid_synthesis_attempted"] is True
+    assert row["hybrid_fallback_reasons"] == "basic_missing_data_citation"
+    assert row["hybrid_fused_evidence_refs"] == "d244f9016ac8,xxxxxxxxxxxx"
+    assert row["hybrid_fused_evidence_sources"] == "bm25=2,basic-citation=1"
+    assert row["hybrid_synthesis_reason"] == "basic_missing_data_citation"
+    assert row["hybrid_local_fallback_enabled"] is False
+    assert row["selected_evidence_recall_at_3"] == 1.0
+    assert row["selected_evidence_rr"] == 1.0
+    assert row["selected_evidence_ndcg_at_5"] == 1.0
+    csv = pd.read_csv(run_dir / "algorithmic_scoring.csv")
+    assert "hybrid_guardrail_score" in csv.columns
+    assert "hybrid_fallback_reasons" in csv.columns
+    assert "selected_evidence_recall_at_3" in csv.columns
+
+
+def test_score_run_algorithmically_leaves_selected_evidence_metrics_empty_for_non_hybrid(tmp_path: Path):
+    run_dir, test_set = _write_run(tmp_path)
+
+    with _patched_semantic():
+        summary = score_run_algorithmically(run_dir, test_set_path=test_set)
+
+    row = summary["rows"][0]
+    assert row["selected_evidence_recall_at_3"] is None
+    assert row["selected_evidence_rr"] is None
+    assert row["selected_evidence_ndcg_at_5"] is None
+
+
 def test_score_run_algorithmically_filters_items_by_run_meta_question_ids(tmp_path: Path):
     test_set = tmp_path / "qa_test_set.jsonl"
     _write_two_item_test_set(test_set)

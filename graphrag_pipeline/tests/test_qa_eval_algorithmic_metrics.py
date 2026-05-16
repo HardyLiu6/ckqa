@@ -30,6 +30,12 @@ def test_extract_text_unit_refs_deduplicates_in_order():
     assert extract_text_unit_refs(answer) == ["aaaabbbbcccc", "ddddeeeeffff"]
 
 
+def test_extract_text_unit_refs_handles_hybrid_data_format():
+    answer = "答案基于低层证据。[Data: Hybrid(d244f9016ac8abcdef, 81d99ad61e36ffff)]"
+
+    assert extract_text_unit_refs(answer) == ["d244f9016ac8", "81d99ad61e36"]
+
+
 def test_extract_text_unit_refs_resolves_reports_sources_entities_and_relationships():
     lookup = DataCitationLookup(
         reports_by_human_id={"21": ["report111111", "shared000000"]},

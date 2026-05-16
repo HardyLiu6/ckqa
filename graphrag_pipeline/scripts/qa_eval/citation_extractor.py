@@ -6,7 +6,7 @@ from graphrag_pipeline.scripts.qa_eval.test_set_schema import TEXT_UNIT_ID_PREFI
 from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import DataCitationLookup
 
 
-TEXT_UNITS_BLOCK_RE = re.compile(r"Text Units?\s*\(([^)]*)\)", re.IGNORECASE)
+DIRECT_TEXT_UNIT_BLOCK_RE = re.compile(r"(?:Text Units?|Hybrid)\s*\(([^)]*)\)", re.IGNORECASE)
 REF_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{7,}")
 
 
@@ -22,7 +22,7 @@ def extract_text_unit_refs(
     data_citation_lookup: DataCitationLookup | None = None,
 ) -> list[str]:
     refs: list[str] = []
-    for block in TEXT_UNITS_BLOCK_RE.findall(answer or ""):
+    for block in DIRECT_TEXT_UNIT_BLOCK_RE.findall(answer or ""):
         for match in REF_TOKEN_RE.findall(block):
             _append_unique(refs, match)
 

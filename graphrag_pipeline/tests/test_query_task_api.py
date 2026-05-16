@@ -157,7 +157,7 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(context.exception.status_code, 404)
         self.assertEqual(context.exception.detail, "Query task not found")
 
-    def test_models_list_exposes_local_global_drift_basic_only(self):
+    def test_models_list_exposes_local_global_drift_basic_hybrid_only(self):
         app = create_app(task_manager=_FakeQueryTaskManager())
         models_endpoint = _get_route_endpoint(app, "/v1/models", "GET")
 
@@ -172,6 +172,7 @@ class TestQueryTaskApi(unittest.TestCase):
                 "graphrag-global-search:latest",
                 "graphrag-drift-search:latest",
                 "graphrag-basic-search:latest",
+                "graphrag-hybrid-v0-search:latest",
             ],
         )
         self.assertNotIn("full-model:latest", model_ids)
