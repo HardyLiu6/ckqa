@@ -55,6 +55,7 @@ public class BuildRunWorkspaceService {
                 "parse",
                 "graph-input",
                 "prompt",
+                "prompt/candidates",
                 "index/input",
                 "index/output",
                 "index/cache",
