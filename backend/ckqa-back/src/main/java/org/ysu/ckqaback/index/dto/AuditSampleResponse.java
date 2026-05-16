@@ -37,6 +37,16 @@ public class AuditSampleResponse {
     /** 用户标注的关系列表，元素 schema 见 spec § 02 步。 */
     private final List<Map<String, Object>> goldRelations;
 
+    /**
+     * AI 候选实体列表（GraphRAG 抽取，未审阅状态）。
+     * 用户在 02 步标注 IDE 中接受/拒绝任一候选后，会从此数组移除并通过 PUT 同步回后端。
+     * 持久化目的：避免页面刷新或切换样本后丢失（单次抽取 ~130 秒、~21k tokens）。
+     */
+    private final List<Map<String, Object>> aiSuggestedEntities;
+
+    /** AI 候选关系列表（语义同 {@link #aiSuggestedEntities}）。 */
+    private final List<Map<String, Object>> aiSuggestedRelations;
+
     private final String annotationNotes;
 
     /** pending / in_progress / completed / skipped。 */

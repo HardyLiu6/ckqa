@@ -33,6 +33,8 @@ public class AuditSampleUpdateRequest {
     private static final Set<String> KNOWN_FIELDS = Set.of(
             "goldEntities",
             "goldRelations",
+            "aiSuggestedEntities",
+            "aiSuggestedRelations",
             "annotationNotes",
             "reviewerDecision",
             "reviewerConfidence",
@@ -41,6 +43,13 @@ public class AuditSampleUpdateRequest {
 
     private List<Map<String, Object>> goldEntities;
     private List<Map<String, Object>> goldRelations;
+    /**
+     * AI 候选实体列表（PATCH 字段）。前端在用户接受/拒绝 AI 候选时增量同步：
+     * 把当前剩余候选数组写入此字段，覆盖 DB 旧值。
+     */
+    private List<Map<String, Object>> aiSuggestedEntities;
+    /** AI 候选关系列表（语义同 {@link #aiSuggestedEntities}）。 */
+    private List<Map<String, Object>> aiSuggestedRelations;
     private String annotationNotes;
 
     /** pending / in_progress / completed / skipped。null 时由 service 视为"清空决策"。 */
@@ -79,6 +88,16 @@ public class AuditSampleUpdateRequest {
     public void setGoldRelations(List<Map<String, Object>> value) {
         this.goldRelations = value;
         presentFields.add("goldRelations");
+    }
+
+    public void setAiSuggestedEntities(List<Map<String, Object>> value) {
+        this.aiSuggestedEntities = value;
+        presentFields.add("aiSuggestedEntities");
+    }
+
+    public void setAiSuggestedRelations(List<Map<String, Object>> value) {
+        this.aiSuggestedRelations = value;
+        presentFields.add("aiSuggestedRelations");
     }
 
     public void setAnnotationNotes(String value) {

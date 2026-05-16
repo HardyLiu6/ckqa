@@ -73,6 +73,14 @@ public class PromptTuneAuditSamples implements Serializable {
     @TableField("gold_relations")
     private String goldRelations;
 
+    /** JSON 数组：AI 候选实体列表（GraphRAG 抽取，未审阅状态；用户接受/拒绝后从此数组移除）。 */
+    @TableField("ai_suggested_entities")
+    private String aiSuggestedEntities;
+
+    /** JSON 数组：AI 候选关系列表（GraphRAG 抽取，未审阅状态；用户接受/拒绝后从此数组移除）。 */
+    @TableField("ai_suggested_relations")
+    private String aiSuggestedRelations;
+
     @TableField("annotation_notes")
     private String annotationNotes;
 

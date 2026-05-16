@@ -136,6 +136,14 @@ public class AuditSampleService {
             sample.setGoldRelations(serializeJson(request.getGoldRelations()));
         }
 
+        if (request.hasField("aiSuggestedEntities")) {
+            sample.setAiSuggestedEntities(serializeJson(request.getAiSuggestedEntities()));
+        }
+
+        if (request.hasField("aiSuggestedRelations")) {
+            sample.setAiSuggestedRelations(serializeJson(request.getAiSuggestedRelations()));
+        }
+
         sample.setUpdatedAt(LocalDateTime.now());
         samplesStore.updateById(sample);
 

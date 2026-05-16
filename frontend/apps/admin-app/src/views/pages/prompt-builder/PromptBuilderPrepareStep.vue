@@ -185,7 +185,7 @@ async function handleAcceptEntity(entityId) {
   }
 
   try {
-    await persistFields(sample, { fields: ['goldEntities', 'status'] })
+    await persistFields(sample, { fields: ['goldEntities', 'aiSuggestedEntities', 'status'] })
     ElMessage.success('已采纳')
   } catch {
     sample.status = previousStatus
@@ -195,10 +195,17 @@ async function handleAcceptEntity(entityId) {
   }
 }
 
-function handleRejectEntity(entityId) {
+async function handleRejectEntity(entityId) {
   const sample = activeSample.value
   if (!sample) return
-  sample.aiSuggestedEntities = sample.aiSuggestedEntities.filter((e) => e.id !== entityId)
+  const idx = sample.aiSuggestedEntities.findIndex((e) => e.id === entityId)
+  if (idx < 0) return
+  const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
+  try {
+    await persistFields(sample, { fields: ['aiSuggestedEntities'] })
+  } catch {
+    sample.aiSuggestedEntities.splice(idx, 0, picked)
+  }
 }
 
 async function handleDeleteEntity(entityId) {
@@ -284,7 +291,7 @@ async function handleAcceptRelation(relationId) {
   }
   sample.goldRelations.push(newRelation)
   try {
-    await persistFields(sample, { fields: ['goldRelations'] })
+    await persistFields(sample, { fields: ['goldRelations', 'aiSuggestedRelations'] })
     ElMessage.success('已采纳')
   } catch {
     sample.aiSuggestedRelations.splice(idx, 0, picked)
@@ -292,10 +299,17 @@ async function handleAcceptRelation(relationId) {
   }
 }
 
-function handleRejectRelation(relationId) {
+async function handleRejectRelation(relationId) {
   const sample = activeSample.value
   if (!sample) return
-  sample.aiSuggestedRelations = sample.aiSuggestedRelations.filter((r) => r.id !== relationId)
+  const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === relationId)
+  if (idx < 0) return
+  const [picked] = sample.aiSuggestedRelations.splice(idx, 1)
+  try {
+    await persistFields(sample, { fields: ['aiSuggestedRelations'] })
+  } catch {
+    sample.aiSuggestedRelations.splice(idx, 0, picked)
+  }
 }
 
 async function handleDeleteRelation(relationId) {
@@ -368,19 +382,10 @@ async function handleRequestAiSuggestions(sampleId) {
   try {
     const response = await requestAuditSampleAiSuggestions(buildRunId.value, sample.id)
     // response 形态：{ entities: [...], relations: [...] }
-    // 实体：每条带 suggestionSource: 'ai_suggested'，name/type/confidence 等领域字段保留
-    // 关系：每条带 suggestionSource: 'ai_suggested'、originalSource/originalTarget（实体名）、type
-    //
-    // 注意 unwrapApiResponse 的形态：CKQA api/client.js 在业务成功时直接返回 body.data，
-    // 所以 response 就是 AiSuggestionResponse 内容（{entities, relations}），不需要再 .data
-    sample.aiSuggestedEntities = (response?.entities ?? []).map((e, idx) => ({
-      ...e,
-      id: e.id ?? `ai_e_${Date.now()}_${idx}`,  // 临时本地 id（不持久化）
-    }))
-    sample.aiSuggestedRelations = (response?.relations ?? []).map((r, idx) => ({
-      ...r,
-      id: r.id ?? `ai_r_${Date.now()}_${idx}`,
-    }))
+    // 后端已经为每个候选分配稳定 id（ai_e_<sampleId>_<idx> / ai_r_<sampleId>_<idx>）
+    // 并通过 ai_suggested_* 字段持久化到 DB。前端不再覆盖 id，刷新后能通过同 id 定位候选。
+    sample.aiSuggestedEntities = response?.entities ?? []
+    sample.aiSuggestedRelations = response?.relations ?? []
     ElMessage.success(
       `生成完成：${sample.aiSuggestedEntities.length} 个实体、${sample.aiSuggestedRelations.length} 个关系候选`
     )

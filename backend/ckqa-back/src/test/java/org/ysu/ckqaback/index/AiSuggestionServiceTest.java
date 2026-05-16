@@ -250,6 +250,40 @@ class AiSuggestionServiceTest {
         ));
     }
 
+    @Test
+    void persistsSuggestionsToSampleAndAssignsStableIds() throws Exception {
+        // 验证 generate 完成后会把候选写回 ai_suggested_*，并给每个候选分配
+        // 基于 sampleId + 索引的稳定 id（ai_e_<sid>_<i> / ai_r_<sid>_<i>）
+        PromptTuneAuditSamples sample = newSample(99L, 10L);
+        when(samplesStore.getById(99L)).thenReturn(sample);
+        when(buildRunsStore.getRequiredById(10L)).thenReturn(newBuildRun(10L));
+        when(workspaceService.resolve(any())).thenReturn(java.nio.file.Path.of("/tmp/ws"));
+
+        SingleSampleExtractionOrchestrator.ExtractionResult result =
+                SingleSampleExtractionOrchestrator.ExtractionResult.builder()
+                        .entities(List.of(
+                                Map.of("name", "进程", "type", "Concept"),
+                                Map.of("name", "线程", "type", "Concept")
+                        ))
+                        .relations(List.of(
+                                Map.of("source", "进程", "target", "线程", "type", "contains")
+                        ))
+                        .build();
+        when(orchestrator.runSingleExtract(any(), any(), any(), any(), any())).thenReturn(result);
+
+        AiSuggestionResponse response = service.generate(10L, 99L);
+
+        // 1. 候选 id 形如 ai_e_99_0 / ai_e_99_1 / ai_r_99_0
+        assertThat(response.getEntities().get(0)).containsEntry("id", "ai_e_99_0");
+        assertThat(response.getEntities().get(1)).containsEntry("id", "ai_e_99_1");
+        assertThat(response.getRelations().get(0)).containsEntry("id", "ai_r_99_0");
+
+        // 2. 持久化触发：sample.aiSuggestedEntities/aiSuggestedRelations 被写入 + samplesStore.updateById 被调用
+        assertThat(sample.getAiSuggestedEntities()).isNotNull().contains("ai_e_99_0");
+        assertThat(sample.getAiSuggestedRelations()).isNotNull().contains("ai_r_99_0");
+        verify(samplesStore).updateById(sample);
+    }
+
     private PromptTuneAuditSamples newSample(Long id, Long buildRunId) {
         PromptTuneAuditSamples e = new PromptTuneAuditSamples();
         e.setId(id);

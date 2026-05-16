@@ -51,6 +51,8 @@ public class AuditSampleResponseMapper {
                 .hitSignals(parseStringList(entity.getHitSignals()))
                 .goldEntities(parseMapList(entity.getGoldEntities()))
                 .goldRelations(parseMapList(entity.getGoldRelations()))
+                .aiSuggestedEntities(parseMapList(entity.getAiSuggestedEntities()))
+                .aiSuggestedRelations(parseMapList(entity.getAiSuggestedRelations()))
                 .annotationNotes(entity.getAnnotationNotes())
                 .reviewerDecision(entity.getReviewerDecision())
                 .reviewerConfidence(entity.getReviewerConfidence())

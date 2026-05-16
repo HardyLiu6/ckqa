@@ -30,6 +30,8 @@ export const STATUS_TO_REVIEWER_DECISION = Object.freeze({
 const ALLOWED_UPDATE_FIELDS = new Set([
   'goldEntities',
   'goldRelations',
+  'aiSuggestedEntities',
+  'aiSuggestedRelations',
   'annotationNotes',
   'reviewerConfidence',
   'skipReason',
@@ -58,8 +60,10 @@ export function apiSampleToLocal(api = {}) {
     goldEntities: api.goldEntities ?? [],
     goldRelations: api.goldRelations ?? [],
     hitSignals: api.hitSignals ?? [],
-    aiSuggestedEntities: [],
-    aiSuggestedRelations: [],
+    // AI 候选：直接采用后端持久化的 ai_suggested_*（Phase 3 持久化方案，
+    // 之前是写死的 []，导致刷新即丢失）
+    aiSuggestedEntities: api.aiSuggestedEntities ?? [],
+    aiSuggestedRelations: api.aiSuggestedRelations ?? [],
   }
 }
 

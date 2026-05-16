@@ -25,8 +25,15 @@ import java.util.Objects;
 /**
  * AI 预填业务编排（Phase 3）。
  * <p>
- * 不使用 {@code @Transactional}：本服务唯一的"写"操作是日志/中间文件，
- * 不直接修改业务表。AI 候选不持久化到 DB（属于待审状态，被采纳后才进 goldEntities）。
+ * 不使用 {@code @Transactional}：本服务的写操作只有"覆盖 sample 的 ai_suggested_*
+ * 两个 JSON 字段"，原子的单条 update 即可，不需要事务边界。
+ * </p>
+ * <p>
+ * AI 候选持久化策略（v2，Phase 3 修订）：
+ * 抽取完成后把候选 JSON 直接写到 {@link PromptTuneAuditSamples#aiSuggestedEntities}
+ * 和 {@link PromptTuneAuditSamples#aiSuggestedRelations}，避免页面刷新或切换样本后
+ * 丢失（单次抽取 ~130 秒、~21k tokens）。用户在前端接受/拒绝候选时，会通过
+ * PUT /audit-samples/{sampleId} 把剩余候选数组覆盖回这两个字段。
  * </p>
  */
 @Service
@@ -109,10 +116,47 @@ public class AiSuggestionService {
             );
         }
 
+        // 标记 + 规范化候选数据，并分配稳定 id（基于 sampleId + 索引），
+        // 让前端在采纳/拒绝/刷新场景下能始终通过 id 定位候选条目
+        List<Map<String, Object>> markedEntities =
+                markEntitiesAsAiSuggested(result.getEntities(), sampleId);
+        List<Map<String, Object>> markedRelations =
+                markRelationsAsAiSuggested(result.getRelations(), sampleId);
+
+        // 持久化到 sample.ai_suggested_*：刷新页面、切样本后还能看到，
+        // 不需要重新花 ~130 秒 + ~21k tokens 重跑
+        persistSuggestionsToSample(sample, markedEntities, markedRelations);
+
         return AiSuggestionResponse.builder()
-                .entities(markEntitiesAsAiSuggested(result.getEntities()))
-                .relations(markRelationsAsAiSuggested(result.getRelations()))
+                .entities(markedEntities)
+                .relations(markedRelations)
                 .build();
+    }
+
+    /**
+     * 把候选 JSON 写回 sample 的 ai_suggested_* 字段。
+     * <p>
+     * 单条 update，无事务，失败抛 BusinessException。本期"重新生成"语义就是覆盖：
+     * 后端不区分"清空 + 写新"，直接全量覆盖即可。
+     * </p>
+     */
+    private void persistSuggestionsToSample(
+            PromptTuneAuditSamples sample,
+            List<Map<String, Object>> entities,
+            List<Map<String, Object>> relations
+    ) {
+        try {
+            sample.setAiSuggestedEntities(objectMapper.writeValueAsString(entities));
+            sample.setAiSuggestedRelations(objectMapper.writeValueAsString(relations));
+            samplesStore.updateById(sample);
+        } catch (Exception e) {
+            log.error("AI 候选持久化失败 sampleId={}", sample.getId(), e);
+            throw new BusinessException(
+                    ApiResultCode.AI_SUGGESTION_FAILED,
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "AI 候选持久化失败: " + e.getMessage()
+            );
+        }
     }
 
     /**
@@ -168,14 +212,28 @@ public class AiSuggestionService {
     }
 
     private List<Map<String, Object>> markEntitiesAsAiSuggested(List<Map<String, Object>> entities) {
-        return entities.stream()
-                .map(this::normalizeEntityType)
-                .map(e -> {
-                    Map<String, Object> copy = new LinkedHashMap<>(e);
-                    copy.put("suggestionSource", "ai_suggested");
-                    return copy;
-                })
-                .toList();
+        return markEntitiesAsAiSuggested(entities, null);
+    }
+
+    /**
+     * 给每个候选实体加上 {@code suggestionSource: 'ai_suggested'} 标记并规范化 type；
+     * 当 sampleId 非空时，同时分配稳定 id {@code ai_e_<sampleId>_<idx>}，
+     * 让前端在采纳/拒绝/刷新场景下能始终通过 id 定位候选条目。
+     */
+    private List<Map<String, Object>> markEntitiesAsAiSuggested(
+            List<Map<String, Object>> entities, Long sampleId
+    ) {
+        List<Map<String, Object>> result = new java.util.ArrayList<>(entities.size());
+        for (int i = 0; i < entities.size(); i++) {
+            Map<String, Object> normalized = normalizeEntityType(entities.get(i));
+            Map<String, Object> copy = new LinkedHashMap<>(normalized);
+            copy.put("suggestionSource", "ai_suggested");
+            if (sampleId != null) {
+                copy.put("id", "ai_e_" + sampleId + "_" + i);
+            }
+            result.add(copy);
+        }
+        return List.copyOf(result);
     }
 
     /**
@@ -222,16 +280,26 @@ public class AiSuggestionService {
      * </p>
      */
     private List<Map<String, Object>> markRelationsAsAiSuggested(List<Map<String, Object>> relations) {
-        return relations.stream()
-                .map(r -> {
-                    Map<String, Object> copy = new LinkedHashMap<>(r);
-                    Object originalSource = copy.remove("source");
-                    Object originalTarget = copy.remove("target");
-                    if (originalSource != null) copy.put("originalSource", originalSource);
-                    if (originalTarget != null) copy.put("originalTarget", originalTarget);
-                    copy.put("suggestionSource", "ai_suggested");
-                    return copy;
-                })
-                .toList();
+        return markRelationsAsAiSuggested(relations, null);
+    }
+
+    private List<Map<String, Object>> markRelationsAsAiSuggested(
+            List<Map<String, Object>> relations, Long sampleId
+    ) {
+        List<Map<String, Object>> result = new java.util.ArrayList<>(relations.size());
+        for (int i = 0; i < relations.size(); i++) {
+            Map<String, Object> r = relations.get(i);
+            Map<String, Object> copy = new LinkedHashMap<>(r);
+            Object originalSource = copy.remove("source");
+            Object originalTarget = copy.remove("target");
+            if (originalSource != null) copy.put("originalSource", originalSource);
+            if (originalTarget != null) copy.put("originalTarget", originalTarget);
+            copy.put("suggestionSource", "ai_suggested");
+            if (sampleId != null) {
+                copy.put("id", "ai_r_" + sampleId + "_" + i);
+            }
+            result.add(copy);
+        }
+        return List.copyOf(result);
     }
 }
