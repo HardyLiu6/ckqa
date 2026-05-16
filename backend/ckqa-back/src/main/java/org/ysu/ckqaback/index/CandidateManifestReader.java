@@ -42,6 +42,7 @@ public class CandidateManifestReader {
 
     private final CandidateMetadataLookup metadataLookup;
     private final ObjectMapper objectMapper;
+    private final SeedInfoStore seedInfoStore;
 
     /**
      * 读 candidatesDir 下的 manifest.json 转 CandidateResponse 列表。
@@ -69,6 +70,9 @@ public class CandidateManifestReader {
             return List.of();
         }
 
+        // Phase 4.5：一次读入 seed-info.json，所有候选共享 seed
+        String seed = seedInfoStore.read(candidatesDir).map(SeedInfoStore.SeedInfo::getSeed).orElse(null);
+
         List<CandidateResponse> result = new ArrayList<>();
         for (Object item : rawList) {
             if (!(item instanceof Map<?, ?> rawMap)) {
@@ -83,12 +87,17 @@ public class CandidateManifestReader {
                 }
                 continue;
             }
-            result.add(buildResponse(candidateId, entry, candidatesDir));
+            result.add(buildResponse(candidateId, entry, candidatesDir, seed));
         }
         return result;
     }
 
-    private CandidateResponse buildResponse(String candidateId, Map<String, Object> entry, Path candidatesDir) {
+    private CandidateResponse buildResponse(
+            String candidateId,
+            Map<String, Object> entry,
+            Path candidatesDir,
+            String seed
+    ) {
         int promptSizeBytes = resolvePromptSizeBytes(entry, candidateId, candidatesDir);
         int estimatedTokenPerCall = promptSizeBytes / 4 + INPUT_TOKEN_OVERHEAD;
         return CandidateResponse.builder()
@@ -105,6 +114,7 @@ public class CandidateManifestReader {
                 .fewshotStrategy(stringField(entry, "fewshot_strategy"))
                 .basePromptSource(simplifyBasePromptSource(stringField(entry, "base_prompt_source")))
                 .generationTime(parseTime(stringField(entry, "generation_time")))
+                .seed(seed)
                 .build();
     }
 

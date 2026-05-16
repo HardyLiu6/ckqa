@@ -14,8 +14,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CandidateManifestReaderTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final CandidateManifestReader reader =
-            new CandidateManifestReader(new CandidateMetadataLookup(), new ObjectMapper());
+            new CandidateManifestReader(new CandidateMetadataLookup(), objectMapper, new SeedInfoStore(objectMapper));
 
     @Test
     void readsManifestWithFourCandidates(@TempDir Path tmp) throws Exception {
