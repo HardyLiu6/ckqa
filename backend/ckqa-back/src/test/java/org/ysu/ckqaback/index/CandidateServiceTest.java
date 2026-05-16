@@ -33,6 +33,8 @@ class CandidateServiceTest {
     private AuditWithGoldExporter auditExporter;
     private CandidateManifestReader manifestReader;
     private CandidateMetadataLookup metadataLookup;
+    private SeedInfoStore seedInfoStore;
+    private PromptTuneService promptTuneService;
     private CandidateService service;
 
     @BeforeEach
@@ -44,6 +46,8 @@ class CandidateServiceTest {
         auditExporter = mock(AuditWithGoldExporter.class);
         manifestReader = mock(CandidateManifestReader.class);
         metadataLookup = new CandidateMetadataLookup();
+        seedInfoStore = mock(SeedInfoStore.class);
+        promptTuneService = mock(PromptTuneService.class);
 
         service = new CandidateService(
                 buildRunsStore,
@@ -53,7 +57,9 @@ class CandidateServiceTest {
                 auditExporter,
                 manifestReader,
                 metadataLookup,
-                new ObjectMapper()
+                new ObjectMapper(),
+                seedInfoStore,
+                promptTuneService
         );
     }
 

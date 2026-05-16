@@ -14,7 +14,9 @@ import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.PromptTuneAuditSamplesService;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.ysu.ckqaback.index.dto.PromptTuneRunResponse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -50,6 +52,8 @@ public class CandidateService {
     private final CandidateManifestReader manifestReader;
     private final CandidateMetadataLookup metadataLookup;
     private final ObjectMapper objectMapper;
+    private final SeedInfoStore seedInfoStore;
+    private final PromptTuneService promptTuneService;
 
     /**
      * 同步生成候选 prompt（覆盖式）：
@@ -94,8 +98,12 @@ public class CandidateService {
             );
         }
 
+        // Phase 4.5：根据 build run 当前 seed 决定底板覆盖
+        String seed = resolveSeed(buildRun);
+        CandidateGenerationOrchestrator.BaseOverride baseOverride = resolveBaseOverride(seed, buildRun, candidatesDir);
+
         try {
-            orchestrator.run(auditWithGoldFile, candidatesDir, null);
+            orchestrator.run(auditWithGoldFile, candidatesDir, baseOverride);
         } catch (BusinessException e) {
             throw e;
         } catch (IOException | InterruptedException e) {
@@ -107,6 +115,22 @@ public class CandidateService {
                     HttpStatus.INTERNAL_SERVER_ERROR,
                     "候选 Prompt 生成异常: " + e.getMessage()
             );
+        }
+
+        // Phase 4.5：写 seed-info.json（审计文件 + GET 路径的 seed 来源）
+        // 写盘失败仅 warn 不阻断响应：本次 POST 返回的候选会通过 Java 侧 withInjectedSeed
+        // 直接注入 seed，前端展示不受影响；下次重新进入 03 步走 GET 路径时，若文件
+        // 仍缺失，候选 seed 会回落到 null（与 Phase 4 老 build run 行为一致）。
+        try {
+            SeedInfoStore.SeedInfo info = SeedInfoStore.SeedInfo.builder()
+                    .seed(seed)
+                    .autoTunedPromptDir(baseOverride != null ? baseOverride.autoTunedPromptDir().toString() : null)
+                    .generatedAt(java.time.OffsetDateTime.now())
+                    .buildRunId(buildRunId)
+                    .build();
+            seedInfoStore.write(candidatesDir, info);
+        } catch (IOException e) {
+            log.warn("写 seed-info.json 失败 buildRunId={}（响应已直接注入 seed，不阻断）", buildRunId, e);
         }
 
         // 2. 读 manifest。注意：reader 已在白名单外的候选跳过，但这里做的是“反向校验”：
@@ -131,9 +155,13 @@ public class CandidateService {
                                 + "。请检查 CandidateMetadataLookup 是否需要扩容。"
                 );
             }
-            log.info("候选生成完成 buildRunId={}, count={}, sampleSource=completed×{}",
-                    buildRunId, candidates.size(), completedSamples.size());
-            return candidates;
+            // Phase 4.5：直接把当前 seed 注入响应，不依赖 seed-info.json 是否落盘成功
+            List<CandidateResponse> withSeed = candidates.stream()
+                    .map(c -> withInjectedSeed(c, seed))
+                    .toList();
+            log.info("候选生成完成 buildRunId={}, count={}, seed={}, sampleSource=completed×{}",
+                    buildRunId, withSeed.size(), seed, completedSamples.size());
+            return withSeed;
         } catch (BusinessException e) {
             throw e;
         } catch (IOException e) {
@@ -210,5 +238,103 @@ public class CandidateService {
         return workspaceService.resolve(buildRun.getWorkspaceUri())
                 .resolve("prompt")
                 .resolve("candidates");
+    }
+
+    /**
+     * 从 build run metadata 读 customPromptDraft.seed；缺失返回 null（按"未选择"处理）。
+     */
+    private String resolveSeed(KnowledgeBaseBuildRuns buildRun) {
+        String metadata = buildRun.getBuildMetadata();
+        if (metadata == null || metadata.isBlank()) return null;
+        try {
+            JsonNode root = objectMapper.readTree(metadata);
+            JsonNode seed = root.path("customPromptDraft").path("seed");
+            if (seed.isTextual() && !seed.asText().isBlank()) return seed.asText();
+        } catch (Exception e) {
+            log.warn("解析 build run metadata 失败 buildRunId={}", buildRun.getId(), e);
+        }
+        return null;
+    }
+
+    /**
+     * 根据 seed 决定 baseOverride：
+     * <ul>
+     *   <li>{@code system_default} → 强制 fallback 到 default 分支</li>
+     *   <li>{@code graphrag_tuned} → 指向 prompt-tune cache 命中目录;缺失抛 4109</li>
+     *   <li>{@code null} 或其它（包括 history_draft，phase 6 范畴） → 返回 null，让 orchestrator 走 Phase 4 兼容路径</li>
+     * </ul>
+     */
+    private CandidateGenerationOrchestrator.BaseOverride resolveBaseOverride(
+            String seed,
+            KnowledgeBaseBuildRuns buildRun,
+            Path candidatesDir
+    ) {
+        if (seed == null) return null;
+
+        if ("system_default".equals(seed)) {
+            return CandidateGenerationOrchestrator.BaseOverride.systemDefault(candidatesDir);
+        }
+
+        if ("graphrag_tuned".equals(seed)) {
+            // 单一口径：用 probeBySelection 与 SeedAvailabilityService 共享判定逻辑，
+            // 确认 cache 当前确实是 success 状态。
+            List<Long> materialIds = parseMaterialIds(buildRun.getSelectedMaterialIds());
+            PromptTuneRunResponse probe = promptTuneService.probeBySelection(
+                    buildRun.getKnowledgeBaseId(), buildRun.getCourseId(), materialIds
+            );
+            if (!"success".equals(probe.getStatus())) {
+                throw new BusinessException(
+                        ApiResultCode.SEED_AUTO_TUNED_UNAVAILABLE,
+                        HttpStatus.BAD_REQUEST,
+                        "graphrag_tuned 种子的自动调优产物当前不可用（status=" + probe.getStatus()
+                                + "），请回知识库构建向导触发自动调优后再试"
+                );
+            }
+            return promptTuneService.findReadyByCacheKey(probe.getCacheKey())
+                    .map(run -> workspaceService.resolve(run.getCandidateDir()))
+                    .map(CandidateGenerationOrchestrator.BaseOverride::graphragTuned)
+                    .orElseThrow(() -> new BusinessException(
+                            ApiResultCode.SEED_AUTO_TUNED_UNAVAILABLE,
+                            HttpStatus.BAD_REQUEST,
+                            "graphrag_tuned 自动调优产物 cache 状态与目录不一致，请重新选择种子"
+                    ));
+        }
+
+        // history_draft 或未知种子：本期当作"无 override"，由 Phase 6 重新落地
+        return null;
+    }
+
+    private List<Long> parseMaterialIds(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * Phase 4.5：把 seed 注入候选响应。
+     * <p>POST 生成路径始终以本次计算出的 seed 为准，覆盖 reader 可能从旧 seed-info.json
+     * 带回的过期值。即使 reader 此时返回 null（seed-info.json 还没写或写失败），本方法
+     * 也能保证响应里的每个候选都带上正确 seed。</p>
+     */
+    private static CandidateResponse withInjectedSeed(CandidateResponse src, String seed) {
+        return CandidateResponse.builder()
+                .candidateId(src.getCandidateId())
+                .displayNameZh(src.getDisplayNameZh())
+                .category(src.getCategory())
+                .description(src.getDescription())
+                .isRecommended(src.getIsRecommended())
+                .traits(src.getTraits())
+                .estimatedTokenPerCall(src.getEstimatedTokenPerCall())
+                .promptSizeBytes(src.getPromptSizeBytes())
+                .schemaUsed(src.getSchemaUsed())
+                .fewshotExampleCount(src.getFewshotExampleCount())
+                .fewshotStrategy(src.getFewshotStrategy())
+                .basePromptSource(src.getBasePromptSource())
+                .generationTime(src.getGenerationTime())
+                .seed(seed)
+                .build();
     }
 }
