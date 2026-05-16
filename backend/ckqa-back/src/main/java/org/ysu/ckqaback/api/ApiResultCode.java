@@ -186,6 +186,21 @@ public enum ApiResultCode {
     AI_SUGGESTION_FAILED(5006, "AI 候选生成失败"),
 
     /**
+     * 03 步候选 prompt 生成脚本执行失败（generate_candidate_prompts.py 退出非零或超时）。
+     */
+    CANDIDATE_GENERATION_FAILED(5007, "候选 Prompt 生成失败"),
+
+    /**
+     * 03 步进入门控失败：02 步未完成至少 1 条样本审阅。
+     */
+    CANDIDATE_REQUIRES_AUDIT_COMPLETED(4104, "请先完成 02 步至少 1 条样本审阅再进入 03 步"),
+
+    /**
+     * 03 步候选未生成：build run workspace 下 manifest.json 不存在或为空。
+     */
+    CANDIDATES_NOT_GENERATED(4105, "本次构建尚未生成候选 Prompt，请先调用生成接口"),
+
+    /**
      * 接口尚未实现（占位）。
      */
     PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现");
