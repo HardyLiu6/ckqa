@@ -9,7 +9,9 @@ import java.util.List;
 /**
  * 03 步候选提示词响应。
  * <p>
- * 字段来自 {@code graphrag_pipeline/scripts/prompt_tuning/manifest.json}。
+ * 字段来源混合：算法产物字段从 {@code graphrag_pipeline/prompts/candidates/manifest.json} 透传，
+ * 前端展示层字段（displayNameZh / description / isRecommended / traits / category）由
+ * {@code CandidateMetadataLookup} 后端硬编码注入。
  * </p>
  */
 @Getter
@@ -19,23 +21,35 @@ public class CandidateResponse {
     /** 稳定标识符，如 schema_fewshot_distilled_v2_strict_tuple。 */
     private final String candidateId;
 
-    /** 中文译名；后端优先从 manifest 读取，缺失时前端有 hardcode fallback。 */
+    /** 中文译名（后端硬编码 Map）。 */
     private final String displayNameZh;
 
-    /** baseline / auto_tuned / schema_aware / schema_fewshot。 */
+    /** baseline / auto_tuned / schema_aware / schema_fewshot（后端硬编码 Map）。 */
     private final String category;
 
-    /** 是否为推荐候选（manifest.notes 标注或上一次评分历史决定）。 */
+    /** 一句话描述（如 "基线 · 课程域微调"），后端硬编码 Map。 */
+    private final String description;
+
+    /** 是否为推荐候选（manifest.notes 标注或上一次评分历史决定，本期硬编码）。 */
     private final Boolean isRecommended;
 
-    /** 特性标签，如 ["schema_injected", "directional_card", "few_shot_distilled"]。 */
-    private final List<String> traits;
+    /** 特性标签数组，后端硬编码 Map<id, List<TraitInfo>>。 */
+    private final List<TraitInfo> traits;
 
     private final Integer estimatedTokenPerCall;
     private final Integer promptSizeBytes;
-    private final String schemaUsed;
+    private final Boolean schemaUsed;
     private final Integer fewshotExampleCount;
     private final String fewshotStrategy;
     private final String basePromptSource;
     private final LocalDateTime generationTime;
+
+    @Getter
+    @Builder
+    public static class TraitInfo {
+        /** 稳定 key，用于前端渲染 chip 时取色等。 */
+        private final String key;
+        /** 中文 label，前端直接显示。 */
+        private final String label;
+    }
 }
