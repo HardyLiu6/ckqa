@@ -62,7 +62,7 @@ class CandidateGenerationOrchestratorTest {
                         .build()
         );
 
-        orchestrator.run(auditFile, outputDir);
+        orchestrator.run(auditFile, outputDir, null);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> argvCaptor = ArgumentCaptor.forClass(List.class);
@@ -98,7 +98,7 @@ class CandidateGenerationOrchestratorTest {
         );
 
         assertThatThrownBy(() -> orchestrator.run(
-                Path.of("/tmp/audit.json"), Path.of("/tmp/out")))
+                Path.of("/tmp/audit.json"), Path.of("/tmp/out"), null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("status", HttpStatus.GATEWAY_TIMEOUT)
                 .hasMessageContaining("超时");
@@ -118,7 +118,7 @@ class CandidateGenerationOrchestratorTest {
         );
 
         assertThatThrownBy(() -> orchestrator.run(
-                Path.of("/tmp/audit.json"), Path.of("/tmp/out")))
+                Path.of("/tmp/audit.json"), Path.of("/tmp/out"), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo(ApiResultCode.CANDIDATE_GENERATION_FAILED.getCode());

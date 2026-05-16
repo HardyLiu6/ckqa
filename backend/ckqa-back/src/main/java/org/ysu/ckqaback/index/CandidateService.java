@@ -95,7 +95,7 @@ public class CandidateService {
         }
 
         try {
-            orchestrator.run(auditWithGoldFile, candidatesDir);
+            orchestrator.run(auditWithGoldFile, candidatesDir, null);
         } catch (BusinessException e) {
             throw e;
         } catch (IOException | InterruptedException e) {

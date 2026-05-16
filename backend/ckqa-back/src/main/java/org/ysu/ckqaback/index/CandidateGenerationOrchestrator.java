@@ -43,15 +43,16 @@ public class CandidateGenerationOrchestrator {
      *
      * @param auditWithGoldFile 含 DB gold 的 audit JSON 文件，作为 --audit_file 传入脚本
      * @param outputDir         build run workspace 下的 prompt/candidates 目录（manifest 等输出位置）
+     * @param baseOverride      可选的底板路径覆盖；null 时走 Phase 4 默认行为，不附加 --auto_tuned_prompt_dir
      */
-    public void run(Path auditWithGoldFile, Path outputDir) throws IOException, InterruptedException {
+    public void run(Path auditWithGoldFile, Path outputDir, BaseOverride baseOverride)
+            throws IOException, InterruptedException {
         Path scriptRoot = Path.of(properties.getGraphrag().getRoot());
 
         List<String> argv = new ArrayList<>(PythonCommandResolver.resolve(
                 properties.getGraphrag().getPython(),
                 properties.getGraphrag().getManagedApi().getCondaEnv()
         ));
-        // Task 0 已定版调用方式：python -m scripts.prompt_tuning.generate_candidate_prompts
         argv.add("-m");
         argv.add("scripts.prompt_tuning.generate_candidate_prompts");
         argv.add("--audit_file");
@@ -59,6 +60,10 @@ public class CandidateGenerationOrchestrator {
         argv.add("--output_dir");
         argv.add(outputDir.toAbsolutePath().toString());
         argv.add("--overwrite");
+        if (baseOverride != null) {
+            argv.add("--auto_tuned_prompt_dir");
+            argv.add(baseOverride.autoTunedPromptDir().toAbsolutePath().toString());
+        }
 
         Path logFile = outputDir.resolve("generate_candidate_prompts.log");
         ProcessContext context = ProcessContext.builder()
@@ -97,5 +102,30 @@ public class CandidateGenerationOrchestrator {
             }
         }
         return fallback;
+    }
+
+    /**
+     * 候选生成时的底板覆盖。仅影响脚本中以 auto_tuned 优先、default 兜底的候选
+     * （schema_aware_directional_v2 / schema_fewshot_distilled_v2_strict_tuple）。
+     */
+    public record BaseOverride(Path autoTunedPromptDir) {
+
+        /**
+         * seed=system_default：把 auto_tuned 目录指向一个一定不存在的子目录，
+         * 强制脚本走 default 分支。
+         *
+         * @param outputDir build run workspace 下的 prompt/candidates 目录
+         *                  （借用此目录拼一个绝对不会存在的子路径）
+         */
+        public static BaseOverride systemDefault(Path outputDir) {
+            return new BaseOverride(outputDir.resolve("_disabled_auto_tuned"));
+        }
+
+        /**
+         * seed=graphrag_tuned：指向 prompt-tune cache 命中目录，目录下含 extract_graph.txt。
+         */
+        public static BaseOverride graphragTuned(Path autoTunedPromptDir) {
+            return new BaseOverride(autoTunedPromptDir);
+        }
     }
 }

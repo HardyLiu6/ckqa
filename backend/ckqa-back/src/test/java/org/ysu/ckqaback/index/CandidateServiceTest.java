@@ -88,7 +88,7 @@ class CandidateServiceTest {
         // 调用顺序：先导出 audit_with_gold.json，再跑 orchestrator
         // 注意：exporter 收到的是 completed 过滤后的样本（只有 1 条且 reviewerDecision=completed）
         verify(auditExporter).export(any(), any(Path.class));
-        verify(orchestrator).run(any(Path.class), any(Path.class));
+        verify(orchestrator).run(any(Path.class), any(Path.class), any());
         verify(manifestReader).read(any(Path.class));
         assertThat(result).hasSize(1);
     }
@@ -114,7 +114,7 @@ class CandidateServiceTest {
 
         // 关键：被拒绝时 orchestrator / exporter 不应被调用
         verify(auditExporter, org.mockito.Mockito.never()).export(any(), any());
-        verify(orchestrator, org.mockito.Mockito.never()).run(any(), any());
+        verify(orchestrator, org.mockito.Mockito.never()).run(any(), any(), any());
     }
 
     @Test
@@ -194,7 +194,7 @@ class CandidateServiceTest {
 
         // list 不应触发 export 或 orchestrator
         verify(auditExporter, org.mockito.Mockito.never()).export(any(), any());
-        verify(orchestrator, org.mockito.Mockito.never()).run(any(), any());
+        verify(orchestrator, org.mockito.Mockito.never()).run(any(), any(), any());
         assertThat(result).hasSize(2);
     }
 
