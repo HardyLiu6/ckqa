@@ -8,6 +8,8 @@ import AnnotationTextCard from './AnnotationTextCard.vue'
 
 const props = defineProps({
   sample: { type: Object, default: null },
+  /** 当前正在生成 AI 候选的 sampleId（null 表示无任务）。从 PromptBuilderPrepareStep 传入。 */
+  aiSuggestionLoadingSampleId: { type: [String, Number], default: null },
 })
 
 defineEmits([
@@ -53,6 +55,11 @@ const confirmedCount = computed(() => props.sample?.goldEntities.length ?? 0)
 const aiCount = computed(() => props.sample?.aiSuggestedEntities.length ?? 0)
 const relConfirmedCount = computed(() => props.sample?.goldRelations.length ?? 0)
 const relAiCount = computed(() => (props.sample?.aiSuggestedRelations ?? []).length)
+
+// AI 候选三态：当前 sample 的 loading 状态判定
+const isAiLoading = computed(() =>
+  props.sample != null && props.aiSuggestionLoadingSampleId === props.sample.id
+)
 
 const breadcrumb = computed(() => {
   if (!props.sample?.headingPath) return ''
@@ -126,9 +133,19 @@ function handleRequestAddEntity({ name, spanStart, spanEnd }) {
       </div>
 
       <!-- A 智能：AI 预填横幅 -->
+      <!-- 三态机：
+           1. 加载中（isAiLoading）：显示 spinner + "AI 候选生成中..."，隐藏所有按钮
+           2. 已生成（aiCount > 0 且 非 loading）：显示候选数 + "按置信度排序" + "重新生成"
+           3. 未生成（aiCount === 0 且 非 loading）：显示生成提示 + "生成候选" 按钮 -->
       <div class="annotation-banner annotation-banner--ai">
         <span class="annotation-banner__icon">✨</span>
-        <template v-if="aiCount > 0">
+        <template v-if="isAiLoading">
+          <div class="annotation-banner__text">
+            <span class="annotation-banner__spinner" aria-hidden="true"></span>
+            AI 候选生成中，约 1-2 分钟，请稍候...
+          </div>
+        </template>
+        <template v-else-if="aiCount > 0">
           <div class="annotation-banner__text">
             AI 助手已生成 <strong>{{ aiCount }} 个候选实体</strong>，请逐条审阅。
           </div>
@@ -139,7 +156,7 @@ function handleRequestAddEntity({ name, spanStart, spanEnd }) {
         </template>
         <template v-else>
           <div class="annotation-banner__text">
-            可用 AI 助手抽取一遍，作为标注起点（约 10-30 秒，所有候选都需逐条审阅）。
+            可用 AI 助手抽取一遍，作为标注起点（约 1-2 分钟，所有候选都需逐条审阅）。
           </div>
           <div class="annotation-banner__actions">
             <button class="ann-btn ann-btn--accent" @click="$emit('request-ai-suggestions', sample.id)">

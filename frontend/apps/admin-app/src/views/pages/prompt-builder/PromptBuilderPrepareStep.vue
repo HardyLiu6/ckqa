@@ -364,7 +364,7 @@ async function handleRequestAiSuggestions(sampleId) {
   if (!sample) return
   if (aiSuggestionLoadingSampleId.value === sampleId) return  // 防重复点击同一样本
   aiSuggestionLoadingSampleId.value = sampleId
-  ElMessage.info('AI 候选生成中，约 1-2 分钟...')
+  ElMessage.info('已开始生成 AI 候选，请稍候...')
   try {
     const response = await requestAuditSampleAiSuggestions(buildRunId.value, sample.id)
     // response 形态：{ entities: [...], relations: [...] }
@@ -385,7 +385,12 @@ async function handleRequestAiSuggestions(sampleId) {
       `生成完成：${sample.aiSuggestedEntities.length} 个实体、${sample.aiSuggestedRelations.length} 个关系候选`
     )
   } catch (err) {
-    ElMessage.error(err?.message ?? 'AI 候选生成失败')
+    // axios 拦截器已经把 'timeout of Xms exceeded' 转成中文'请求超时，请稍后重试'，
+    // 但 AI 候选场景需要更具体的提示文案
+    const message = err?.timeout
+      ? 'AI 候选生成超时（>5 分钟），请稍后重试'
+      : (err?.message ?? 'AI 候选生成失败')
+    ElMessage.error(message)
   } finally {
     if (aiSuggestionLoadingSampleId.value === sampleId) {
       aiSuggestionLoadingSampleId.value = null
@@ -569,6 +574,7 @@ async function handleCreateRelation(payload) {
           />
           <AnnotationWorkArea
             :sample="activeSample"
+            :ai-suggestion-loading-sample-id="aiSuggestionLoadingSampleId"
             @finish-sample="handleFinishSample"
             @skip-sample="handleSkipSample"
             @accept-entity="handleAcceptEntity"

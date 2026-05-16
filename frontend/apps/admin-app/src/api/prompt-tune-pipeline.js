@@ -35,8 +35,12 @@ export async function updateAuditSample(buildRunId, sampleId, payload, client = 
 }
 
 export async function requestAuditSampleAiSuggestions(buildRunId, sampleId, client = http) {
+  // AI 候选生成单次需要 90-150 秒（含 1 轮 gleaning），单独放宽 timeout 到 5 分钟，
+  // 与后端 SingleSampleExtractionOrchestrator.EXTRACT_TIMEOUT 一致。
   return unwrapApiResponse(await client.post(
     `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/audit-samples/${encodeURIComponent(sampleId)}/ai-suggestions`,
+    null,
+    { timeout: 5 * 60 * 1000 },
   ))
 }
 

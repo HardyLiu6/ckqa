@@ -4568,6 +4568,20 @@ textarea.text-input {
 .annotation-banner__icon { font-size: 16px; line-height: 1; }
 .annotation-banner__text { flex: 1; }
 .annotation-banner__actions { display: flex; gap: 6px; }
+// AI 候选加载中的内联 spinner（紫色边框 + 旋转）
+.annotation-banner__spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  border: 2px solid color-mix(in srgb, #a855f7 30%, transparent);
+  border-top-color: #a855f7;
+  border-radius: 50%;
+  animation: annotation-banner-spin 0.85s linear infinite;
+}
+@keyframes annotation-banner-spin {
+  to { transform: rotate(360deg); }
+}
 .annotation-banner--reuse {
   background: color-mix(in srgb, #15803d 8%, transparent);
   border: 1px solid color-mix(in srgb, #15803d 24%, transparent);

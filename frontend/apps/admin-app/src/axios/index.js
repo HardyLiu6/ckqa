@@ -38,11 +38,18 @@ export function createHttpClient({ authStore: activeAuthStore = null, getAuthSes
     (response) => response,
     (error) => {
       const status = error.response?.status
-      const message = error.message ?? '请求失败'
+      // axios 超时（ECONNABORTED + 'timeout of Xms exceeded'）的英文报错对终端用户不友好，
+      // 在拦截器里统一转成中文。区分超时和其它网络错误。
+      const isTimeout = error.code === 'ECONNABORTED'
+        || (typeof error.message === 'string' && error.message.toLowerCase().includes('timeout'))
+      const message = isTimeout
+        ? '请求超时，请稍后重试'
+        : (error.message ?? '请求失败')
 
       return Promise.reject({
         status,
         message,
+        timeout: isTimeout,
         data: error.response?.data,
         raw: error,
       })
