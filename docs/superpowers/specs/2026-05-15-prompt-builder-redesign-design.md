@@ -392,6 +392,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
    - **并发场景**：`prompt_tune_audit_samples` 没有 `version` 字段，多标签页同时编辑同一样本时"最后写入获胜"。缓解：留到 Phase 8 加 `@Version` 乐观锁。
    - **build run 归档**：外键 `fk_audit_samples_build_run` 是 `ON DELETE RESTRICT`，归档/删除 build run 时会被 audit 样本阻塞。缓解：留到 Phase 8 决策"软归档" vs "导出后清理"。
    - **后端长耗时同步阻塞**：`regenerateAuditSet` 在 controller 线程内同步等 ≤5 分钟（Python 子进程超时上限），并发请求高时会撑满线程池。缓解：留到 Phase 8 仿照 `PromptTuneWorker` 拆成异步任务 + 状态轮询。
+   - **AI 单样本抽取（02.3）同步阻塞 90-180 秒**（Phase 3 落地后暴露的边界）：当前 `POST /audit-samples/{sampleId}/ai-suggestions` 在 controller 线程同步等 5 分钟（`SingleSampleExtractionOrchestrator.EXTRACT_TIMEOUT`）。问题表现为 ① 用户在抽取过程中关闭浏览器/网络抖动，HTTP 连接断开但 Java 子进程仍跑完 + 写入 `ai_suggested_*` 字段，前端再进入时拿到结果但缺少"任务正在跑"的指示；② axios timeout 必须单独配 5 分钟（已落地），但若用户多个 sample 同时点"生成候选"，Tomcat 工作线程会被几条长任务占满阻塞短请求。缓解：留到 Phase 8 仿照 `PromptTuneWorker` 模式拆成 `pending → running → success/failed` 异步任务，POST 立即返回 202 + taskId，前端轮询 `GET /ai-suggestions/status?sampleId=X`；同时利用 Phase 3 已落地的 `ai_suggested_*` 持久化字段，把任务的 running 状态作为 sample 三态（none / running / done）展示给前端，刷新页面后能从 DB 恢复 running 横幅。详见 Phase 8 落地计划。
 7. **AI 候选与已采纳实体重复**（Phase 3 持久化方案落地后暴露的边界）：
    - 用户点"重新生成"或"AI 候选去重已采纳实体"未启用时，原文里被反复抽出的同一实体会作为新候选再次出现，与已采纳的 goldEntities 视觉上重复。
    - 当前 Phase 3 的边界是"用户可以手动拒绝重复候选"，候选与 gold 是两条独立卡片，行为正确但体验略冗余。
@@ -472,6 +473,14 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 - **后端长耗时 API 异步化：**
   - 当前 `regenerateAuditSet` 在 controller 线程内同步等 5 分钟（`AuditPipelineOrchestrator.STEP_TIMEOUT`）。
   - 仿照 `PromptTuneWorker` 拆成 `pending → running → success/failed` 异步任务，前端轮询 `GET /audit-set/status`；同样适用于 Phase 5 的 04 步评分（80 次大模型调用，30+ 分钟）。
+  - **AI 单样本抽取（02.3）同步阻塞 90-180 秒同步改造**：`POST /audit-samples/{sampleId}/ai-suggestions` 改为立即返回 202 + `taskId`。
+    - 新增 `prompt_tune_ai_suggestion_tasks` 表（或复用通用任务表），字段 `task_id / sample_id / status / started_at / finished_at / error`。
+    - 任务由独立线程池 worker 跑，复用 Phase 3 已落地的 `SingleSampleExtractionOrchestrator`，区别只是不在 controller 线程同步等。
+    - 利用 Phase 3 已落地的 `ai_suggested_entities` / `ai_suggested_relations` 字段：worker 跑完直接写库，前端任意时刻刷新都能从 sample 查到最新候选；任务表只是给"running 横幅"用，做 UI 状态机。
+    - 前端 `GET /audit-samples/{sampleId}/ai-suggestions/status` 返回 `{ status, startedAt, etaSeconds }`；02 步加载 sample 时同时拉这个状态决定横幅渲染（none / running / done）。
+    - **跨页面恢复**：用户关浏览器再进 02 步，根据状态接口结果显示 spinner，不需要重跑。
+    - **失败重试**：任务表保留 `error` 字段，前端 running → failed 时显示 toast + "重试"按钮，重试发起新 task 不污染历史。
+    - **去重**：worker 启动前检查 sample 是否已有 running 任务，防并发重复触发。
 
 #### Phase 9：错误处理边界、E2E、文案与视觉打磨
 
