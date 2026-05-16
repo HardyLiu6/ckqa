@@ -2858,22 +2858,480 @@ git commit -m "fix(prompt-builder): 03 步路由切换保留 buildRunId 等 quer
 
 ---
 
-## Task 14：端到端手工验证
+## Task 14：真后端集成冒烟（手工 + 5 步精简）
 
-启动本地环境，浏览器走完整 03 步流程。
+> 这一步专做"Mock e2e 做不到的"集成验证：DB gold 合并、Python 脚本真跑、磁盘 build run 隔离、Phase 3 fallback 真路径。前端 UI 五态 / 抽屉懒加载 / 业务码 4105 等纯前端路径由下一个 Task 15（Playwright e2e）覆盖。
 
 **前置：** infra docker compose 已启动，后端在跑（已重启加载 Phase 4 改动），02 步至少有 1 个 build run 完成 ≥1 条 audit 样本审阅。
 
-- [ ] **Step 1：启动前端 dev server**
+- [ ] **Step 1：DB gold 真合并到 audit_with_gold.json**
 
-由于 `pnpm dev` 是长驻进程，**不要用 bash 工具直接跑**。手动在新终端：
+1. 在 admin-app 进入某个已完成 02 步的 build run，触发 03 步 POST /candidates（点"立即生成候选"按钮）。
+2. 检查磁盘：
 
 ```bash
-cd frontend/apps/admin-app
-pnpm dev
+WORKSPACE=/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/user_0/kb_<KB>/build_<RID>
+cat $WORKSPACE/prompt/candidates/audit_with_gold.json | python -c "import json,sys; d=json.load(sys.stdin); samples=d['audit_samples']; print(f'samples: {len(samples)}'); golds=[s for s in samples if s['gold_entities']]; print(f'with gold: {len(golds)}'); print('first gold sample:', golds[0]['source_sample_id'] if golds else None)"
 ```
 
-- [ ] **Step 2：进入门控验证（blocked-by-gate）**
+Expected：`with gold` ≥ 1（至少一条已 completed 样本带 gold_entities）。
+
+- [ ] **Step 2：Python 脚本真写出 4 个候选目录**
+
+```bash
+ls $WORKSPACE/prompt/candidates/
+```
+
+Expected：`audit_with_gold.json / manifest.json / generate_candidate_prompts.log / default/ / auto_tuned/ / schema_aware_directional_v2/ / schema_fewshot_distilled_v2_strict_tuple/`。每个候选子目录含 `prompt.txt` 和 `README.md`。
+
+- [ ] **Step 3：build run 隔离验证（A vs B）**
+
+1. 在 build run A（已含真实 audit gold）跑 03 步候选生成，记下 distilled prompt MD5：
+```bash
+md5sum $WORKSPACE_A/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt
+```
+
+2. 创建 build run B（同 KB，不同 audit 样本或重新审阅成不同 gold），跑 03 步候选生成，记下 distilled MD5：
+```bash
+md5sum $WORKSPACE_B/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt
+```
+
+Expected：A 和 B 的 MD5 **不同**（含各自 audit gold 的 fewshot 蒸馏）；其它 3 个候选（default / auto_tuned / schema_aware_directional_v2）MD5 应该**相同**（不依赖 audit gold）。
+
+- [ ] **Step 4：Phase 3 fallback 路径切换**
+
+1. 在 build run A（已跑过 03）的 02 步点"生成候选"（触发 AI 单样本抽取）。
+2. 看后端日志：`grep "运行 AI 单样本抽取" 后端 console 日志 | tail -1`
+
+Expected 含 `prompt=<workspace_A>/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt`，**不是**仓库根。
+
+3. 创建 build run C（**未**跑 03 步），在 02 步触发 AI 抽取。
+
+Expected 后端日志含 `prompt=<GRAPHRAG_ROOT>/prompts/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt`（仓库根 fallback）。
+
+- [ ] **Step 5：覆盖式生成验证（POST 幂等覆盖）**
+
+1. 修改 build run A 的某条 02 步样本 gold（增加一条实体）。
+2. 二次触发 03 步 POST /candidates（DevTools 直接发 POST）：
+
+```javascript
+fetch('/api/v1/knowledge-base-build-runs/<A>/candidates', {
+  method: 'POST',
+  headers: { Authorization: 'Bearer ' + localStorage.token }
+}).then(r => r.json()).then(console.log)
+```
+
+3. 检查 distilled prompt 是否更新（新 MD5 与 Step 3 记录的 MD5A 不同）：
+
+```bash
+md5sum $WORKSPACE_A/prompt/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt.txt
+```
+
+Expected：MD5 与 Step 3 不同；新 fewshot 微示例反映了用户新增的 gold。
+
+- [ ] **Step 6：不需要 commit**
+
+集成冒烟无代码改动。
+
+---
+
+## Task 15：Playwright e2e 覆盖前端五态 + 交互路径
+
+仿现有 `e2e/build-wizard-prompt-*.spec.js` 模式，新建 mock 后端 helper，覆盖 03 步前端路径。
+
+**Files:**
+- Create: `frontend/apps/admin-app/e2e/helpers/prompt-builder-candidates.js`
+- Create: `frontend/apps/admin-app/e2e/prompt-builder-candidates.spec.js`
+
+- [ ] **Step 1：创建 helper**
+
+Create `frontend/apps/admin-app/e2e/helpers/prompt-builder-candidates.js`:
+
+```javascript
+/**
+ * E2E prompt-builder Phase 4 helpers
+ *
+ * 关键设计：可变 liveCandidates / liveAuditCompleted 跟踪状态。
+ * 4105 空态、loading / error / ready 四态都通过控制 mock 响应触发。
+ */
+
+const API_PREFIX = '/api/v1'
+
+const ADMIN_USER = {
+  id: 1,
+  userCode: 'ADM2026001',
+  username: 'admin.heqh',
+  displayName: '平台管理员',
+  roleCode: 'admin',
+}
+
+const SAMPLE_CANDIDATES = [
+  {
+    candidateId: 'default',
+    displayNameZh: '默认基线',
+    category: 'baseline',
+    description: '基线 · 课程域微调',
+    isRecommended: false,
+    traits: [
+      { key: 'baseline', label: '课程基线' },
+      { key: 'no_schema', label: '无 schema 注入' },
+    ],
+    estimatedTokenPerCall: 775,
+    promptSizeBytes: 2300,
+    schemaUsed: false,
+    fewshotExampleCount: 0,
+    fewshotStrategy: null,
+    basePromptSource: 'extract_graph.txt',
+    generationTime: '2026-05-16T15:42:59',
+  },
+  {
+    candidateId: 'auto_tuned',
+    displayNameZh: 'GraphRAG 自动调优',
+    category: 'auto_tuned',
+    description: 'GraphRAG 官方 prompt-tune 自动产物',
+    isRecommended: false,
+    traits: [{ key: 'auto_tuned', label: '自动调优' }],
+    estimatedTokenPerCall: 925,
+    promptSizeBytes: 3100,
+    schemaUsed: false,
+    fewshotExampleCount: 0,
+    fewshotStrategy: null,
+    basePromptSource: 'extract_graph.txt',
+    generationTime: '2026-05-16T15:42:59',
+  },
+  {
+    candidateId: 'schema_aware_directional_v2',
+    displayNameZh: '图谱感知',
+    category: 'schema_aware',
+    description: '注入 schema + 方向卡 + 失败族守卫',
+    isRecommended: false,
+    traits: [
+      { key: 'schema_injected', label: 'schema 注入' },
+      { key: 'directional_card', label: '方向卡' },
+    ],
+    estimatedTokenPerCall: 1650,
+    promptSizeBytes: 5800,
+    schemaUsed: true,
+    fewshotExampleCount: 0,
+    fewshotStrategy: null,
+    basePromptSource: 'prompts/candidates/auto_tuned/extract_graph.txt',
+    generationTime: '2026-05-16T15:42:59',
+  },
+  {
+    candidateId: 'schema_fewshot_distilled_v2_strict_tuple',
+    displayNameZh: '图谱感知 + 蒸馏样例',
+    category: 'schema_fewshot',
+    description: '注入 schema + few-shot 蒸馏 + 严格 tuple 约束',
+    isRecommended: true,
+    traits: [
+      { key: 'schema_injected', label: 'schema 注入' },
+      { key: 'few_shot_distilled', label: 'few-shot 蒸馏' },
+      { key: 'strict_tuple', label: '严格 tuple' },
+    ],
+    estimatedTokenPerCall: 2500,
+    promptSizeBytes: 9200,
+    schemaUsed: true,
+    fewshotExampleCount: 3,
+    fewshotStrategy: 'distilled_negative_direction_rules_with_strict_tuple_guard',
+    basePromptSource: 'prompts/candidates/auto_tuned/extract_graph.txt',
+    generationTime: '2026-05-16T15:42:59',
+  },
+]
+
+const SAMPLE_AUDIT_SAMPLES = [
+  { id: 1, sourceSampleId: 's-001', text: 'sample 1', reviewerDecision: 'completed' },
+  { id: 2, sourceSampleId: 's-002', text: 'sample 2', reviewerDecision: 'pending' },
+]
+
+export async function loginAsAdmin(page) {
+  await page.setViewportSize({ width: 1980, height: 720 })
+}
+
+/**
+ * 安装 03 步 mock。可通过 options 控制初始态：
+ * - initialPhase: 'ready' | 'empty' | 'blocked-by-gate' | 'error'
+ * - candidates: 自定义候选数组（默认 SAMPLE_CANDIDATES 4 个）
+ * - auditCompletedCount: 02 步 completed 数（影响门控）
+ */
+export async function installCandidatesMocks(page, {
+  buildRunId = 18,
+  initialPhase = 'ready',
+  candidates = SAMPLE_CANDIDATES,
+  auditCompletedCount = 1,
+} = {}) {
+  let liveCandidates = initialPhase === 'empty' ? [] : candidates
+
+  const auditSamples = auditCompletedCount === 0
+    ? [{ ...SAMPLE_AUDIT_SAMPLES[0], reviewerDecision: 'pending' }]
+    : SAMPLE_AUDIT_SAMPLES.slice(0, Math.max(1, auditCompletedCount))
+
+  await page.route(`**${API_PREFIX}/**`, async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+
+    if (request.method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: corsHeaders() })
+      return
+    }
+
+    const path = url.pathname.replace(API_PREFIX, '')
+    const method = request.method()
+    const key = `${method} ${path}`
+
+    const handlers = {
+      'GET /auth/me': () => ({ data: ADMIN_USER }),
+      [`GET /knowledge-base-build-runs/${buildRunId}/audit-samples`]: () => ({
+        data: auditSamples,
+      }),
+      [`GET /knowledge-base-build-runs/${buildRunId}/candidates`]: () => {
+        if (initialPhase === 'error') {
+          return { httpStatus: 500, code: 5000, message: '后端崩溃' }
+        }
+        if (liveCandidates.length === 0) {
+          return { httpStatus: 404, code: 4105, message: '本次构建尚未生成候选 Prompt' }
+        }
+        return { data: liveCandidates }
+      },
+      [`POST /knowledge-base-build-runs/${buildRunId}/candidates`]: () => {
+        liveCandidates = candidates
+        return { data: liveCandidates }
+      },
+      [`GET /knowledge-base-build-runs/${buildRunId}/candidates/default/prompt`]: () => ({
+        data: '-Goal-\n基线候选 prompt\n',
+      }),
+      [`GET /knowledge-base-build-runs/${buildRunId}/candidates/schema_fewshot_distilled_v2_strict_tuple/prompt`]: () => ({
+        data: '-Goal-\n蒸馏样例 prompt\n## 关键改进 ##\n...',
+      }),
+    }
+
+    const handler = handlers[key]
+    if (!handler) {
+      await route.fulfill({
+        status: 500,
+        headers: jsonHeaders(),
+        body: JSON.stringify({ code: 5000, message: `未配置 E2E mock: ${key}`, data: null, timestamp: new Date().toISOString() }),
+      })
+      return
+    }
+
+    const result = await handler(request)
+    await route.fulfill({
+      status: result.httpStatus ?? 200,
+      headers: jsonHeaders(),
+      body: JSON.stringify({
+        code: result.code ?? 200,
+        message: result.message ?? '操作成功',
+        data: result.data ?? null,
+        timestamp: new Date().toISOString(),
+      }),
+    })
+  })
+}
+
+/**
+ * 直接跳到 03 步页面。url 含 buildRunId 和 step=candidates。
+ */
+export async function gotoCandidatesStep(page, { buildRunId = 18 } = {}) {
+  await page.goto(`/prompt-builder?buildRunId=${buildRunId}&step=candidates`)
+}
+
+function corsHeaders() {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'access-control-allow-headers': '*',
+  }
+}
+
+function jsonHeaders() {
+  return {
+    ...corsHeaders(),
+    'content-type': 'application/json',
+  }
+}
+```
+
+- [ ] **Step 2：创建 spec 文件**
+
+Create `frontend/apps/admin-app/e2e/prompt-builder-candidates.spec.js`:
+
+```javascript
+import { test, expect } from '@playwright/test'
+import {
+  loginAsAdmin,
+  installCandidatesMocks,
+  gotoCandidatesStep,
+} from './helpers/prompt-builder-candidates.js'
+
+test.describe('03 步候选 prompt 生成', () => {
+
+  test('blocked-by-gate：02 步 0 条 completed 时显示门控空态', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { auditCompletedCount: 0 })
+    await gotoCandidatesStep(page)
+
+    await expect(page.getByText(/请先在 02 步完成至少 1 条样本的审阅/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '返回 02 步标注' })).toBeVisible()
+  })
+
+  test('empty：02 步已完成但候选未生成时显示生成入口', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'empty' })
+    await gotoCandidatesStep(page)
+
+    await expect(page.getByText(/本次构建尚未生成候选 Prompt/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '立即生成候选' })).toBeVisible()
+  })
+
+  test('empty → ready：点立即生成后切到候选网格', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'empty' })
+    await gotoCandidatesStep(page)
+
+    await page.getByRole('button', { name: '立即生成候选' }).click()
+
+    // 4 个候选卡片显示
+    await expect(page.getByText('默认基线')).toBeVisible()
+    await expect(page.getByText('GraphRAG 自动调优')).toBeVisible()
+    await expect(page.getByText('图谱感知', { exact: true })).toBeVisible()
+    await expect(page.getByText('图谱感知 + 蒸馏样例')).toBeVisible()
+  })
+
+  test('ready：4 个候选默认全选 + 推荐徽章只在 distilled 上', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'ready' })
+    await gotoCandidatesStep(page)
+
+    // 摘要显示已选 4 / 4
+    await expect(page.getByText(/已选\s*4\s*\/\s*4 个候选/)).toBeVisible()
+
+    // 推荐徽章只在 distilled 卡片上
+    const recommendedBadges = page.locator('.candidate-card__rec-badge')
+    await expect(recommendedBadges).toHaveCount(1)
+  })
+
+  test('快捷动作：仅选基线只勾 default', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'ready' })
+    await gotoCandidatesStep(page)
+
+    await page.getByRole('button', { name: '仅选基线' }).click()
+
+    await expect(page.getByText(/已选\s*1\s*\/\s*4 个候选/)).toBeVisible()
+  })
+
+  test('快捷动作：清空后开始评分按钮 disabled', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'ready' })
+    await gotoCandidatesStep(page)
+
+    await page.getByRole('button', { name: '清空' }).click()
+
+    const startBtn = page.getByRole('button', { name: /开始抽取评分/ })
+    await expect(startBtn).toBeDisabled()
+  })
+
+  test('抽屉懒加载：点查看完整提示词触发 GET /prompt', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'ready' })
+    await gotoCandidatesStep(page)
+
+    // 监听 prompt 请求
+    const promptRequest = page.waitForRequest((req) =>
+      req.url().includes('/candidates/default/prompt')
+    )
+
+    // 点击 default 卡片的"查看完整提示词"按钮
+    const defaultCard = page.locator('.candidate-card', { hasText: '默认基线' })
+    await defaultCard.getByRole('button', { name: /查看完整提示词/ }).click()
+
+    await promptRequest
+
+    // 抽屉打开，标题含候选 ID
+    await expect(page.getByText(/默认基线（default）/)).toBeVisible()
+    // PromptDisplay 渲染了 prompt 文本
+    await expect(page.getByText(/基线候选 prompt/)).toBeVisible()
+  })
+
+  test('error 态：后端 5xx 显示重试按钮', async ({ page }) => {
+    await loginAsAdmin(page)
+    await installCandidatesMocks(page, { initialPhase: 'error' })
+    await gotoCandidatesStep(page)
+
+    await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
+  })
+})
+```
+
+- [ ] **Step 3：跑 e2e**
+
+Run:
+```bash
+cd frontend/apps/admin-app && pnpm test:e2e prompt-builder-candidates 2>&1 | tail -20
+```
+
+Expected：8 个 e2e 测试全 PASS。
+
+- [ ] **Step 4：commit**
+
+```bash
+git add frontend/apps/admin-app/e2e/helpers/prompt-builder-candidates.js frontend/apps/admin-app/e2e/prompt-builder-candidates.spec.js
+git commit -m "test(prompt-builder): 03 步 Playwright e2e 覆盖五态 + 抽屉 + 推荐徽章 (Phase 4)"
+```
+
+---
+
+## Task 16：联合验证 + spec 标记完成
+
+> 收尾：把 Task 14 真后端冒烟 + Task 15 mock e2e 的产出聚合，确认 Phase 4 真正完结。
+
+- [ ] **Step 1：跑全部测试套件**
+
+后端：
+```bash
+cd backend/ckqa-back && ./mvnw test 2>&1 | grep -E "Tests run|FAIL|ERROR" | tail -5
+```
+
+Expected：≥ 356 PASS，0 FAIL。
+
+前端单测：
+```bash
+cd frontend/apps/admin-app && pnpm test 2>&1 | tail -5
+```
+
+Expected：≥ 325 PASS。
+
+前端 e2e：
+```bash
+cd frontend/apps/admin-app && pnpm test:e2e 2>&1 | tail -8
+```
+
+Expected：原有 e2e 仍 PASS + Phase 4 新加 8 个 PASS。
+
+- [ ] **Step 2：自检清单走一遍**
+
+打开 plan 末尾的"自检清单"，逐项打勾。任一项未达成停止合并。
+
+- [ ] **Step 3：spec 标记 ✅**
+
+Modify `docs/superpowers/specs/2026-05-15-prompt-builder-redesign-design.md`：
+
+定位 `**Phase 4（⏸）**` 段，把 ⏸ 改成 ✅。同时把"已识别风险" §3（候选译名硬编码）和 §5（auto_tuned 绝对路径）后面附上"Phase 4 已落地缓解（CandidateMetadataLookup / simplifyBasePromptSource）"。
+
+- [ ] **Step 4：commit**
+
+```bash
+git add docs/superpowers/specs/2026-05-15-prompt-builder-redesign-design.md
+git commit -m "docs(spec): Phase 4 标记完成 + 风险 #3/#5 缓解备注 (Phase 4)"
+```
+
+- [ ] **Step 5：push**
+
+```bash
+git push origin feature/prompt-confirmation-step
+```
+
+---
 
 1. 在 admin-app 新建一个**空** build run（不进入 02 步标注），URL 含 `?buildRunId=<id>&step=candidates`。
 2. 直接访问 03 步 URL。
@@ -3026,6 +3484,8 @@ Phase 4 完结。
 - [ ] **E2**：异常路径测试：脚本超时、脚本失败、manifest 损坏、未知 candidateId、文件缺失。
 - [ ] **E3**：Phase 3 fix 加 2 个单测：build run 候选优先 + fallback 仓库根。
 - [ ] **E4**：前端 5 个 API 单测：generateCandidates / listCandidates / getCandidatePromptText / URL encoding / 4105 业务码抛错。
+- [ ] **E5**：Playwright e2e 8 个测试：blocked-by-gate / empty / empty→ready / ready 默认全选 + 推荐徽章 / 仅选基线 / 清空 / 抽屉懒加载 / error 重试。
+- [ ] **E6**：真后端集成冒烟 5 步：DB gold 合并 / 4 候选目录 / build run 隔离 MD5 不同 / Phase 3 fallback 路径切换 / 覆盖式生成。
 
 ---
 
@@ -3033,7 +3493,8 @@ Phase 4 完结。
 
 - 后端单测：原 326 → 326 + ~30（5 新类 × ~6 测试）= 约 356 PASS
 - 前端单测：原 320 → 320 + 5 = 325 PASS
-- 浏览器手工验证 14 步全过
+- 前端 e2e：现有套件 + Phase 4 新加 8 个 PASS
+- 真后端集成冒烟 5 步全过（含 DB gold 合并 + build run 隔离 + Phase 3 fallback）
 - 一致性 / 上下文 / spec 覆盖 / 依赖 / 测试 5 类自检全过
 - 所有 commit message 含 `(Phase 4)` 标记
 - spec § Phase 4 段标记为 ✅ 已完成
