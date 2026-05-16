@@ -281,6 +281,7 @@ function returnToWizard() {
         <PromptBuilderCandidatesStep
           v-else-if="activeStepKey === 'candidates'"
           :dirty="dirty"
+          :current-build-run-seed="seed"
           @start-scoring="gotoStep('scoring')"
           @back="gotoPrev"
         />

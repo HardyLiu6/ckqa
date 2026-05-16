@@ -22,6 +22,12 @@ import {
 
 const props = defineProps({
   dirty: { type: Boolean, default: false },
+  /**
+   * Phase 4.5：当前 build run metadata 中的 seed。
+   * 用于与 candidates[0].seed 比较，若不一致则候选已 stale，提示用户重新生成。
+   * 缺失（null）时不触发 stale 判定（兼容老 build run）。
+   */
+  currentBuildRunSeed: { type: String, default: null },
 })
 
 const emit = defineEmits(['start-scoring', 'back'])
@@ -53,6 +59,21 @@ const drawerPromptText = ref('')
 const drawerLoading = ref(false)
 
 const summary = computed(() => computeSummary(selectedIds.value, candidates.value))
+
+// Phase 4.5：候选 seed 与当前 build run seed 不一致 → 标记 stale
+// 缺 candidate.seed（Phase 4 老 build run 候选目录无 seed-info.json）→ 不触发 stale
+const isCandidatesStaleBySeed = computed(() => {
+  if (candidates.value.length === 0) return false
+  const candidateSeed = candidates.value[0].seed ?? null
+  if (candidateSeed === null) return false
+  return candidateSeed !== props.currentBuildRunSeed
+})
+
+function seedShortLabel(seed) {
+  if (seed === 'system_default') return '系统默认'
+  if (seed === 'graphrag_tuned') return '自动调优'
+  return seed ?? '未知'
+}
 
 onMounted(loadCandidates)
 
@@ -211,6 +232,18 @@ function handleStart() {
 
     <!-- ready -->
     <template v-else>
+      <!-- Phase 4.5：候选 seed 与当前 seed 不一致时显示 stale 横幅 -->
+      <div v-if="isCandidatesStaleBySeed" class="candidate-stale-banner">
+        <span>
+          ⚠ 当前候选基于旧种子（{{ seedShortLabel(candidates[0]?.seed) }}）生成，
+          与本次构建当前的种子（{{ seedShortLabel(currentBuildRunSeed) }}）不一致，
+          建议点&quot;重新生成候选&quot;覆盖更新。
+        </span>
+        <el-button size="small" @click="handleRegenerate" :disabled="regenerating">
+          {{ regenerating ? '重新生成中...' : '立即重新生成' }}
+        </el-button>
+      </div>
+
       <!-- 合并摘要 + 操作为一栏 -->
       <div class="candidate-action-bar">
         <div class="candidate-action-bar__left">
@@ -282,4 +315,22 @@ function handleStart() {
 .candidate-state-card--error { color: var(--ckqa-danger, #dc2626); }
 .candidate-state-card--blocked { color: var(--ckqa-warning, #d97706); }
 .candidate-state-card--empty { color: var(--ckqa-text); }
+
+/* Phase 4.5：stale 横幅 */
+.candidate-stale-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background-color: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.32);
+  border-radius: 8px;
+  color: var(--ckqa-warning, #d97706);
+  font-size: 13px;
+}
+.candidate-stale-banner > span {
+  flex: 1;
+}
 </style>

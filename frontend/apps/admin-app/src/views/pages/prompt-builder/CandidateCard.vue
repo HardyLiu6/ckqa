@@ -27,6 +27,14 @@ const formattedToken = computed(() =>
 const formattedSize = computed(() =>
   `${(props.candidate.promptSizeBytes / 1024).toFixed(1)} KB`
 )
+
+// Phase 4.5：seed 角标文案
+const seedBadgeLabel = computed(() => {
+  const seed = props.candidate.seed
+  if (seed === 'system_default') return '基于 系统默认'
+  if (seed === 'graphrag_tuned') return '基于 自动调优'
+  return null
+})
 </script>
 
 <template>
@@ -56,6 +64,7 @@ const formattedSize = computed(() =>
       <span v-for="trait in candidate.traits" :key="trait.key" class="cand-pill">
         {{ trait.label }}
       </span>
+      <span v-if="seedBadgeLabel" class="cand-pill cand-pill--seed">{{ seedBadgeLabel }}</span>
     </div>
 
     <dl class="candidate-card__meta">
@@ -81,3 +90,12 @@ const formattedSize = computed(() =>
     </button>
   </article>
 </template>
+
+<style scoped>
+.cand-pill--seed {
+  background-color: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.24);
+}
+</style>
+
