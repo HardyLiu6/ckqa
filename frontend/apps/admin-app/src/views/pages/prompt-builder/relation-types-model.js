@@ -66,3 +66,29 @@ export function filterRelationTypesByEndpoints({ sourceType, targetType }) {
 export function describeRelationType(name) {
   return RELATION_TYPES.find((r) => r.name === name) ?? null
 }
+
+/**
+ * 检测正向无更具体关系（仅剩 related_to 兜底或为空）但反向有更具体关系的情况，
+ * 用于 RelationEditor 提示用户调换 source/target。
+ *
+ * @param {{sourceType: string, targetType: string}} params
+ * @returns {{hasReverse: boolean, reverseTypes?: Array}}
+ */
+export function tryReverseRelation({ sourceType, targetType }) {
+  if (!sourceType || !targetType) return { hasReverse: false }
+
+  const forward = filterRelationTypesByEndpoints({ sourceType, targetType })
+  const forwardSpecific = forward.filter((r) => r.name !== 'related_to')
+  if (forwardSpecific.length > 0) {
+    // 正向已有 related_to 之外的更具体关系，不需要反向
+    return { hasReverse: false }
+  }
+
+  const reverse = filterRelationTypesByEndpoints({ sourceType: targetType, targetType: sourceType })
+  const reverseSpecific = reverse.filter((r) => r.name !== 'related_to')
+  if (reverseSpecific.length === 0) {
+    return { hasReverse: false }
+  }
+
+  return { hasReverse: true, reverseTypes: reverseSpecific }
+}

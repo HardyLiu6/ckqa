@@ -1,7 +1,7 @@
 <!-- frontend/apps/admin-app/src/views/pages/prompt-builder/RelationEditor.vue -->
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { filterRelationTypesByEndpoints } from './relation-types-model.js'
+import { filterRelationTypesByEndpoints, tryReverseRelation } from './relation-types-model.js'
 
 const props = defineProps({
   /** 当前样本的实体列表，用于源/目标下拉 */
@@ -81,6 +81,23 @@ function reset() {
   evidence.value = ''
   submitAttempted.value = false
 }
+
+const reverseHint = computed(() => {
+  if (!sourceEntity.value || !targetEntity.value) return null
+  if (isSelfLoop.value) return null
+  // 当正向只有 related_to 兜底（没有更具体关系），且反向有更具体关系时才提示
+  return tryReverseRelation({
+    sourceType: sourceEntity.value.type,
+    targetType: targetEntity.value.type,
+  })
+})
+
+function swapDirection() {
+  const tmp = sourceEntityId.value
+  sourceEntityId.value = targetEntityId.value
+  targetEntityId.value = tmp
+  // type 会被 watch(availableRelationTypes) 自动清空
+}
 </script>
 
 <template>
@@ -134,6 +151,12 @@ function reset() {
       <p v-if="sourceEntity && targetEntity && !isSelfLoop && availableRelationTypes.length === 0" class="relation-editor__hint relation-editor__hint--error">
         ⚠ 两端类型「{{ sourceEntity.type }} → {{ targetEntity.type }}」之间没有 schema 合法关系，请检查实体类型是否正确。
       </p>
+      <p v-if="reverseHint?.hasReverse" class="relation-editor__hint relation-editor__hint--reverse">
+        💡 当前方向「{{ sourceEntity.type }} → {{ targetEntity.type }}」仅有 related_to 兜底关系；
+        反向「{{ targetEntity.type }} → {{ sourceEntity.type }}」可使用更具体关系
+        ({{ reverseHint.reverseTypes.map((r) => r.name).join('/') }})。
+        <button type="button" class="relation-editor__swap-btn" @click="swapDirection">调换方向</button>
+      </p>
     </label>
     <label class="relation-editor__row relation-editor__row--full">
       <span class="relation-editor__label">证据（可选）</span>
@@ -186,6 +209,22 @@ function reset() {
 }
 .relation-editor__hint--error {
   color: #b45309;
+}
+.relation-editor__hint--reverse {
+  color: #6366f1;
+}
+.relation-editor__swap-btn {
+  margin-left: 8px;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.relation-editor__swap-btn:hover {
+  background: #4f46e5;
 }
 .relation-editor__error {
   font-size: 12px;
