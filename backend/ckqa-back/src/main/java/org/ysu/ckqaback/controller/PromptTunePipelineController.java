@@ -20,6 +20,7 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.AiSuggestionService;
 import org.ysu.ckqaback.index.AuditSampleService;
 import org.ysu.ckqaback.index.CandidateService;
+import org.ysu.ckqaback.index.SeedAvailabilityService;
 import org.ysu.ckqaback.index.dto.AiSuggestionResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleUpdateRequest;
@@ -31,6 +32,7 @@ import org.ysu.ckqaback.index.dto.ExtractionEvalStatusResponse;
 import org.ysu.ckqaback.index.dto.FinalizePromptRequest;
 import org.ysu.ckqaback.index.dto.PipelineStepResponse;
 import org.ysu.ckqaback.index.dto.PromptDraftResponse;
+import org.ysu.ckqaback.index.dto.SeedAvailabilityResponse;
 
 import java.util.List;
 import java.util.Map;
@@ -55,6 +57,7 @@ public class PromptTunePipelineController {
     private final AuditSampleService auditSampleService;
     private final AiSuggestionService aiSuggestionService;
     private final CandidateService candidateService;
+    private final SeedAvailabilityService seedAvailabilityService;
 
     // ------------------------------------------------------------
     // 02 步：构建准备材料
@@ -115,6 +118,16 @@ public class PromptTunePipelineController {
     // ------------------------------------------------------------
     // 03 步：生成候选提示词
     // ------------------------------------------------------------
+
+    /**
+     * Phase 4.5：返回 01 步 3 个种子选项各自的可用状态。
+     */
+    @GetMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/seed-availability")
+    public ApiResponse<SeedAvailabilityResponse> getSeedAvailability(
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
+    ) {
+        return ApiResponseUtils.success(seedAvailabilityService.evaluate(buildRunId));
+    }
 
     /**
      * 03 步：触发候选 prompt 生成。
