@@ -42,7 +42,11 @@ export async function navigateToKnowledgeBaseBuild(page, {
   ]
   const parseResults = exportIncomplete
     ? []
-    : [{ fileName: 'graphrag_normalized_docs.json' }, { fileName: 'graphrag_section_docs.json' }]
+    : [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ]
 
   await installBuildWizardMocks(page, {
     kbId,

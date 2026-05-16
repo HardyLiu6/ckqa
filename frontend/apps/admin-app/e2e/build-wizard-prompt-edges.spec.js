@@ -9,17 +9,22 @@ test('第 03 步未确认导出时第 04 步全部禁用 + blocked 文案', asyn
   // 强行导航到 step=prompt（不带 exportConfirmed）
   await page.goto(`/app/knowledge-bases/${kbId}/build?buildRunId=${buildRunId}&step=prompt`)
 
-  await expect(page.getByText('阻塞')).toBeVisible()
+  const stage = page.locator('.build-step-stage')
+
+  await expect(stage.getByText('未满足条件')).toBeVisible()
   // 三张策略卡都 aria-disabled
-  for (const name of ['默认提示词', 'GraphRAG 自动调优提示词', '手动调优提示词']) {
-    await expect(page.getByRole('radio', { name: new RegExp(name) })).toHaveAttribute('aria-disabled', 'true')
+  for (const name of ['默认提示词', '自动调优提示词', '手动调优提示词']) {
+    await expect(stage.getByRole('radio', { name: new RegExp(name) })).toHaveAttribute('aria-disabled', 'true')
   }
   // 主按钮 disabled + 副文案
-  await expect(page.getByRole('button', { name: '确认提示词策略' })).toBeDisabled()
-  await expect(page.getByText('请先确认导出产物')).toBeVisible()
+  await expect(stage.getByRole('button', { name: '确认提示词策略', exact: true })).toBeDisabled()
+  await expect(stage.getByText('请先确认导出产物')).toBeVisible()
 })
 
-test('保存草稿后刷新页面，状态正确恢复', async ({ page }) => {
+test.skip('保存草稿后刷新页面，状态正确恢复', async ({ page }) => {
+  // TODO(Phase 6+)：当前 prompt-builder 已重构为 5 步流程（seed/prepare/candidates/eval/save），
+  // 不再包含旧版"实体抽取提示词内容"textarea + "保存并返回"按钮。
+  // 等 Phase 6 (05 步草稿入库) 落地后用新 UI 重写。
   await loginAsAdmin(page)
   const { kbId, buildRunId } = await navigateToKnowledgeBaseBuild(page, { stage: 'prompt' })
 
@@ -42,7 +47,9 @@ test('保存草稿后刷新页面，状态正确恢复', async ({ page }) => {
   await expect(page.getByText(/已构建手动调优提示词/)).toBeVisible()
 })
 
-test('Builder dirty 时点面包屑返回 → 弹确认对话框', async ({ page }) => {
+test.skip('Builder dirty 时点面包屑返回 → 弹确认对话框', async ({ page }) => {
+  // TODO(Phase 6+)：依赖旧 prompt-builder 的"实体抽取提示词内容"textarea 与
+  // "保存并返回"按钮，新 5 步流程已不再包含。等 Phase 6 落地后用新 UI 重写。
   await loginAsAdmin(page)
   const { kbId, buildRunId } = await navigateToKnowledgeBaseBuild(page, { stage: 'prompt' })
   await page.getByRole('radio', { name: /手动调优提示词/ }).click()

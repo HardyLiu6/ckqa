@@ -8,17 +8,19 @@ test('URL 携带 promptConfirmed=1 但 metadata 为 false → 页面仍显示待
   // 强行访问携带伪造 query 的 URL
   await page.goto(`/app/knowledge-bases/${kbId}/build?buildRunId=${buildRunId}&step=prompt&exportConfirmed=1&promptConfirmed=1`)
 
-  // 期望：query 被前端清理 + 状态徽章仍显示待确认
+  const stage = page.locator('.build-step-stage')
+
+  // 期望：query 被前端清理 + 状态徽章仍显示未确认（"可执行"，对应 ready 态）
   await page.waitForURL((url) => !url.searchParams.has('promptConfirmed'))
-  await expect(page.getByText('待确认')).toBeVisible()
-  await expect(page.getByRole('button', { name: '确认提示词策略' })).toBeVisible()
+  await expect(stage.locator('[aria-label*="状态"]')).toContainText(/可执行|执行中/)
+  await expect(stage.getByRole('button', { name: '确认提示词策略', exact: true })).toBeVisible()
 
   // 直跳 step=index 应被后端拦截或前端阻止
   await page.goto(`/app/knowledge-bases/${kbId}/build?buildRunId=${buildRunId}&step=index`)
   // 验证方式：前端应将索引步骤的主操作按钮置为 disabled（因为 promptConfirmed=false）
   // 或者前端直接重定向回 step=prompt
   await page.waitForSelector('.build-step-panel, .build-step-stage')
-  const primaryBtn = page.getByRole('button', { name: /开始构建|创建索引/ })
+  const primaryBtn = stage.getByRole('button', { name: /开始构建|创建索引/ })
   if (await primaryBtn.isVisible()) {
     await expect(primaryBtn).toBeDisabled()
   } else {

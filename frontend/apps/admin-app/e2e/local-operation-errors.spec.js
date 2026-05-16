@@ -177,7 +177,7 @@ test('构建向导第03步生成缺失产物后提供进入 Prompt 确认入口'
   await expect.poll(() => calls.includes('export-10')).toBe(true)
   await expect.poll(() => calls.includes('graph-input-sync'), { timeout: 7000 }).toBe(true)
 
-  await page.locator('.build-step-stage').getByRole('button', { name: '确认图谱输入并进入 Prompt 确认' }).click()
+  await page.locator('.build-step-stage').getByRole('button', { name: '确认图谱输入并进入提示词确认' }).click()
   await expect.poll(() => calls.includes('graph-input-confirm')).toBe(true)
   await expect(page).toHaveURL(/exportConfirmed=1/)
   await expect(page).toHaveURL(/step=prompt/)
@@ -246,7 +246,7 @@ test('构建向导产物缺失时清理旧 exportConfirmed 和 promptConfirmed',
 
   await expect(page).not.toHaveURL(/exportConfirmed=1/)
   await expect(page).not.toHaveURL(/promptConfirmed=1/)
-  await expect(page.locator('.build-step-stage')).toContainText('Prompt确认')
+  await expect(page.locator('.build-step-stage')).toContainText('提示词确认')
 })
 
 test('Prompt确认步骤刷新后从 promptConfirmed=1 恢复完成态', async ({ page }) => {
@@ -258,7 +258,7 @@ test('Prompt确认步骤刷新后从 promptConfirmed=1 恢复完成态', async (
   await page.reload()
 
   const stage = page.locator('.build-step-stage')
-  await expect(stage).toContainText('Prompt确认')
+  await expect(stage).toContainText('提示词确认')
   await expect(stage).toContainText('已完成')
   await expect(stage).toContainText('进入创建索引')
 })

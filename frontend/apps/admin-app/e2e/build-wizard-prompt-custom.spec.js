@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, navigateToKnowledgeBaseBuild } from './helpers/build-wizard.js'
 
-test('custom_pipeline 策略 - 编辑保存后回到向导可确认', async ({ page }) => {
+test.skip('custom_pipeline 策略 - 编辑保存后回到向导可确认', async ({ page }) => {
+  // TODO(Phase 6+)：依赖旧 prompt-builder 的"实体抽取提示词内容"textarea 与
+  // "保存并返回"按钮。新 5 步流程（seed/prepare/candidates/eval/save）已不再包含。
+  // 等 Phase 6 (05 步草稿入库) 落地后用新 UI 重写。
   await loginAsAdmin(page)
   const { kbId, buildRunId } = await navigateToKnowledgeBaseBuild(page, { stage: 'prompt' })
 
