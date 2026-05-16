@@ -37,7 +37,7 @@ class FusedEvidencePack:
 
 
 _TEXT_UNIT_BLOCK_RE = re.compile(r"(?:Text Units?|Hybrid)\s*\(([^)]*)\)", re.IGNORECASE)
-_REF_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{2,}")
+_REF_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{7,}")
 
 
 def fuse_basic_and_bm25_evidence(

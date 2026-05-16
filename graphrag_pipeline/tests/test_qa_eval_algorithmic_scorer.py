@@ -193,7 +193,7 @@ def test_score_run_algorithmically_surfaces_hybrid_diagnostics(tmp_path: Path):
                             "high_evidence_count": 2,
                             "synthesis_attempted": True,
                             "fallback_reasons": ["basic_missing_data_citation"],
-                            "fused_evidence_refs": ["d244f9016ac8", "xxxxxxxxxxxx"],
+                            "fused_evidence_refs": ["d244f9016ac8", "149", "+more", "xxxxxxxxxxxx"],
                             "fused_evidence_sources": {"bm25": 2, "basic-citation": 1},
                             "synthesis_reason": "basic_missing_data_citation",
                             "local_fallback_enabled": False,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,11 @@ from graphrag_pipeline.scripts.qa_eval.run_loader import (
     select_question_ids_for_run,
 )
 from graphrag_pipeline.scripts.qa_eval.semantic_similarity import SemanticScoringConfig, score_semantic_similarity
+from graphrag_pipeline.scripts.qa_eval.test_set_schema import TEXT_UNIT_ID_PREFIX_LEN
 from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import DataCitationLookup, load_data_citation_lookup
+
+
+_DIAGNOSTIC_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,}$")
 
 
 def _hit_rate(answer: str, terms: list[str]) -> float:
@@ -50,7 +55,7 @@ def _hybrid_diagnostic_columns(diagnostics: dict[str, Any]) -> dict[str, Any]:
             "hybrid_local_fallback_enabled": None,
         }
     fallback_reasons = diagnostics.get("fallback_reasons") or []
-    fused_refs = diagnostics.get("fused_evidence_refs") or []
+    fused_refs = _normalized_diagnostic_refs(diagnostics.get("fused_evidence_refs"))
     return {
         "hybrid_used_local_fallback": diagnostics.get("used_local_fallback"),
         "hybrid_guardrail_score": diagnostics.get("guardrail_score"),
@@ -71,7 +76,7 @@ def _selected_evidence_columns(
     diagnostics: dict[str, Any],
     gold_refs: list[str],
 ) -> dict[str, float | None]:
-    refs = [str(ref) for ref in diagnostics.get("fused_evidence_refs") or [] if str(ref).strip()]
+    refs = _normalized_diagnostic_refs(diagnostics.get("fused_evidence_refs"))
     if not refs:
         return {
             "selected_evidence_recall_at_3": None,
@@ -89,6 +94,20 @@ def _selected_evidence_columns(
         "selected_evidence_rr": float(scores["citation_rr"]),
         "selected_evidence_ndcg_at_5": float(scores["citation_ndcg_at_5"]),
     }
+
+
+def _normalized_diagnostic_refs(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    refs: list[str] = []
+    for raw in value:
+        token = str(raw).strip()
+        if not _DIAGNOSTIC_REF_RE.fullmatch(token):
+            continue
+        prefix = token[:TEXT_UNIT_ID_PREFIX_LEN]
+        if prefix not in refs:
+            refs.append(prefix)
+    return refs
 
 
 def _format_source_counts(value: object) -> str:

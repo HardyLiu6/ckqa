@@ -45,7 +45,7 @@ def test_build_hybrid_diagnostics_rows_explains_no_fallback(tmp_path: Path):
             "guardrail_score": 1.0,
             "low_evidence_count": 8,
             "high_evidence_count": 1,
-            "fused_evidence_refs": ["aaaabbbbcccc", "ddddeeeeffff"],
+            "fused_evidence_refs": ["aaaabbbbcccc", "149", "+more", "ddddeeeeffff"],
             "fused_evidence_sources": {"bm25": 2, "basic-citation": 1},
             "synthesis_reason": "",
             "local_fallback_enabled": False,

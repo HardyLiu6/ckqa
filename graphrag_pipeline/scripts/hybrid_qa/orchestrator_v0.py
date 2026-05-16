@@ -8,7 +8,10 @@ from typing import Any, Protocol
 
 from graphrag_pipeline.scripts.hybrid_qa.basic_local_client import GraphRagDraft
 from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import FusedEvidencePack
-from graphrag_pipeline.scripts.hybrid_qa.prompt_builder import build_hybrid_v0_prompt
+from graphrag_pipeline.scripts.hybrid_qa.prompt_builder import (
+    build_hybrid_v0_basic_injection_prompt,
+    build_hybrid_v0_prompt,
+)
 from graphrag_pipeline.scripts.hybrid_qa.question_classifier import classify_question
 from graphrag_pipeline.scripts.hybrid_qa.types import (
     EvidenceCandidate,
@@ -41,6 +44,7 @@ EvidenceFusionCallable = Callable[
 
 _DATA_CITATION_RE = re.compile(r"\[Data:\s*[^\]]+\]", re.IGNORECASE)
 _DIRECT_REF_BLOCK_RE = re.compile(r"(?:Text Units?|Hybrid)\s*\(([^)]*)\)", re.IGNORECASE)
+_DIRECT_REF_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{7,}")
 _TEXT_UNIT_REF_PREFIX_LEN = 12
 
 
@@ -50,6 +54,8 @@ class HybridFallbackPolicy:
     require_data_citation: bool = True
     require_low_ref_overlap_when_direct_refs: bool = True
     fused_overlap_top_k: int = 3
+    enable_basic_evidence_injection: bool = False
+    disable_synthesis: bool = False
     enable_local_fallback: bool = False
 
 
@@ -81,7 +87,12 @@ class HybridV0Orchestrator:
         high_candidates: list[EvidenceCandidate] = []
         errors: list[str] = []
 
-        basic_draft = self.graph_client.query_basic(question)
+        basic_prompt = (
+            build_hybrid_v0_basic_injection_prompt(question, low_candidates)
+            if self.fallback_policy.enable_basic_evidence_injection
+            else question
+        )
+        basic_draft = self.graph_client.query_basic(basic_prompt)
         if basic_draft.answer.strip():
             high_candidates.append(basic_draft.as_candidate())
         if basic_draft.error:
@@ -106,7 +117,7 @@ class HybridV0Orchestrator:
             fallback_reasons.append("basic_guardrail_fail")
 
         synthesis_reason = fallback_reasons[0] if fallback_reasons else ""
-        if fallback_reasons:
+        if fallback_reasons and not self.fallback_policy.disable_synthesis:
             synthesis_attempted = True
             answer = self._complete(question, fused_candidates, high_candidates)
             guardrail_result = self.guardrail(answer, [*fused_candidates, *high_candidates])
@@ -213,8 +224,8 @@ class HybridV0Orchestrator:
 def _extract_direct_refs(answer: str) -> list[str]:
     refs: list[str] = []
     for block in _DIRECT_REF_BLOCK_RE.findall(answer or ""):
-        for raw in re.split(r"[,，;；\s]+", block):
-            normalized = raw.strip()[:_TEXT_UNIT_REF_PREFIX_LEN]
+        for raw in _DIRECT_REF_TOKEN_RE.findall(block):
+            normalized = raw[:_TEXT_UNIT_REF_PREFIX_LEN]
             if normalized and normalized not in refs:
                 refs.append(normalized)
     return refs

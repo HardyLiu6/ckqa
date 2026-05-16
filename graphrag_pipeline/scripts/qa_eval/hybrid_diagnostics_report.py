@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 
 HYBRID_V0_MODEL = "graphrag-hybrid-v0-search:latest"
+_DIAGNOSTIC_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,}$")
 
 
 def build_hybrid_diagnostics_rows(run_dirs: list[Path]) -> list[dict[str, Any]]:
@@ -26,7 +28,7 @@ def build_hybrid_diagnostics_rows(run_dirs: list[Path]) -> list[dict[str, Any]]:
                     "guardrail_status": str(diagnostics.get("guardrail_status") or "missing"),
                     "guardrail_score": _float_or_none(diagnostics.get("guardrail_score")),
                     "bm25_evidence_count": _int_or_none(diagnostics.get("low_evidence_count")),
-                    "fused_evidence_count": len(_list_or_empty(diagnostics.get("fused_evidence_refs"))),
+                    "fused_evidence_count": len(_valid_ref_list(diagnostics.get("fused_evidence_refs"))),
                     "fused_evidence_sources": _format_source_counts(diagnostics.get("fused_evidence_sources")),
                     "high_evidence_count": _int_or_none(diagnostics.get("high_evidence_count")),
                     "synthesis_reason": str(diagnostics.get("synthesis_reason") or ""),
@@ -136,6 +138,10 @@ def _int_or_none(value: object) -> int | None:
 
 def _list_or_empty(value: object) -> list[object]:
     return value if isinstance(value, list) else []
+
+
+def _valid_ref_list(value: object) -> list[str]:
+    return [str(ref).strip() for ref in _list_or_empty(value) if _DIAGNOSTIC_REF_RE.fullmatch(str(ref).strip())]
 
 
 def _format_source_counts(value: object) -> str:

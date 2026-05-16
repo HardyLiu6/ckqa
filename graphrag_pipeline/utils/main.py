@@ -218,6 +218,17 @@ def _parse_int_env(value: str | None, *, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
+def _parse_float_env(value: str | None, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        logger.warning("忽略无效浮点环境变量值: %s", value)
+        return default
+    return parsed if parsed > 0 else default
+
+
 def _get_hybrid_v0_orchestrator():
     """按需构建 Hybrid v0 orchestrator，避免 API 启动时加载重依赖。"""
     global _HYBRID_V0_ORCHESTRATOR
@@ -230,6 +241,10 @@ def _get_hybrid_v0_orchestrator():
         check_answer_supported_by_evidence,
     )
     from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import EvidenceFusionConfig, fuse_basic_and_bm25_evidence
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_selector import (
+        V6EvidenceSelectorConfig,
+        build_v6_hybrid_evidence_selector,
+    )
     from graphrag_pipeline.scripts.hybrid_qa.orchestrator_v0 import HybridFallbackPolicy, HybridV0Orchestrator
     from graphrag_pipeline.scripts.hybrid_qa.synthesis_client import OpenAICompatibleSynthesisClient
     from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import load_data_citation_lookup, load_text_unit_lookup
@@ -252,8 +267,32 @@ def _get_hybrid_v0_orchestrator():
     fusion_config = EvidenceFusionConfig(
         bm25_anchor_top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_ANCHOR_TOP_K"), default=2),
     )
+    evidence_strategy = (os.environ.get("CKQA_HYBRID_V0_EVIDENCE_STRATEGY") or "legacy").strip().casefold()
+    if evidence_strategy == "v6":
+        bm25 = build_v6_hybrid_evidence_selector(
+            text_units_path,
+            config=V6EvidenceSelectorConfig(
+                top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_TOP_K"), default=8),
+                k1=_parse_float_env(os.environ.get("CKQA_HYBRID_V0_BM25_K1"), default=1.5),
+                b=_parse_float_env(os.environ.get("CKQA_HYBRID_V0_BM25_B"), default=0.75),
+                enable_dense_rerank=_parse_bool_env(
+                    os.environ.get("CKQA_HYBRID_V0_ENABLE_DENSE_RERANK"),
+                    default=False,
+                ),
+                dense_rerank_candidate_pool_k=_parse_int_env(
+                    os.environ.get("CKQA_HYBRID_V0_DENSE_RERANK_POOL_K"),
+                    default=20,
+                ),
+                dense_rerank_model=os.environ.get("CKQA_BGE_M3_MODEL") or None,
+                dense_rerank_device=os.environ.get("CKQA_BGE_M3_DEVICE") or None,
+                dense_rerank_use_fp16=_parse_bool_env(os.environ.get("CKQA_BGE_M3_FP16"), default=False),
+                dense_rerank_batch_size=_parse_int_env(os.environ.get("CKQA_BGE_M3_BATCH_SIZE"), default=8),
+            ),
+        )
+    else:
+        bm25 = build_text_unit_bm25(text_units_path, cache_dir=OUTPUT_DIR / ".hybrid_v0_cache")
     _HYBRID_V0_ORCHESTRATOR = HybridV0Orchestrator(
-        bm25=build_text_unit_bm25(text_units_path, cache_dir=OUTPUT_DIR / ".hybrid_v0_cache"),
+        bm25=bm25,
         graph_client=graph_client,
         guardrail=lambda answer, evidence: check_answer_supported_by_evidence(
             answer,
@@ -273,6 +312,14 @@ def _get_hybrid_v0_orchestrator():
             )
         ),
         fallback_policy=HybridFallbackPolicy(
+            enable_basic_evidence_injection=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION"),
+                default=False,
+            ),
+            disable_synthesis=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_DISABLE_SYNTHESIS"),
+                default=False,
+            ),
             enable_local_fallback=_parse_bool_env(
                 os.environ.get("CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK"),
                 default=False,

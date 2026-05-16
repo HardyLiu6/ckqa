@@ -82,6 +82,26 @@ def test_missing_citation_resolver_returns_bm25_only():
     assert pack.source_counts == {"bm25": 1}
 
 
+def test_hybrid_citation_ignores_more_marker_and_short_source_ids():
+    bm25 = [
+        EvidenceCandidate("bm25", "bm25aaa11111ffff", "BM25 第一段", 9.0, HybridLayer.LOW),
+    ]
+    lookup = _Lookup({"gold33333333": "Hybrid text unit 引用段"})
+
+    pack = fuse_basic_and_bm25_evidence(
+        question="I/O 管理、磁盘调度和文件系统如何衔接？",
+        basic_answer="[Data: Hybrid(149, gold33333333ffff, +more)]",
+        bm25_candidates=bm25,
+        text_unit_lookup=lookup,
+        citation_ref_resolver=None,
+        config=EvidenceFusionConfig(fused_top_k=4),
+    )
+
+    assert "gold33333333" in pack.refs
+    assert "149" not in pack.refs
+    assert "more" not in pack.refs
+
+
 def test_bm25_anchor_top_k_keeps_lexical_hits_ahead_of_basic_only_refs():
     bm25 = [
         EvidenceCandidate("bm25", "bm25gold1111", "BM25 命中的关键证据", 9.0, HybridLayer.LOW),

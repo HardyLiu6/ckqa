@@ -19,7 +19,7 @@ BASIC_LONG_ANSWER = (
 def test_orchestrator_uses_basic_without_local_when_guardrail_passes():
     low_candidate = EvidenceCandidate(
         source="bm25",
-        ref="tu-1",
+        ref="tu1111111111",
         text="操作系统是第一层软件。",
         score=0.7,
         layer=HybridLayer.LOW,
@@ -29,17 +29,17 @@ def test_orchestrator_uses_basic_without_local_when_guardrail_passes():
     graph_client = MagicMock()
     graph_client.query_basic.return_value = GraphRagDraft(
         "basic",
-        BASIC_LONG_ANSWER + "[Data: Text Units (tu-1)]",
+        BASIC_LONG_ANSWER + "[Data: Text Units (tu1111111111)]",
         1.0,
     )
     guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
-    llm_complete = MagicMock(return_value="最终答案 [Data: Hybrid(tu-1)]")
+    llm_complete = MagicMock(return_value="最终答案 [Data: Hybrid(tu1111111111)]")
     fusion = MagicMock(
         return_value=FusedEvidencePack(
             candidates=[low_candidate],
-            refs=["tu-1"],
+            refs=["tu1111111111"],
             source_counts={"bm25": 1, "basic-citation": 1},
-            fusion_debug=[{"ref": "tu-1"}],
+            fusion_debug=[{"ref": "tu1111111111"}],
         )
     )
 
@@ -53,14 +53,65 @@ def test_orchestrator_uses_basic_without_local_when_guardrail_passes():
 
     result = orchestrator.answer("操作系统是什么？")
 
-    assert result.answer == BASIC_LONG_ANSWER + "[Data: Text Units (tu-1)]"
+    assert result.answer == BASIC_LONG_ANSWER + "[Data: Text Units (tu1111111111)]"
     assert result.diagnostics.used_local_fallback is False
     assert result.diagnostics.guardrail_status == "pass"
     assert result.diagnostics.guardrail_score == 1.0
     assert result.diagnostics.low_evidence_count == 1
     assert result.diagnostics.high_evidence_count == 1
-    assert result.diagnostics.fused_evidence_refs == ["tu-1"]
+    assert result.diagnostics.fused_evidence_refs == ["tu1111111111"]
     assert result.diagnostics.fused_evidence_sources == {"bm25": 1, "basic-citation": 1}
+    assert result.diagnostics.local_fallback_enabled is False
+    llm_complete.assert_not_called()
+    graph_client.query_local.assert_not_called()
+
+
+def test_orchestrator_one_shot_injects_low_evidence_into_basic_and_never_synthesizes():
+    low_candidate = EvidenceCandidate(
+        source="bm25-v6",
+        ref="tu1111111111",
+        text="操作系统是第一层软件。",
+        score=0.7,
+        layer=HybridLayer.LOW,
+    )
+    bm25 = MagicMock()
+    bm25.search.return_value = [low_candidate]
+    graph_client = MagicMock()
+    graph_client.query_basic.return_value = GraphRagDraft(
+        "basic",
+        BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]",
+        1.0,
+    )
+    guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
+    llm_complete = MagicMock(return_value="不应调用")
+    fusion = MagicMock(
+        return_value=FusedEvidencePack(
+            candidates=[low_candidate],
+            refs=["tu1111111111"],
+            source_counts={"bm25-v6": 1},
+            fusion_debug=[],
+        )
+    )
+
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=guardrail,
+        llm_complete=llm_complete,
+        evidence_fusion=fusion,
+        fallback_policy=HybridFallbackPolicy(
+            enable_basic_evidence_injection=True,
+            disable_synthesis=True,
+        ),
+    )
+
+    result = orchestrator.answer("操作系统是什么？")
+
+    basic_prompt = graph_client.query_basic.call_args.args[0]
+    assert "操作系统是什么？" in basic_prompt
+    assert "Text Unit Ref: tu1111111111" in basic_prompt
+    assert result.answer == BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]"
+    assert result.diagnostics.synthesis_attempted is False
     assert result.diagnostics.local_fallback_enabled is False
     llm_complete.assert_not_called()
     graph_client.query_local.assert_not_called()
@@ -69,7 +120,7 @@ def test_orchestrator_uses_basic_without_local_when_guardrail_passes():
 def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_by_default():
     low_candidate = EvidenceCandidate(
         source="bm25",
-        ref="tu-1",
+        ref="tu1111111111",
         text="操作系统是第一层软件。",
         score=0.7,
         layer=HybridLayer.LOW,
@@ -83,11 +134,11 @@ def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_b
         1.0,
     )
     guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
-    llm_complete = MagicMock(return_value=BASIC_LONG_ANSWER + "[Data: Hybrid(tu-1)]")
+    llm_complete = MagicMock(return_value=BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]")
     fusion = MagicMock(
         return_value=FusedEvidencePack(
             candidates=[low_candidate],
-            refs=["tu-1"],
+            refs=["tu1111111111"],
             source_counts={"bm25": 1},
             fusion_debug=[],
         )
@@ -103,7 +154,7 @@ def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_b
 
     result = orchestrator.answer("操作系统是什么？")
 
-    assert result.answer == BASIC_LONG_ANSWER + "[Data: Hybrid(tu-1)]"
+    assert result.answer == BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]"
     assert result.diagnostics.used_local_fallback is False
     assert result.diagnostics.synthesis_attempted is True
     assert result.diagnostics.synthesis_reason == "basic_missing_data_citation"
@@ -115,7 +166,7 @@ def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_b
 def test_orchestrator_does_not_use_local_when_synthesis_still_lacks_data_citation_by_default():
     low_candidate = EvidenceCandidate(
         source="bm25",
-        ref="tu-1",
+        ref="tu1111111111",
         text="操作系统是第一层软件。",
         score=0.7,
         layer=HybridLayer.LOW,
@@ -130,7 +181,7 @@ def test_orchestrator_does_not_use_local_when_synthesis_still_lacks_data_citatio
     )
     graph_client.query_local.return_value = GraphRagDraft(
         "local",
-        "操作系统是第一层软件。[Data: Text Units (tu-1)]",
+        "操作系统是第一层软件。[Data: Text Units (tu1111111111)]",
         1.4,
     )
     guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
@@ -138,7 +189,7 @@ def test_orchestrator_does_not_use_local_when_synthesis_still_lacks_data_citatio
     fusion = MagicMock(
         return_value=FusedEvidencePack(
             candidates=[low_candidate],
-            refs=["tu-1"],
+            refs=["tu1111111111"],
             source_counts={"bm25": 1},
             fusion_debug=[],
         )
@@ -164,7 +215,7 @@ def test_orchestrator_does_not_use_local_when_synthesis_still_lacks_data_citatio
 def test_orchestrator_uses_local_only_when_explicitly_enabled():
     low_candidate = EvidenceCandidate(
         source="bm25",
-        ref="tu-1",
+        ref="tu1111111111",
         text="操作系统是第一层软件。",
         score=0.7,
         layer=HybridLayer.LOW,
@@ -175,20 +226,20 @@ def test_orchestrator_uses_local_only_when_explicitly_enabled():
     graph_client.query_basic.return_value = GraphRagDraft("basic", "操作系统是第一层软件。", 1.0)
     graph_client.query_local.return_value = GraphRagDraft(
         "local",
-        "操作系统是第一层软件。[Data: Text Units (tu-1)]",
+        "操作系统是第一层软件。[Data: Text Units (tu1111111111)]",
         1.4,
     )
     guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
     llm_complete = MagicMock(
         side_effect=[
             "仍然没有引用的最终答案",
-            "最终答案：操作系统是第一层软件。[Data: Hybrid(tu-1)]",
+            "最终答案：操作系统是第一层软件。[Data: Hybrid(tu1111111111)]",
         ]
     )
     fusion = MagicMock(
         return_value=FusedEvidencePack(
             candidates=[low_candidate],
-            refs=["tu-1"],
+            refs=["tu1111111111"],
             source_counts={"bm25": 1},
             fusion_debug=[],
         )
@@ -252,6 +303,47 @@ def test_orchestrator_synthesizes_when_direct_refs_do_not_overlap_low_evidence()
     assert "basic_low_evidence_ref_overlap_low" in result.diagnostics.fallback_reasons
     llm_complete.assert_called_once()
     graph_client.query_local.assert_not_called()
+
+
+def test_orchestrator_ignores_short_hybrid_source_ids_for_overlap_policy():
+    low_candidate = EvidenceCandidate(
+        source="bm25",
+        ref="aaaabbbbcccc",
+        text="操作系统是第一层软件。",
+        score=0.7,
+        layer=HybridLayer.LOW,
+    )
+    bm25 = MagicMock()
+    bm25.search.return_value = [low_candidate]
+    graph_client = MagicMock()
+    graph_client.query_basic.return_value = GraphRagDraft(
+        "basic",
+        BASIC_LONG_ANSWER + "[Data: Hybrid(149, +more)]",
+        1.0,
+    )
+    guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
+    llm_complete = MagicMock(return_value="最终答案：操作系统是第一层软件。[Data: Hybrid(aaaabbbbcccc)]")
+    fusion = MagicMock(
+        return_value=FusedEvidencePack(
+            candidates=[low_candidate],
+            refs=["aaaabbbbcccc"],
+            source_counts={"bm25": 1},
+            fusion_debug=[],
+        )
+    )
+
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=guardrail,
+        llm_complete=llm_complete,
+        evidence_fusion=fusion,
+    )
+
+    result = orchestrator.answer("操作系统是什么？")
+
+    assert "basic_missing_resolved_citation_refs" in result.diagnostics.fallback_reasons
+    assert "basic_low_evidence_ref_overlap_low" not in result.diagnostics.fallback_reasons
 
 
 def test_orchestrator_synthesizes_when_resolved_source_refs_do_not_overlap_low_evidence():
@@ -347,7 +439,7 @@ def test_orchestrator_keeps_basic_when_resolved_source_refs_overlap_low_evidence
 def test_orchestrator_uses_local_fallback_when_guardrail_fails():
     low_candidate = EvidenceCandidate(
         source="bm25",
-        ref="tu-1",
+        ref="tu1111111111",
         text="操作系统负责管理硬件与软件资源。",
         score=0.7,
         layer=HybridLayer.LOW,
@@ -362,7 +454,7 @@ def test_orchestrator_uses_local_fallback_when_guardrail_fails():
     )
     graph_client.query_local.return_value = GraphRagDraft(
         "local",
-        "操作系统负责管理硬件与软件资源。[Data: Text Units (tu-1)]",
+        "操作系统负责管理硬件与软件资源。[Data: Text Units (tu1111111111)]",
         1.4,
     )
     guardrail = MagicMock(
@@ -376,7 +468,7 @@ def test_orchestrator_uses_local_fallback_when_guardrail_fails():
     fusion = MagicMock(
         return_value=FusedEvidencePack(
             candidates=[low_candidate],
-            refs=["tu-1"],
+            refs=["tu1111111111"],
             source_counts={"bm25": 1},
             fusion_debug=[],
         )
