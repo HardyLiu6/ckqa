@@ -37,7 +37,7 @@
   - 后端 `POST /audit-samples/{sampleId}/ai-suggestions` 端点真实实现
   - Python 单样本抽取脚本包装（复用 `run_native_extraction.py --limit 1`）
   - 前端紫色 ✨ 横幅"生成候选 / 按置信度排序"按钮
-  - AI 候选实体/关系卡的 source `ai_suggested` / 紫色虚线边框（Phase 1b 视觉已就位）
+  - AI 候选实体/关系卡用 `suggestionSource: 'ai_suggested'` 标记 / 紫色虚线边框（Phase 1b 视觉已就位）
   - 用户审阅交互：每条单独"采纳" / "拒绝"（**严禁**"全部采纳"）
 - 智能能力 D：历史复用 banner UI 完善
   - Phase 1b 模板已有 `<div v-if="sample.reusedFrom">`，本期补"隐藏复用提示"按钮 + 单测
@@ -90,9 +90,85 @@
 
 ---
 
-## Task 0：现有产物形态确认
+## Task 0：现有产物形态确认 + 计划一致性自检
 
-无代码改动，只 grep 确认 Phase 2b/2c-pre 现有形态符合本计划假设。**Step 失败时停下，不要继续。**
+无代码改动，只 grep 确认两件事：(1) Phase 2b/2c-pre 现有形态符合本计划假设；(2) 本计划文档里**没有 v1 残留措辞**——避免实施者从矛盾段落复制错误代码。**Step 失败时停下，不要继续。**
+
+### 一致性自检（必做：避免文档残留误导实施）
+
+- [ ] **Step A1: 确认无旧"覆盖 source 字段"措辞**
+
+Run:
+
+```bash
+grep -nE 'copy\.put\("source", "ai_suggested"\)|source: '"'"'ai_suggested'"'"'\b' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。本期统一用 `suggestionSource: "ai_suggested"`，**不**覆盖 GraphRAG 的 `source` 字段。如果有匹配，说明文档里还有旧片段，先修干净再继续。
+
+- [ ] **Step A2: 确认无 properties = null 占位**
+
+Run:
+
+```bash
+grep -n 'properties = null' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。`AiSuggestionService` 的 `properties` 字段必须直接以 `private final CkqaIntegrationProperties properties;` 形式声明并由 `@RequiredArgsConstructor` 注入。
+
+- [ ] **Step A3: 确认无旧"不使用此预填"按钮文案**
+
+Run:
+
+```bash
+grep -nE '不使用此预填|不使用"按钮' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 仅在 v2 修订要点段（解释历史措辞）出现 ≤1 行。其他地方应该全部是"隐藏复用提示"。
+
+- [ ] **Step A4: 确认无 customPromptDraft 在 AI 预填路径中的引用**
+
+Run:
+
+```bash
+grep -nE 'customPromptDraft.*覆盖.*prompt|customPromptDraft.*AI' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。本期 AI 预填**固定**使用默认 `extract_graph.txt`，customPromptDraft 留到 Phase 6。
+
+- [ ] **Step A5: 确认无 stdout 解析输出路径残留**
+
+Run:
+
+```bash
+grep -nE 'parseOutputPathFromLog|wrote candidate result to' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。本期用确定性 `--run-id` + 固定输出路径 `<GRAPHRAG_ROOT>/results/extraction_eval/<runId>/ai_suggestion.json`。
+
+- [ ] **Step A6: 确认无 aiSuggestionLoading 单标志（应改为 SampleId）**
+
+Run:
+
+```bash
+grep -nE 'aiSuggestionLoading\.value\s*=\s*(true|false)|const aiSuggestionLoading\s*=\s*ref\(false\)' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。应改为 `aiSuggestionLoadingSampleId = ref(null)`。
+
+- [ ] **Step A7: 确认所有 spread 操作符正确**
+
+Run:
+
+```bash
+grep -nE '\{ \.[a-zA-Z]|\{\.[a-zA-Z]' docs/superpowers/plans/2026-05-15-prompt-builder-phase3-smart-features.md
+```
+
+Expected: 0 行匹配。所有 JS spread 必须是 `{ ...obj }`（三点）而非 `{ .obj }`（一点）。如果有匹配，说明 markdown 渲染或复制时丢字符，立即修。
+
+如果以上 7 步全部通过 → 进入 Step 1 现有产物校验。
+
+### 现有产物形态确认
 
 - [ ] **Step 1: 校验 reusedFrom 在响应中已经返回**
 
@@ -496,13 +572,24 @@ import java.util.Map;
 public class AiSuggestionResponse {
 
     /**
-     * 候选实体列表，每项至少含 {@code name} / {@code type} / {@code description} / {@code confidence}。
-     * GraphRAG 输出可能含额外字段（如 {@code source_id}），原样透传。
+     * 候选实体列表，每项含：
+     * <ul>
+     *   <li>{@code name} / {@code type} / {@code description} / {@code confidence}（GraphRAG 透传）</li>
+     *   <li>{@code suggestionSource}: {@code "ai_suggested"}（service 添加，标记候选来源；不与
+     *       {@code source/target} 这种关系领域字段冲突）</li>
+     * </ul>
      */
     private final List<Map<String, Object>> entities;
 
     /**
-     * 候选关系列表，每项至少含 {@code source} / {@code target} / {@code type} / {@code description} / {@code confidence}。
+     * 候选关系列表，每项含：
+     * <ul>
+     *   <li>{@code originalSource}/{@code originalTarget}（实体名字符串；从 GraphRAG 的 source/target 改名而来）</li>
+     *   <li>{@code type} / {@code description} / {@code evidence} / {@code confidence}</li>
+     *   <li>{@code suggestionSource}: {@code "ai_suggested"}</li>
+     * </ul>
+     * 前端采纳时优先查 {@code aiEntityNameToGoldId} 映射表把 originalSource/originalTarget
+     * 解析为 sample.goldEntities 中的 entity id。
      */
     private final List<Map<String, Object>> relations;
 }
@@ -525,7 +612,7 @@ git commit -m "feat(dto): 新增 AiSuggestionResponse (Phase 3)"
 2. 把 sample 数据组装成 GraphRAG 期望的格式
 3. 决定 prompt 文件路径：**本期固定使用 `<GRAPHRAG_ROOT>/prompts/extract_graph.txt`**——即 GraphRAG 当前激活的 prompt（可能是默认的，也可能是 GraphRAG 自动调优生成的）。**不读取** build run 的 `customPromptDraft`：因为 customPromptDraft 当前以 JSON 字符串形式存在 `build_metadata` 中，把它落到临时文件 + 选 prompt 文件的逻辑要等 Phase 6 `<PromptDisplay>` 一起做。如果用户手动调优后想用调优草稿做 AI 预填，需要先在 05 步保存草稿并通过 `confirmPrompt` 写入到 GraphRAG 的 prompt 路径，然后才能在 02 步生效。
 4. 调 orchestrator
-5. 把 GraphRAG 输出的 entities / relations 转成前端期望格式（保留 confidence，加 `source: 'ai_suggested'`）
+5. 把 GraphRAG 输出的 entities / relations 转成前端期望格式（保留 confidence，加 `suggestionSource: 'ai_suggested'`；relation 的 `source/target` 改名为 `originalSource/originalTarget`）
 
 **Files:**
 - Create: `backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/AiSuggestionService.java`
@@ -545,6 +632,7 @@ import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.PromptTuneAuditSamples;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.AiSuggestionResponse;
+import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
 import org.ysu.ckqaback.service.PromptTuneAuditSamplesService;
 
@@ -572,8 +660,15 @@ class AiSuggestionServiceTest {
         buildRunsStore = mock(KnowledgeBaseBuildRunsService.class);
         orchestrator = mock(SingleSampleExtractionOrchestrator.class);
         workspaceService = mock(BuildRunWorkspaceService.class);
+
+        // properties mock：AiSuggestionService.resolvePromptFile 需要从 graphrag.root 拼路径
+        CkqaIntegrationProperties properties = mock(CkqaIntegrationProperties.class);
+        CkqaIntegrationProperties.Graphrag graphrag = mock(CkqaIntegrationProperties.Graphrag.class);
+        when(properties.getGraphrag()).thenReturn(graphrag);
+        when(graphrag.getRoot()).thenReturn("/tmp/graphrag-test");
+
         service = new AiSuggestionService(
-                samplesStore, buildRunsStore, orchestrator, workspaceService, new ObjectMapper()
+                samplesStore, buildRunsStore, orchestrator, workspaceService, properties, new ObjectMapper()
         );
     }
 
@@ -754,6 +849,7 @@ public class AiSuggestionService {
     private final KnowledgeBaseBuildRunsService buildRunsStore;
     private final SingleSampleExtractionOrchestrator orchestrator;
     private final BuildRunWorkspaceService workspaceService;
+    private final CkqaIntegrationProperties properties;
     private final ObjectMapper objectMapper;
 
     public AiSuggestionResponse generate(Long buildRunId, Long sampleId) {
@@ -828,8 +924,6 @@ public class AiSuggestionService {
         return Path.of(properties.getGraphrag().getRoot()).resolve("prompts").resolve("extract_graph.txt");
     }
 
-    private final CkqaIntegrationProperties properties = null;  // 占位，Step 4 修订
-
     private List<Map<String, Object>> markEntitiesAsAiSuggested(List<Map<String, Object>> entities) {
         return entities.stream()
                 .map(e -> {
@@ -870,46 +964,13 @@ public class AiSuggestionService {
 }
 ```
 
-- [ ] **Step 4: 修订 service 让 `properties` 由构造器注入**
-
-上一步代码占位的 `properties` 字段需要移到构造器。修改类签名：
-
-把 `@RequiredArgsConstructor` 保留，把 `private final CkqaIntegrationProperties properties = null;` 删掉，改为正常字段：
-
-```java
-    private final CkqaIntegrationProperties properties;
-```
-
-并把它放在其他 final 字段一起（与 `@RequiredArgsConstructor` 配合自动注入）。同时在测试 setUp() 中给 mock：
-
-```java
-@BeforeEach
-void setUp() {
-    samplesStore = mock(PromptTuneAuditSamplesService.class);
-    buildRunsStore = mock(KnowledgeBaseBuildRunsService.class);
-    orchestrator = mock(SingleSampleExtractionOrchestrator.class);
-    workspaceService = mock(BuildRunWorkspaceService.class);
-
-    CkqaIntegrationProperties properties = mock(CkqaIntegrationProperties.class);
-    CkqaIntegrationProperties.Graphrag graphrag = mock(CkqaIntegrationProperties.Graphrag.class);
-    when(properties.getGraphrag()).thenReturn(graphrag);
-    when(graphrag.getRoot()).thenReturn("/tmp/graphrag-test");
-
-    service = new AiSuggestionService(
-            samplesStore, buildRunsStore, orchestrator, workspaceService, properties, new ObjectMapper()
-    );
-}
-```
-
-并在 service 构造参数顺序中插入 `properties`（在 ObjectMapper 前）。
-
-- [ ] **Step 5: 跑测试，确认通过**
+- [ ] **Step 4: 跑测试，确认通过**
 
 Run: `cd backend/ckqa-back && mvn -q -Dtest=AiSuggestionServiceTest test`
 
 Expected: 4 个测试 PASS。
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
 git add backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/AiSuggestionService.java \
@@ -2104,7 +2165,11 @@ import {
 在 `<script setup>` 中（合适位置，建议放在 `loading` ref 之后）追加：
 
 ```javascript
-// 按 sample id 维度记录 AI 抽取 loading 状态，支持多样本并发
+// 当前正在生成 AI 候选的 sampleId（null 表示无任务）。
+// 选这种"单标量"形态而非 Map 是因为本期单端用户单标签页基本不会同时点多个 sample。
+// 如果未来需要"多 sample 并行生成"（多标签页 / 团队协作），可以改为 ref({}) 形态：
+//   aiSuggestionLoadingBySampleId.value[sampleId] = true/false
+// 这是 Phase 7+ 优化方向，本期 YAGNI。
 const aiSuggestionLoadingSampleId = ref(null)
 
 // 已采纳 AI 候选实体的本地映射：originalName -> goldEntityId
@@ -2310,16 +2375,27 @@ async function handleAcceptRelation(relationId) {
 
   // AI 候选关系用 originalSource/originalTarget（实体名字符串），需要找 entity id：
   // 1. 优先查 aiEntityNameToGoldId（用户已采纳的 AI 实体记录的 originalName→id 映射）
-  // 2. fallback 按 name 查 sample.goldEntities（手动添加的实体）
+  // 2. fallback 按 name 查 sample.goldEntities（手动添加的实体或先于 AI 实体存在的同名实体）
+  // 3. fallback 命中多个同名实体时取第一个并提示——同名同类型在 Phase 2c-pre 已经有重名警告，
+  //    此场景概率低，不做严格 type 校验（GraphRAG 输出的 relation 不带 source_type/target_type）
   let sourceEntityId = picked.sourceEntityId
   let targetEntityId = picked.targetEntityId
+  let ambiguousMatch = false
   if (!sourceEntityId && picked.originalSource) {
     sourceEntityId = aiEntityNameToGoldId.value.get(picked.originalSource)
-        ?? sample.goldEntities.find((e) => e.name === picked.originalSource)?.id
+    if (!sourceEntityId) {
+      const matches = sample.goldEntities.filter((e) => e.name === picked.originalSource)
+      if (matches.length > 1) ambiguousMatch = true
+      sourceEntityId = matches[0]?.id
+    }
   }
   if (!targetEntityId && picked.originalTarget) {
     targetEntityId = aiEntityNameToGoldId.value.get(picked.originalTarget)
-        ?? sample.goldEntities.find((e) => e.name === picked.originalTarget)?.id
+    if (!targetEntityId) {
+      const matches = sample.goldEntities.filter((e) => e.name === picked.originalTarget)
+      if (matches.length > 1) ambiguousMatch = true
+      targetEntityId = matches[0]?.id
+    }
   }
   if (!sourceEntityId || !targetEntityId) {
     ElMessage.warning(
@@ -2328,6 +2404,9 @@ async function handleAcceptRelation(relationId) {
       }${!targetEntityId ? picked.originalTarget : ''}）`
     )
     return
+  }
+  if (ambiguousMatch) {
+    ElMessage.warning('两端实体存在同名候选，已绑定第一个匹配项；如果不正确请删除后重新建立关系')
   }
 
   sample.aiSuggestedRelations.splice(idx, 1)
