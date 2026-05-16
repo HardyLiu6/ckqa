@@ -174,12 +174,9 @@ export async function installCandidatesMocks(page, {
           return { httpStatus: 500, code: 5000, message: '后端崩溃' }
         }
         if (liveCandidates.length === 0) {
-          // 注意：真后端 4105 走 HTTP 404 + envelope，但 axios 拦截器对非 2xx 直接拒绝，
-          // 业务码不会被提到顶层（component 看到 err.code === undefined）。
-          // 现有 component（PromptBuilderCandidatesStep）和单测（prompt-tune-pipeline-
-          // candidates.test.js）都基于"HTTP 200 + envelope.code 由 unwrapApiResponse 抛出"
-          // 来识别 4105。e2e 这里复用同一约定，让 empty 态可被 component 触发。
-          return { code: 4105, message: '本次构建尚未生成候选 Prompt' }
+          // 真后端 4105 走 HTTP 404 + envelope；axios 拦截器把 envelope.code 提到顶层
+          // err.code，所以 component 的 err?.code === 4105 判断能命中。
+          return { httpStatus: 404, code: 4105, message: '本次构建尚未生成候选 Prompt' }
         }
         return { data: liveCandidates }
       },
