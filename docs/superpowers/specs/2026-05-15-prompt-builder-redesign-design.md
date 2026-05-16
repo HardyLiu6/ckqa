@@ -89,6 +89,12 @@ digraph user_journey {
 
 3 张种子卡：系统默认 / GraphRAG 自动调优 / 我的历史草稿。第 3 张在 05 步入库后才会有内容，否则空状态显示"05 步保存后会出现在这里"。
 
+> **Phase 4.5 已落地**：3 张种子卡的可用状态由 `GET /seed-availability` 决定；
+> graphrag_tuned 当且仅当本次 build run 选材已有自动调优产物时可选；
+> history_draft 始终灰显（Phase 6 落地）。
+> seed 真正影响 03 步候选生成的底板（schema_aware_directional_v2 / schema_fewshot_distilled_v2_strict_tuple
+> 这两族候选根据 seed 选用不同的 base_prompt）。
+
 ### 02 构建准备材料
 
 **布局**：白色容器 + 左右两栏。左栏 280px 是样本列表，右栏弹性宽度是当前样本工作区。
@@ -413,6 +419,20 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 - **Phase 2a（✅）：DB 迁移（`prompt_tune_audit_samples` + `prompt_drafts` 表）+ Java Entity/Mapper/Service 骨架 + Controller 501 占位 + 前端 API 桩。**
 - **Phase 2b（✅）：02 步标注 API 后端实现（`/audit-set` / `/audit-samples` GET、PUT）+ 前端去 mock 接入真实 API + 跨 build run 历史标注复用合并（数据层 silent 完成）+ force 防误删。**
 - **Phase 2c-pre（✅）：02 步实体/关系手动新建（`EntityEditor` + `RelationEditor` 组件）+ 关系类型动态过滤（C 智能能力的同步部分）+ 删除实体级联清理关系 + 自环禁止。**
+
+- **Phase 4.5（✅）：01 步种子分流真正影响 03 候选生成（仅覆盖 01-03 步业务逻辑；前端展示同步延伸到 05 步来源记录）**
+  - 新增 `GET /knowledge-base-build-runs/{id}/seed-availability` 端点 + `SeedAvailabilityService`，
+    01 步据此决定 `graphrag_tuned` 是否可点；不可用时附 tooltip 引导回知识库构建向导触发自动调优。
+  - 01 步选 seed 时立即 PUT `customPromptDraft.seed`（仅 seed 子字段，不动 prompts），让 03 步后端能读到正确的种子。
+  - `CandidateService.generate` 解析 build run metadata 取 seed → `CandidateGenerationOrchestrator.run`
+    接受 `BaseOverride`：`system_default` 强制 fallback 到 default 分支；`graphrag_tuned` 先用 `probeBySelection`
+    校验 cache success 状态、再用 `findReadyByCacheKey` 拿目录路径；`null` 走 Phase 4 兼容路径不附加 `--auto_tuned_prompt_dir`。
+  - 候选生成结果旁路文件 `seed-info.json` 落盘（OffsetDateTime 含时区偏移）；`CandidateManifestReader` 注入
+    `CandidateResponse.seed` 字段；POST 路径下 `CandidateService.withInjectedSeed` 直接用本次计算的 seed
+    覆盖 reader 可能带回的旧值，保证写盘失败时响应仍含正确 seed。
+  - 4109 错误码：`seed=graphrag_tuned` 但 prompt-tune cache 失效时拒绝候选生成。
+  - **04 步评分对 seed 的感知（评分表 seed 列、报告透传）已移交 Phase 5 落地，本期不实施。**
+  - 测试：后端 388 + 1 skipped PASS，前端 327 单测 + 3 个 e2e PASS。
 
 ### 进行中 / 计划阶段
 
