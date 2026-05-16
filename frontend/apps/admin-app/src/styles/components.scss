@@ -4852,12 +4852,32 @@ textarea.text-input {
   transform: translateY(12px);
 }
 
-// 手动调优向导 · 实体小卡片网格 (Phase 1b 优化)
+// 手动调优向导 · 实体小卡片网格 (Phase 1b 优化 / Phase 3 调整为 auto-fill)
+// 用 grid + auto-fill + minmax 让卡片自适应填充列数，消除右侧空白
 .entity-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
   align-items: stretch;
+}
+// 候选/确认实体卡 + 复选框包裹层
+.entity-chip-cell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+.entity-chip-cell__check {
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 14px; height: 14px;
+  z-index: 2;
+  cursor: pointer;
+  accent-color: var(--ckqa-accent);
+}
+.entity-chip-cell .entity-chip {
+  width: 100%;
+  padding-left: 26px;  // 给左上角的 check 让位
 }
 .entity-chip-grid__add {
   border: 1.5px dashed var(--ckqa-border); border-radius: 8px;
@@ -4876,7 +4896,7 @@ textarea.text-input {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 220px;
+  width: 100%;
   padding: 10px 12px;
   background: var(--ckqa-surface);
   border: 1px solid var(--ckqa-border);
@@ -4970,6 +4990,89 @@ textarea.text-input {
   background: transparent; color: var(--ckqa-text-muted);
 }
 .entity-chip__btn--delete:hover { background: var(--ckqa-border); color: var(--ckqa-text); }
+.entity-chip__btn--edit {
+  background: transparent; color: var(--ckqa-accent);
+}
+.entity-chip__btn--edit:hover { background: color-mix(in srgb, var(--ckqa-accent) 14%, transparent); }
+
+// 子分组（已确认 / AI 候选）+ 工具栏
+.annotation-subgroup {
+  margin-bottom: 12px;
+}
+.annotation-subgroup__toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; margin-bottom: 8px;
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.annotation-subgroup--ai .annotation-subgroup__toolbar {
+  background: linear-gradient(135deg, #faf5ff, #f5f3ff);
+  border-color: #e9d5ff;
+}
+.annotation-subgroup__label {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 500; color: var(--ckqa-text);
+  margin-right: auto;
+}
+.annotation-subgroup__icon { color: #a855f7; font-size: 14px; }
+
+// 关系网格：双列自适应，单个关系不再占整行
+.annotation-relation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+.annotation-relation-cell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.annotation-relation-cell__check {
+  position: absolute;
+  top: 8px; left: 8px;
+  width: 14px; height: 14px;
+  z-index: 2;
+  cursor: pointer;
+  accent-color: var(--ckqa-accent);
+}
+.annotation-relation-cell .annotation-relation-card {
+  width: 100%;
+  padding-left: 28px;  // 给 check 让位
+}
+
+// 关系卡：候选状态加 ✨ badge + 紫色边框
+.annotation-relation-card__badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 12px; color: #a855f7;
+}
+.annotation-relation-card__entity.is-unlinked {
+  background: color-mix(in srgb, var(--ckqa-text-muted) 14%, transparent);
+  color: var(--ckqa-text-muted);
+  font-style: italic;
+}
+
+// 工作区头部卡片化
+.annotation-work-area__head--card {
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.annotation-work-area__head--card .annotation-work-area__meta {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.annotation-work-area__head--card .annotation-work-area__actions {
+  display: flex; gap: 8px;
+  flex-shrink: 0;
+}
 
 // 手动调优向导 · 03 候选勾选 (Phase 1c)
 .prompt-builder-candidates {

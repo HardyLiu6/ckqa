@@ -412,6 +412,172 @@ function handleDismissReusedFrom(sampleId) {
   }
 }
 
+// ─── 批量操作 handler ───────────────────────────────────────────────────
+// 设计：批量 = 循环单条，最后做一次 persistFields 把所有变化一起写。
+// 对失败处理简化：批量操作中任一条失败 → toast + reload sample 状态以保证一致
+
+async function handleAcceptSelectedEntities(entityIds) {
+  const sample = activeSample.value
+  if (!sample || entityIds.length === 0) return
+  const acceptedSnapshot = []
+  for (const id of entityIds) {
+    const idx = sample.aiSuggestedEntities.findIndex((e) => e.id === id)
+    if (idx < 0) continue
+    const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
+    const acceptedEntity = { ...picked, source: 'accepted' }
+    delete acceptedEntity.suggestionSource
+    sample.goldEntities.push(acceptedEntity)
+    acceptedSnapshot.push({ picked, acceptedEntity })
+    if (picked.name) {
+      aiEntityNameToGoldId.value.set(picked.name, acceptedEntity.id)
+    }
+  }
+  if (sample.status === 'not_started' && acceptedSnapshot.length > 0) sample.status = 'in_progress'
+  try {
+    await persistFields(sample, { fields: ['goldEntities', 'aiSuggestedEntities', 'status'] })
+    ElMessage.success(`已批量采纳 ${acceptedSnapshot.length} 个候选实体`)
+  } catch {
+    // 整体回滚
+    for (const { picked, acceptedEntity } of acceptedSnapshot) {
+      sample.goldEntities = sample.goldEntities.filter((e) => e.id !== acceptedEntity.id)
+      sample.aiSuggestedEntities.push(picked)
+      if (picked.name) aiEntityNameToGoldId.value.delete(picked.name)
+    }
+  }
+}
+
+async function handleRejectSelectedEntities(entityIds) {
+  const sample = activeSample.value
+  if (!sample || entityIds.length === 0) return
+  const removed = []
+  for (const id of entityIds) {
+    const idx = sample.aiSuggestedEntities.findIndex((e) => e.id === id)
+    if (idx < 0) continue
+    const [picked] = sample.aiSuggestedEntities.splice(idx, 1)
+    removed.push({ idx, picked })
+  }
+  try {
+    await persistFields(sample, { fields: ['aiSuggestedEntities'] })
+    ElMessage.success(`已批量拒绝 ${removed.length} 个候选实体`)
+  } catch {
+    for (const { idx, picked } of removed) {
+      sample.aiSuggestedEntities.splice(idx, 0, picked)
+    }
+  }
+}
+
+async function handleAcceptSelectedRelations(relationIds) {
+  const sample = activeSample.value
+  if (!sample || relationIds.length === 0) return
+  const accepted = []
+  const skipped = []
+  for (const id of relationIds) {
+    const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === id)
+    if (idx < 0) continue
+    const picked = sample.aiSuggestedRelations[idx]
+
+    // 沿用单条 accept 的实体 id 解析逻辑
+    let sourceEntityId = picked.sourceEntityId
+    let targetEntityId = picked.targetEntityId
+    if (!sourceEntityId && picked.originalSource) {
+      sourceEntityId = aiEntityNameToGoldId.value.get(picked.originalSource)
+        ?? sample.goldEntities.find((e) => e.name === picked.originalSource)?.id
+    }
+    if (!targetEntityId && picked.originalTarget) {
+      targetEntityId = aiEntityNameToGoldId.value.get(picked.originalTarget)
+        ?? sample.goldEntities.find((e) => e.name === picked.originalTarget)?.id
+    }
+    if (!sourceEntityId || !targetEntityId) {
+      skipped.push(picked)
+      continue
+    }
+    sample.aiSuggestedRelations.splice(idx, 1)
+    const newRelation = {
+      id: picked.id,
+      sourceEntityId,
+      targetEntityId,
+      type: picked.type,
+      evidence: picked.evidence,
+      description: picked.description,
+      source: 'accepted',
+    }
+    sample.goldRelations.push(newRelation)
+    accepted.push({ picked, newRelation })
+  }
+  try {
+    if (accepted.length > 0) {
+      await persistFields(sample, { fields: ['goldRelations', 'aiSuggestedRelations'] })
+    }
+    const msg = [
+      accepted.length > 0 ? `已批量采纳 ${accepted.length} 个候选关系` : '',
+      skipped.length > 0 ? `${skipped.length} 个因两端实体未采纳被跳过` : '',
+    ].filter(Boolean).join('，')
+    if (accepted.length > 0 && skipped.length === 0) ElMessage.success(msg)
+    else if (skipped.length > 0) ElMessage.warning(msg)
+  } catch {
+    for (const { picked, newRelation } of accepted) {
+      sample.aiSuggestedRelations.push(picked)
+      sample.goldRelations = sample.goldRelations.filter((r) => r.id !== newRelation.id)
+    }
+  }
+}
+
+async function handleRejectSelectedRelations(relationIds) {
+  const sample = activeSample.value
+  if (!sample || relationIds.length === 0) return
+  const removed = []
+  for (const id of relationIds) {
+    const idx = sample.aiSuggestedRelations.findIndex((r) => r.id === id)
+    if (idx < 0) continue
+    const [picked] = sample.aiSuggestedRelations.splice(idx, 1)
+    removed.push({ idx, picked })
+  }
+  try {
+    await persistFields(sample, { fields: ['aiSuggestedRelations'] })
+    ElMessage.success(`已批量拒绝 ${removed.length} 个候选关系`)
+  } catch {
+    for (const { idx, picked } of removed) {
+      sample.aiSuggestedRelations.splice(idx, 0, picked)
+    }
+  }
+}
+
+async function handleDeleteSelectedEntities(entityIds) {
+  const sample = activeSample.value
+  if (!sample || entityIds.length === 0) return
+  // 级联收集：被删实体引用的关系
+  const removedEntities = sample.goldEntities.filter((e) => entityIds.includes(e.id))
+  const removedRelations = sample.goldRelations.filter(
+    (r) => entityIds.includes(r.sourceEntityId) || entityIds.includes(r.targetEntityId)
+  )
+  sample.goldEntities = sample.goldEntities.filter((e) => !entityIds.includes(e.id))
+  sample.goldRelations = sample.goldRelations.filter(
+    (r) => !entityIds.includes(r.sourceEntityId) && !entityIds.includes(r.targetEntityId)
+  )
+  const fields = removedRelations.length > 0 ? ['goldEntities', 'goldRelations'] : ['goldEntities']
+  try {
+    await persistFields(sample, { fields })
+    const cascade = removedRelations.length > 0 ? `，及关联 ${removedRelations.length} 条关系` : ''
+    ElMessage.success(`已批量删除 ${removedEntities.length} 个实体${cascade}`)
+  } catch {
+    sample.goldEntities.push(...removedEntities)
+    if (removedRelations.length > 0) sample.goldRelations.push(...removedRelations)
+  }
+}
+
+async function handleDeleteSelectedRelations(relationIds) {
+  const sample = activeSample.value
+  if (!sample || relationIds.length === 0) return
+  const removed = sample.goldRelations.filter((r) => relationIds.includes(r.id))
+  sample.goldRelations = sample.goldRelations.filter((r) => !relationIds.includes(r.id))
+  try {
+    await persistFields(sample, { fields: ['goldRelations'] })
+    ElMessage.success(`已批量删除 ${removed.length} 条关系`)
+  } catch {
+    sample.goldRelations.push(...removed)
+  }
+}
+
 async function handleCreateEntity(payload) {
   const sample = activeSample.value
   if (!sample) return
@@ -588,6 +754,12 @@ async function handleCreateRelation(payload) {
             @accept-relation="handleAcceptRelation"
             @reject-relation="handleRejectRelation"
             @delete-relation="handleDeleteRelation"
+            @accept-selected-entities="handleAcceptSelectedEntities"
+            @reject-selected-entities="handleRejectSelectedEntities"
+            @accept-selected-relations="handleAcceptSelectedRelations"
+            @reject-selected-relations="handleRejectSelectedRelations"
+            @delete-selected-entities="handleDeleteSelectedEntities"
+            @delete-selected-relations="handleDeleteSelectedRelations"
             @sort-suggestions-by-confidence="sortSuggestionsByConfidence"
             @create-entity="handleCreateEntity"
             @create-relation="handleCreateRelation"

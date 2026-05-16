@@ -7,7 +7,7 @@ const props = defineProps({
   entity: { type: Object, required: true },
 })
 
-defineEmits(['accept', 'reject', 'delete'])
+defineEmits(['accept', 'reject', 'delete', 'edit'])
 
 const isReused    = computed(() => props.entity.source === 'reused')
 const isSuggested = computed(() => props.entity.source === 'ai_suggested')
@@ -55,6 +55,7 @@ const typeWarningTitle = computed(() =>
     </div>
     <div class="entity-chip__actions">
       <template v-if="isSuggested">
+        <button class="entity-chip__btn entity-chip__btn--edit" title="编辑后采纳" @click="$emit('edit', entity.id)">✎</button>
         <button class="entity-chip__btn entity-chip__btn--accept" @click="$emit('accept', entity.id)">✓</button>
         <button class="entity-chip__btn entity-chip__btn--reject" @click="$emit('reject', entity.id)">✕</button>
       </template>
