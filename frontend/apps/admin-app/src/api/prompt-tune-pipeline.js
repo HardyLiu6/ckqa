@@ -1,6 +1,14 @@
 import { http } from '../axios/index.js'
 import { unwrapApiResponse } from './client.js'
 
+// ----- Phase 4.5：01 步种子可用性 -----
+
+export async function getSeedAvailability(buildRunId, client = http) {
+  return unwrapApiResponse(await client.get(
+    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/seed-availability`,
+  ))
+}
+
 // ----- 02 步：构建准备材料 -----
 
 export async function triggerPromptTuneSamples(buildRunId, client = http) {
