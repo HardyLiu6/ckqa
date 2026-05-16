@@ -385,8 +385,10 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 1. **AI 预填可能误导用户**：候选实体的置信度从原 prompt 抽取得来，本身是要被审阅的，过度依赖会污染 gold。缓解：UI 上明确写"由 AI 识别 · 置信度 X"，且采纳前必须二次确认（不能批量"一键全采纳"），上方横幅按钮文案改为"按置信度排序"而不是"全部采纳"。需要在 PR review 中再次验证。
 2. **历史标注复用的稳定键失配**：text_hash 对原文空白和标点敏感。如果上游 build_audit_extraction_set 的 text 规范化策略改了，会失配。缓解：后端 `_normalize_text_for_hash` 已用 `re.sub(r"\s+", " ", text).strip()`，只要这个函数不动就稳定；如要改需写迁移脚本。
 3. **候选译名硬编码与候选数量增长**：本设计把 4 个候选的中文译名硬编码在前端，但后端 `manifest.json.candidates` 的数量未来可能扩展到 6+。缓解：在 manifest 中新增 `display_name_zh` 字段，前端显示时优先读 manifest，退化到本地 hardcode 表。
+   - **Phase 4 已落地缓解（路径 B：后端拼装）**：后端 `CandidateMetadataLookup` 静态硬编码 4 个候选的 `displayNameZh / category / isRecommended / traits`，与算法产物解耦；前端 mock / 单测无需自维护译名表。Phase 7+ 引入 `GET /relation-schemas` 时一并迁移到 manifest 配置或 schema 配置层。
 4. **04 评分时长不可预测**：full 模式 80 次大模型调用，慢的话 30+ 分钟。如果用户中途关浏览器，前端状态丢失，但后端任务仍在跑。缓解：评分启动后端立即写 task 状态到 build run，刷新页面后能从 `extraction-eval/status` 恢复进度；离开页面前 onbeforeunload 弹窗确认。
 5. **prompt parser 容错不足**：rich 模式的 parser 对非标准 prompt 文本会渲染怪样。缓解：parser 检测段落数 < 2 / 单段超长时回退到 raw，且头部加提示。
+   - **Phase 4 已落地缓解（候选 manifest 绝对路径压缩）**：`auto_tuned` 候选的 `base_prompt_source` 在 manifest 中是绝对路径（含 `/home/...`），后端 `CandidateManifestReader.simplifyBasePromptSource` 在透传给前端前压缩为文件名 / 相对路径，避免把服务器路径暴露到浏览器；rich 模式 parser 容错本身留到 Phase 6 `<PromptDisplay>` 落地时一并完善。
 6. **当前进度持久化未覆盖离线 / 并发 / 长事务**（Phase 2b/2c-pre 已落地的现状）：
    - **离线场景**：`persistFields` 失败时会回滚本地状态 + toast，用户输入会丢；`EntityEditor` / `RelationEditor` 提交后立即 reset，PUT 失败时表单内容也丢。缓解：留到 Phase 7 用 IndexedDB 暂存 + 编辑器持久化成功后再 reset。
    - **并发场景**：`prompt_tune_audit_samples` 没有 `version` 字段，多标签页同时编辑同一样本时"最后写入获胜"。缓解：留到 Phase 8 加 `@Version` 乐观锁。
@@ -420,9 +422,12 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - **拖选原文添加实体**：原文卡的 `mouseup` 选区监听 + 浮动按钮"添加为实体"；选区计算 spanStart/spanEnd 写入实体；已确认实体在原文中渲染紫色高亮。
   - **关系自动反向**：A→B 在 schema 中只允许 B→A 时，UI 自动调换源/目标并提示。
 
-- **Phase 4（⏸）：03 步候选生成 + 勾选 + 抽屉预览**
-  - 实现 `POST /candidates` / `GET /candidates` 端点（包装 `generate_candidate_prompts.py`）。
-  - 前端候选网格、token 估算、推荐徽章、`<PromptDisplay>` 抽屉预览。
+- **Phase 4（✅）：03 步候选生成 + 勾选 + 抽屉预览**
+  - 实现 `POST /candidates` / `GET /candidates` / `GET /candidates/{candidateId}/prompt` 端点（包装 `generate_candidate_prompts.py`）。
+  - 后端 4104 门控（02 步至少 1 条 completed）+ 4105 未生成契约（HTTP 404 + envelope）+ 5007 契约漂移检测；DB gold 字段在 `AuditWithGoldExporter` 做 camelCase → snake_case 归一化，缺 `entity_id` 时按 `auto_e_<sampleId>_<idx>` 兜底。
+  - 候选展示元数据由后端 `CandidateMetadataLookup` 硬编码 4 个候选（`default` / `auto_tuned` / `schema_aware_directional_v2` / `schema_fewshot_distilled_v2_strict_tuple`），并在 `simplifyBasePromptSource` 把绝对路径压缩成 manifest 友好的相对/文件名片段。
+  - 前端 `PromptBuilderCandidatesStep` 五态（loading / error / blocked-by-gate / empty / ready）+ ready 态"重新生成候选"按钮 + 推荐徽章 + 抽屉懒加载 prompt 文本；axios 拦截器把后端 ApiResponse envelope 的业务码提到 `err.code` 顶层，确保 4104 / 4105 在 component 层可识别。
+  - 测试：后端 362 测试 PASS，前端单测 325 PASS，Playwright e2e 9/9 PASS（覆盖五态 + 重新生成 + 抽屉懒加载）。
 
 - **Phase 5（⏸）：04 步候选矩阵 + 排行榜 + 详情抽屉**
   - 实现 `POST /extraction-eval` / `/status` / `/report` 端点（包装 `run_native_extraction.py` + `score_extraction_results.py`）。
