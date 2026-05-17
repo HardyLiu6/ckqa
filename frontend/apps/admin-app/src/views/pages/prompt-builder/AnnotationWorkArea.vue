@@ -132,21 +132,24 @@ const entityEditorPrefillName = ref('')
 const entityEditorPrefillSpan = ref(null)
 
 // ─── 多选切换 ─────────────────────────────────────────────────────────
+//
+// 这些函数接收 Set 实例（模板自动 unwrap ref），直接调用 add/delete/clear。
+// Vue 3 的 reactive Set 对这些原生方法都有 reactivity trap，会正确触发模板更新；
+// 不要写 `set.value = new Set(...)`：`set` 在模板调用语境里已经是 Set 实例本体，
+// 写 .value 只会在 Set 上附加一个无效属性，原 ref 完全不会动，UI 会"点了没反应"。
 
 function toggleSelected(set, id) {
-  // Vue 3 reactivity 不响应 Set.add/delete，需要重新赋值新 Set 触发更新
-  const next = new Set(set.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  set.value = next
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
 }
 
 function selectAll(set, ids) {
-  set.value = new Set(ids)
+  set.clear()
+  for (const id of ids) set.add(id)
 }
 
 function clearSelection(set) {
-  set.value = new Set()
+  set.clear()
 }
 
 function handleRequestAddEntity({ name, spanStart, spanEnd }) {
