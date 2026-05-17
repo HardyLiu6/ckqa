@@ -167,7 +167,8 @@ class ExtractionEvalServiceTest {
     void triggerWritesSeedSnapshotFromBuildRunMetadata() throws Exception {
         // Phase 4.5 引入：启动评分时把 build run metadata.customPromptDraft.seed 写入 eval run
         when(samplesService.listByBuildRunId(18L)).thenReturn(List.of(newSample("completed")));
-        when(manifestReader.read(any())).thenReturn(List.of(stubCandidateResponse("default")));
+        // Phase 5.2 注意：seed=graphrag_tuned 时白名单不含 default，需要选 auto_tuned 或 schema_*
+        when(manifestReader.read(any())).thenReturn(List.of(stubCandidateResponse("auto_tuned")));
         when(evalRunsService.findActiveByBuildRunId(18L)).thenReturn(Optional.empty());
         when(evalRunsService.save(any())).thenAnswer(inv -> {
             PromptTuneExtractionEvalRuns r = inv.getArgument(0);
@@ -180,7 +181,7 @@ class ExtractionEvalServiceTest {
         when(buildRunsService.getRequiredById(18L)).thenReturn(withSeed);
 
         ExtractionEvalRequest req = new ExtractionEvalRequest();
-        req.setSelectedCandidates(List.of("default"));
+        req.setSelectedCandidates(List.of("auto_tuned"));
         service.trigger(18L, req);
 
         ArgumentCaptor<PromptTuneExtractionEvalRuns> captor = ArgumentCaptor.forClass(PromptTuneExtractionEvalRuns.class);

@@ -454,6 +454,20 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
     - **Phase 7 落地计划**：详见 Phase 7 § "5 步流水线级联失效追踪"。
     - **本期接受作为短板**：Phase 1-6 的用户路径假定"按顺序走完不回头"，这条风险只在用户真的回 02 步改样本时才暴露。优先级 P1 但不紧急，与 Phase 7 已记录的「样本级真进度」「硬取消」共用 worker / metadata 改造同期落地划算。
 
+12. **03 步固定 4 候选含冗余对照组**（spec § 决策 4 早期固化）：
+    - 现状（Phase 5.2 已落地缓解）：`generate_candidate_prompts.py` 一次性输出 4 个候选 prompt（`default` / `auto_tuned` / `schema_aware_directional_v2` / `schema_fewshot_distilled_v2_strict_tuple`）。但**当 seed=`system_default` 时**，`auto_tuned` 候选源目录被 `BaseOverride.systemDefault` 故意指到一个不存在的 `_disabled_auto_tuned`，Python 走 fallback 把 `auto_tuned_prompt_text = default_prompt_text`，`source_type="fallback_default_copy"`——**`auto_tuned` 候选与 `default` 完全同源**，浪费 ~25% LLM 调用 + 评分排行榜不是真实对比。同理当 seed=`graphrag_tuned` 时，`default` 候选不依赖 seed 是冗余对照。
+    - **Phase 5.2 已落地缓解**：
+      - 新增 `CandidateSeedFilter.allowedCandidatesForSeed(seed)`，按 seed 返回允许出现的候选白名单：
+        - `system_default` / `history_draft` → 排除 `auto_tuned`（fallback 等同 default 无价值）
+        - `graphrag_tuned` → 排除 `default`（不 base on seed 是冗余对照）
+        - `null` / 未知 seed → 全 4 候选（向后兼容 Phase 4 老 build run）
+      - `CandidateService.generate` / `list` 透出前过滤；`ExtractionEvalService.trigger` 校验 `selectedCandidates` 时也按 seed-aware 白名单收紧（防止用户绕过前端门控提交"被规则排除"的 candidateId，返回 4108 `INVALID_EVAL_CANDIDATE_SELECTION`）。
+      - **Python 脚本不动**：仍生成 4 个 prompt 文件（避免改 Python 副作用扩散），Java 层做白名单是单点真相。
+      - 前端 `PromptBuilderCandidatesStep` 候选网格 `[data-count="3"]` 强制 3 列等宽布局（响应式 1100px → 2 列 / 720px → 1 列），从 4 列回到一排显示。
+      - 04 步矩阵 `CandidateMatrixRow` 是逐行渲染，3/4 候选都自然纵向堆叠，无需 CSS 改动。
+    - **预期收益**：评分时长 30 min → ~22 min（-25%），LLM token 消耗同比降低，UX 排行榜全是有意义对比组。
+    - **未覆盖的短板**：`history_draft` seed 的候选清单选了「沿用 system_default 的 3 候选」（default + schema_*），实际 history_draft 的语义是"以历史草稿为种子做 02→03→04→05 完整链路"——历史草稿本身可能与 default / auto_tuned 都不同。完整方案需要在 Phase 6 真正落地 history_draft 时决策（选项 A 新增 `history_draft_base` 候选名 / 选项 B 用 default 做对照组），本期先按选项 B 简化处理。
+
 
 ## 实施分期
 
@@ -508,6 +522,14 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 前端 5 态（loading / blocked / running / done / failed），轮询 1500ms，终态停止；中止按钮调 cancel 端点（候选边界软取消，不强杀子进程），worker 在下一个候选切换时落 cancelled 终态；前端 cancel 后继续轮询直到终态。
   - **承接 Phase 4.5 的 seed 透传**：表 schema 直接含 `seed` 列；`ExtractionEvalService` 启动评分时把 build run metadata.customPromptDraft.seed 写入快照；`ExtractionEvalReportResponse` 顶层透传 seed，前端可展示"本次评分基于哪个种子的候选"。
   - 测试：后端 427 PASS / 1 skipped（Phase 5 新增 ExtractionEvalOrchestratorTest 3 / ExtractionEvalReportAssemblerTest 11 / ExtractionEvalWorkerTest 6 / ExtractionEvalServiceTest 11 / ExtractionEvalStartupRecoveryTest 4）；前端单测 334 PASS（含新增 7 个 API 单测）；Playwright e2e 37 PASS / 4 skipped（含新增 7 个 04 步 e2e 覆盖五态 + 排行榜交互 + 中止 + 详情抽屉）。
+
+- **Phase 5.2（✅）：03 步候选 seed-aware 过滤（spec § 风险 #12）**
+  - 新增 `CandidateSeedFilter.allowedCandidatesForSeed(seed)`，按 seed 返回允许出现的候选白名单（system_default / history_draft 排除 auto_tuned；graphrag_tuned 排除 default；null 不过滤兼容 Phase 4）。
+  - `CandidateService.generate` / `list` 在 manifestReader 读出 4 候选后按 seed 过滤透出 3 个；`ExtractionEvalService.trigger` 校验 `selectedCandidates` 时同步收紧用 seed-aware 白名单（防绕过前端门控提交"被冗余基线规则排除"的 candidateId，返回 4108）。
+  - **Python 脚本不动**：`generate_candidate_prompts.py` 仍生成 4 个 prompt 文件（避免改 Python 副作用扩散），Java 层做白名单是单点真相。
+  - 前端 `PromptBuilderCandidatesStep` 候选网格 `[data-count="3"]` 强制 3 列等宽（响应式 1100px → 2 列 / 720px → 1 列），从 4 列回到一排显示；04 步 `CandidateMatrixRow` 是逐行渲染无需改动。
+  - 收益：评分时长 30 min → ~22 min（-25% LLM 调用），UX 排行榜全是有意义对比组（不再有 fallback_default_copy 与 default 同分的伪对照）。
+  - 测试：后端 442 PASS / 1 skipped（修订 ExtractionEvalServiceTest 1 条用 auto_tuned 替代 default 适配新 seed-aware 校验）；前端单测 346 PASS / 构建 SUCCESS。
 
 - **Phase 6（✅）：05 步历史草稿入库 + 01 步种子打通 + PromptDisplay raw prismjs 高亮**
   - 实现 `POST /knowledge-base-build-runs/{id}/finalize` 端点：从 04 评分 run 取选定候选 prompt + composite_score；FinalizePromptService **直接写** `buildMetadata.customPromptDraft`（不复用 saveCustomPromptDraft），落库**完整 finalize 快照**：`seed` / `selectedCandidateId` / `compositeScore`（4 位小数）/ `sourceEvalRunId` / `finalizedAt`（ISO_OFFSET_DATE_TIME）/ `prompts.extract_graph.content`；当 `saveAsDraft=true` 时同事务插一条 `prompt_drafts` 行（保存范围两模式）。事务语义闭环：`promptDraftsService.save` 返 false 抛 5000 让 customPromptDraft 一并回滚（不依赖 mybatis-plus 静默 false）。

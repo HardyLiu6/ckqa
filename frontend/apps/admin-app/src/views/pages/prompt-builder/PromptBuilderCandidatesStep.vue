@@ -271,7 +271,7 @@ function handleStart() {
         </div>
       </div>
 
-      <div class="candidate-grid">
+      <div class="candidate-grid" :data-count="candidates.length">
         <CandidateCard
           v-for="candidate in candidates"
           :key="candidate.candidateId"

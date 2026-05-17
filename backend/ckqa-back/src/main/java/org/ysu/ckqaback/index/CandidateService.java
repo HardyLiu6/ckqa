@@ -156,7 +156,11 @@ public class CandidateService {
                 );
             }
             // Phase 4.5：直接把当前 seed 注入响应，不依赖 seed-info.json 是否落盘成功
+            // Phase 5.2：按 seed 过滤冗余基线候选（system_default 排除 auto_tuned，graphrag_tuned 排除 default），
+            //            永远只透出 3 个候选给前端。Python 仍生成 4 个 prompt 文件（不动脚本），Java 层做白名单。
+            java.util.Set<String> allowed = CandidateSeedFilter.allowedCandidatesForSeed(seed);
             List<CandidateResponse> withSeed = candidates.stream()
+                    .filter(c -> allowed.contains(c.getCandidateId()))
                     .map(c -> withInjectedSeed(c, seed))
                     .toList();
             log.info("候选生成完成 buildRunId={}, count={}, seed={}, sampleSource=completed×{}",
@@ -189,7 +193,14 @@ public class CandidateService {
                         HttpStatus.NOT_FOUND
                 );
             }
-            return candidates;
+            // Phase 5.2：按 seed 过滤冗余基线候选——与 generate 路径行为一致。
+            // 注意：manifestReader 已在 SeedInfoStore.read 注入了 seed 字段，但这里再读一次 build run metadata
+            // 兜底（seed-info.json 写盘失败时仍能拿到正确 seed）。
+            String seed = resolveSeed(buildRun);
+            java.util.Set<String> allowed = CandidateSeedFilter.allowedCandidatesForSeed(seed);
+            return candidates.stream()
+                    .filter(c -> allowed.contains(c.getCandidateId()))
+                    .toList();
         } catch (BusinessException e) {
             throw e;
         } catch (IOException e) {

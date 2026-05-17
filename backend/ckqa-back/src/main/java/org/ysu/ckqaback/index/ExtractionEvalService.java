@@ -103,9 +103,17 @@ public class ExtractionEvalService {
             );
         }
 
-        // 门控 3：selectedCandidates ⊆ 已生成候选
+        // 门控 3：selectedCandidates ⊆ 当前 seed 下允许的候选白名单
+        // Phase 5.2：candidates 透出按 seed 过滤后只剩 3 个；trigger 校验同步收紧，
+        // 防止用户从 URL 或绕过前端门控提交"被冗余基线规则排除"的 candidateId。
+        String currentSeed = resolveSeedFromMetadata(buildRun);
+        Set<String> seedAllowed = CandidateSeedFilter.allowedCandidatesForSeed(currentSeed);
         Set<String> generatedIds = new LinkedHashSet<>();
-        for (CandidateResponse c : candidates) generatedIds.add(c.getCandidateId());
+        for (CandidateResponse c : candidates) {
+            if (seedAllowed.contains(c.getCandidateId())) {
+                generatedIds.add(c.getCandidateId());
+            }
+        }
         List<String> selected = request.getSelectedCandidates();
         List<String> unknown = new ArrayList<>();
         for (String id : selected) {
@@ -115,7 +123,7 @@ public class ExtractionEvalService {
             throw new BusinessException(
                     ApiResultCode.INVALID_EVAL_CANDIDATE_SELECTION,
                     HttpStatus.BAD_REQUEST,
-                    "未识别的候选 ID：" + String.join(", ", unknown)
+                    "未识别或已被 seed 规则排除的候选 ID：" + String.join(", ", unknown)
             );
         }
 

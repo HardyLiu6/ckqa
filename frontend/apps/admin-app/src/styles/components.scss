@@ -5213,6 +5213,25 @@ textarea.text-input {
   gap: 16px;
 }
 
+/*
+ * Phase 5.2：候选数永远 3 个（seed-aware 过滤后），尽量在一排显示。
+ * data-count=3 时强制 3 列等宽（不再走 auto-fill 在窄屏掉到 2 列）；
+ * 视口窄于 1100px 时降级为 2 列再窄屏 1 列，避免横向溢出。
+ */
+.candidate-grid[data-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .candidate-grid[data-count="3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .candidate-grid[data-count="3"] {
+    grid-template-columns: 1fr;
+  }
+}
+
 .candidate-card {
   position: relative;
   background: var(--ckqa-surface);
