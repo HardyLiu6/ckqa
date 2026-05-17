@@ -22,6 +22,8 @@ class QueryTaskRequest:
     index_run_id: int | None
     data_dir_uri: str | None
     data_dir: Path | None
+    retrieval_query: str | None = None
+    generation_context: str | None = None
 
 
 @dataclass(slots=True)
@@ -43,6 +45,8 @@ class QueryTaskSnapshot:
     return_code: int | None = None
     index_run_id: int | None = None
     data_dir_uri: str | None = None
+    retrieval_query: str | None = None
+    generation_context: str | None = None
 
 
 def trim_log_tail(lines: list[str], *, max_lines: int, max_chars: int) -> list[str]:
@@ -85,13 +89,18 @@ class QueryTaskManager:
         *,
         index_run_id: int | None = None,
         data_dir_uri: str | None = None,
+        retrieval_query: str | None = None,
+        generation_context: str | None = None,
     ) -> QueryTaskSnapshot:
         data_dir = self._resolve_data_dir(data_dir_uri)
+        effective_retrieval_query = (retrieval_query or prompt).strip()
         python_task_id = f"qt_{utc_now():%Y%m%d_%H%M%S}_{next(self._counter):03d}"
         snapshot = QueryTaskSnapshot(
             python_task_id=python_task_id,
             mode=mode,
             prompt=prompt,
+            retrieval_query=effective_retrieval_query,
+            generation_context=generation_context,
             task_status="pending",
             progress_stage="queued",
             process_alive=False,
@@ -106,6 +115,8 @@ class QueryTaskManager:
             index_run_id=index_run_id,
             data_dir_uri=data_dir_uri,
             data_dir=data_dir,
+            retrieval_query=effective_retrieval_query,
+            generation_context=generation_context,
         )
         async with self._lock:
             self._tasks[python_task_id] = snapshot

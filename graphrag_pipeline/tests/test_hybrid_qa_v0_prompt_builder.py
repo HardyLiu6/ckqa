@@ -48,7 +48,7 @@ def test_build_hybrid_v0_prompt_renders_low_high_evidence_and_question(tmp_path)
 
 
 def test_default_template_resolves_when_cwd_is_graphrag_pipeline(monkeypatch):
-    monkeypatch.chdir(Path("graphrag_pipeline"))
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
 
     prompt = build_hybrid_v0_prompt("操作系统是什么？", [], [])
 

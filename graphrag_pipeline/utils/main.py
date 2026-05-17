@@ -117,7 +117,7 @@ def _build_query_cmd(request: QueryTaskRequest) -> list[str]:
     cmd.extend([
         "--method",
         request.mode,
-        request.prompt,
+        request.retrieval_query or request.prompt,
     ])
     return cmd
 
@@ -362,9 +362,14 @@ class ChatCompletionRequest(BaseModel):
 
 class QueryTaskCreateRequest(BaseModel):
     mode: Literal["local", "global", "drift", "basic"] = Field(default="local")
-    prompt: str
+    prompt: str | None = None
+    retrievalQuery: str | None = None
+    generationContext: str | None = None
     indexRunId: int | None = None
     dataDirUri: str | None = None
+
+    def effective_prompt(self) -> str:
+        return (self.retrievalQuery or self.prompt or "").strip()
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -434,6 +439,8 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "returnCode": snapshot.return_code,
         "indexRunId": snapshot.index_run_id,
         "dataDirUri": snapshot.data_dir_uri,
+        "retrievalQuery": snapshot.retrieval_query,
+        "generationContext": snapshot.generation_context,
     }
 
 
@@ -463,11 +470,16 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
     @app.post("/v1/query-tasks")
     async def submit_query_task(request: QueryTaskCreateRequest):
         """提交一个异步查询任务。"""
+        prompt = request.effective_prompt()
+        if not prompt:
+            raise HTTPException(status_code=422, detail="retrievalQuery or prompt is required")
         snapshot = await active_task_manager.create_task(
             request.mode,
-            request.prompt,
+            request.prompt or prompt,
             index_run_id=request.indexRunId,
             data_dir_uri=request.dataDirUri,
+            retrieval_query=prompt,
+            generation_context=request.generationContext,
         )
         return JSONResponse(
             content={
