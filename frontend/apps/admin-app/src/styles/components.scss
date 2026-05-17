@@ -4791,6 +4791,17 @@ textarea.text-input {
 .ann-btn--icon:hover { background: var(--ckqa-border); color: var(--ckqa-text); }
 .ann-btn--soft  { background: white; border: 1px solid #e9d5ff; color: #7c3aed; }
 
+// 「全选 ↔ 取消全选」按钮切换：用 fade + 轻微 scale 让两态不要硬跳
+.ann-btn-swap-enter-active,
+.ann-btn-swap-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.ann-btn-swap-enter-from,
+.ann-btn-swap-leave-to {
+  opacity: 0;
+  transform: scale(0.92);
+}
+
 .ann-pill {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
   background: var(--ckqa-border); color: var(--ckqa-text-muted);

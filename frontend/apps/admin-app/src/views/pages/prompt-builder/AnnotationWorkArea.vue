@@ -390,16 +390,20 @@ function closeRelationEditor() {
               AI 候选 · {{ aiEntities.length }}
               <span v-if="selectedSuggestedEntityIds.size > 0" class="ann-text-muted">（已选 {{ selectedSuggestedEntityIds.size }}）</span>
             </span>
-            <button
-              class="ann-btn ann-btn--soft"
-              :disabled="selectedSuggestedEntityIds.size === aiEntities.length"
-              @click="selectAll(selectedSuggestedEntityIds, aiEntities.map((e) => e.id))"
-            >全选</button>
-            <button
-              class="ann-btn ann-btn--soft"
-              :disabled="selectedSuggestedEntityIds.size === 0"
-              @click="clearSelection(selectedSuggestedEntityIds)"
-            >取消</button>
+            <Transition name="ann-btn-swap" mode="out-in">
+              <button
+                v-if="selectedSuggestedEntityIds.size < aiEntities.length"
+                key="select-all"
+                class="ann-btn ann-btn--soft"
+                @click="selectAll(selectedSuggestedEntityIds, aiEntities.map((e) => e.id))"
+              >全选</button>
+              <button
+                v-else
+                key="clear"
+                class="ann-btn ann-btn--soft"
+                @click="clearSelection(selectedSuggestedEntityIds)"
+              >取消全选</button>
+            </Transition>
             <button
               class="ann-btn ann-btn--accept"
               :disabled="selectedSuggestedEntityIds.size === 0"
@@ -490,16 +494,20 @@ function closeRelationEditor() {
               AI 候选 · {{ aiRelations.length }}
               <span v-if="selectedSuggestedRelationIds.size > 0" class="ann-text-muted">（已选 {{ selectedSuggestedRelationIds.size }}）</span>
             </span>
-            <button
-              class="ann-btn ann-btn--soft"
-              :disabled="selectedSuggestedRelationIds.size === aiRelations.length"
-              @click="selectAll(selectedSuggestedRelationIds, aiRelations.map((r) => r.id))"
-            >全选</button>
-            <button
-              class="ann-btn ann-btn--soft"
-              :disabled="selectedSuggestedRelationIds.size === 0"
-              @click="clearSelection(selectedSuggestedRelationIds)"
-            >取消</button>
+            <Transition name="ann-btn-swap" mode="out-in">
+              <button
+                v-if="selectedSuggestedRelationIds.size < aiRelations.length"
+                key="select-all"
+                class="ann-btn ann-btn--soft"
+                @click="selectAll(selectedSuggestedRelationIds, aiRelations.map((r) => r.id))"
+              >全选</button>
+              <button
+                v-else
+                key="clear"
+                class="ann-btn ann-btn--soft"
+                @click="clearSelection(selectedSuggestedRelationIds)"
+              >取消全选</button>
+            </Transition>
             <button
               class="ann-btn ann-btn--accept"
               :disabled="selectedSuggestedRelationIds.size === 0"
