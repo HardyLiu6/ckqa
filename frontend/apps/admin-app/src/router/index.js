@@ -4,6 +4,7 @@ import { markRaw } from 'vue'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import ConsoleLayout from '../layouts/ConsoleLayout.vue'
 import DetailLayout from '../layouts/DetailLayout.vue'
+import FullscreenLayout from '../layouts/FullscreenLayout.vue'
 import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import DashboardView from '../views/dashboard/DashboardView.vue'
@@ -32,6 +33,7 @@ const layoutMap = {
   auth: markRaw(AuthLayout),
   console: markRaw(ConsoleLayout),
   detail: markRaw(DetailLayout),
+  fullscreen: markRaw(FullscreenLayout),
   workflow: markRaw(WorkflowLayout),
 }
 

@@ -647,10 +647,11 @@ textarea.text-input {
 .app-topbar {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(190px, 260px) auto auto 1fr auto auto;
+  /* 3 段式：品牌定宽 / 搜索吃掉所有剩余空间 / 右侧动作组定宽 */
+  grid-template-columns: minmax(220px, 280px) 1fr auto;
   align-items: center;
-  gap: var(--ckqa-space-3);
-  padding: 0 var(--ckqa-space-5) 0 var(--ckqa-space-6);
+  gap: var(--ckqa-space-4, 16px);
+  padding: 0 var(--ckqa-space-5) 0 var(--ckqa-space-5);
   border-bottom: 1px solid var(--ckqa-border);
   background: color-mix(in srgb, var(--ckqa-surface) 88%, transparent);
   backdrop-filter: blur(16px);
@@ -4141,18 +4142,10 @@ textarea.text-input {
 
 @media (max-width: 1180px) {
   .app-topbar {
-    grid-template-columns: minmax(190px, 1fr) minmax(180px, 1fr) auto;
-    grid-auto-flow: row;
-    grid-template-rows: auto auto;
-    height: auto;
-    padding-block: var(--ckqa-space-4);
-  }
-
-  .theme-control,
-  .identity-cluster,
-  .identity-chip,
-  .app-topbar .ckqa-el-button--ghost {
-    justify-self: start;
+    /* 中型屏：保持 3 列结构但更紧凑 */
+    grid-template-columns: minmax(190px, 220px) 1fr auto;
+    gap: var(--ckqa-space-3);
+    padding-block: var(--ckqa-space-3);
   }
 }
 

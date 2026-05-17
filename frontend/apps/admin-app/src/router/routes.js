@@ -76,11 +76,12 @@ export const APP_ROUTES = [
     componentKey: 'ProfileView',
     meta: {
       title: '个人中心',
-      layout: 'console',
+      // 全屏 layout：不渲染左侧导航，仅顶部 topbar + 返回按钮
+      layout: 'fullscreen',
       // 任意已登录用户都可访问，不要求特定业务 permission
       permissions: [],
       status: 'mvp',
-      // 不进入主侧边栏分组（隐藏在 navigation-model 中），仅顶部头像菜单可达
+      // 不进入主侧边栏分组（也不会被 navigation-model 挑出来）
       navGroup: 'profile',
       hidden: true,
     },
@@ -95,6 +96,9 @@ export const APP_ROUTES = [
       permissions: ['system:read'],
       status: 'mvp',
       navGroup: 'system',
+      // 仅作为 redirect 入口供 primaryNavigation 使用；
+      // 不要在侧栏分组内重复展示「系统与审计」条目。
+      hidden: true,
     },
   },
   {

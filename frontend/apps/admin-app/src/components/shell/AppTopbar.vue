@@ -61,97 +61,159 @@ function handleDropdownCommand(cmd) {
       </span>
     </RouterLink>
 
-    <!-- 搜索（待接入）：保持视觉占位但缩成 chip 风格，让出空间给主题/身份 -->
-    <span class="topbar-search-chip" title="全局搜索（功能尚未接入）">
-      <Search :size="14" aria-hidden="true" />
-      <em>搜索待接入</em>
-    </span>
+    <!-- 搜索（待接入）：拉长成现代搜索条样式占位 -->
+    <div class="topbar-search" role="search">
+      <Search :size="16" class="topbar-search__icon" aria-hidden="true" />
+      <input
+        type="search"
+        class="topbar-search__input"
+        placeholder="搜索课程、知识库、问答会话…（暂未开放）"
+        disabled
+        readonly
+        aria-disabled="true"
+        aria-label="全局搜索（暂未开放）"
+      />
+      <span class="topbar-search__hint">⌘K</span>
+    </div>
 
-    <span class="runtime-chip" title="当前请求基线">
-      <Server :size="15" aria-hidden="true" />
-      <strong>{{ apiBaseline }}</strong>
-    </span>
+    <div class="topbar-actions">
+      <span class="runtime-chip" title="当前请求基线">
+        <Server :size="15" aria-hidden="true" />
+        <strong>{{ apiBaseline }}</strong>
+      </span>
 
-    <ThemeControl />
+      <ThemeControl />
 
-    <!-- 身份 dropdown：头像按钮 + 下拉菜单（含个人中心 / 退出） -->
-    <el-dropdown
-      class="identity-dropdown"
-      trigger="click"
-      :hide-on-click="true"
-      @command="handleDropdownCommand"
-    >
-      <button
-        type="button"
-        class="identity-trigger"
-        :title="`${identityLabel}（${dataScopeLabel}）`"
-        aria-label="账号菜单"
+      <!-- 身份 dropdown：头像按钮 + 下拉菜单（含个人中心 / 退出） -->
+      <el-dropdown
+        class="identity-dropdown"
+        trigger="click"
+        :hide-on-click="true"
+        @command="handleDropdownCommand"
       >
-        <span class="identity-avatar" aria-hidden="true">
-          <img
-            v-if="avatarUrl && !avatarLoadFailed"
-            :src="avatarUrl"
-            :alt="`${identityLabel}头像`"
-            @error="avatarLoadFailed = true"
-          />
-          <span v-else>{{ identityInitial }}</span>
-        </span>
-        <span class="identity-trigger__copy">
-          <strong>{{ identityLabel }}</strong>
-          <small>{{ dataScopeLabel }}</small>
-        </span>
-        <ChevronDown :size="14" class="identity-trigger__chevron" aria-hidden="true" />
-      </button>
-      <template #dropdown>
-        <el-dropdown-menu class="identity-menu">
-          <header class="identity-menu__header">
-            <span class="identity-avatar identity-avatar--lg" aria-hidden="true">
-              <img
-                v-if="avatarUrl && !avatarLoadFailed"
-                :src="avatarUrl"
-                :alt="`${identityLabel}头像`"
-              />
-              <span v-else>{{ identityInitial }}</span>
-            </span>
-            <span class="identity-menu__copy">
-              <strong>{{ identityLabel }}</strong>
-              <small v-if="username">@{{ username }}</small>
-              <span class="identity-menu__scope">
-                <ShieldCheck :size="12" aria-hidden="true" />
-                {{ dataScopeLabel }}
+        <button
+          type="button"
+          class="identity-trigger"
+          :title="`${identityLabel}（${dataScopeLabel}）`"
+          aria-label="账号菜单"
+        >
+          <span class="identity-avatar" aria-hidden="true">
+            <img
+              v-if="avatarUrl && !avatarLoadFailed"
+              :src="avatarUrl"
+              :alt="`${identityLabel}头像`"
+              @error="avatarLoadFailed = true"
+            />
+            <span v-else>{{ identityInitial }}</span>
+          </span>
+          <span class="identity-trigger__copy">
+            <strong>{{ identityLabel }}</strong>
+            <small>{{ dataScopeLabel }}</small>
+          </span>
+          <ChevronDown :size="14" class="identity-trigger__chevron" aria-hidden="true" />
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu class="identity-menu">
+            <header class="identity-menu__header">
+              <span class="identity-avatar identity-avatar--lg" aria-hidden="true">
+                <img
+                  v-if="avatarUrl && !avatarLoadFailed"
+                  :src="avatarUrl"
+                  :alt="`${identityLabel}头像`"
+                />
+                <span v-else>{{ identityInitial }}</span>
               </span>
-            </span>
-          </header>
-          <el-dropdown-item command="profile" :icon="UserCog">
-            个人中心
-          </el-dropdown-item>
-          <el-dropdown-item command="logout" :icon="LogOut" divided>
-            退出登录
-          </el-dropdown-item>
-        </el-dropdown-menu>
-      </template>
-    </el-dropdown>
+              <span class="identity-menu__copy">
+                <strong>{{ identityLabel }}</strong>
+                <small v-if="username">@{{ username }}</small>
+                <span class="identity-menu__scope">
+                  <ShieldCheck :size="12" aria-hidden="true" />
+                  {{ dataScopeLabel }}
+                </span>
+              </span>
+            </header>
+            <el-dropdown-item command="profile" :icon="UserCog">
+              个人中心
+            </el-dropdown-item>
+            <el-dropdown-item command="logout" :icon="LogOut" divided>
+              退出登录
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
   </header>
 </template>
 
 <style scoped>
-.topbar-search-chip {
+/* 全局搜索条占位：宽度铺满中部主轴 */
+.topbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-full, 999px);
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 85%, transparent);
+  transition: border-color 0.18s ease, background 0.18s ease;
+  min-width: 280px;
+  max-width: 540px;
+  width: 100%;
+}
+.topbar-search:hover {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 35%, var(--ckqa-border));
+  background: var(--ckqa-surface);
+}
+
+.topbar-search__icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ckqa-text-muted);
+  flex-shrink: 0;
+}
+
+.topbar-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ckqa-text);
+  font: inherit;
+  font-size: 13px;
+}
+.topbar-search__input::placeholder {
+  color: var(--ckqa-text-muted);
+  font-style: normal;
+}
+.topbar-search__input:disabled {
+  cursor: not-allowed;
+  color: var(--ckqa-text-muted);
+}
+
+.topbar-search__hint {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: 4px;
+  background: var(--ckqa-surface);
+  color: var(--ckqa-text-muted);
+  font-family: var(--ckqa-font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* 右侧 actions 聚合容器：所有非品牌、非搜索元素紧凑成一组 */
+.topbar-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px dashed var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
-  background: var(--ckqa-surface-muted);
-  color: var(--ckqa-text-muted);
-  font-size: 12px;
-  cursor: not-allowed;
-  user-select: none;
-  white-space: nowrap;
-}
-.topbar-search-chip em {
-  font-style: normal;
+  gap: var(--ckqa-space-2, 8px);
+  flex-shrink: 0;
 }
 
 .identity-dropdown {
@@ -211,6 +273,19 @@ function handleDropdownCommand(cmd) {
   width: 40px;
   height: 40px;
   font-size: 16px;
+}
+
+/* 中等屏：搜索 + runtime chip 都很挤时收起 chip */
+@media (max-width: 1280px) {
+  .topbar-search { min-width: 220px; max-width: 380px; }
+}
+@media (max-width: 1080px) {
+  .topbar-actions .runtime-chip { display: none; }
+}
+@media (max-width: 900px) {
+  .topbar-search { display: none; }
+  .identity-trigger__copy { display: none; }
+  .identity-trigger { padding: 4px; }
 }
 </style>
 
