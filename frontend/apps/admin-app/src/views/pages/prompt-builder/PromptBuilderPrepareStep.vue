@@ -13,6 +13,8 @@ import {
 import { apiSampleToLocal, localSampleToUpdatePayload } from './prepare-step-api.js'
 import { generateEntityId, generateRelationId } from './entity-id-generator.js'
 
+// 'next' 事件保留接口但本期不主动触发：当所有样本完成时由用户在 02 主页面手动点
+// 「下一步」推进到 03 步（见 advanceToNextSampleOrFinish），避免 IDE 关闭瞬间被传送
 const emit = defineEmits(['back', 'next'])
 
 const route = useRoute()
@@ -357,7 +359,9 @@ async function handleSkipSample(sampleId) {
 /**
  * 完成 / 跳过当前样本后的统一处理：
  * - 优先切到下一条「未开始 / 进行中」的样本，让用户继续标注
- * - 当所有样本都已处于终态（done / skipped）时，提示"已完成"并 emit('next') 让父组件切到 03 步
+ * - 当所有样本都已处于终态（done / skipped）时，关闭 IDE 回到 02 主页面，提示完成；
+ *   不自动 emit('next')，让用户在主页面看到 2/2 完成总览后手动点「下一步」进 03 步，
+ *   避免 IDE 关闭瞬间页面切换给人"被传送"的不连贯感
  *
  * @param {string} primaryAction - "已完成" 或 "已跳过"
  * @param {{ neutral?: boolean }} options - neutral=true 时单条切换用 info 而非 success
@@ -372,11 +376,11 @@ function advanceToNextSampleOrFinish(primaryAction, { neutral = false } = {}) {
     else ElMessage.success(primaryAction)
     return
   }
-  // 全部处于终态（done / skipped）：通知父组件切到下一步
+  // 全部处于终态（done / skipped）：关闭 IDE，把用户送回 02 主页面
   const allFinalized = samples.value.every((s) => s.status === 'done' || s.status === 'skipped')
   if (allFinalized) {
-    ElMessage.success(`${primaryAction} · 所有样本已处理完毕，正在前往下一步`)
-    emit('next')
+    closeIde()
+    ElMessage.success(`${primaryAction} · 所有样本已处理完毕，请在下方点击「下一步」进入 03 步`)
   } else {
     // 兜底：理论上不会进入这里，但若存在未识别状态，至少给出非误导文案
     if (neutral) ElMessage.info(primaryAction)
