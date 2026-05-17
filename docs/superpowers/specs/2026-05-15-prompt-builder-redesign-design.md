@@ -421,12 +421,21 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 9. **04 步评分汇总失败时「重试」会重跑 30+ 分钟抽取**（Phase 5 落地后暴露的边界）：
    - 现状：`ExtractionEvalWorker.runInternal` 抽取阶段全部完成后（`finished_candidates` 含全部候选）才进 scoring；如果 `orchestrator.runScoring(...)` 失败（如 Python 脚本异常 / 评分汇总报告损坏），整个 evalRun 进 failed 终态。
    - 前端「重试」按钮直接调 `triggerNewEval` → service `trigger` → 没有 active run（已 failed）→ 创建新 evalRun 重头跑抽取阶段。已在磁盘上的抽取产物（`${GRAPHRAG_ROOT}/results/extraction_eval/runs/<oldRunId>/*.json`）不被复用，浪费 30+ 分钟 LLM 调用。
+   - **score 脚本目录契约 bug**：Java `ExtractionEvalOrchestrator.runScoring` 之前不传 `--eval-dir`，Python `score_extraction_results.py` 默认从 `results/extraction_eval/` 根目录扫 `*.json`；但 `run_native_extraction.py` 的 `result_writer` 把抽取产物落在 `results/extraction_eval/runs/<runId>/<candidate>.json` 子目录里——根目录无 `.json`，scoring 必抛 `ValueError("评测输入目录无 JSON 文件")`。
    - **Phase 5.1 已落地缓解**：
      - DTO `ExtractionEvalStatusResponse.recoverableScoringOnly:Boolean`：service 投影时若 `status=failed && progress_stage=scoring && finished_candidates 非空`，置 true。
-     - 新端点 `POST /knowledge-base-build-runs/{id}/extraction-eval/retry-scoring`：service `retryScoring(buildRunId)` 复用最新 evalRun，重置为 running + progress_stage=scoring，dispatch 一个仅跑 scoring 的轻量任务（`ExtractionEvalWorker.runScoringOnly`），跳过抽取段。worker 启动前校验 `sharedExtractDir` 仍在，缺失则回退 markFailed 让 caller 走全量重跑。
-     - 前端 `PromptBuilderScoringStep` 在 `recoverableScoringOnly=true` 时把单按钮「重试」拆成「仅重跑评分」+「重新抽取并评分」二选一；后端拒绝（产物已被清理 / 任务非 failed 等 4106 + 409）时降级走全量重跑。
+     - DTO `ExtractionEvalStatusResponse.recoverableScoringEvalRunId:Long`：覆盖范围更宽——含 cancelled 终态、不要求是最新 run，专给"最新 run 是 cancelled 但更早的 run 抽取已完成"场景前端入口。
+     - 新端点 `POST /knowledge-base-build-runs/{id}/extraction-eval/retry-scoring?evalRunId=X`：service `retryScoring(buildRunId, targetEvalRunId?)` 复用指定/最新 evalRun，校验属于该 buildRun + status ∈ {failed, cancelled} + progress_stage=scoring + finished_candidates 非空 + 当前 buildRun 没有别的 active 任务，重置为 running + progress_stage=scoring，dispatch `runScoringOnly` 仅跑 scoring，跳过抽取段。worker 启动前校验 `sharedExtractDir` 仍在，缺失则回退 markFailed 让 caller 走全量重跑。
+     - `ExtractionEvalOrchestrator.runScoring` 显式传 `--eval-dir results/extraction_eval/runs/<runId>`，与 result_writer 子目录布局对齐，修复 score 脚本扫不到产物的根因。
+     - 前端 `PromptBuilderScoringStep` 在 `recoverableScoringOnly || recoverableScoringEvalRunId 非空` 时把单按钮「重试」拆成「仅重跑评分 / 按上次产物补跑评分」+「重新抽取并评分」二选一；后端拒绝（产物已被清理 / 任务非 failed 等 4106 + 409）时降级走全量重跑。
      - DTO `ExtractionEvalStatusResponse.lastSuccessfulEvalRunId:Long`：service 投影非 success 终态时附带最近一次 success 的 evalRunId；前端在失败 / 取消 / 中止终态显示「查看上次评分结果」按钮，调 `GET /extraction-eval/report?evalRunId=X` 拉历史 success 报告，让用户在不重跑的前提下查看 / 选定上次最佳候选。`getReportByEvalRunId` 校验 evalRun 属于该 buildRun 且 status=success，否则抛 4106。
    - **未覆盖的短板**：worker 在 `markFailed` 后没主动清理 `sharedExtractDir`，所以"产物未清理"是默认状态；下次 `runInternal` 启动时清理逻辑（`deleteIfExists(sharedExtractDir)`）只针对当前 runId，不影响旧 evalRun 的产物。如果手工清理 `${GRAPHRAG_ROOT}/results/extraction_eval/runs/` 或服务重启 + 启动恢复把任务标 failed 再清理，仅重跑会拒绝并降级。这条边界本期接受作为已知技术债。
+
+10. **04 步「中止评分」延迟感知不直观**（Phase 5 落地后暴露的 UX 问题）：
+    - 现状：spec 决策 6 软取消语义——cancel API 立即把 status 切到 cancelling，worker 必须等当前候选 20 个样本全跑完（典型 ~8 min）才在候选边界检查到 cancelling 并落 cancelled 终态。
+    - 用户感知：点中止后只看到一闪而过的 toast「已请求中止，评分将在当前候选完成后停止」，进度条仍在跑，多次点击中止以为没生效，体验混乱。
+    - **Phase 5.1 UX 缓解**：cancelling 状态下显示橙色横幅 spinner + 文案「已请求中止 · 评分将在当前候选完成后停止（典型 5-10 分钟）。如已确认放弃当前进度，可直接关闭此页」；「中止评分」按钮置灰文案变「中止中…」，避免误重复点。
+    - **未覆盖的短板**：仍是软取消语义，最坏情况要等 ~8 min。要做硬取消需要 worker 持有 Python 子进程句柄 + 在 cancelling 检测到时 destroyForcibly + 子进程清理半成品文件，工程量较大，留 Phase 7+ 视用户反馈再决定是否升级。
 
 
 ## 实施分期

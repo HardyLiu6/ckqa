@@ -236,12 +236,17 @@ public class PromptTunePipelineController {
     /**
      * Phase 5.1：仅重跑「评分汇总」。前端在 status.recoverableScoringOnly=true 时点击
      * 「仅重跑评分」按钮触发；不满足条件返回 4106 + CONFLICT 让 caller 走 trigger 全量重跑。
+     *
+     * <p>可选 {@code evalRunId} 查询参数：指定具体 evalRun（用于"最新 run 是 cancelled
+     * 但更早的 run 抽取已完成"场景，前端按 status.recoverableScoringEvalRunId 传入）。
+     * 不传时默认按最新 run 处理。</p>
      */
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/retry-scoring")
     public ApiResponse<Long> retryExtractionEvalScoring(
-            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "evalRunId", required = false) Long evalRunId
     ) {
-        return ApiResponseUtils.success(extractionEvalService.retryScoring(buildRunId));
+        return ApiResponseUtils.success(extractionEvalService.retryScoring(buildRunId, evalRunId));
     }
 
     // ------------------------------------------------------------

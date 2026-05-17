@@ -133,6 +133,11 @@ public class ExtractionEvalOrchestrator {
         argv.add("scripts.extraction_eval.score_extraction_results");
         argv.add("--audit");
         argv.add(auditFile.toAbsolutePath().toString());
+        // 与 run_native_extraction.py 的 result_writer 对齐：抽取产物落在
+        // results/extraction_eval/runs/<runId>/*.json；不传 --eval-dir 时 score 脚本会扫
+        // 默认根目录 results/extraction_eval/ 而它只有子目录没有 .json，必然失败。
+        argv.add("--eval-dir");
+        argv.add(scriptRoot.resolve("results/extraction_eval/runs").resolve(runId).toAbsolutePath().toString());
         argv.add("--run-id");
         argv.add(runId);
         argv.add("--overwrite");

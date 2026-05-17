@@ -71,10 +71,33 @@ const failedCandidates = computed(() => report.value?.failedCandidates ?? [])
 const recoverableScoringOnly = computed(() => status.value?.recoverableScoringOnly === true)
 
 /**
+ * 历史可补跑评分的 evalRunId。覆盖范围比 recoverableScoringOnly 宽：包含 cancelled 终态、
+ * 不要求是最新 run。例如最新 run 是 cancelled 但更早的 run 抽取已完成，按这条复用旧产物。
+ * null 表示没有可复用产物。
+ */
+const recoverableScoringEvalRunId = computed(() => status.value?.recoverableScoringEvalRunId ?? null)
+
+/**
+ * 是否能给"仅重跑评分"按钮——含两类：
+ * - recoverableScoringOnly=true（最新 run 自身满足条件）
+ * - recoverableScoringEvalRunId 非空（更早的 run 满足条件）
+ */
+const canRetryScoring = computed(
+  () => recoverableScoringOnly.value || recoverableScoringEvalRunId.value != null,
+)
+
+/**
  * 失败 / 取消 / 中止终态下的"上次成功 evalRunId"。
  * 前端据此显示「查看上次评分结果」按钮，让用户不用重跑评估也能看到旧报告。
  */
 const lastSuccessfulEvalRunId = computed(() => status.value?.lastSuccessfulEvalRunId ?? null)
+
+/**
+ * worker 软取消语义：cancel API 立即把 status 切到 cancelling，但 worker 必须等当前候选
+ * 整套 20 个样本跑完（典型 ~8 min）才会在候选边界检查到 cancelling 并落 cancelled 终态。
+ * 前端据此显示橙色横幅 + 禁用二次「中止」按钮，避免用户因为没看到立即生效误点重复。
+ */
+const isCancelling = computed(() => status.value?.status === 'cancelling')
 
 onMounted(initialize)
 
@@ -278,13 +301,15 @@ async function handleRetry() {
 /**
  * Phase 5.1：仅重跑评分汇总，跳过抽取阶段。
  *
- * <p>失败 + scoring 阶段时使用，避免重新跑 30+ 分钟抽取。后端校验失败（如抽取产物已被清理）
- * 时返回业务错误，调用方退化到 handleRetry 走全量重跑。</p>
+ * <p>失败 / 取消 + scoring 阶段时使用，避免重新跑 30+ 分钟抽取。
+ * 优先用 recoverableScoringEvalRunId（覆盖更宽、含历史 run）；后端校验失败
+ * （如抽取产物已被清理）时返回业务错误，调用方退化到 handleRetry 走全量重跑。</p>
  */
 async function handleRetryScoring() {
   phase.value = 'loading'
   try {
-    await retryExtractionEvalScoring(buildRunId.value)
+    const targetEvalRunId = recoverableScoringEvalRunId.value
+    await retryExtractionEvalScoring(buildRunId.value, targetEvalRunId ? { evalRunId: targetEvalRunId } : {})
     // 重新拉一次 status 让 phase 切到 running，然后开始轮询
     const s = await getExtractionEvalStatus(buildRunId.value)
     handleStatusUpdate(s)
@@ -328,14 +353,26 @@ async function handleRetryScoring() {
         <el-button v-if="lastSuccessfulEvalRunId" type="primary" @click="handleViewLastReport">
           查看上次评分结果
         </el-button>
-        <el-button v-if="recoverableScoringOnly" :type="lastSuccessfulEvalRunId ? 'default' : 'primary'" @click="handleRetryScoring">仅重跑评分</el-button>
-        <el-button @click="handleRetry">{{ recoverableScoringOnly ? '重新抽取并评分' : '重试' }}</el-button>
+        <el-button v-if="canRetryScoring" :type="lastSuccessfulEvalRunId ? 'default' : 'primary'" @click="handleRetryScoring">
+          {{ recoverableScoringOnly ? '仅重跑评分' : '按上次产物补跑评分' }}
+        </el-button>
+        <el-button @click="handleRetry">{{ canRetryScoring ? '重新抽取并评分' : '重试' }}</el-button>
         <el-button @click="$emit('back')">返回 03 步</el-button>
       </div>
     </div>
 
     <!-- running -->
     <template v-else-if="phase === 'running'">
+      <!-- cancelling 横幅：解释为什么"已请求中止"后还在转——worker 软取消语义，
+           当前候选必须跑完才会落 cancelled 终态（典型 ~8 min） -->
+      <div v-if="isCancelling" class="scoring-cancelling-banner" role="status">
+        <span class="scoring-cancelling-banner__spinner" aria-hidden="true"></span>
+        <div class="scoring-cancelling-banner__copy">
+          <strong>已请求中止</strong>
+          <span class="ann-text-tiny">评分将在当前候选完成后停止（典型 5-10 分钟）。如已确认放弃当前进度，可直接关闭此页。</span>
+        </div>
+      </div>
+
       <div class="scoring-progress-summary">
         <div>
           <div class="scoring-progress-summary__metric">
@@ -358,7 +395,9 @@ async function handleRetryScoring() {
           </div>
         </div>
         <div class="scoring-progress-summary__abort">
-          <el-button @click="handleAbort">中止评分</el-button>
+          <el-button :disabled="isCancelling" @click="handleAbort">
+            {{ isCancelling ? '中止中…' : '中止评分' }}
+          </el-button>
         </div>
       </div>
 
@@ -450,6 +489,35 @@ async function handleRetryScoring() {
 .scoring-state-card__actions {
   display: flex;
   gap: 8px;
+}
+
+/* cancelling 横幅：橙色 + spinner，提醒"已请求但还要等当前候选完成" */
+.scoring-cancelling-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: rgba(217, 119, 6, 0.08);
+  border: 1px solid rgba(217, 119, 6, 0.32);
+  border-radius: 8px;
+  color: var(--ckqa-warning, #d97706);
+}
+.scoring-cancelling-banner__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scoring-cancelling-banner__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: scoring-cancelling-spin 0.85s linear infinite;
+}
+@keyframes scoring-cancelling-spin {
+  to { transform: rotate(360deg); }
 }
 
 .scoring-failed-candidates {

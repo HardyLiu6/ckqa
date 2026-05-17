@@ -32,6 +32,15 @@ public interface PromptTuneExtractionEvalRunsService extends IService<PromptTune
     Optional<PromptTuneExtractionEvalRuns> findLatestSuccessByBuildRunId(Long buildRunId);
 
     /**
+     * 取指定 buildRun 下最近一条「抽取已基本完成、可仅重跑评分」的 evalRun。
+     * <p>判定：status ∈ {failed, cancelled} 且 progress_stage='scoring' 且 finished_candidates 非空。
+     * 即抽取阶段产生过完成候选（产物大概率仍在共享磁盘上），但 scoring 没成功收尾。</p>
+     * <p>用于历史 success 不存在但抽取产物仍可复用的场景：前端可显示「按上次产物补跑评分」入口，
+     * 调 retryScoring(targetEvalRunId)。无符合记录时返回 empty。</p>
+     */
+    Optional<PromptTuneExtractionEvalRuns> findLatestRecoverableScoringByBuildRunId(Long buildRunId);
+
+    /**
      * 列出心跳过期的 running 任务（用于启动恢复时把卡死的运行任务标记 failed）。
      */
     List<PromptTuneExtractionEvalRuns> listStaleRunning(LocalDateTime heartbeatBefore);

@@ -114,12 +114,17 @@ export async function cancelExtractionEval(buildRunId, client = http) {
 /**
  * Phase 5.1：仅重跑评分汇总。
  * <p>前端在 status.recoverableScoringOnly=true 时调用，避免重新跑 30+ 分钟抽取阶段。
- * 不满足条件时后端返回 HTTP 409 + 业务码 EXTRACTION_EVAL_NOT_STARTED，调用方应回退走 startExtractionEval。</p>
+ * 不满足条件时后端返回 HTTP 409 + 业务码 EXTRACTION_EVAL_NOT_STARTED，调用方应回退走 startExtractionEval。
+ *
+ * @param {number} buildRunId
+ * @param {object} options - { evalRunId?: 指定具体 evalRun 复用其抽取产物 }
+ * @param {object} client - http 客户端（默认 http）
  */
-export async function retryExtractionEvalScoring(buildRunId, client = http) {
-  return unwrapApiResponse(await client.post(
-    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/extraction-eval/retry-scoring`,
-  ))
+export async function retryExtractionEvalScoring(buildRunId, options = {}, client = http) {
+  const { evalRunId } = options ?? {}
+  const url = `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/extraction-eval/retry-scoring`
+        + (evalRunId ? `?evalRunId=${encodeURIComponent(evalRunId)}` : '')
+  return unwrapApiResponse(await client.post(url))
 }
 
 // ----- 05 步：预览保存 -----

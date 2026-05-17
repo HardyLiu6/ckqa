@@ -51,6 +51,19 @@ public class PromptTuneExtractionEvalRunsServiceImpl
     }
 
     @Override
+    public Optional<PromptTuneExtractionEvalRuns> findLatestRecoverableScoringByBuildRunId(Long buildRunId) {
+        return this.lambdaQuery()
+                .eq(PromptTuneExtractionEvalRuns::getBuildRunId, buildRunId)
+                .in(PromptTuneExtractionEvalRuns::getStatus, "failed", "cancelled")
+                .eq(PromptTuneExtractionEvalRuns::getProgressStage, "scoring")
+                .isNotNull(PromptTuneExtractionEvalRuns::getFinishedCandidates)
+                .ne(PromptTuneExtractionEvalRuns::getFinishedCandidates, "[]")
+                .orderByDesc(PromptTuneExtractionEvalRuns::getId)
+                .last("LIMIT 1")
+                .oneOpt();
+    }
+
+    @Override
     public List<PromptTuneExtractionEvalRuns> listStaleRunning(LocalDateTime heartbeatBefore) {
         return this.lambdaQuery()
                 .eq(PromptTuneExtractionEvalRuns::getStatus, "running")

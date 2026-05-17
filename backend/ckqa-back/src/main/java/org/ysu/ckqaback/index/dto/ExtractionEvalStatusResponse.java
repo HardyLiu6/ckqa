@@ -48,6 +48,15 @@ public class ExtractionEvalStatusResponse {
     private final Boolean recoverableScoringOnly;
 
     /**
+     * 当前 buildRun 下最近一条「抽取已完成、可仅补跑评分」的 evalRunId。
+     * <p>覆盖范围比 {@code recoverableScoringOnly} 宽：包含 failed 和 cancelled 终态，且不要求是
+     * 最新一次任务。例如最新 run 是 cancelled，但更早的 run 抽取阶段已完成（progress_stage=scoring,
+     * finished_candidates 非空），就让前端在失败页提供「按 evalRun #X 的产物补跑评分」按钮，
+     * 让用户不必重跑 30+ 分钟抽取就能拿到上次的评估结果。null 表示无可复用产物。</p>
+     */
+    private final Long recoverableScoringEvalRunId;
+
+    /**
      * 当前 buildRun 下最近一条 status=success 的 evalRunId（与本次任务可能不同）。
      * <p>用于失败 / 取消 / 中止终态下让前端入口"查看上次评分结果"——即便当前最新任务异常，
      * 历史 success 报告仍可通过 GET /extraction-eval/report?evalRunId=X 访问。无历史 success

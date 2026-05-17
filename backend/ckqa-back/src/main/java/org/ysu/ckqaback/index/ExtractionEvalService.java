@@ -208,20 +208,40 @@ public class ExtractionEvalService {
      * 跳过 30+ 分钟的抽取阶段。否则（含产物已被清理 / 任务非 failed / 还没进 scoring 阶段）
      * 抛 IllegalStateException 让 caller 走 trigger 全量重跑。
      *
+     * @param buildRunId 构建运行 id
+     * @param targetEvalRunId 可选：指定具体 evalRun（必须属于该 buildRun，且 status ∈ {failed, cancelled} +
+     *                       progress_stage='scoring' + finished_candidates 非空）。null 时按"最新 run"行为。
+     *                       用于"最新 run 是 cancelled 但更早的 run 抽取已完成"场景，让前端按 status.recoverableScoringEvalRunId
+     *                       传入历史可恢复 run。
      * @return 复用的 evalRunId
      */
     @Transactional
-    public Long retryScoring(Long buildRunId) {
-        Optional<PromptTuneExtractionEvalRuns> latestOpt =
-                evalRunsService.findLatestByBuildRunId(buildRunId);
-        if (latestOpt.isEmpty()) {
-            throw new BusinessException(
-                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
-                    HttpStatus.NOT_FOUND
-            );
+    public Long retryScoring(Long buildRunId, Long targetEvalRunId) {
+        PromptTuneExtractionEvalRuns run;
+        if (targetEvalRunId != null && targetEvalRunId > 0) {
+            run = evalRunsService.getRequiredById(targetEvalRunId);
+            if (!run.getBuildRunId().equals(buildRunId)) {
+                throw new BusinessException(
+                        ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                        HttpStatus.NOT_FOUND,
+                        "评分任务不属于当前构建运行"
+                );
+            }
+        } else {
+            Optional<PromptTuneExtractionEvalRuns> latestOpt =
+                    evalRunsService.findLatestByBuildRunId(buildRunId);
+            if (latestOpt.isEmpty()) {
+                throw new BusinessException(
+                        ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                        HttpStatus.NOT_FOUND
+                );
+            }
+            run = latestOpt.get();
         }
-        PromptTuneExtractionEvalRuns run = latestOpt.get();
-        boolean canRetryScoring = "failed".equals(run.getStatus())
+
+        // 复用产物的判定：(failed 或 cancelled) + 已进入 scoring 阶段（即抽取已完成或大部分完成）+ 有 finished 候选
+        boolean canRetryScoring =
+                ("failed".equals(run.getStatus()) || "cancelled".equals(run.getStatus()))
                 && "scoring".equals(run.getProgressStage())
                 && run.getFinishedCandidates() != null
                 && !parseSelectedIds(run.getFinishedCandidates()).isEmpty();
@@ -229,7 +249,17 @@ public class ExtractionEvalService {
             throw new BusinessException(
                     ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
                     HttpStatus.CONFLICT,
-                    "当前任务无可复用的抽取产物，请重新触发完整评分"
+                    "目标任务无可复用的抽取产物，请重新触发完整评分"
+            );
+        }
+
+        // 同时确保 buildRun 上没有 active 任务（防与正在跑的任务并发）
+        Optional<PromptTuneExtractionEvalRuns> active = evalRunsService.findActiveByBuildRunId(buildRunId);
+        if (active.isPresent() && !active.get().getId().equals(run.getId())) {
+            throw new BusinessException(
+                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                    HttpStatus.CONFLICT,
+                    "已有活跃评分任务，请先等待或中止后再补跑"
             );
         }
 
@@ -254,6 +284,14 @@ public class ExtractionEvalService {
         }
         log.info("评分仅重跑 scoring 已派发 evalRunId={}", evalRunId);
         return evalRunId;
+    }
+
+    /**
+     * 兼容旧签名（无 targetEvalRunId）。
+     */
+    @Transactional
+    public Long retryScoring(Long buildRunId) {
+        return retryScoring(buildRunId, null);
     }
 
     // -----------------------------------------------------------------
@@ -423,6 +461,21 @@ public class ExtractionEvalService {
                     .orElse(null);
         }
 
+        // 终态下查"最近一条抽取已基本完成、可补跑评分"的 evalRun。
+        // 优先指当前 run（恰好满足 recoverableScoringOnly 同样条件），否则查历史。
+        // 用于"最新 run 是 cancelled 但更早的 run 抽取已完成"这类场景，让用户不必重跑抽取阶段。
+        Long recoverableScoringEvalRunId = null;
+        if (terminal) {
+            if (recoverableScoringOnly) {
+                recoverableScoringEvalRunId = run.getId();
+            } else {
+                recoverableScoringEvalRunId = evalRunsService
+                        .findLatestRecoverableScoringByBuildRunId(run.getBuildRunId())
+                        .map(PromptTuneExtractionEvalRuns::getId)
+                        .orElse(null);
+            }
+        }
+
         return ExtractionEvalStatusResponse.builder()
                 .evalRunId(run.getId())
                 .status(run.getStatus())
@@ -433,6 +486,7 @@ public class ExtractionEvalService {
                 .finishedAt(run.getFinishedAt())
                 .lastHeartbeatAt(run.getLastHeartbeatAt())
                 .recoverableScoringOnly(recoverableScoringOnly ? Boolean.TRUE : null)
+                .recoverableScoringEvalRunId(recoverableScoringEvalRunId)
                 .lastSuccessfulEvalRunId(lastSuccessfulEvalRunId)
                 .overall(overall)
                 .candidates(progresses)
