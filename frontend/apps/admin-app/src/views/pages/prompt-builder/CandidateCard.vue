@@ -71,7 +71,6 @@ const seedBadgeLabel = computed(() => {
       <div><dt>大小</dt><dd>{{ formattedSize }}</dd></div>
       <div><dt>schema</dt><dd>{{ candidate.schemaUsed ? '✓' : '—' }}</dd></div>
       <div><dt>few-shot</dt><dd>{{ candidate.fewshotExampleCount > 0 ? `${candidate.fewshotExampleCount} 例` : '—' }}</dd></div>
-      <div><dt>来源</dt><dd>{{ candidate.basePromptSource }}</dd></div>
     </dl>
 
     <div class="candidate-card__token">

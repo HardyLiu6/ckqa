@@ -5265,16 +5265,18 @@ textarea.text-input {
 }
 
 .candidate-card__meta {
-  display: grid; grid-template-columns: 1fr 1fr;
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 6px 16px; padding: 10px 12px;
   background: var(--ckqa-bg); border-radius: 8px;
   margin: 0; font-size: 12px;
 }
-.candidate-card__meta > div { display: flex; justify-content: space-between; margin: 0; }
-.candidate-card__meta dt { color: var(--ckqa-text-muted); margin: 0; }
+.candidate-card__meta > div { display: flex; justify-content: space-between; gap: 6px; margin: 0; min-width: 0; }
+.candidate-card__meta dt { color: var(--ckqa-text-muted); margin: 0; flex: 0 0 auto; }
 .candidate-card__meta dd {
   color: var(--ckqa-text); font-weight: 500;
   font-family: var(--ckqa-font-mono, ui-monospace, monospace); margin: 0;
+  text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .candidate-card__token {
