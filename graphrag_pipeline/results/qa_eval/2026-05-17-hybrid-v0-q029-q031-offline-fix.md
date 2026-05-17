@@ -31,18 +31,31 @@
    - `共同服务`
    - `共同体现`
 
-2. hybrid v6 evidence selector 默认启用 section-aware search text：
+2. hybrid v6 evidence selector 增加可选 section-aware search text：
    - 复用 bakeoff 的 `build_search_texts`
    - 将 `chapter / section / subsection / heading_path_text` 以默认权重 4 加入 BM25 检索文本
    - 不修改 GraphRAG 原始 `output/**/text_units.parquet`
+   - 32 题离线回归显示该策略对 global_overview 有退化风险，因此不作为默认路径启用。
 
-3. multi-query RRF 增加 facet anchor：
+3. multi-query RRF 增加可选 facet anchor：
    - 对 “X、Y 和 Z 如何衔接” 这类问题，保留每个子查询的首个候选。
    - dense rerank 之后仍保留这些 facet anchors，避免重排把多概念覆盖压成单一主题。
+   - 该策略能改善人类视角的多概念覆盖，但 raw gold RR 有下降风险，因此默认关闭，只用于后续受控 smoke。
 
 ## 离线验证结果
 
 验证命令不调用 LLM，只读取本地 `text_units.parquet`、`qa_test_set.jsonl` 和已有 raw 结果。
+
+32 题回归：
+
+| strategy | overall r@3 | overall r@5 | overall r@10 | overall rr | global r@3 | global rr | Q029 r@3/r@5/r@10/rr |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| old-like no section/no facet | 0.4813 | 0.6057 | 0.7083 | 0.5858 | 0.3542 | 0.5387 | 0.50 / 0.50 / 0.75 / 1.00 |
+| section only | 0.5047 | 0.5771 | 0.7500 | 0.5540 | 0.1979 | 0.4208 | 0.50 / 0.50 / 0.75 / 0.50 |
+| facet only | 0.4604 | 0.6344 | 0.7422 | 0.5662 | 0.1667 | 0.4354 | 0.50 / 0.75 / 1.00 / 1.00 |
+| section + facet | 0.4839 | 0.6240 | 0.7422 | 0.5349 | 0.2604 | 0.3646 | 0.25 / 0.50 / 0.50 / 0.3333 |
+
+结论：section/facet 都不能无脑默认启用。它们是诊断/受控策略，不是全局替换 v6 默认选择器的稳定升级。
 
 Q029：
 
@@ -78,7 +91,7 @@ Q031：
 
 本轮小修主要改善的是“证据覆盖形态”：让跨概念问题的候选证据更像人类写答案时需要的材料，而不是只追单个 text unit 的 BM25 分数。
 
-离线指标说明：Q029 raw gold top5/top10 有改善空间，但 top3 仍受 gold 粒度影响；Q031 更像 gold/问题口径问题。基于节省成本原则，本轮不需要立即重跑大样本真实问答。
+离线指标说明：Q029 raw gold top5/top10 有改善空间，但 top3 仍受 gold 粒度影响；Q031 更像 gold/问题口径问题。更重要的是，32 题回归已暴露过拟合风险，因此 section-aware 和 facet anchor 必须保持默认关闭，后续只在 Q029/Q031 这类结构题上受控验证。
 
 ## 下一步建议
 

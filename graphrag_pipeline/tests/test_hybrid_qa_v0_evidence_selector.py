@@ -35,12 +35,12 @@ def test_v6_selector_filters_noise_and_uses_multi_query_rrf():
 def test_v6_selector_uses_section_heading_text_for_broad_queries():
     rows = [
         TextUnitRow(
-            "heading111111",
+            "head11111111",
             "document_type: textbook. chapter: 第七章 文件管理. section: 7.3 文件目录. "
             "heading_path_text: 第七章 文件管理 > 7.3 文件目录. 正文介绍目录项的组织方式。",
         ),
-        TextUnitRow("other2222222", "处理机调度负责在就绪进程之间分配处理机。"),
-        TextUnitRow("other3333333", "银行家算法用于避免死锁。"),
+        TextUnitRow("oth222222222", "处理机调度负责在就绪进程之间分配处理机。"),
+        TextUnitRow("oth333333333", "银行家算法用于避免死锁。"),
     ]
 
     selector = build_v6_hybrid_evidence_selector_from_rows(
@@ -54,7 +54,7 @@ def test_v6_selector_uses_section_heading_text_for_broad_queries():
 
     refs = [candidate.ref for candidate in selector.search("文件管理中的文件目录如何组织？", top_k=1)]
 
-    assert refs == ["heading111111"]
+    assert refs == ["head11111111"]
 
 
 def test_v6_selector_preserves_multi_facet_anchors_after_dense_rerank():
@@ -80,6 +80,7 @@ def test_v6_selector_preserves_multi_facet_anchors_after_dense_rerank():
         rows,
         config=V6EvidenceSelectorConfig(
             user_terms=("I/O", "磁盘调度", "文件系统", "文件控制块", "索引结点"),
+            enable_facet_diversity=True,
             enable_dense_rerank=True,
             dense_encoder=fake_encoder,
             dense_rerank_candidate_pool_k=4,

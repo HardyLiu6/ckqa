@@ -45,10 +45,10 @@ class V6EvidenceSelectorConfig:
     b: float = 0.75
     enable_noise_filter: bool = True
     exclude_exercises: bool = True
-    enable_section_aware_text: bool = True
+    enable_section_aware_text: bool = False
     section_heading_weight: int = 4
     enable_multi_query_rrf: bool = True
-    enable_facet_diversity: bool = True
+    enable_facet_diversity: bool = False
     facet_anchor_per_query: int = 1
     enable_dense_rerank: bool = False
     dense_rerank_candidate_pool_k: int = 20
