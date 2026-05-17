@@ -1892,10 +1892,11 @@ test('知识库构建 loader 仅在 buildRunId 存在时加载 build-run 且不�
   assert.equal(runResult.workflowSteps.find((step) => step.key === 'prompt').status, 'running')
 })
 
-test('知识库构建 loader 优先从 build-run 详情恢复资料选择', async () => {
+test('知识库构建 loader 在 URL 没有显式资料选择时回退 build-run.selectedMaterialIds', async () => {
+  // 场景：用户首次进入构建页或刷新（URL 不带 materialIds），从 buildRun 持久化值恢复选择。
   const result = await loadModulePage(
-    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
-    { buildRunId: '27', materialIds: '9' },
+    { name: 'knowledge-base-build', query: { buildRunId: '27' }, params: { kbId: '7' } },
+    { buildRunId: '27' },
     {
       getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
       listCourseMaterials: async () => [
@@ -1927,6 +1928,46 @@ test('知识库构建 loader 优先从 build-run 详情恢复资料选择', asyn
   assert.deepEqual(result.blocks.selection.materialIds, ['10'])
   assert.equal(result.blocks.selection.selectionSource, 'buildRun')
   assert.equal(result.raw.selectedMaterials[0].fileName, 'selected.pdf')
+})
+
+test('知识库构建 loader 在 URL 显式给出 materialIds 时以 URL 为准（用户编辑态优先于 build-run 持久化值）', async () => {
+  // 修复前：buildRun.selectedMaterialIds=[10] 永远盖过 URL 的 materialIds=9，导致用户在第一步勾选/取消
+  // 时被 loadPage 反向回灌旧值，出现「点两次才能勾上 / 取消反而恢复 / 下一步用的还是旧值」。
+  // 修复后：URL 显式承载选择即视为用户编辑态优先。
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
+    { buildRunId: '27', materialIds: '9' },
+    {
+      getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+      listCourseMaterials: async () => [
+        { id: 9, fileName: 'legacy.pdf', parseStatus: 'done' },
+        { id: 10, fileName: 'selected.pdf', parseStatus: 'done' },
+      ],
+      listIndexRuns: async () => [],
+      getMaterial: async (id) => ({
+        id: Number(id),
+        courseId: 'os',
+        fileName: id === '10' ? 'selected.pdf' : 'legacy.pdf',
+        parseStatus: 'done',
+      }),
+      listParseResults: async () => [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ],
+      getBuildRun: async () => ({
+        id: 27,
+        currentStage: 'parse_check',
+        status: 'running',
+        selectedMaterialIds: '[10]',
+        materialIds: [9],
+      }),
+    },
+  )
+
+  assert.deepEqual(result.blocks.selection.materialIds, ['9'])
+  assert.equal(result.blocks.selection.selectionSource, 'materialIds')
+  assert.equal(result.raw.selectedMaterials[0].fileName, 'legacy.pdf')
 })
 
 test('知识库构建 loader 在 selectionKey 本地缺失时降级读取 materialIds', async () => {

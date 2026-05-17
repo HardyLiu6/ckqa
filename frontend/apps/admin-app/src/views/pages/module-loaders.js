@@ -933,7 +933,15 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
   const buildRunBlock = createBuildRunBlock(buildRunResult, buildRunId)
   const buildRun = buildRunBlock.item ?? null
-  const selectionQuery = resolveBuildSelectionFromBuildRun(buildRun) ?? resolveBuildSelectionFromQuery(query)
+  // 选择来源仲裁：
+  //   1. 如果 URL 显式带了 materialIds / selectionKey / 旧版 materialId，使用 URL（用户编辑态优先）
+  //   2. URL 没有显式选择时，回退到 buildRun.selectedMaterialIds（页面初次加载或刷新时使用）
+  // 注意：之前的实现是「buildRun 存在 → 永远盖掉 URL」，会导致用户在第一步勾选 / 取消时被 loadPage
+  // 用旧值反向覆盖，出现「点两次才勾上 / 取消反而恢复 / 下一步用的还是旧值」的 bug。
+  const querySelection = resolveBuildSelectionFromQuery(query)
+  const selectionQuery = (querySelection.materialIds.length > 0 || querySelection.selectionKey)
+    ? querySelection
+    : (resolveBuildSelectionFromBuildRun(buildRun) ?? querySelection)
   const selection = await resolveBuildSelection({
     selectionQuery,
     knowledgeBase,
