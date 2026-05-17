@@ -109,7 +109,27 @@ onMounted(async () => {
     const rawSelected = Array.isArray(route.query.selectedCandidate)
       ? route.query.selectedCandidate[0]
       : route.query.selectedCandidate
-    if (rawSelected) selectedCandidateId.value = String(rawSelected)
+    if (rawSelected) {
+      selectedCandidateId.value = String(rawSelected)
+    } else if (draft?.selectedCandidateId) {
+      // 从 build run metadata 的 finalize 快照恢复（用户从 build wizard 点「编辑提示词」回来时）
+      selectedCandidateId.value = String(draft.selectedCandidateId)
+    }
+
+    // Phase 6：根据已保存进度推断起步 step——避免每次回到 prompt-builder 都从 01 步重新开始。
+    // 规则：
+    //   - URL 显式给了 ?step=xxx（在 BUILDER_STEP_KEYS 白名单内）→ 尊重它
+    //   - 否则，customPromptDraft 已 finalize（finalizedAt 非空）→ 跳到 'save' 让用户继续编辑/查看
+    //   - 否则，customPromptDraft 已有内容（prompts.extract_graph.content 非空）→ 跳到 'save'
+    //   - 都没有 → 默认 'seed'（首次进入）
+    const explicitStep = String(Array.isArray(route.query.step) ? route.query.step[0] : (route.query.step ?? '')).trim()
+    if (!BUILDER_STEP_KEYS.includes(explicitStep)) {
+      const hasFinalized = !!draft?.finalizedAt
+      const hasContent = !!draft?.prompts?.extract_graph?.content?.trim()
+      if (hasFinalized || hasContent) {
+        await router.replace({ query: { ...route.query, step: 'save' } })
+      }
+    }
 
     dirty.value = false
   } catch (e) {

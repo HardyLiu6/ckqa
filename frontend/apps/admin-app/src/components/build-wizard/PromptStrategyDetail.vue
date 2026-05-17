@@ -87,7 +87,7 @@ const draftSummary = computed(() => {
           :disabled="disabled"
           @click="$emit('goto-builder')"
         >
-          编辑提示词
+          继续编辑
         </el-button>
       </div>
     </template>
