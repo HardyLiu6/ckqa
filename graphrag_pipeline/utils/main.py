@@ -429,6 +429,7 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "finishedAt": _serialize_api_local_datetime(snapshot.finished_at),
         "latestLogs": list(snapshot.latest_logs or []),
         "resultText": snapshot.result_text,
+        "sources": list(snapshot.sources or []),
         "errorMessage": snapshot.error_message,
         "returnCode": snapshot.return_code,
         "indexRunId": snapshot.index_run_id,

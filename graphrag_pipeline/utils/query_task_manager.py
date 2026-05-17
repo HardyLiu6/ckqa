@@ -6,7 +6,9 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+from query_citation_resolver import QueryCitationSource, resolve_answer_citations
 
 
 def utc_now() -> datetime:
@@ -36,6 +38,7 @@ class QueryTaskSnapshot:
     finished_at: datetime | None = None
     latest_logs: list[str] | None = None
     result_text: str | None = None
+    sources: list[dict[str, Any]] | None = None
     error_message: str | None = None
     return_code: int | None = None
     index_run_id: int | None = None
@@ -154,13 +157,15 @@ class QueryTaskManager:
 
             final_logs = trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars)
             stdout_text = "\n".join(stdout_lines)
+            resolved_answer = resolve_answer_citations(stdout_text, request.data_dir)
             await self._update_task(
                 python_task_id,
                 task_status="success" if return_code == 0 else "failed",
                 progress_stage="done",
                 process_alive=False,
                 latest_logs=final_logs,
-                result_text=stdout_text if return_code == 0 else None,
+                result_text=resolved_answer.display_text if return_code == 0 else None,
+                sources=_serialize_sources(resolved_answer.sources) if return_code == 0 else None,
                 error_message=None if return_code == 0 else f"graphrag query exit code={return_code}",
                 return_code=return_code,
                 finished_at=utc_now(),
@@ -227,3 +232,7 @@ class QueryTaskManager:
                 latest_logs=trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars),
                 last_heartbeat_at=utc_now(),
             )
+
+
+def _serialize_sources(sources: list[QueryCitationSource]) -> list[dict[str, Any]]:
+    return [source.to_dict() for source in sources]

@@ -76,6 +76,10 @@ hybrid = [
     # Hybrid QA v0 sparse retrieval
     "rank-bm25>=0.2.2",
 ]
+db = [
+    # Database maintenance scripts
+    "PyMySQL>=1.1",
+]
 semantic-compat = [
     # Optional compatibility metric for historical BERTScore reports
     "bert-score>=0.3.13",
@@ -89,7 +93,7 @@ factuality-extra = [
     "scale-score>=0.2.0",
 ]
 all = [
-    "graphrag-pipeline[ml,graph,scraper,eval,hybrid]",
+    "graphrag-pipeline[ml,graph,scraper,eval,hybrid,db]",
 ]
 
 [build-system]

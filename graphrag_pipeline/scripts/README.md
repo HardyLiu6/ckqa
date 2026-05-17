@@ -21,6 +21,7 @@
 | `qa_eval/significance_reporter.py` | 生成四模式 bootstrap 对比，并在 category 样本过小时输出警告。 |
 | `qa_eval/ragas_exporter.py` | 导出 RAGAS 兼容数据集。 |
 | `qa_eval/factuality_extra_exporter.py` | 导出 SummaC / AlignScore / SCALE 兼容数据集。 |
+| `backfill_qa_answer_citations.py` | dry-run 或显式执行历史问答回答中的 GraphRAG `[Data: Sources (...)]` 引用清理。 |
 
 兼容性约定：
 
