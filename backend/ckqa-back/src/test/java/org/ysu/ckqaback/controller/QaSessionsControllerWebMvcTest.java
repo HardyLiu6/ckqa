@@ -134,6 +134,7 @@ class QaSessionsControllerWebMvcTest {
         given(qaWorkflowService.sendMessage(eq(5L), any())).willReturn(response);
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -157,6 +158,7 @@ class QaSessionsControllerWebMvcTest {
                 .willThrow(new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT));
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -176,6 +178,7 @@ class QaSessionsControllerWebMvcTest {
                 .willThrow(new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT));
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -192,6 +195,7 @@ class QaSessionsControllerWebMvcTest {
     @Test
     void shouldRejectArchivedFullMode() throws Exception {
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                                 {
@@ -229,7 +233,8 @@ class QaSessionsControllerWebMvcTest {
         );
         given(qaWorkflowService.getTaskDetail(5L, 9001L)).willReturn(response);
 
-        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001"))
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.taskStatus").value("success"))
                 .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(5))
@@ -248,11 +253,32 @@ class QaSessionsControllerWebMvcTest {
                 QaMessageResponse.of(102L, 5L, "assistant", 2, "图谱主题集中在操作系统概念网络", LocalDateTime.of(2026, 4, 22, 15, 22), null, null)
         ));
 
-        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/messages"))
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].taskStatus").value("running"))
                 .andExpect(jsonPath("$.data[0].progressStage").value("running"))
                 .andExpect(jsonPath("$.data[1].taskStatus").isEmpty());
+    }
+
+    @Test
+    void shouldRequireAuthWhenReadingSessionDetails() throws Exception {
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(4010))
+                .andExpect(jsonPath("$.message").value("请先登录"));
+    }
+
+    @Test
+    void shouldRejectSessionAccessForNonOwner() throws Exception {
+        Mockito.doThrow(new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能访问自己的问答会话"))
+                .when(qaWorkflowService).ensureSessionOwner(5L, 7L);
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(4030))
+                .andExpect(jsonPath("$.message").value("只能访问自己的问答会话"));
     }
 
     private AuthenticatedUser authenticatedStudent() {

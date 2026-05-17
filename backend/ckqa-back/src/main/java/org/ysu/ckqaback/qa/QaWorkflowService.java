@@ -84,6 +84,16 @@ public class QaWorkflowService {
         return qaSessionsService.pageFormalSessions(currentUserId, request);
     }
 
+    public void ensureSessionOwner(Long sessionId, Long currentUserId) {
+        if (currentUserId == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        QaSessions session = qaSessionsService.getRequiredById(sessionId);
+        if (!currentUserId.equals(session.getUserId())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能访问自己的问答会话");
+        }
+    }
+
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request) {
         return sendMessage(sessionId, request, null);
     }

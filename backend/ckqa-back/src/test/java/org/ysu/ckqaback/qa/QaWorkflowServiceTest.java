@@ -1,7 +1,9 @@
 package org.ysu.ckqaback.qa;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
@@ -36,6 +38,53 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 class QaWorkflowServiceTest {
+
+    @Test
+    void shouldAllowSessionOwnerAccess() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+
+        workflowService.ensureSessionOwner(5L, 7L);
+
+        then(qaSessionsService).should().getRequiredById(5L);
+    }
+
+    @Test
+    void shouldRejectSessionAccessForNonOwner() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(9L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+
+        assertThatThrownBy(() -> workflowService.ensureSessionOwner(5L, 7L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.AUTH_FORBIDDEN.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                })
+                .hasMessageContaining("只能访问自己的问答会话");
+    }
 
     @Test
     void shouldCreateFormalSessionWithLockedActiveIndexRunId() {

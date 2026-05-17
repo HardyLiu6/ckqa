@@ -72,26 +72,46 @@ public class QaSessionsController {
     @PostMapping("/{id}/messages")
     public ApiResponse<QaTaskSubmissionResponse> sendMessage(
             @PathVariable @Positive(message = "id必须大于0") Long id,
-            @Valid @RequestBody CreateQaMessageRequest request
+            @Valid @RequestBody CreateQaMessageRequest request,
+            HttpServletRequest servletRequest
     ) {
+        qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.sendMessage(id, request));
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<QaSessionResponse> getSession(@PathVariable @Positive(message = "id必须大于0") Long id) {
+    public ApiResponse<QaSessionResponse> getSession(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            HttpServletRequest servletRequest
+    ) {
+        qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.getSession(id));
     }
 
     @GetMapping("/{id}/messages")
-    public ApiResponse<List<QaMessageResponse>> listMessages(@PathVariable @Positive(message = "id必须大于0") Long id) {
+    public ApiResponse<List<QaMessageResponse>> listMessages(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            HttpServletRequest servletRequest
+    ) {
+        qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.listMessages(id));
     }
 
     @GetMapping("/{sessionId}/tasks/{taskId}")
     public ApiResponse<QaTaskDetailResponse> getTaskDetail(
             @PathVariable @Positive(message = "sessionId必须大于0") Long sessionId,
-            @PathVariable @Positive(message = "taskId必须大于0") Long taskId
+            @PathVariable @Positive(message = "taskId必须大于0") Long taskId,
+            HttpServletRequest servletRequest
     ) {
+        qaWorkflowService.ensureSessionOwner(sessionId, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.getTaskDetail(sessionId, taskId));
+    }
+
+    private Long currentUserId(HttpServletRequest servletRequest) {
+        AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        return currentUser.id();
     }
 }
