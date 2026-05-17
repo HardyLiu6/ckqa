@@ -105,6 +105,15 @@ public class ExtractionEvalWorker {
             return;
         }
 
+        // 回填本次评分实际使用的 audit 样本数：
+        // build_audit_extraction_set.py --sample_size 默认 20，但当原始 prompt_tuning_samples
+        // 总条数 < 20 时实际只会含 N (N<20) 条；不回填的话 service 投影 status 时会一直按
+        // 硬编码 20 算分母，UI 会显示 0/20 永远跑不到 20。
+        int sampleTotal = readAuditSampleCount(auditFile);
+        if (sampleTotal > 0) {
+            updateSampleTotal(run.getId(), sampleTotal);
+        }
+
         List<String> selected = parseSelectedIds(run.getSelectedCandidateIds());
         // 校验候选 ID（worker 层兜底；正常 Service 已经过滤）
         for (String candidateId : selected) {
@@ -341,6 +350,33 @@ public class ExtractionEvalWorker {
         } catch (JsonProcessingException e) {
             return List.of();
         }
+    }
+
+    /**
+     * 读 audit_with_gold.json 数组长度作为本次评分实际样本数。读失败返回 -1，调用方按"未知"兜底。
+     * 兼容根级数组与 {@code {"audit_samples": [...]}} 两种 schema（与 build_audit_extraction_set.py 输出对齐）。
+     */
+    private int readAuditSampleCount(Path auditFile) {
+        if (!Files.exists(auditFile)) return -1;
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(auditFile.toFile());
+            if (node.isArray()) return node.size();
+            com.fasterxml.jackson.databind.JsonNode list = node.path("audit_samples");
+            if (list.isArray()) return list.size();
+            return -1;
+        } catch (IOException e) {
+            log.warn("读取 audit_with_gold.json 大小失败 path={}: {}", auditFile, e.getMessage());
+            return -1;
+        }
+    }
+
+    @Transactional
+    protected void updateSampleTotal(Long id, int sampleTotal) {
+        PromptTuneExtractionEvalRuns run = evalRunsService.getById(id);
+        if (run == null) return;
+        run.setSampleTotal(sampleTotal);
+        run.setUpdatedAt(LocalDateTime.now());
+        evalRunsService.updateById(run);
     }
 
     private String serializeIds(List<String> ids) {

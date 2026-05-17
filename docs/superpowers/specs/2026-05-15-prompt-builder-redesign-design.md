@@ -408,6 +408,16 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
    - 当前 Phase 3 的边界是"用户可以手动拒绝重复候选"，候选与 gold 是两条独立卡片，行为正确但体验略冗余。
    - 缓解：留到 Phase 7 加"AI 候选去重已采纳实体"——后端在 `markEntitiesAsAiSuggested` 之后过滤掉与 sample.goldEntities 同名（或 name+type）已存在的候选，并对关系做相同处理。详见 Phase 7 落地计划。
 
+8. **04 步评分进度只能在候选边界回写 DB，前端长时间停在 0**（Phase 5 落地后暴露的边界）：
+   - 现状：`ExtractionEvalWorker.runInternal` 调 `runSingleCandidateExtract(...)` 阻塞跑一个候选的全部样本（典型 ~8 min / 候选），中间只在候选完成时写一次 DB（`finished_candidates` / `extracting_candidate_id`）；service 投影 status 时 `extract.finished` 是"二值"——`finished.contains(id) ? sampleTotal : 0`。
+   - 表现：前端轮询 `recommendedPollingIntervalMillis=1500ms`，但拿到的 `extract.finished` 在该候选完成前永远是 0；用户能看到"已用时 47s"在跳，但分子 0/分母 N 长时间不动，看上去任务卡住。
+   - 另一个边界：`build_audit_extraction_set.py --sample_size` 默认 20，但当原始 `prompt_tuning_samples.json` 总条数 < 20 时（例如教师只标了 2 条），`audit_with_gold.json` 实际只产 2 条；后端 service 之前**硬编码** 20 作为分母，UI 显示 0/20 永远跑不到分母。
+   - **Phase 6.5 已落地缓解**：
+     - SQL 加 `prompt_tune_extraction_eval_runs.sample_total` 列；`ExtractionEvalWorker.runInternal` 启动时读 `audit_with_gold.json` 真实长度回填，service 投影时用此值替换硬编码 20，分母随 build_audit_extraction_set 实际产出动态走（旧记录或回填失败时仍按 20 兜底）。
+     - service 在 `projectStatus` 对当前 `extracting_candidate_id` 的候选按 `elapsedSeconds` 推算"估算 finished"——用 `已用秒数 / 单样本预估秒数`，限 0..sampleTotal-1，永远不到分母（避免抢真值）；overall 的 `finishedCalls` / `tokensUsed` / `estimatedRemainingSeconds` 同步按 sampleTotal 比例缩放。
+     - DTO `ExtractionEvalStatusResponse.Stage` 加 `estimated:Boolean` 标志，前端 `CandidateMatrixRow` 在估算值后追加「（估算）」徽标，避免误以为是真值。
+   - **未覆盖的短板（留 Phase 7+）**：仍是候选粒度的"估算型"反馈；要做样本级真进度，需要让 Python `run_native_extraction.py` 每完成 1 个样本写 `progress.json`（`{finished:N}`），Java worker 起 watcher 线程定期读 progress.json → 写 DB；候选边界软取消的 race 处理需要小心。本期未做。
+
 
 ## 实施分期
 

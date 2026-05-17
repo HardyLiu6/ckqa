@@ -41,6 +41,14 @@ public class PromptTuneExtractionEvalRuns implements Serializable {
     private String selectedCandidateIds;
 
     /**
+     * 本次评分使用的 audit 样本数（=audit_with_gold.json 长度）。
+     * <p>worker 启动时回填；service 投影 status 时用此值替换硬编码 20。
+     * 旧记录 sample_total 为 null 时，service 默认按 20 兜底。</p>
+     */
+    @TableField("sample_total")
+    private Integer sampleTotal;
+
+    /**
      * 本次评分启动时 build run 的 seed 快照（system_default / graphrag_tuned / null）。
      * <p>由 Phase 4.5 引入，用于审计"本次评分基于哪个种子的候选 prompt"。
      * 若启动评分时 build run metadata 中没有 customPromptDraft.seed 字段，写入 null。</p>

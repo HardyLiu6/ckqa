@@ -53,10 +53,10 @@ public class ExtractionEvalService {
 
     private static final int POLLING_INTERVAL_MS = 1500;
 
-    /** 单候选预估 token（与 candidates 列表中估算保持口径一致），用于 overall.estimatedTotalTokens。 */
+    /** 单候选预估每样本 token，乘以 sampleTotal 得到候选总 token 估算。 */
     private static final int ESTIMATED_TOKEN_PER_CANDIDATE = 5000 * 20;
 
-    /** 单候选 20 样本预估总耗时秒数（5-15 分钟，取中位 8 分钟）。 */
+    /** 标准 20 样本规模下单候选预估总耗时秒数（5-15 分钟，取中位 8 分钟）；service 会按 sampleTotal 比例缩放。 */
     private static final int ESTIMATED_SECONDS_PER_CANDIDATE = 8 * 60;
 
     private final KnowledgeBaseBuildRunsService buildRunsService;
@@ -225,6 +225,13 @@ public class ExtractionEvalService {
     private ExtractionEvalStatusResponse projectStatus(PromptTuneExtractionEvalRuns run) {
         List<String> selected = parseSelectedIds(run.getSelectedCandidateIds());
         List<String> finished = parseSelectedIds(run.getFinishedCandidates());
+        // sampleTotal：build_audit_extraction_set.py 的实际产出条数，由 worker 在
+        // ExtractionEvalWorker.runInternal 启动时回填。null（旧记录 / worker 还没回填）按 20 兜底。
+        int sampleTotal = run.getSampleTotal() != null && run.getSampleTotal() > 0
+                ? run.getSampleTotal()
+                : 20;
+        // 单候选估算秒数与样本数同步缩放，避免 sample_total<20 时 estimate 严重高估。
+        int estimatedCandidateSeconds = ESTIMATED_SECONDS_PER_CANDIDATE * sampleTotal / 20;
 
         // 整体已用秒数（无 startedAt 时为 null）
         Integer elapsedSeconds = null;
@@ -233,18 +240,18 @@ public class ExtractionEvalService {
             elapsedSeconds = (int) Duration.between(run.getStartedAt(), end).toSeconds();
         }
 
-        // 估算当前正在抽取的候选完成进度（基于 elapsedSeconds，限 0..19，永远不到 20）：
-        // 为什么需要：worker 在 runSingleCandidateExtract 内部阻塞跑 20 个样本（约 8 min），
+        // 估算当前正在抽取的候选完成进度（基于 elapsedSeconds，限 0..sampleTotal-1，永远不到 sampleTotal）：
+        // 为什么需要：worker 在 runSingleCandidateExtract 内部阻塞跑 sampleTotal 个样本，
         // 期间不更新 DB；如果不补估算，前端拿到的 extract.finished 长时间是 0，看上去后端卡死。
-        // 推算逻辑：当前候选已用秒数 = elapsedSeconds - finished.size() * ESTIMATED_SECONDS_PER_CANDIDATE
-        // 估算 finished = 当前候选已用秒数 / 单样本预估秒数（限 0..19）。
+        // 推算逻辑：当前候选已用秒数 = elapsedSeconds - finished.size() * estimatedCandidateSeconds
+        // 估算 finished = 当前候选已用秒数 / 单样本预估秒数（限 0..sampleTotal-1）。
         boolean isExtractingPhase = "extracting".equals(run.getProgressStage())
                 && run.getExtractingCandidateId() != null;
         int estimatedCurrentExtractFinished = 0;
         if (isExtractingPhase && elapsedSeconds != null) {
-            int currentCandidateElapsed = Math.max(0, elapsedSeconds - finished.size() * ESTIMATED_SECONDS_PER_CANDIDATE);
-            int perSampleSec = Math.max(1, ESTIMATED_SECONDS_PER_CANDIDATE / 20);
-            estimatedCurrentExtractFinished = Math.min(19, currentCandidateElapsed / perSampleSec);
+            int currentCandidateElapsed = Math.max(0, elapsedSeconds - finished.size() * estimatedCandidateSeconds);
+            int perSampleSec = Math.max(1, estimatedCandidateSeconds / Math.max(1, sampleTotal));
+            estimatedCurrentExtractFinished = Math.min(Math.max(0, sampleTotal - 1), currentCandidateElapsed / perSampleSec);
         }
 
         List<ExtractionEvalStatusResponse.CandidateProgress> progresses = new ArrayList<>();
@@ -264,7 +271,7 @@ public class ExtractionEvalService {
             int extractFinished;
             boolean extractEstimated = false;
             if (finished.contains(id)) {
-                extractFinished = 20;
+                extractFinished = sampleTotal;
             } else if (id.equals(run.getExtractingCandidateId()) && isExtractingPhase) {
                 extractFinished = estimatedCurrentExtractFinished;
                 extractEstimated = true;
@@ -278,7 +285,7 @@ public class ExtractionEvalService {
                     .status(candidateStatus)
                     .extract(ExtractionEvalStatusResponse.Stage.builder()
                             .finished(extractFinished)
-                            .total(20)
+                            .total(sampleTotal)
                             .currentSampleId(null)
                             .estimated(extractEstimated ? Boolean.TRUE : null)
                             .build())
@@ -293,24 +300,26 @@ public class ExtractionEvalService {
 
         int totalCandidates = selected.size();
         // overall.finishedCalls：已完成候选的真实贡献 + 当前候选的估算贡献
-        int finishedCalls = finished.size() * 20 + estimatedCurrentExtractFinished;
-        int totalCalls = totalCandidates * 20;
+        int finishedCalls = finished.size() * sampleTotal + estimatedCurrentExtractFinished;
+        int totalCalls = totalCandidates * sampleTotal;
 
         Integer estimatedRemainingSeconds = null;
         if (elapsedSeconds != null && finished.size() < totalCandidates) {
-            int remaining = (totalCandidates - finished.size()) * ESTIMATED_SECONDS_PER_CANDIDATE;
+            int remaining = (totalCandidates - finished.size()) * estimatedCandidateSeconds;
             estimatedRemainingSeconds = remaining;
         } else if (finished.size() == totalCandidates) {
             estimatedRemainingSeconds = 0;
         }
 
+        // tokens 估算同步缩放：原口径基于 20 样本，sampleTotal 不同则按比例折算
+        int tokensPerCandidate = ESTIMATED_TOKEN_PER_CANDIDATE * sampleTotal / 20;
         ExtractionEvalStatusResponse.Overall overall = ExtractionEvalStatusResponse.Overall.builder()
                 .finishedCalls(finishedCalls)
                 .totalCalls(totalCalls)
                 .elapsedSeconds(elapsedSeconds)
                 .estimatedRemainingSeconds(estimatedRemainingSeconds)
-                .tokensUsed(finished.size() * ESTIMATED_TOKEN_PER_CANDIDATE)
-                .estimatedTotalTokens(totalCandidates * ESTIMATED_TOKEN_PER_CANDIDATE)
+                .tokensUsed(finished.size() * tokensPerCandidate)
+                .estimatedTotalTokens(totalCandidates * tokensPerCandidate)
                 .build();
 
         boolean terminal = "success".equals(run.getStatus())

@@ -8,13 +8,21 @@ const props = defineProps({
   index: { type: Number, required: true },
 })
 
+// 总样本数：优先用 progress.extractTotal（来自后端 c.extract.total，
+// build_audit_extraction_set.py 实际产出条数 < 20 时分母会跟着小）。
+// 兜底 TOTAL_SAMPLES_PER_CANDIDATE=20 给后端旧记录或前端 mock 用。
+const sampleTotal = computed(() => {
+  const t = Number(props.progress.extractTotal)
+  return Number.isFinite(t) && t > 0 ? t : TOTAL_SAMPLES_PER_CANDIDATE
+})
+
 const isQueued     = computed(() => props.progress.status === 'queued')
 const isExtracting = computed(() => props.progress.status === 'extracting')
 const isScoring    = computed(() => props.progress.status === 'scoring')
 const isDone       = computed(() => props.progress.status === 'done')
 
 const extractPercent = computed(() =>
-  Math.round((props.progress.extractDone / TOTAL_SAMPLES_PER_CANDIDATE) * 100)
+  Math.round((props.progress.extractDone / sampleTotal.value) * 100)
 )
 
 const extractStatusLabel = computed(() => {
@@ -50,7 +58,7 @@ const scoreStatusLabel = computed(() => {
       <div class="candidate-matrix-row__bar">
         <div :class="['fill', isDone || isScoring ? 'is-done' : 'is-running']" :style="{ width: extractPercent + '%' }"></div>
       </div>
-      <span class="ann-text-tiny">{{ progress.extractDone }} / {{ TOTAL_SAMPLES_PER_CANDIDATE }}<span v-if="isExtracting && progress.extractEstimated" class="ann-text-muted">（估算）</span></span>
+      <span class="ann-text-tiny">{{ progress.extractDone }} / {{ sampleTotal }}<span v-if="isExtracting && progress.extractEstimated" class="ann-text-muted">（估算）</span></span>
     </div>
 
     <div class="candidate-matrix-row__status">
