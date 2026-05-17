@@ -91,7 +91,7 @@ digraph user_journey {
 
 > **Phase 4.5 已落地**：3 张种子卡的可用状态由 `GET /seed-availability` 决定；
 > graphrag_tuned 当且仅当本次 build run 选材已有自动调优产物时可选；
-> history_draft 始终灰显（Phase 6 落地）。
+> history_draft 由 `PromptDraftsService.countByKnowledgeBaseId` 决定可用：count > 0 时可点开抽屉选具体草稿（Phase 6 已落地）。
 > seed 真正影响 03 步候选生成的底板（schema_aware_directional_v2 / schema_fewshot_distilled_v2_strict_tuple
 > 这两族候选根据 seed 选用不同的 base_prompt）。
 
@@ -395,7 +395,8 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 4. **04 评分时长不可预测**：full 模式 80 次大模型调用，慢的话 30+ 分钟。如果用户中途关浏览器，前端状态丢失，但后端任务仍在跑。缓解：评分启动后端立即写 task 状态到 build run，刷新页面后能从 `extraction-eval/status` 恢复进度；离开页面前 onbeforeunload 弹窗确认。
    - **Phase 5 已落地缓解**：`prompt_tune_extraction_eval_runs` 表持久化 pending/running/extracting/scoring 全链路状态；前端按 `recommendedPollingIntervalMillis=1500ms` 轮询 `/extraction-eval/status` 恢复进度；服务重启时 `ExtractionEvalStartupRecovery` 三态分流（pending → 重派发 / running → failed / cancelling → cancelled）；中止评分走 `POST /extraction-eval/cancel` 候选边界软取消，前端持续轮询直到 cancelled 终态。
 5. **prompt parser 容错不足**：rich 模式的 parser 对非标准 prompt 文本会渲染怪样。缓解：parser 检测段落数 < 2 / 单段超长时回退到 raw，且头部加提示。
-   - **Phase 4 已落地缓解（候选 manifest 绝对路径压缩）**：`auto_tuned` 候选的 `base_prompt_source` 在 manifest 中是绝对路径（含 `/home/...`），后端 `CandidateManifestReader.simplifyBasePromptSource` 在透传给前端前压缩为文件名 / 相对路径，避免把服务器路径暴露到浏览器；rich 模式 parser 容错本身留到 Phase 6 `<PromptDisplay>` 落地时一并完善。
+   - **Phase 4 已落地缓解（候选 manifest 绝对路径压缩）**：`auto_tuned` 候选的 `base_prompt_source` 在 manifest 中是绝对路径（含 `/home/...`），后端 `CandidateManifestReader.simplifyBasePromptSource` 在透传给前端前压缩为文件名 / 相对路径，避免把服务器路径暴露到浏览器。
+   - **Phase 6 已落地缓解**：`PromptDisplayRaw` 换成 prismjs 自定义 `prompt-tune` 语言（section / placeholder / arrow / comment / keyword 五类 token + tomorrow 暗色主题）；`parsePromptSections` 容错单测覆盖"段落数 < 2 / 单段超长"两条 fallback raw 路径，PromptDisplay 据此切到 raw 模式并在头部条提示。
 6. **当前进度持久化未覆盖离线 / 并发 / 长事务**（Phase 2b/2c-pre 已落地的现状）：
    - **离线场景**：`persistFields` 失败时会回滚本地状态 + toast，用户输入会丢；`EntityEditor` / `RelationEditor` 提交后立即 reset，PUT 失败时表单内容也丢。缓解：留到 Phase 7 用 IndexedDB 暂存 + 编辑器持久化成功后再 reset。
    - **并发场景**：`prompt_tune_audit_samples` 没有 `version` 字段，多标签页同时编辑同一样本时"最后写入获胜"。缓解：留到 Phase 8 加 `@Version` 乐观锁。
@@ -462,10 +463,17 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - **承接 Phase 4.5 的 seed 透传**：表 schema 直接含 `seed` 列；`ExtractionEvalService` 启动评分时把 build run metadata.customPromptDraft.seed 写入快照；`ExtractionEvalReportResponse` 顶层透传 seed，前端可展示"本次评分基于哪个种子的候选"。
   - 测试：后端 427 PASS / 1 skipped（Phase 5 新增 ExtractionEvalOrchestratorTest 3 / ExtractionEvalReportAssemblerTest 11 / ExtractionEvalWorkerTest 6 / ExtractionEvalServiceTest 11 / ExtractionEvalStartupRecoveryTest 4）；前端单测 334 PASS（含新增 7 个 API 单测）；Playwright e2e 37 PASS / 4 skipped（含新增 7 个 04 步 e2e 覆盖五态 + 排行榜交互 + 中止 + 详情抽屉）。
 
-- **Phase 6（⏸）：05 步历史草稿入库 + 01 步种子打通 + `<PromptDisplay>` 组件**
-  - 实现 `POST /finalize` / `GET /knowledge-bases/{kbId}/prompt-drafts` 端点。
-  - 前端 05 步保存表单 + 草稿入库；01 步从历史草稿列表选种子。
-  - `<PromptDisplay>` 三视图（rich / split / raw）+ markdown-it + prismjs。
+- **Phase 6（✅）：05 步历史草稿入库 + 01 步种子打通 + PromptDisplay raw prismjs 高亮**
+  - 实现 `POST /knowledge-base-build-runs/{id}/finalize` 端点：从 04 评分 run 取选定候选 prompt + composite_score；FinalizePromptService **直接写** `buildMetadata.customPromptDraft`（不复用 saveCustomPromptDraft），落库**完整 finalize 快照**：`seed` / `selectedCandidateId` / `compositeScore`（4 位小数）/ `sourceEvalRunId` / `finalizedAt`（ISO_OFFSET_DATE_TIME）/ `prompts.extract_graph.content`；当 `saveAsDraft=true` 时同事务插一条 `prompt_drafts` 行（保存范围两模式）。事务语义闭环：`promptDraftsService.save` 返 false 抛 5000 让 customPromptDraft 一并回滚（不依赖 mybatis-plus 静默 false）。
+  - 实现 `GET /knowledge-bases/{kbId}/prompt-drafts` 端点：本期重新定义为**列表摘要语义**，返回该 kb 下按 created_at 倒序的 `PromptDraftResponse`（**不含 promptsJson 大字段**），由 `PromptDraftListService` 把 entity 投影成 DTO；mapper 层用 `select` 排除 `prompts_json` 列，避免 600 KB+ 列表响应；草稿详情接口（`GET /knowledge-bases/{kbId}/prompt-drafts/{id}` + `PromptDraftDetailResponse`）留 Phase 7+。
+  - 错误码：4110 `EXTRACTION_EVAL_NOT_SUCCESS`（finalize 时 04 评分尚未 success 拒绝）、4111 `INVALID_FINALIZE_CANDIDATE`（candidateId 不在评分报告 candidates 中）；reportJson 解析失败抛 5000 `INTERNAL_ERROR`（区分服务端数据异常与业务入参错误）。
+  - `SeedAvailabilityService.buildHistoryDraft` 真实化：注入 `PromptDraftsService.countByKnowledgeBaseId`，count > 0 时 available=true / summary 含数量；count = 0 时 reason="no_history_draft" / summary 友好文案，替代 Phase 4.5 占位 "phase_6_not_implemented"。
+  - 前端 `PromptBuilderPage.handleSave` 真发 `POST /finalize`；`onMounted` 调 `listPromptDrafts(kbId)` 填充 `historyDrafts`。
+  - 新组件 `PromptBuilderHistoryDraftDrawer.vue`：当 ≥2 条历史草稿时打开抽屉让用户选具体一条；count=1 时直接选取；count=0 时禁用并提示。`loadHistoryDraft` **不**恢复旧 `selectedCandidateId`，主动清空旧 03 / 04 步状态，与 spec § "history_draft 仅是种子来源、不复用旧候选 ID" 一致；`historyDraftId` 仅做前端记账，finalize 仍由 04 评分报告中的 candidateId 决定。
+  - `PromptBuilderSeedStep.vue` 删硬编码 "Phase 1e 开放" 文案，按 availability 动态显示数量；reason 文案分支 `phase_6_not_implemented` 替换为 `no_history_draft`。
+  - `PromptDisplayRaw.vue` 换 prismjs：自定义 `prompt-tune` 语言识别 section / placeholder / arrow / comment / keyword（课程域实体类型 hardcode 列表），引入 prism-tomorrow 暗色主题；不依赖 prismjs/components/prism-* 任何内置语言以避开 vite 全局 attach 兼容问题。
+  - `parsePromptSections` 容错单测落地（spec § 风险 #5）：段落数 < 2 / 单段超长两条路径，验证 caller 据此决定 `fallbackToRaw`。
+  - 测试：后端 442 PASS / 1 skipped（Phase 6 新增 16 条：PromptDraftsServiceImplTest 4 + SeedAvailabilityServiceTest 新增 2 + FinalizePromptServiceTest 8 + PromptDraftListServiceTest 2），前端单测 345 PASS（Phase 6 新增 11 条：finalize 4 + prompt-drafts 3 + parser 4），Playwright e2e 42 PASS / 4 skipped（Phase 6 新增 4 条：finalize 两模式 + 历史草稿空态 / 抽屉选择）。
 
 ### 鲁棒性与扩展阶段（Phase 7+）
 
