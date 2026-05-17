@@ -162,7 +162,11 @@ public class PromptTuneWorker {
             } finally {
                 tailer.stop();
                 try {
-                    tailerThread.join(2000);
+                    // 把 tailer 线程退出等待时间从 2s 拉长到 8s。
+                    // 给 tailer 充分时间消化最后一段 buffer，避免在主线程进入
+                    // markFailed/markSuccess 后 tailer 滞后写入造成丢失更新。
+                    // 即使没等到也无害：service 层已经用 WHERE status='running' 守护。
+                    tailerThread.join(8000);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 }
@@ -218,29 +222,15 @@ public class PromptTuneWorker {
 
     @Transactional
     protected void markRunning(Long id) {
-        PromptTuneRuns run = promptTuneRunsService.getRequiredById(id);
-        if ("running".equals(run.getStatus())) {
-            return;
-        }
-        run.setStatus("running");
-        run.setProgressStage("queued");
-        run.setStartedAt(LocalDateTime.now());
-        run.setLastHeartbeatAt(LocalDateTime.now());
-        run.setUpdatedAt(LocalDateTime.now());
-        promptTuneRunsService.updateById(run);
+        // 条件 SQL：仅在 status IN (pending, running) 时翻为 running，避免覆盖终态。
+        promptTuneRunsService.markRunning(id);
     }
 
     @Transactional
     protected void updateProgress(Long id, String stage, Deque<String> logBuffer) {
-        PromptTuneRuns run = promptTuneRunsService.getById(id);
-        if (run == null) {
-            return;
-        }
-        run.setProgressStage(stage);
-        run.setLatestLogs(joinLogs(logBuffer));
-        run.setLastHeartbeatAt(LocalDateTime.now());
-        run.setUpdatedAt(LocalDateTime.now());
-        promptTuneRunsService.updateById(run);
+        // 条件 SQL：WHERE status='running'。worker 主线程已 mark success/failed 后，
+        // tailer 滞后回调进来 update 行数为 0，不会覆盖终态字段。
+        promptTuneRunsService.updateProgressStage(id, stage, joinLogs(logBuffer));
     }
 
     @Transactional
@@ -251,49 +241,21 @@ public class PromptTuneWorker {
                 buffer.removeFirst();
             }
         }
-        // 心跳更新放在锁外，DB 写入不阻塞流式读取。
-        PromptTuneRuns run = promptTuneRunsService.getById(id);
-        if (run == null) {
-            return;
-        }
-        run.setLatestLogs(joinLogs(buffer));
-        run.setLastHeartbeatAt(LocalDateTime.now());
-        run.setUpdatedAt(LocalDateTime.now());
-        promptTuneRunsService.updateById(run);
+        // 条件 SQL：WHERE status='running'，与 updateProgress 同理。
+        promptTuneRunsService.appendLatestLogs(id, joinLogs(buffer));
     }
 
     @Transactional
     protected void markSuccess(Long id, String promptSha256, String logs) {
-        PromptTuneRuns run = promptTuneRunsService.getById(id);
-        if (run == null) {
-            return;
-        }
-        run.setStatus("success");
-        run.setProgressStage("done");
-        run.setPromptSha256(promptSha256);
-        run.setLatestLogs(logs);
-        run.setFinishedAt(LocalDateTime.now());
-        run.setLastHeartbeatAt(LocalDateTime.now());
-        run.setUpdatedAt(LocalDateTime.now());
-        promptTuneRunsService.updateById(run);
+        // 条件 SQL：WHERE status IN (pending, running)，确保不会从已 failed 翻回 success。
+        promptTuneRunsService.markSuccess(id, promptSha256, logs);
     }
 
     @Transactional
     protected void markFailed(Long id, String error, String logs) {
-        PromptTuneRuns run = promptTuneRunsService.getById(id);
-        if (run == null) {
-            return;
-        }
-        run.setStatus("failed");
-        run.setProgressStage("done");
-        run.setErrorMessage(firstSummary(error, "调优失败"));
-        if (logs != null) {
-            run.setLatestLogs(logs);
-        }
-        run.setFinishedAt(LocalDateTime.now());
-        run.setLastHeartbeatAt(LocalDateTime.now());
-        run.setUpdatedAt(LocalDateTime.now());
-        promptTuneRunsService.updateById(run);
+        // 条件 SQL：WHERE status IN (pending, running)，确保不会从 success 翻回 failed，
+        // 且不会被 tailer 滞后写入覆盖。
+        promptTuneRunsService.markFailed(id, firstSummary(error, "调优失败"), logs);
     }
 
     private String joinLogs(Deque<String> buffer) {

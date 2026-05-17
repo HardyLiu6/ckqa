@@ -26,6 +26,15 @@ public class PromptTuneStartupRecovery implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         try {
+            // 1. 先把「终态字段已写但 status 没翻」的丢失更新脏记录立即修正（不依赖阈值）。
+            //    这类记录是 worker mark success/failed 后被 tailer 滞后回写覆盖产生的，
+            //    必须立即清理，否则前端会一直转圈到 stale 阈值（默认 40 分钟）才返回。
+            var inconsistent = promptTuneRunsService.recoverInconsistentRunningRuns();
+            if (!inconsistent.isEmpty()) {
+                log.info("启动阶段修正了 {} 个状态不一致的 prompt-tune 任务（finished_at 已写但 status=running）", inconsistent.size());
+            }
+
+            // 2. 再按陈旧阈值兜底标 failed：处理后端崩溃 / 进程被 kill 留下的真正 stuck 任务。
             var recovered = promptTuneRunsService.recoverStaleRunningRuns(
                     Duration.ofSeconds(properties.getTimeout().getPromptTuneStaleSeconds())
             );

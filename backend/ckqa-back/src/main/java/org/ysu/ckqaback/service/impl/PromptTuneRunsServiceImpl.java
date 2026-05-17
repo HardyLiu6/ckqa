@@ -90,6 +90,99 @@ public class PromptTuneRunsServiceImpl
     }
 
     @Override
+    public List<PromptTuneRuns> recoverInconsistentRunningRuns() {
+        // 终态字段（finished_at + error_message 二选一）已写、但 status 仍 running 的记录：
+        // 这类肯定是 worker 已经 mark 了 success/failed，但被 tailer 滞后写入覆盖。
+        LambdaQueryWrapper<PromptTuneRuns> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PromptTuneRuns::getStatus, "running")
+                .isNotNull(PromptTuneRuns::getFinishedAt);
+        List<PromptTuneRuns> stuckRuns = list(wrapper);
+        for (PromptTuneRuns run : stuckRuns) {
+            LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+            update.eq(PromptTuneRuns::getId, run.getId())
+                    .eq(PromptTuneRuns::getStatus, "running")
+                    .set(PromptTuneRuns::getStatus, "failed")
+                    .set(PromptTuneRuns::getProgressStage, "done")
+                    .set(
+                            PromptTuneRuns::getErrorMessage,
+                            run.getErrorMessage() != null && !run.getErrorMessage().isBlank()
+                                    ? run.getErrorMessage()
+                                    : "调优结束但状态未及时翻转，已由启动恢复修正"
+                    );
+            baseMapper.update(null, update);
+        }
+        return stuckRuns;
+    }
+
+    @Override
+    public int markRunning(Long id) {
+        LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+        update.eq(PromptTuneRuns::getId, id)
+                .in(PromptTuneRuns::getStatus, "pending", "running")
+                .set(PromptTuneRuns::getStatus, "running")
+                .set(PromptTuneRuns::getProgressStage, "queued")
+                .setSql("started_at = COALESCE(started_at, NOW())")
+                .setSql("last_heartbeat_at = NOW()")
+                .setSql("updated_at = NOW()");
+        return baseMapper.update(null, update);
+    }
+
+    @Override
+    public int updateProgressStage(Long id, String stage, String latestLogs) {
+        LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+        update.eq(PromptTuneRuns::getId, id)
+                .eq(PromptTuneRuns::getStatus, "running")
+                .set(PromptTuneRuns::getProgressStage, stage)
+                .set(PromptTuneRuns::getLatestLogs, latestLogs)
+                .setSql("last_heartbeat_at = NOW()")
+                .setSql("updated_at = NOW()");
+        return baseMapper.update(null, update);
+    }
+
+    @Override
+    public int appendLatestLogs(Long id, String latestLogs) {
+        LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+        update.eq(PromptTuneRuns::getId, id)
+                .eq(PromptTuneRuns::getStatus, "running")
+                .set(PromptTuneRuns::getLatestLogs, latestLogs)
+                .setSql("last_heartbeat_at = NOW()")
+                .setSql("updated_at = NOW()");
+        return baseMapper.update(null, update);
+    }
+
+    @Override
+    public int markSuccess(Long id, String promptSha256, String latestLogs) {
+        LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+        update.eq(PromptTuneRuns::getId, id)
+                .in(PromptTuneRuns::getStatus, "pending", "running")
+                .set(PromptTuneRuns::getStatus, "success")
+                .set(PromptTuneRuns::getProgressStage, "done")
+                .set(PromptTuneRuns::getPromptSha256, promptSha256)
+                .set(PromptTuneRuns::getLatestLogs, latestLogs)
+                .setSql("finished_at = NOW()")
+                .setSql("last_heartbeat_at = NOW()")
+                .setSql("updated_at = NOW()");
+        return baseMapper.update(null, update);
+    }
+
+    @Override
+    public int markFailed(Long id, String errorMessage, String latestLogs) {
+        LambdaUpdateWrapper<PromptTuneRuns> update = new LambdaUpdateWrapper<>();
+        update.eq(PromptTuneRuns::getId, id)
+                .in(PromptTuneRuns::getStatus, "pending", "running")
+                .set(PromptTuneRuns::getStatus, "failed")
+                .set(PromptTuneRuns::getProgressStage, "done")
+                .set(PromptTuneRuns::getErrorMessage, errorMessage)
+                .setSql("finished_at = NOW()")
+                .setSql("last_heartbeat_at = NOW()")
+                .setSql("updated_at = NOW()");
+        if (latestLogs != null) {
+            update.set(PromptTuneRuns::getLatestLogs, latestLogs);
+        }
+        return baseMapper.update(null, update);
+    }
+
+    @Override
     public PromptTuneRuns getRequiredById(Long id) {
         PromptTuneRuns run = getById(id);
         if (run == null) {
