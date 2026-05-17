@@ -81,5 +81,13 @@ public class ExtractionEvalStatusResponse {
         private final Integer total;
         /** 当前阶段处理的样本 id（保留字段，本期候选粒度时返回 null）。 */
         private final String currentSampleId;
+        /**
+         * finished 是否为「按 elapsed 估算的中间值」。
+         * <p>worker 当前只在候选边界写 DB（runSingleCandidateExtract 阻塞跑 ~8 min），
+         * 中间没有真实样本级回写。前端拿到 0/20 二值会"看似不动"。
+         * 这里在 service 层基于 elapsedSeconds 做估算补全，并打 estimated=true 提醒 UI 加上 "估算" 标签，
+         * 不要让用户以为后端卡住。终态（done/failed/queued）时 estimated 不设置或为 false。</p>
+         */
+        private final Boolean estimated;
     }
 }

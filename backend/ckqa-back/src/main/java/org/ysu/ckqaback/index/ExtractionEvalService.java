@@ -226,6 +226,27 @@ public class ExtractionEvalService {
         List<String> selected = parseSelectedIds(run.getSelectedCandidateIds());
         List<String> finished = parseSelectedIds(run.getFinishedCandidates());
 
+        // 整体已用秒数（无 startedAt 时为 null）
+        Integer elapsedSeconds = null;
+        if (run.getStartedAt() != null) {
+            LocalDateTime end = run.getFinishedAt() != null ? run.getFinishedAt() : LocalDateTime.now();
+            elapsedSeconds = (int) Duration.between(run.getStartedAt(), end).toSeconds();
+        }
+
+        // 估算当前正在抽取的候选完成进度（基于 elapsedSeconds，限 0..19，永远不到 20）：
+        // 为什么需要：worker 在 runSingleCandidateExtract 内部阻塞跑 20 个样本（约 8 min），
+        // 期间不更新 DB；如果不补估算，前端拿到的 extract.finished 长时间是 0，看上去后端卡死。
+        // 推算逻辑：当前候选已用秒数 = elapsedSeconds - finished.size() * ESTIMATED_SECONDS_PER_CANDIDATE
+        // 估算 finished = 当前候选已用秒数 / 单样本预估秒数（限 0..19）。
+        boolean isExtractingPhase = "extracting".equals(run.getProgressStage())
+                && run.getExtractingCandidateId() != null;
+        int estimatedCurrentExtractFinished = 0;
+        if (isExtractingPhase && elapsedSeconds != null) {
+            int currentCandidateElapsed = Math.max(0, elapsedSeconds - finished.size() * ESTIMATED_SECONDS_PER_CANDIDATE);
+            int perSampleSec = Math.max(1, ESTIMATED_SECONDS_PER_CANDIDATE / 20);
+            estimatedCurrentExtractFinished = Math.min(19, currentCandidateElapsed / perSampleSec);
+        }
+
         List<ExtractionEvalStatusResponse.CandidateProgress> progresses = new ArrayList<>();
         CandidateMetadataLookup metadataLookup = new CandidateMetadataLookup();
         for (String id : selected) {
@@ -239,7 +260,18 @@ public class ExtractionEvalService {
             } else {
                 candidateStatus = "queued";
             }
-            int extractFinished = finished.contains(id) ? 20 : 0;
+
+            int extractFinished;
+            boolean extractEstimated = false;
+            if (finished.contains(id)) {
+                extractFinished = 20;
+            } else if (id.equals(run.getExtractingCandidateId()) && isExtractingPhase) {
+                extractFinished = estimatedCurrentExtractFinished;
+                extractEstimated = true;
+            } else {
+                extractFinished = 0;
+            }
+
             progresses.add(ExtractionEvalStatusResponse.CandidateProgress.builder()
                     .candidateId(id)
                     .displayNameZh(metadataLookup.displayNameZh(id))
@@ -248,24 +280,22 @@ public class ExtractionEvalService {
                             .finished(extractFinished)
                             .total(20)
                             .currentSampleId(null)
+                            .estimated(extractEstimated ? Boolean.TRUE : null)
                             .build())
                     .score(ExtractionEvalStatusResponse.Stage.builder()
                             .finished(finished.contains(id) ? 1 : 0)
                             .total(1)
                             .currentSampleId(null)
+                            .estimated(null)
                             .build())
                     .build());
         }
 
         int totalCandidates = selected.size();
-        int finishedCalls = finished.size() * 20;
+        // overall.finishedCalls：已完成候选的真实贡献 + 当前候选的估算贡献
+        int finishedCalls = finished.size() * 20 + estimatedCurrentExtractFinished;
         int totalCalls = totalCandidates * 20;
 
-        Integer elapsedSeconds = null;
-        if (run.getStartedAt() != null) {
-            LocalDateTime end = run.getFinishedAt() != null ? run.getFinishedAt() : LocalDateTime.now();
-            elapsedSeconds = (int) Duration.between(run.getStartedAt(), end).toSeconds();
-        }
         Integer estimatedRemainingSeconds = null;
         if (elapsedSeconds != null && finished.size() < totalCandidates) {
             int remaining = (totalCandidates - finished.size()) * ESTIMATED_SECONDS_PER_CANDIDATE;

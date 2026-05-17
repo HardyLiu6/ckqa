@@ -50,7 +50,7 @@ const scoreStatusLabel = computed(() => {
       <div class="candidate-matrix-row__bar">
         <div :class="['fill', isDone || isScoring ? 'is-done' : 'is-running']" :style="{ width: extractPercent + '%' }"></div>
       </div>
-      <span class="ann-text-tiny">{{ progress.extractDone }} / {{ TOTAL_SAMPLES_PER_CANDIDATE }}</span>
+      <span class="ann-text-tiny">{{ progress.extractDone }} / {{ TOTAL_SAMPLES_PER_CANDIDATE }}<span v-if="isExtracting && progress.extractEstimated" class="ann-text-muted">（估算）</span></span>
     </div>
 
     <div class="candidate-matrix-row__status">

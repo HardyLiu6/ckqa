@@ -310,6 +310,7 @@ async function handleRetry() {
             candidateId: c.candidateId,
             status: c.status,
             extractDone: c.extract?.finished ?? 0,
+            extractEstimated: c.extract?.estimated === true,
             scoringStartedAtMs: null,
           }"
           :index="i"
