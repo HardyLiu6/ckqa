@@ -393,6 +393,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 3. **候选译名硬编码与候选数量增长**：本设计把 4 个候选的中文译名硬编码在前端，但后端 `manifest.json.candidates` 的数量未来可能扩展到 6+。缓解：在 manifest 中新增 `display_name_zh` 字段，前端显示时优先读 manifest，退化到本地 hardcode 表。
    - **Phase 4 已落地缓解（路径 B：后端拼装）**：后端 `CandidateMetadataLookup` 静态硬编码 4 个候选的 `displayNameZh / category / isRecommended / traits`，与算法产物解耦；前端 mock / 单测无需自维护译名表。Phase 7+ 引入 `GET /relation-schemas` 时一并迁移到 manifest 配置或 schema 配置层。
 4. **04 评分时长不可预测**：full 模式 80 次大模型调用，慢的话 30+ 分钟。如果用户中途关浏览器，前端状态丢失，但后端任务仍在跑。缓解：评分启动后端立即写 task 状态到 build run，刷新页面后能从 `extraction-eval/status` 恢复进度；离开页面前 onbeforeunload 弹窗确认。
+   - **Phase 5 已落地缓解**：`prompt_tune_extraction_eval_runs` 表持久化 pending/running/extracting/scoring 全链路状态；前端按 `recommendedPollingIntervalMillis=1500ms` 轮询 `/extraction-eval/status` 恢复进度；服务重启时 `ExtractionEvalStartupRecovery` 三态分流（pending → 重派发 / running → failed / cancelling → cancelled）；中止评分走 `POST /extraction-eval/cancel` 候选边界软取消，前端持续轮询直到 cancelled 终态。
 5. **prompt parser 容错不足**：rich 模式的 parser 对非标准 prompt 文本会渲染怪样。缓解：parser 检测段落数 < 2 / 单段超长时回退到 raw，且头部加提示。
    - **Phase 4 已落地缓解（候选 manifest 绝对路径压缩）**：`auto_tuned` 候选的 `base_prompt_source` 在 manifest 中是绝对路径（含 `/home/...`），后端 `CandidateManifestReader.simplifyBasePromptSource` 在透传给前端前压缩为文件名 / 相对路径，避免把服务器路径暴露到浏览器；rich 模式 parser 容错本身留到 Phase 6 `<PromptDisplay>` 落地时一并完善。
 6. **当前进度持久化未覆盖离线 / 并发 / 长事务**（Phase 2b/2c-pre 已落地的现状）：
@@ -449,9 +450,17 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 前端 `PromptBuilderCandidatesStep` 五态（loading / error / blocked-by-gate / empty / ready）+ ready 态"重新生成候选"按钮 + 推荐徽章 + 抽屉懒加载 prompt 文本；axios 拦截器把后端 ApiResponse envelope 的业务码提到 `err.code` 顶层，确保 4104 / 4105 在 component 层可识别。
   - 测试：后端 362 测试 PASS，前端单测 325 PASS，Playwright e2e 9/9 PASS（覆盖五态 + 重新生成 + 抽屉懒加载）。
 
-- **Phase 5（⏸）：04 步候选矩阵 + 排行榜 + 详情抽屉**
-  - 实现 `POST /extraction-eval` / `/status` / `/report` 端点（包装 `run_native_extraction.py` + `score_extraction_results.py`）。
-  - 前端候选评分矩阵（实时进度）+ 排行榜（金银铜牌）+ 详情抽屉（指标 + 质量门控）+ 选定候选交互。
+- **Phase 5（✅）：04 步候选矩阵 + 排行榜 + 详情抽屉**
+  - 实现 `POST /extraction-eval` / `/status` / `/report` / `/cancel` 四个端点（异步任务化，仿 PromptTune 模式）。
+  - 新增 `prompt_tune_extraction_eval_runs` 状态表 + `ExtractionEvalAsyncConfig`（独立线程池 corePoolSize=1，串行评分避免限流）。
+  - 评分产物按 build run 隔离到 `<workspace>/eval/<evalRunId>/`，worker 跑完复制 + 清理共享磁盘路径，多 build run 互不污染。
+  - 三重门控：02 ≥1 completed（4104）+ 03 候选已生成（4105）+ selectedCandidates ⊆ 已生成（4108）；前端在 onMounted 检查 selectedCandidates query 缺失 → 引导回 03 步。
+  - 报告 gate.passed 在后端按 spec 阈值（0.8 / 0.5 / 0.5 / 0.95）重新计算，与脚本严格 GATE_THRESHOLD=0.95 解耦；F1 由 recall + precision 重算。
+  - **整体终态语义**：finished 全空 → 整体 failed；finished 非空且 scoring 完成 → 整体 success（含部分候选 failed 的情况）。失败候选通过 `candidate_failures` JSON 列结构化持久化，由 `ExtractionEvalReportResponse.failedCandidates` 透传给前端，在排行榜下方"未进入排名"区域展示。
+  - 服务启动恢复：`ExtractionEvalStartupRecovery` 三态分流（pending → 重新 dispatch / running → failed / cancelling → cancelled），避免僵尸任务卡住后续 trigger 复用逻辑。
+  - 前端 5 态（loading / blocked / running / done / failed），轮询 1500ms，终态停止；中止按钮调 cancel 端点（候选边界软取消，不强杀子进程），worker 在下一个候选切换时落 cancelled 终态；前端 cancel 后继续轮询直到终态。
+  - **承接 Phase 4.5 的 seed 透传**：表 schema 直接含 `seed` 列；`ExtractionEvalService` 启动评分时把 build run metadata.customPromptDraft.seed 写入快照；`ExtractionEvalReportResponse` 顶层透传 seed，前端可展示"本次评分基于哪个种子的候选"。
+  - 测试：后端 427 PASS / 1 skipped（Phase 5 新增 ExtractionEvalOrchestratorTest 3 / ExtractionEvalReportAssemblerTest 11 / ExtractionEvalWorkerTest 6 / ExtractionEvalServiceTest 11 / ExtractionEvalStartupRecoveryTest 4）；前端单测 334 PASS（含新增 7 个 API 单测）；Playwright e2e 37 PASS / 4 skipped（含新增 7 个 04 步 e2e 覆盖五态 + 排行榜交互 + 中止 + 详情抽屉）。
 
 - **Phase 6（⏸）：05 步历史草稿入库 + 01 步种子打通 + `<PromptDisplay>` 组件**
   - 实现 `POST /finalize` / `GET /knowledge-bases/{kbId}/prompt-drafts` 端点。
