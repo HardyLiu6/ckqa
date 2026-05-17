@@ -1,13 +1,13 @@
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
-  GraduationCap,
+  ArrowRight,
+  Brain,
+  FileText,
   KeyRound,
-  LogIn,
+  MessageSquareText,
   ShieldCheck,
-  Sparkles,
   UserRound,
-  Workflow,
 } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -18,18 +18,90 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const submitError = ref('')
+
+/**
+ * "记住密码 7 天" 草案：
+ * 仅前端 localStorage 保存账号 + 密码（明文）+ 过期时间戳，到期或退出登录后清除。
+ * 不传到后端、不写 cookie，避免越权场景下 cookie 自动随请求泄漏。
+ * 这是登录便利性 trade-off；安全要求更高的场景请关闭此开关。
+ */
+const REMEMBER_STORAGE_KEY = 'ckqa.admin.remember-credentials'
+const REMEMBER_DURATION_DAYS = 7
+const REMEMBER_DURATION_MS = REMEMBER_DURATION_DAYS * 24 * 60 * 60 * 1000
+
+function readRememberedCredentials() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(REMEMBER_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    if (typeof parsed.expiresAt !== 'number' || parsed.expiresAt < Date.now()) {
+      window.localStorage.removeItem(REMEMBER_STORAGE_KEY)
+      return null
+    }
+    if (typeof parsed.username !== 'string' || typeof parsed.password !== 'string') {
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeRememberedCredentials(username, password) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(
+      REMEMBER_STORAGE_KEY,
+      JSON.stringify({
+        username,
+        password,
+        expiresAt: Date.now() + REMEMBER_DURATION_MS,
+      }),
+    )
+  } catch {
+    // 忽略 localStorage 写入异常（隐私模式 / 配额超限）
+  }
+}
+
+function clearRememberedCredentials() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(REMEMBER_STORAGE_KEY)
+  } catch {
+    // 忽略
+  }
+}
+
+// 默认账号优先级：localStorage 持久化 > LOGIN_PRESETS[0]
+const remembered = readRememberedCredentials()
 const activePreset = ref(LOGIN_PRESETS[0].role)
 const form = reactive({
-  username: LOGIN_PRESETS[0].username,
-  password: LOGIN_PRESETS[0].password,
+  username: remembered?.username ?? LOGIN_PRESETS[0].username,
+  password: remembered?.password ?? LOGIN_PRESETS[0].password,
 })
-const rememberMe = ref(true)
+const rememberMe = ref(Boolean(remembered))
 
-const productHighlights = [
-  { icon: Workflow, label: 'PDF 解析 → GraphRAG 建图', detail: '一站式课程资料图谱化' },
-  { icon: Sparkles, label: '提示词自动调优', detail: '比基线候选评分提升 30%+' },
-  { icon: ShieldCheck, label: '细粒度权限', detail: '管理员 / 教师 / 学生分层' },
-  { icon: GraduationCap, label: '智能问答', detail: '本地 / 全局 / 漂移多模式' },
+const productPipeline = [
+  {
+    step: '01',
+    icon: FileText,
+    title: 'PDF 解析与导出',
+    detail: 'MinerU · MinIO · MySQL',
+  },
+  {
+    step: '02',
+    icon: Brain,
+    title: '知识图谱构建',
+    detail: 'GraphRAG · 提示词调优',
+  },
+  {
+    step: '03',
+    icon: MessageSquareText,
+    title: '智能问答与运维',
+    detail: '4 种检索模式 · 验证溯源',
+  },
 ]
 
 const activePresetDetail = computed(() =>
@@ -38,8 +110,14 @@ const activePresetDetail = computed(() =>
 
 function applyPreset(preset) {
   activePreset.value = preset.role
-  form.username = preset.username
-  form.password = preset.password
+  // 如果用户已经修改过账号密码，preset 切换不应该覆盖；只在初始 / preset 当前账号匹配时切换
+  const matchingExisting = LOGIN_PRESETS.find(
+    (p) => p.username === form.username && p.password === form.password,
+  )
+  if (matchingExisting) {
+    form.username = preset.username
+    form.password = preset.password
+  }
   submitError.value = ''
 }
 
@@ -49,6 +127,11 @@ async function submit() {
 
   try {
     await authStore.login(form)
+    if (rememberMe.value) {
+      writeRememberedCredentials(form.username, form.password)
+    } else {
+      clearRememberedCredentials()
+    }
     router.replace(resolveRedirect())
   } catch (error) {
     submitError.value = createApiError(error).message || '登录失败，请检查账号密码'
@@ -61,63 +144,80 @@ function resolveRedirect() {
   const redirect = route.query.redirect
   return typeof redirect === 'string' && redirect.startsWith('/app') ? redirect : '/app/dashboard'
 }
+
+onMounted(() => {
+  // 路由层 logout 已经清掉 token 与 currentUser；这里只负责"取消勾选记住密码 → 立即清空持久化"。
+  if (!rememberMe.value) {
+    clearRememberedCredentials()
+  }
+})
 </script>
 
 <template>
   <div class="login-shell">
-    <!-- 左侧：品牌叙事 -->
+    <!-- 左侧：品牌叙事 + 生产链路卡片 -->
     <aside class="login-aside" aria-labelledby="login-product-title">
-      <div class="login-aside__brand">
+      <!-- 知识图谱节点装饰（绝对定位） -->
+      <div class="login-aside__graph" aria-hidden="true">
+        <span class="login-aside__node login-aside__node--1"></span>
+        <span class="login-aside__node login-aside__node--2"></span>
+        <span class="login-aside__node login-aside__node--3"></span>
+        <span class="login-aside__node login-aside__node--4"></span>
+        <span class="login-aside__node login-aside__node--5"></span>
+        <span class="login-aside__line login-aside__line--1"></span>
+        <span class="login-aside__line login-aside__line--2"></span>
+        <span class="login-aside__line login-aside__line--3"></span>
+        <span class="login-aside__line login-aside__line--4"></span>
+      </div>
+
+      <header class="login-aside__brand">
         <img class="login-aside__logo" src="/logo.png" alt="智课问答" />
         <div class="login-aside__brand-text">
           <strong>智课问答</strong>
-          <span>CourseKG · 教学数据底座</span>
+          <span>CourseKG · GraphRAG</span>
         </div>
-      </div>
+      </header>
 
       <div class="login-aside__hero">
-        <p class="login-aside__eyebrow">CONSOLE · ADMIN & TEACHER</p>
+        <span class="login-aside__eyebrow">从资料到问答 · 全链路工作台</span>
         <h1 id="login-product-title" class="login-aside__title">
-          让课程资料成为<br />
-          <em>可被检索的知识图谱</em>
+          让课程资料<br />
+          成为<em>可被检索的图谱</em>
         </h1>
         <p class="login-aside__lede">
-          管理员与教师共用一套控制台，统一管理课程、资料、知识库与问答会话。
-          登录后按角色权限进入对应工作区。
+          PDF 解析、GraphRAG 建图、提示词调优、智能问答，管理员与教师在同一控制台协作。
         </p>
+
+        <ol class="login-aside__pipeline">
+          <li v-for="item in productPipeline" :key="item.step" class="login-aside__pipeline-item">
+            <span class="login-aside__pipeline-step">{{ item.step }}</span>
+            <span class="login-aside__pipeline-icon">
+              <component :is="item.icon" :size="14" aria-hidden="true" />
+            </span>
+            <span class="login-aside__pipeline-text">
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </span>
+            <ArrowRight :size="14" class="login-aside__pipeline-arrow" aria-hidden="true" />
+          </li>
+        </ol>
       </div>
-
-      <ul class="login-aside__highlights">
-        <li v-for="item in productHighlights" :key="item.label">
-          <span class="login-aside__highlight-icon">
-            <component :is="item.icon" :size="16" aria-hidden="true" />
-          </span>
-          <div class="login-aside__highlight-copy">
-            <strong>{{ item.label }}</strong>
-            <small>{{ item.detail }}</small>
-          </div>
-        </li>
-      </ul>
-
-      <footer class="login-aside__footer">
-        © 2026 CKQA · 仅限管理员与教师登录
-      </footer>
     </aside>
 
-    <!-- 右侧：登录卡 -->
+    <!-- 右侧：乳白色登录卡 -->
     <main class="login-main">
-      <div class="login-card">
+      <section class="login-card" aria-labelledby="login-form-title">
         <header class="login-card__header">
           <span class="login-card__icon">
             <ShieldCheck :size="22" aria-hidden="true" />
           </span>
           <div>
-            <h2 class="login-card__title">欢迎回来</h2>
-            <p class="login-card__subtitle">使用账号与密码登录管理控制台</p>
+            <h2 id="login-form-title" class="login-card__title">欢迎回来</h2>
+            <p class="login-card__subtitle">使用账号与密码登录控制台</p>
           </div>
         </header>
 
-        <!-- preset 角色切换 -->
+        <!-- 角色 preset -->
         <div class="login-preset" role="tablist" aria-label="测试身份切换">
           <button
             v-for="preset in LOGIN_PRESETS"
@@ -136,12 +236,12 @@ function resolveRedirect() {
 
         <form class="login-form" @submit.prevent="submit">
           <label class="login-field">
-            <span>账号 / 用户名</span>
+            <span class="login-field__label">账号 / 用户名</span>
             <el-input
               v-model.trim="form.username"
               size="large"
               autocomplete="username"
-              placeholder="如：admin.heqh"
+              placeholder="例如：admin.heqh"
             >
               <template #prefix>
                 <UserRound :size="16" aria-hidden="true" />
@@ -150,7 +250,7 @@ function resolveRedirect() {
           </label>
 
           <label class="login-field">
-            <span>密码</span>
+            <span class="login-field__label">密码</span>
             <el-input
               v-model="form.password"
               size="large"
@@ -167,7 +267,7 @@ function resolveRedirect() {
 
           <div class="login-form__row">
             <label class="login-remember">
-              <el-checkbox v-model="rememberMe">下次自动填充</el-checkbox>
+              <el-checkbox v-model="rememberMe">记住密码 7 天</el-checkbox>
             </label>
             <button
               type="button"
@@ -190,7 +290,7 @@ function resolveRedirect() {
             :loading="loading"
             size="large"
           >
-            <LogIn class="button-icon" :size="16" aria-hidden="true" />
+            <ArrowRight class="button-icon" :size="16" aria-hidden="true" />
             进入控制台
           </el-button>
         </form>
@@ -200,7 +300,7 @@ function resolveRedirect() {
           <strong>{{ activePresetDetail.label }}</strong>
           <em>{{ activePresetDetail.description }}</em>
         </footer>
-      </div>
+      </section>
     </main>
   </div>
 </template>
@@ -208,77 +308,129 @@ function resolveRedirect() {
 <style scoped>
 .login-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(420px, 1fr);
   min-height: 100vh;
   width: 100%;
-  background:
-    radial-gradient(circle at -10% -10%, color-mix(in srgb, var(--ckqa-accent) 25%, transparent), transparent 38%),
-    radial-gradient(circle at 110% 110%, color-mix(in srgb, var(--ckqa-accent) 18%, transparent), transparent 32%),
-    var(--ckqa-bg);
+  background: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-/* ─── 左侧品牌叙事 ────────────────────────── */
+/* ──────────────────────────────────────────────
+ * 左侧：深紫极光 + 知识图谱装饰
+ * ────────────────────────────────────────────── */
 .login-aside {
   position: relative;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  gap: 32px;
-  padding: 48px 56px 32px;
-  color: var(--ckqa-text);
+  grid-template-rows: auto 1fr;
+  gap: 28px;
+  padding: 48px 56px;
+  color: #fff;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 70% 30%, rgba(56, 189, 248, 0.42) 0%, transparent 38%),
+    radial-gradient(circle at 30% 70%, rgba(192, 132, 252, 0.36) 0%, transparent 42%),
+    radial-gradient(circle at 50% 100%, rgba(236, 72, 153, 0.22) 0%, transparent 50%),
+    linear-gradient(160deg, #1e1b4b 0%, #312e81 60%, #4338ca 130%);
 }
 
-.login-aside::before {
-  content: '';
+/* 知识图谱节点装饰 */
+.login-aside__graph {
   position: absolute;
-  inset: 24px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 12%, transparent), transparent 60%),
-    var(--ckqa-surface);
-  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 18%, var(--ckqa-border));
-  border-radius: 24px;
-  box-shadow: 0 24px 60px color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
+  inset: 0;
   pointer-events: none;
   z-index: 0;
 }
-.login-aside > * {
-  position: relative;
-  z-index: 1;
+.login-aside__node {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
+  animation: login-pulse 4s ease-in-out infinite;
+}
+.login-aside__node--1 { width: 10px; height: 10px; top: 12%; left: 8%; }
+.login-aside__node--2 {
+  width: 14px; height: 14px; top: 26%; left: 62%;
+  background: rgba(192, 132, 252, 0.78);
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.92);
+  animation-delay: 0.6s;
+}
+.login-aside__node--3 {
+  width: 12px; height: 12px; top: 56%; left: 78%;
+  background: rgba(56, 189, 248, 0.72);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.85);
+  animation-delay: 1.2s;
+}
+.login-aside__node--4 {
+  width: 8px; height: 8px; top: 70%; left: 22%;
+  background: rgba(236, 72, 153, 0.85);
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.7);
+  animation-delay: 1.8s;
+}
+.login-aside__node--5 {
+  width: 16px; height: 16px; top: 84%; left: 56%;
+  background: rgba(99, 102, 241, 0.66);
+  box-shadow: 0 0 18px rgba(99, 102, 241, 0.7);
+  animation-delay: 2.4s;
+}
+.login-aside__line {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.55), transparent);
+}
+.login-aside__line--1 { width: 44%; top: 15%; left: 12%; transform: rotate(8deg); }
+.login-aside__line--2 { width: 24%; top: 36%; left: 60%; transform: rotate(38deg); }
+.login-aside__line--3 { width: 32%; top: 73%; left: 24%; transform: rotate(-12deg); }
+.login-aside__line--4 { width: 18%; top: 60%; left: 70%; transform: rotate(-22deg); }
+
+@keyframes login-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.18); }
 }
 
+/* 左侧 brand */
 .login-aside__brand {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 12px;
 }
 .login-aside__logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   object-fit: contain;
+  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.42);
 }
 .login-aside__brand-text strong {
   display: block;
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 .login-aside__brand-text span {
-  font-size: 12px;
-  color: var(--ckqa-text-muted);
-  font-family: var(--ckqa-font-mono);
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  letter-spacing: 0.04em;
 }
 
+/* 左侧 hero */
 .login-aside__hero {
+  position: relative;
+  z-index: 1;
   align-self: center;
   max-width: 480px;
 }
 .login-aside__eyebrow {
-  margin: 0 0 12px;
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  color: #93c5fd;
   font-weight: 700;
-  color: var(--ckqa-accent-strong);
+  margin-bottom: 14px;
+  text-transform: uppercase;
 }
 .login-aside__title {
   margin: 0 0 16px;
@@ -286,90 +438,119 @@ function resolveRedirect() {
   font-weight: 800;
   line-height: 1.18;
   letter-spacing: -0.01em;
-  color: var(--ckqa-text);
+  color: #fff;
 }
 .login-aside__title em {
   font-style: normal;
-  background: linear-gradient(135deg, var(--ckqa-accent), var(--ckqa-accent-strong));
+  background: linear-gradient(135deg, #38bdf8, #c084fc);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 .login-aside__lede {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--ckqa-text-muted);
+  margin: 0 0 28px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(203, 213, 225, 0.92);
+  max-width: 380px;
 }
 
-.login-aside__highlights {
+/* 生产链路卡片 */
+.login-aside__pipeline {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
+  max-width: 420px;
 }
-.login-aside__highlights li {
-  display: inline-flex;
+.login-aside__pipeline-item {
+  display: grid;
+  grid-template-columns: 24px 26px 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 12px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ckqa-surface) 92%, transparent);
-  border: 1px solid var(--ckqa-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
 }
-.login-aside__highlight-icon {
+.login-aside__pipeline-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(147, 197, 253, 0.32);
+  transform: translateX(2px);
+}
+.login-aside__pipeline-step {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.32);
+  color: #c7d2fe;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+}
+.login-aside__pipeline-icon {
   display: inline-grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ckqa-accent) 14%, var(--ckqa-surface));
-  color: var(--ckqa-accent-strong);
-  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  color: #93c5fd;
 }
-.login-aside__highlight-copy {
+.login-aside__pipeline-text {
   display: grid;
   gap: 1px;
   min-width: 0;
 }
-.login-aside__highlight-copy strong {
-  font-size: 13px;
+.login-aside__pipeline-text strong {
+  font-size: 12px;
   font-weight: 600;
-  color: var(--ckqa-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #fff;
 }
-.login-aside__highlight-copy small {
-  font-size: 11px;
-  color: var(--ckqa-text-muted);
+.login-aside__pipeline-text small {
+  font-size: 10px;
+  color: rgba(203, 213, 225, 0.7);
 }
-
-.login-aside__footer {
-  font-size: 11px;
-  color: var(--ckqa-text-muted);
-  font-family: var(--ckqa-font-mono);
+.login-aside__pipeline-arrow {
+  color: rgba(147, 197, 253, 0.6);
+  flex-shrink: 0;
 }
 
-/* ─── 右侧登录卡 ────────────────────────── */
+/* ──────────────────────────────────────────────
+ * 右侧：极光底色 + 乳白卡片
+ * ────────────────────────────────────────────── */
 .login-main {
   display: grid;
   place-items: center;
   padding: 40px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.16) 0%, transparent 60%),
+    radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.12) 0%, transparent 55%),
+    linear-gradient(160deg, #1e1b4b 0%, #312e81 100%);
 }
 
+/* 乳白卡（B 档：94% 半透 + 20px 模糊） */
 .login-card {
   width: 100%;
-  max-width: 420px;
-  padding: 36px;
-  border-radius: 20px;
-  background: var(--ckqa-surface);
-  border: 1px solid var(--ckqa-border);
+  max-width: 380px;
+  padding: 32px 30px;
+  border-radius: 22px;
+  background: rgba(252, 252, 254, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow:
-    0 1px 0 0 color-mix(in srgb, var(--ckqa-accent) 8%, transparent),
-    0 24px 60px color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 28px 70px rgba(15, 23, 42, 0.5);
+  color: #1e1b4b;
 }
 
 .login-card__header {
@@ -384,8 +565,9 @@ function resolveRedirect() {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--ckqa-accent) 14%, var(--ckqa-surface));
-  color: var(--ckqa-accent-strong);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14), rgba(236, 72, 153, 0.14));
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  color: #6366f1;
   flex-shrink: 0;
 }
 .login-card__title {
@@ -393,32 +575,33 @@ function resolveRedirect() {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.01em;
-  color: var(--ckqa-text);
+  color: #1e1b4b;
 }
 .login-card__subtitle {
   margin: 0;
-  font-size: 13px;
-  color: var(--ckqa-text-muted);
+  font-size: 12px;
+  color: rgba(30, 27, 75, 0.66);
 }
 
+/* 角色 preset */
 .login-preset {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 20px;
   padding: 4px;
-  border: 1px solid var(--ckqa-border);
+  border: 1px solid rgba(99, 102, 241, 0.14);
   border-radius: 12px;
-  background: var(--ckqa-surface-muted);
+  background: rgba(248, 250, 252, 0.78);
 }
 .login-preset__tab {
   display: grid;
   gap: 1px;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
-  color: var(--ckqa-text-muted);
+  color: rgba(30, 27, 75, 0.6);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -430,23 +613,24 @@ function resolveRedirect() {
   font-weight: 700;
 }
 .login-preset__tab small {
-  font-size: 11px;
-  color: var(--ckqa-text-muted);
+  font-size: 10px;
+  color: rgba(30, 27, 75, 0.55);
 }
 .login-preset__tab:hover {
-  background: color-mix(in srgb, var(--ckqa-accent) 6%, var(--ckqa-surface));
-  color: var(--ckqa-text);
+  background: rgba(99, 102, 241, 0.06);
+  color: #1e1b4b;
 }
 .login-preset__tab.is-active {
-  background: var(--ckqa-surface);
-  color: var(--ckqa-text);
-  border-color: var(--ckqa-accent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--ckqa-accent) 18%, transparent);
+  background: #fff;
+  color: #1e1b4b;
+  border-color: rgba(99, 102, 241, 0.42);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
 }
 .login-preset__tab.is-active strong {
-  color: var(--ckqa-accent-strong);
+  color: #6366f1;
 }
 
+/* form */
 .login-form {
   display: grid;
   gap: 14px;
@@ -455,14 +639,20 @@ function resolveRedirect() {
   display: grid;
   gap: 6px;
 }
-.login-field > span {
+.login-field__label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--ckqa-text-muted);
+  color: rgba(30, 27, 75, 0.66);
 }
 .login-field :deep(.el-input__wrapper) {
   border-radius: 10px;
   padding: 0 14px;
+  background: rgba(248, 250, 252, 0.85);
+  box-shadow: 0 0 0 1px #e0e7ff inset;
+}
+.login-field :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #6366f1 inset, 0 0 0 4px rgba(99, 102, 241, 0.12);
+  background: #fff;
 }
 
 .login-form__row {
@@ -474,7 +664,7 @@ function resolveRedirect() {
 }
 .login-remember :deep(.el-checkbox__label) {
   font-size: 12px;
-  color: var(--ckqa-text-muted);
+  color: rgba(30, 27, 75, 0.7);
 }
 .login-help-link {
   background: none;
@@ -482,7 +672,7 @@ function resolveRedirect() {
   padding: 0;
   font: inherit;
   font-size: 12px;
-  color: var(--ckqa-accent-strong);
+  color: #6366f1;
   cursor: pointer;
   text-decoration: none;
 }
@@ -494,59 +684,80 @@ function resolveRedirect() {
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--ckqa-danger, #dc2626) 10%, var(--ckqa-surface));
-  border: 1px solid color-mix(in srgb, var(--ckqa-danger, #dc2626) 30%, transparent);
+  background: color-mix(in srgb, var(--ckqa-danger, #dc2626) 8%, #fff);
+  border: 1px solid color-mix(in srgb, var(--ckqa-danger, #dc2626) 32%, transparent);
   color: var(--ckqa-danger, #dc2626);
   font-size: 12px;
 }
 
 .login-submit {
+  margin-top: 4px;
   height: 44px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: 0.04em;
+  background: linear-gradient(135deg, #38bdf8 0%, #6366f1 50%, #c084fc 100%) !important;
+  border: none !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 8px 24px rgba(99, 102, 241, 0.42) !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.login-submit:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 12px 32px rgba(99, 102, 241, 0.5) !important;
 }
 
 .login-card__footer {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px dashed var(--ckqa-border);
+  border-top: 1px dashed rgba(99, 102, 241, 0.14);
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
-  color: var(--ckqa-text-muted);
+  color: rgba(30, 27, 75, 0.62);
 }
 .login-card__footer strong {
-  color: var(--ckqa-accent-strong);
+  color: #6366f1;
   font-weight: 700;
 }
 .login-card__footer em {
   font-style: normal;
-  color: var(--ckqa-text-muted);
+  color: rgba(30, 27, 75, 0.55);
 }
 
-@media (max-width: 980px) {
+/* ──────────────────────────────────────────────
+ * 响应式
+ * ────────────────────────────────────────────── */
+@media (max-width: 1080px) {
   .login-shell {
     grid-template-columns: 1fr;
   }
   .login-aside {
-    padding: 32px 24px 16px;
-    grid-template-rows: auto auto auto auto;
-  }
-  .login-aside::before {
-    inset: 16px;
+    padding: 32px 24px;
   }
   .login-aside__title {
     font-size: 28px;
   }
-  .login-aside__highlights {
-    grid-template-columns: 1fr;
+  .login-aside__pipeline {
+    max-width: none;
   }
   .login-main {
     padding: 24px 16px 40px;
+  }
+}
+
+@media (max-width: 720px) {
+  .login-aside__pipeline-item {
+    grid-template-columns: 22px 24px 1fr;
+  }
+  .login-aside__pipeline-arrow {
+    display: none;
   }
 }
 </style>
