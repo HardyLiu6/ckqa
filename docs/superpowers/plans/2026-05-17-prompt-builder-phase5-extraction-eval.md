@@ -279,7 +279,7 @@ Run:
 grep -nE "ThreadPoolTaskExecutor|@Bean|setCorePoolSize|setQueueCapacity|setThreadNamePrefix" backend/ckqa-back/src/main/java/org/ysu/ckqaback/index/PromptTuneAsyncConfig.java
 ```
 
-Expected：含 `corePoolSize=2`、`queueCapacity=10`、`threadNamePrefix="prompt-tune-"` 等典型 ThreadPoolTaskExecutor 配置（PromptTune 那边是 2，但 Phase 5 因为决策 1 / 风险 8 选了串行模板）。Phase 5 仿这个 ThreadPoolTaskExecutor 模板新建 `extractionEvalExecutor`，但**用 corePoolSize=1**（决策 1）。
+Expected：含 `corePoolSize=1`、`queueCapacity=8`、`threadNamePrefix="prompt-tune-"` 等典型 ThreadPoolTaskExecutor 配置。Phase 5 仿这个 ThreadPoolTaskExecutor 模板新建 `extractionEvalExecutor`，使用 `corePoolSize=1`（决策 1，串行评分）和 `queueCapacity=10`（比 PromptTune 略宽，因评分链路单次更耗时）。
 
 - [ ] **Step 6：自检通过承诺**
 
