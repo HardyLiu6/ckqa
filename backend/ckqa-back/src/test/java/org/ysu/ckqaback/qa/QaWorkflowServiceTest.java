@@ -7,6 +7,7 @@ import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
+import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
@@ -19,6 +20,7 @@ import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
+import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
 import org.ysu.ckqaback.service.UsersService;
 
@@ -262,6 +264,75 @@ class QaWorkflowServiceTest {
         assertThat(response.getContextApplied()).isTrue();
         assertThat(response.getContextStrategy()).isEqualTo("recent");
         assertThat(response.getContextSizeEstimate().getChars()).isGreaterThan(0);
+    }
+
+    @Test
+    void shouldUseLatestSummaryWhenCreatingContextForLongSession() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService qaSessionSummariesService = mock(QaSessionSummariesService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaSessionSummariesService(qaSessionSummariesService);
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
+
+        QaSessionSummaries summary = new QaSessionSummaries();
+        summary.setSessionId(5L);
+        summary.setSummaryText("本会话已讨论死锁定义。");
+        summary.setSummaryUntilSequenceNo(2);
+        summary.setStatus("success");
+
+        QaMessages summarizedUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages summarizedAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages recentUser = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaMessages recentAssistant = message(104L, 5L, "assistant", 4, "银行家算法用于避免进入不安全状态。");
+        QaMessages userMessage = message(105L, 5L, "user", 5, "它怎么判断安全？");
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9004L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(summarizedUser, summarizedAssistant, recentUser, recentAssistant));
+        given(qaSessionSummariesService.findLatestSuccessfulBySessionId(5L)).willReturn(summary);
+        given(qaMessagesService.appendUserMessage(5L, "它怎么判断安全？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(105L),
+                eq("basic"),
+                eq("关于上一轮主题「那银行家算法呢」：它怎么判断安全？"),
+                argThat(context -> "summary_recent".equals(context.contextStrategy())
+                        && context.contextSnapshotText().contains("会话摘要")
+                        && context.contextSnapshotText().contains("最近对话")
+                        && context.contextCharCount() > 0)
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它怎么判断安全？"));
+
+        assertThat(response.getContextStrategy()).isEqualTo("summary_recent");
     }
 
     @Test

@@ -10,26 +10,64 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Phase 1 短期上下文组装器：只生成 recent 快照，不把完整上下文传给 Python。
+ * 问答上下文组装器：只生成 Java 侧快照，不把完整上下文传给 Python。
  */
 public class QaContextAssembler {
 
     private static final int MAX_RECENT_MESSAGES = 6;
     private static final int MAX_RECENT_CHARS = 1800;
+    private static final int MAX_SUMMARY_CHARS = 800;
     private static final int MAX_SNAPSHOT_CHARS = 3500;
     private static final Pattern WHAT_IS_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下)(.+?)[？?。.!！]*$");
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history) {
+        return assemble(mode, question, history, null);
+    }
+
+    public QaContextAssembly assemble(String mode, String question, List<QaMessages> history, QaContextSummary summary) {
+        QaContextSummary safeSummary = summary == null ? null : summary;
         if (!"basic".equals(mode) && !"local".equals(mode)) {
-            return none();
+            return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary) : none();
         }
 
         List<QaMessages> usableHistory = safeHistory(history);
+        if (safeSummary == null || !safeSummary.hasText()) {
+            return recentOnly(usableHistory);
+        }
+
+        List<QaMessages> unsummarizedHistory = usableHistory.stream()
+                .filter(message -> message.getSequenceNo() != null && message.getSequenceNo() > safeSummary.untilSequenceNo())
+                .toList();
+        List<QaMessages> recent = selectRecentMessages(unsummarizedHistory);
+        QaContextAssembly recentAssembly = buildRecentAssembly(recent, usableHistory, "summary_recent");
+        if (!recentAssembly.contextApplied()) {
+            return summaryOnly(safeSummary);
+        }
+        String summaryText = truncate(trimToEmpty(safeSummary.text()), MAX_SUMMARY_CHARS);
+        String snapshot = "会话摘要：\n" + summaryText + "\n\n最近对话：\n" + recentAssembly.snapshotText();
+        if (snapshot.length() > MAX_SNAPSHOT_CHARS) {
+            snapshot = snapshot.substring(0, MAX_SNAPSHOT_CHARS);
+        }
+        int charCount = Math.min(summaryText.length() + recentAssembly.charCount(), MAX_SNAPSHOT_CHARS);
+        return new QaContextAssembly(
+                "summary_recent",
+                snapshot,
+                recentAssembly.messageRange(),
+                charCount,
+                recentAssembly.latestTopic(),
+                recentAssembly.latestTopicMessageRange()
+        );
+    }
+
+    private QaContextAssembly recentOnly(List<QaMessages> usableHistory) {
         if (usableHistory.isEmpty()) {
             return none();
         }
 
-        List<QaMessages> recent = selectRecentMessages(usableHistory);
+        return buildRecentAssembly(selectRecentMessages(usableHistory), usableHistory, "recent");
+    }
+
+    private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, List<QaMessages> topicHistory, String strategy) {
         if (recent.isEmpty()) {
             return none();
         }
@@ -60,14 +98,30 @@ public class QaContextAssembler {
             return none();
         }
 
-        Topic topic = latestCompletedTopic(usableHistory);
+        Topic topic = latestCompletedTopic(topicHistory);
         return new QaContextAssembly(
-                "recent",
+                strategy,
                 snapshot.toString(),
                 rangeOf(recent),
                 Math.min(contentChars, MAX_RECENT_CHARS),
                 topic.text(),
                 topic.range()
+        );
+    }
+
+    private QaContextAssembly summaryOnly(QaContextSummary summary) {
+        String summaryText = truncate(trimToEmpty(summary.text()), MAX_SUMMARY_CHARS);
+        if (summaryText.isEmpty()) {
+            return none();
+        }
+        String snapshot = "会话摘要：\n" + summaryText;
+        return new QaContextAssembly(
+                "summary",
+                snapshot,
+                "",
+                summaryText.length(),
+                "",
+                ""
         );
     }
 
@@ -142,6 +196,13 @@ public class QaContextAssembler {
 
     private String trimToEmpty(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private record Topic(String text, String range) {

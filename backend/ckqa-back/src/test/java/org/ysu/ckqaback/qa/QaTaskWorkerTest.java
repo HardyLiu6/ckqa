@@ -8,6 +8,7 @@ import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
@@ -27,6 +28,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class QaTaskWorkerTest {
@@ -220,6 +222,115 @@ class QaTaskWorkerTest {
         then(retrievalLogsService).should().bindPythonTask(9001L, "qt_20260422_001", "pending", "queued");
         then(messagesService).should().appendAssistantMessage(5L, "图谱主题集中在操作系统概念网络");
         then(retrievalLogsService).should().markSuccess(anyLong(), anyLong(), contains("done"), contains("success"));
+    }
+
+    @Test
+    void shouldTriggerSummaryRefreshAfterAssistantMessageSucceeds() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        QaSessionSummaryService summaryService = mock(QaSessionSummaryService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+        worker.setQaSessionSummaryService(summaryService);
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("basic");
+        task.setQueryText("什么是死锁？");
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("basic", "什么是死锁？"))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260517_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260517_001"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260517_001",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "死锁是多个进程互相等待资源。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "死锁是多个进程互相等待资源。")).willReturn(assistant);
+
+        worker.processTask(5L, 9001L);
+
+        then(summaryService).should().checkAndSummarizeAsync(5L);
+    }
+
+    @Test
+    void shouldKeepTaskSuccessWhenSummaryRefreshFails() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        QaSessionSummaryService summaryService = mock(QaSessionSummaryService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+        worker.setQaSessionSummaryService(summaryService);
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("basic");
+        task.setQueryText("什么是死锁？");
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("basic", "什么是死锁？"))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260517_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260517_001"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260517_001",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "死锁是多个进程互相等待资源。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "死锁是多个进程互相等待资源。")).willReturn(assistant);
+        doThrow(new RuntimeException("summary down")).when(summaryService).checkAndSummarizeAsync(5L);
+
+        worker.processTask(5L, 9001L);
+
+        then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
     }
 
     @Test

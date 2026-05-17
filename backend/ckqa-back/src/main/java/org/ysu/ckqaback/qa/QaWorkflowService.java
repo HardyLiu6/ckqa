@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.qa;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -10,12 +11,14 @@ import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
+import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
+import org.ysu.ckqaback.qa.context.QaContextSummary;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
@@ -31,6 +34,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
+import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
 import org.ysu.ckqaback.service.UsersService;
 
@@ -58,6 +62,12 @@ public class QaWorkflowService {
     private final CkqaIntegrationProperties properties;
     private final QaContextAssembler qaContextAssembler = new QaContextAssembler();
     private final QaQuestionRewriteService qaQuestionRewriteService = new QaQuestionRewriteService();
+    private QaSessionSummariesService qaSessionSummariesService;
+
+    @Autowired(required = false)
+    public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
+        this.qaSessionSummariesService = qaSessionSummariesService;
+    }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
         usersService.getRequiredById(request.getUserId());
@@ -111,7 +121,12 @@ public class QaWorkflowService {
         Long indexRunId = resolveSessionIndexRunId(session, knowledgeBase, indexRunIdOverride);
 
         List<QaMessages> history = qaMessagesService.listBySessionId(sessionId);
-        QaContextAssembly context = qaContextAssembler.assemble(request.getMode(), request.getContent(), history);
+        QaContextAssembly context = qaContextAssembler.assemble(
+                request.getMode(),
+                request.getContent(),
+                history,
+                loadLatestContextSummary(sessionId)
+        );
         QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
@@ -185,6 +200,20 @@ public class QaWorkflowService {
                 ApiResultCode.KNOWLEDGE_BASE_NOT_READY,
                 HttpStatus.CONFLICT,
                 "该会话创建于索引版本固化前，请基于当前索引新建会话"
+        );
+    }
+
+    private QaContextSummary loadLatestContextSummary(Long sessionId) {
+        if (qaSessionSummariesService == null) {
+            return null;
+        }
+        QaSessionSummaries summary = qaSessionSummariesService.findLatestSuccessfulBySessionId(sessionId);
+        if (summary == null) {
+            return null;
+        }
+        return new QaContextSummary(
+                summary.getSummaryText(),
+                summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo()
         );
     }
 

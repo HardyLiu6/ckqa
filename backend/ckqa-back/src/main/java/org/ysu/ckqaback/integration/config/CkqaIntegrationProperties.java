@@ -20,6 +20,7 @@ public class CkqaIntegrationProperties {
     private final GraphRagProperties graphrag = new GraphRagProperties();
     private final PollingProperties polling = new PollingProperties();
     private final TimeoutProperties timeout = new TimeoutProperties();
+    private final SummaryProperties summary = new SummaryProperties();
 
     public QueryTaskModePolicy resolveQueryTaskModePolicy(String rawMode) {
         String mode = normalizeMode(rawMode);
@@ -139,5 +140,19 @@ public class CkqaIntegrationProperties {
                 "global", "global 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
                 "drift", "drift 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。"
         ));
+    }
+
+    @Getter
+    @Setter
+    public static class SummaryProperties {
+        private boolean enabled = true;
+        private String apiBaseUrl = "http://127.0.0.1:3000/v1";
+        private String apiKey = "";
+        private String model = "deepseek-v4-flash";
+        private int maxChars = 800;
+        private int triggerMessageCount = 12;
+        private int triggerCharCount = 3000;
+        private boolean thinkingDisabled = true;
+        private long timeoutSeconds = 30L;
     }
 }

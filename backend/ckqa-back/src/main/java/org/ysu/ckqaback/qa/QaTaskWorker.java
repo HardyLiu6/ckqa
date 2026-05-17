@@ -15,6 +15,7 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
@@ -47,6 +48,7 @@ public class QaTaskWorker {
     private final Function<String, Duration> staleThresholdResolver;
     private final Function<String, String> timeoutMessageResolver;
     private final Clock clock;
+    private QaSessionSummaryService qaSessionSummaryService;
 
     @Autowired
     public QaTaskWorker(
@@ -149,6 +151,11 @@ public class QaTaskWorker {
         qaTaskExecutor.execute(() -> processTask(sessionId, taskId));
     }
 
+    @Autowired(required = false)
+    public void setQaSessionSummaryService(QaSessionSummaryService qaSessionSummaryService) {
+        this.qaSessionSummaryService = qaSessionSummaryService;
+    }
+
     public void processTask(Long sessionId, Long taskId) {
         GraphRagTaskSnapshot latestSnapshot = null;
         try {
@@ -174,6 +181,7 @@ public class QaTaskWorker {
                     QaMessages assistant = qaMessagesService.appendAssistantMessage(sessionId, snapshot.resultText());
                     qaSessionsService.touchLastMessageAt(sessionId);
                     qaRetrievalLogsService.markSuccess(taskId, assistant.getId(), joinLatestLogs(snapshot.latestLogs()), "success");
+                    triggerSummaryRefresh(sessionId);
                     return;
                 }
 
@@ -223,6 +231,17 @@ public class QaTaskWorker {
             return "";
         }
         return String.join("\n", latestLogs);
+    }
+
+    private void triggerSummaryRefresh(Long sessionId) {
+        if (qaSessionSummaryService == null) {
+            return;
+        }
+        try {
+            qaSessionSummaryService.checkAndSummarizeAsync(sessionId);
+        } catch (RuntimeException ignored) {
+            // 摘要是旁路增强，不能影响主问答任务成功。
+        }
     }
 
     private GraphRagTaskCreateResult createGraphRagTask(QaRetrievalLogs task) {
