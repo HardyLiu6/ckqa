@@ -34,6 +34,12 @@ _RULE_PATTERNS: dict[HybridLayer, tuple[str, ...]] = {
         "为什么",
         "处理思路",
         "总结第",
+        "衔接",
+        "串联",
+        "贯通",
+        "协同",
+        "共同服务",
+        "共同体现",
     ),
     HybridLayer.HIGH: (
         "整体",

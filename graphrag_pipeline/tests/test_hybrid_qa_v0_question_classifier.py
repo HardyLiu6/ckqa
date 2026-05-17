@@ -23,6 +23,19 @@ def test_difference_wording_routes_to_mixed():
     assert classification.layer is HybridLayer.MIXED
 
 
+def test_structural_linking_question_routes_to_mixed():
+    classification = classify_question("I/O 管理、磁盘调度和文件系统在课程中如何衔接？")
+
+    assert classification.layer is HybridLayer.MIXED
+    assert any(hit["pattern"] == "衔接" for hit in classification.diagnostics["rule_hits"])
+
+
+def test_shared_goal_question_routes_to_mixed():
+    classification = classify_question("并发控制、同步机制和死锁处理共同服务于什么课程目标？")
+
+    assert classification.layer is HybridLayer.MIXED
+
+
 def test_course_mainline_question_routes_to_high():
     classification = classify_question("这门课程贯穿始终的方法论主线是什么？")
 

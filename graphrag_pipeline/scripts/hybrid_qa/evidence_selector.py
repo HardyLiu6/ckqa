@@ -18,6 +18,7 @@ from graphrag_pipeline.scripts.qa_eval.bm25_retrieval_bakeoff import (
     DEFAULT_THUOCL_CACHE,
     TextUnitRow,
     audit_text_unit_noise,
+    build_search_texts,
     build_multi_queries,
     extract_course_terms,
     filter_thuocl_terms,
@@ -44,7 +45,11 @@ class V6EvidenceSelectorConfig:
     b: float = 0.75
     enable_noise_filter: bool = True
     exclude_exercises: bool = True
+    enable_section_aware_text: bool = True
+    section_heading_weight: int = 4
     enable_multi_query_rrf: bool = True
+    enable_facet_diversity: bool = True
+    facet_anchor_per_query: int = 1
     enable_dense_rerank: bool = False
     dense_rerank_candidate_pool_k: int = 20
     dense_rerank_model: str | None = None
@@ -64,16 +69,17 @@ class V6HybridEvidenceSelector:
     def search(self, query: str, top_k: int = 10) -> list[EvidenceCandidate]:
         limit = top_k or self.config.top_k
         pool_k = max(limit, self.config.dense_rerank_candidate_pool_k)
-        refs = self._bm25_refs(query, top_k=pool_k)
+        refs, facet_anchor_refs = self._bm25_refs_and_facet_anchors(query, top_k=pool_k)
         source = "bm25-v6"
         if self.config.enable_dense_rerank and _should_dense_rerank_query(query):
-            refs = _rerank_refs_by_dense_similarity(
+            reranked_refs = _rerank_refs_by_dense_similarity(
                 question=query,
                 ranked_refs=refs,
                 text_by_ref=self.text_by_ref,
                 encoder=self.config.dense_encoder or self._dense_encoder(),
                 top_k=limit,
             )
+            refs = _dedupe([*facet_anchor_refs, *reranked_refs])[:limit]
             source = "bm25-v6+dense"
         else:
             refs = refs[:limit]
@@ -90,14 +96,34 @@ class V6HybridEvidenceSelector:
             if self.text_by_ref.get(ref)
         ]
 
-    def _bm25_refs(self, query: str, *, top_k: int) -> list[str]:
+    def _bm25_refs_and_facet_anchors(self, query: str, *, top_k: int) -> tuple[list[str], list[str]]:
         if not self.config.enable_multi_query_rrf:
-            return [candidate.ref for candidate in self.index.search(query, top_k=top_k)]
+            return [candidate.ref for candidate in self.index.search(query, top_k=top_k)], []
         ranked_lists = [
             [candidate.ref for candidate in self.index.search(subquery, top_k=max(top_k, 10))]
             for subquery in build_multi_queries(query)
         ]
-        return rrf_fuse_ranked_refs(ranked_lists, top_k=top_k)
+        fused = rrf_fuse_ranked_refs(ranked_lists, top_k=top_k)
+        facet_anchor_refs = self._facet_anchors_from_ranked_lists(ranked_lists)
+        return _dedupe([*facet_anchor_refs, *fused])[:top_k], facet_anchor_refs
+
+    def _facet_anchors_from_ranked_lists(self, ranked_lists: list[list[str]]) -> list[str]:
+        if not self.config.enable_facet_diversity or self.config.facet_anchor_per_query <= 0:
+            return []
+        # 第 0 个 ranked list 来自原始问题，后续 list 才是切分后的子问题。
+        # 对“X、Y 和 Z 如何衔接”这类结构题，保留每个子问题的首个命中，
+        # 比单纯 RRF 更能保证答案证据覆盖多个概念面。
+        facet_lists = ranked_lists[1:] if len(ranked_lists) > 1 else ranked_lists
+        anchors: list[str] = []
+        for ranked in facet_lists:
+            picked = 0
+            for ref in ranked:
+                if ref and ref not in anchors:
+                    anchors.append(ref)
+                    picked += 1
+                if picked >= self.config.facet_anchor_per_query:
+                    break
+        return anchors
 
     def _dense_encoder(self) -> DenseEncoder:
         model_name = self.config.dense_rerank_model or os.environ.get("CKQA_BGE_M3_MODEL", DEFAULT_BGE_M3_MODEL)
@@ -132,9 +158,14 @@ def build_v6_hybrid_evidence_selector_from_rows(
     config = config or V6EvidenceSelectorConfig()
     filtered_rows = _filter_noise(rows) if config.enable_noise_filter else rows
     user_terms = config.user_terms or tuple(_build_runtime_terms(rows, config))
+    search_texts = build_search_texts(
+        filtered_rows,
+        section_aware=config.enable_section_aware_text,
+        heading_weight=config.section_heading_weight,
+    )
     index = build_text_unit_bm25_from_texts(
         refs=[row.ref for row in filtered_rows],
-        texts=[row.text for row in filtered_rows],
+        texts=search_texts,
         config=TextUnitBm25Config(
             user_terms=user_terms,
             k1=config.k1,
@@ -224,7 +255,11 @@ def _replace_user_terms(
         b=config.b,
         enable_noise_filter=config.enable_noise_filter,
         exclude_exercises=config.exclude_exercises,
+        enable_section_aware_text=config.enable_section_aware_text,
+        section_heading_weight=config.section_heading_weight,
         enable_multi_query_rrf=config.enable_multi_query_rrf,
+        enable_facet_diversity=config.enable_facet_diversity,
+        facet_anchor_per_query=config.facet_anchor_per_query,
         enable_dense_rerank=config.enable_dense_rerank,
         dense_rerank_candidate_pool_k=config.dense_rerank_candidate_pool_k,
         dense_rerank_model=config.dense_rerank_model,
