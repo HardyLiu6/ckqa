@@ -120,6 +120,12 @@ function getCellLabel(row, index) {
 function getColumnMinWidth(index) {
   const column = props.columns[index] ?? ''
   if (index === 0) return 260
+  // 进度型 cell 视觉是「42px 圆环 + 8px gap + 两行文本」，整体不能小于 164px，
+  // 否则像「解析状态」这种圆环列的 summary/detail（如「已完成 / 100%」）会被截断。
+  // 这里通过扫描当前行集判定该列是否为 progress 列，若是则强制最小列宽。
+  if (filteredRows.value.some((row) => isProgressCell(getRowCells(row)[index]))) {
+    return 188
+  }
   if (column.includes('状态')) return 112
   if (column.includes('进度') || column.includes('知识库')) return 190
   if (column.includes('更新时间')) return 168
