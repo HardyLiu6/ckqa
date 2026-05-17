@@ -14,18 +14,28 @@ import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
+import org.ysu.ckqaback.qa.context.QaContextAssembler;
+import org.ysu.ckqaback.qa.context.QaContextAssembly;
+import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
+import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
+import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionsService;
 import org.ysu.ckqaback.service.UsersService;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +47,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class QaWorkflowService {
 
+    private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+
     private final QaSessionsService qaSessionsService;
     private final QaMessagesService qaMessagesService;
     private final QaRetrievalLogsService qaRetrievalLogsService;
@@ -44,13 +56,32 @@ public class QaWorkflowService {
     private final UsersService usersService;
     private final QaTaskWorker qaTaskWorker;
     private final CkqaIntegrationProperties properties;
+    private final QaContextAssembler qaContextAssembler = new QaContextAssembler();
+    private final QaQuestionRewriteService qaQuestionRewriteService = new QaQuestionRewriteService();
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
         usersService.getRequiredById(request.getUserId());
+        Long lockedIndexRunId = null;
+        LocalDateTime indexLockedAt = null;
         if (request.getKnowledgeBaseId() != null) {
-            knowledgeBasesService.getRequiredById(request.getKnowledgeBaseId());
+            KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(request.getKnowledgeBaseId());
+            if (!"smoke".equals(request.getSessionType())) {
+                lockedIndexRunId = knowledgeBase.getActiveIndexRunId();
+                if (lockedIndexRunId == null) {
+                    throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
+                }
+                indexLockedAt = LocalDateTime.now(SHANGHAI_ZONE);
+            }
         }
-        return QaSessionResponse.fromEntity(qaSessionsService.createSession(request));
+        return QaSessionResponse.fromEntity(qaSessionsService.createSession(request, lockedIndexRunId, indexLockedAt));
+    }
+
+    public ApiPageData<QaSessionResponse> listSessions(Long currentUserId, QaSessionQueryRequest request) {
+        if (currentUserId == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        usersService.getRequiredById(currentUserId);
+        return qaSessionsService.pageFormalSessions(currentUserId, request);
     }
 
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request) {
@@ -67,10 +98,22 @@ public class QaWorkflowService {
         }
 
         KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(session.getKnowledgeBaseId());
-        Long indexRunId = indexRunIdOverride == null ? knowledgeBase.getActiveIndexRunId() : indexRunIdOverride;
-        if (indexRunId == null) {
-            throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
-        }
+        Long indexRunId = resolveSessionIndexRunId(session, knowledgeBase, indexRunIdOverride);
+
+        List<QaMessages> history = qaMessagesService.listBySessionId(sessionId);
+        QaContextAssembly context = qaContextAssembler.assemble(request.getMode(), request.getContent(), history);
+        QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
+        QaRetrievalLogContext logContext = new QaRetrievalLogContext(
+                request.getContent(),
+                rewrite.retrievalQueryText(),
+                context.snapshotText(),
+                context.strategy(),
+                context.messageRange(),
+                context.charCount(),
+                rewrite.rewriteApplied(),
+                rewrite.rewriteReason(),
+                rewrite.rewriteSourceMessageRange()
+        );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
         qaSessionsService.touchLastMessageAt(sessionId);
@@ -80,7 +123,8 @@ public class QaWorkflowService {
                 indexRunId,
                 userMessage.getId(),
                 request.getMode(),
-                request.getContent()
+                rewrite.retrievalQueryText(),
+                logContext
         );
         dispatchAfterCommit(sessionId, task.getId());
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(request.getMode());
@@ -95,7 +139,42 @@ public class QaWorkflowService {
                 taskPolicy.mode(),
                 taskPolicy.recommendedPollingIntervalSeconds(),
                 taskPolicy.staleTimeoutSeconds(),
-                taskPolicy.timeoutMessage()
+                taskPolicy.timeoutMessage(),
+                context.contextApplied(),
+                context.strategy(),
+                ContextSizeEstimateResponse.of(context.charCount())
+        );
+    }
+
+    private Long resolveSessionIndexRunId(QaSessions session, KnowledgeBases knowledgeBase, Long indexRunIdOverride) {
+        if (indexRunIdOverride != null) {
+            return indexRunIdOverride;
+        }
+        if ("smoke".equals(session.getSessionType())) {
+            Long activeIndexRunId = knowledgeBase.getActiveIndexRunId();
+            if (activeIndexRunId == null) {
+                throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
+            }
+            return activeIndexRunId;
+        }
+        if (session.getIndexRunId() != null) {
+            return session.getIndexRunId();
+        }
+
+        List<Long> historicalIndexRunIds = qaRetrievalLogsService.findDistinctSuccessfulIndexRunIdsBySession(session.getId());
+        if (historicalIndexRunIds.size() == 1) {
+            Long recoveredIndexRunId = historicalIndexRunIds.get(0);
+            LocalDateTime lockedAt = LocalDateTime.now(SHANGHAI_ZONE);
+            qaSessionsService.lockIndexRun(session.getId(), recoveredIndexRunId, lockedAt);
+            session.setIndexRunId(recoveredIndexRunId);
+            session.setIndexLockedAt(lockedAt);
+            return recoveredIndexRunId;
+        }
+
+        throw new BusinessException(
+                ApiResultCode.KNOWLEDGE_BASE_NOT_READY,
+                HttpStatus.CONFLICT,
+                "该会话创建于索引版本固化前，请基于当前索引新建会话"
         );
     }
 
@@ -156,6 +235,7 @@ public class QaWorkflowService {
                 ? Arrays.stream(task.getLatestLogs().split("\\R")).toList()
                 : List.of();
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(task.getQueryMode());
+        String contextStrategy = StringUtils.hasText(task.getContextStrategy()) ? task.getContextStrategy() : "none";
 
         return QaTaskDetailResponse.of(
                 task.getId(),
@@ -174,7 +254,10 @@ public class QaWorkflowService {
                 task.getErrorMessage(),
                 taskPolicy.recommendedPollingIntervalSeconds(),
                 taskPolicy.staleTimeoutSeconds(),
-                taskPolicy.timeoutMessage()
+                taskPolicy.timeoutMessage(),
+                !"none".equals(contextStrategy),
+                contextStrategy,
+                ContextSizeEstimateResponse.of(task.getContextCharCount())
         );
     }
 }

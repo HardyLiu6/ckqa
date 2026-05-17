@@ -3,18 +3,27 @@ package org.ysu.ckqaback.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
+import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.auth.AuthContext;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
@@ -40,8 +49,24 @@ public class QaSessionsController {
     private final QaWorkflowService qaWorkflowService;
 
     @PostMapping
-    public ApiResponse<QaSessionResponse> createSession(@Valid @RequestBody CreateQaSessionRequest request) {
+    public ApiResponse<QaSessionResponse> createSession(
+            @Valid @RequestBody CreateQaSessionRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
+        if (currentUser != null && currentUser.id() != null && !currentUser.id().equals(request.getUserId())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能为当前登录用户创建问答会话");
+        }
         return ApiResponseUtils.success(qaWorkflowService.createSession(request));
+    }
+
+    @GetMapping
+    public ApiResponse<ApiPageData<QaSessionResponse>> listSessions(
+            @Valid @ModelAttribute QaSessionQueryRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
+        return ApiResponseUtils.success(qaWorkflowService.listSessions(currentUser == null ? null : currentUser.id(), request));
     }
 
     @PostMapping("/{id}/messages")

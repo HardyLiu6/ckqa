@@ -8,10 +8,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.AuthConstants;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
+import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
@@ -45,6 +49,37 @@ class QaSessionsControllerWebMvcTest {
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
+    }
+
+    @Test
+    void shouldListFormalSessionsForCurrentUserWithoutUserIdQueryParam() throws Exception {
+        QaSessionResponse item = QaSessionResponse.of(
+                5L,
+                "qa-0001",
+                7L,
+                "os",
+                3L,
+                17L,
+                LocalDateTime.of(2026, 5, 17, 10, 0),
+                "formal",
+                "操作系统问答",
+                "active",
+                LocalDateTime.of(2026, 5, 17, 10, 5),
+                LocalDateTime.of(2026, 5, 17, 10, 0)
+        );
+        given(qaWorkflowService.listSessions(eq(7L), any())).willReturn(new ApiPageData<>(List.of(item), 1, 50, 1, 1));
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .param("status", "active")
+                        .param("page", "1")
+                        .param("size", "50"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(5))
+                .andExpect(jsonPath("$.data.items[0].indexRunId").value(17))
+                .andExpect(jsonPath("$.data.items[0].indexLockedAt").exists());
+
+        then(qaWorkflowService).should().listSessions(eq(7L), argThat(request -> request.getPage() == 1L && request.getSize() == 50L));
     }
 
     @Test
@@ -187,7 +222,10 @@ class QaSessionsControllerWebMvcTest {
                 null,
                 5L,
                 30L,
-                "任务心跳超时"
+                "任务心跳超时",
+                true,
+                "recent",
+                ContextSizeEstimateResponse.of(38)
         );
         given(qaWorkflowService.getTaskDetail(5L, 9001L)).willReturn(response);
 
@@ -196,6 +234,10 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.taskStatus").value("success"))
                 .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(5))
                 .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(30))
+                .andExpect(jsonPath("$.data.contextApplied").value(true))
+                .andExpect(jsonPath("$.data.contextStrategy").value("recent"))
+                .andExpect(jsonPath("$.data.contextSizeEstimate.chars").value(38))
+                .andExpect(jsonPath("$.data.queryText").doesNotExist())
                 .andExpect(jsonPath("$.data.latestLogs[0]").value("started graphrag query --method global"));
     }
 
@@ -211,5 +253,9 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data[0].taskStatus").value("running"))
                 .andExpect(jsonPath("$.data[0].progressStage").value("running"))
                 .andExpect(jsonPath("$.data[1].taskStatus").isEmpty());
+    }
+
+    private AuthenticatedUser authenticatedStudent() {
+        return new AuthenticatedUser(7L, "student.zhouzh", "student.zhouzh", "周同学", List.of("student"), List.of());
     }
 }
