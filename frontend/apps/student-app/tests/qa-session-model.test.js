@@ -7,6 +7,7 @@ import {
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeQaMessage,
+  normalizeQaSources,
   normalizeQaSession,
   resolvePollingDelaySeconds,
   resolveContextStatusText,
@@ -100,6 +101,7 @@ test('消息与任务状态规范化为前端展示模型', () => {
       createdAt: '2026-05-17T10:20:30',
       taskStatus: null,
       progressStage: null,
+      sources: [],
     },
   )
 
@@ -107,6 +109,37 @@ test('消息与任务状态规范化为前端展示模型', () => {
   assert.equal(isTerminalTaskStatus('running'), false)
   assert.equal(resolvePollingDelaySeconds({ recommendedPollingIntervalSeconds: 30 }), 30)
   assert.equal(resolvePollingDelaySeconds({ mode: 'basic' }), 10)
+})
+
+test('来源卡片数据规范化为学生端展示模型', () => {
+  assert.deepEqual(
+    normalizeQaSources([
+      {
+        rankPosition: 1,
+        documentKey: 'doc-1',
+        chunkId: 'chunk-1',
+        sourceRef: '156',
+        sourceFile: '操作系统教材',
+        headingPath: '第3章/死锁',
+        pageStart: 123,
+        pageEnd: 124,
+        snippet: '死锁来源片段',
+      },
+    ]),
+    [
+      {
+        rankPosition: 1,
+        documentKey: 'doc-1',
+        chunkId: 'chunk-1',
+        sourceRef: '156',
+        sourceFile: '操作系统教材',
+        headingPath: '第3章/死锁',
+        pageStart: 123,
+        pageEnd: 124,
+        snippet: '死锁来源片段',
+      },
+    ],
+  )
 })
 
 test('会话模型保留固化索引和可恢复状态', () => {

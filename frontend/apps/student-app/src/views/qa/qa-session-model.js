@@ -129,7 +129,25 @@ export function normalizeQaMessage(message) {
     createdAt: message.createdAt ?? '',
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
+    sources: normalizeQaSources(message.sources),
   }
+}
+
+export function normalizeQaSources(sources) {
+  const list = Array.isArray(sources) ? sources : []
+  return list
+    .map((source, index) => ({
+      rankPosition: Number(source.rankPosition ?? source.rank ?? index + 1),
+      documentKey: source.documentKey ?? '',
+      chunkId: source.chunkId ?? '',
+      sourceRef: source.sourceRef ?? source.ref ?? '',
+      sourceFile: source.sourceFile ?? '',
+      headingPath: source.headingPath ?? '',
+      pageStart: source.pageStart ?? null,
+      pageEnd: source.pageEnd ?? null,
+      snippet: source.snippet ?? '',
+    }))
+    .filter((source) => source.sourceFile || source.headingPath || source.snippet || source.documentKey || source.chunkId)
 }
 
 export function normalizeQaSession(session = {}) {

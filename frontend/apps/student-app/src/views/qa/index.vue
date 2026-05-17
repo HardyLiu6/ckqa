@@ -437,6 +437,34 @@ function taskStatusText(task) {
   }
   return task.progressStage || task.taskStatus || '处理中'
 }
+
+function sourceTitle(source) {
+  return source.sourceFile || source.headingPath || source.documentKey || `来源 ${source.rankPosition || ''}`.trim()
+}
+
+function sourceMeta(source) {
+  const parts = []
+  if (source.headingPath && source.headingPath !== source.sourceFile) {
+    parts.push(source.headingPath)
+  }
+  const pageLabel = sourcePageLabel(source)
+  if (pageLabel) {
+    parts.push(pageLabel)
+  }
+  return parts.join(' · ')
+}
+
+function sourcePageLabel(source) {
+  const start = Number(source.pageStart)
+  const end = Number(source.pageEnd)
+  if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0 && start !== end) {
+    return `第 ${start}-${end} 页`
+  }
+  if (Number.isFinite(start) && start > 0) {
+    return `第 ${start} 页`
+  }
+  return ''
+}
 </script>
 
 <template>
@@ -573,6 +601,25 @@ function taskStatusText(task) {
               </ModuleTag>
             </div>
             <QaMarkdownContent :content="msg.content" />
+            <details v-if="msg.sources?.length" class="source-cards">
+              <summary>参考来源 {{ msg.sources.length }}</summary>
+              <ol class="source-list">
+                <li
+                  v-for="source in msg.sources"
+                  :key="`${source.rankPosition}-${source.sourceRef || source.chunkId || source.documentKey}`"
+                  class="source-card"
+                >
+                  <div class="source-card-head">
+                    <span class="source-rank">来源 {{ source.rankPosition }}</span>
+                    <strong>{{ sourceTitle(source) }}</strong>
+                  </div>
+                  <div v-if="sourceMeta(source)" class="source-card-meta">
+                    {{ sourceMeta(source) }}
+                  </div>
+                  <p v-if="source.snippet" class="source-snippet">{{ source.snippet }}</p>
+                </li>
+              </ol>
+            </details>
             <div class="msg-meta">{{ formatMessageTime(msg.createdAt) }}</div>
           </GlassCard>
         </div>
@@ -872,6 +919,73 @@ function taskStatusText(task) {
   font-size: 14px;
   line-height: 1.7;
   white-space: pre-wrap;
+}
+
+.source-cards {
+  margin-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  padding-top: 10px;
+}
+
+.source-cards summary {
+  width: max-content;
+  cursor: pointer;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.source-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-card {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: $radius-md;
+  background: rgba(248, 250, 252, 0.82);
+  padding: 9px 10px;
+}
+
+.source-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2937;
+  font-size: 12px;
+}
+
+.source-card-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-rank {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.13);
+  padding: 2px 7px;
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.source-card-meta {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.source-snippet {
+  margin: 7px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 
 .msg-meta {
