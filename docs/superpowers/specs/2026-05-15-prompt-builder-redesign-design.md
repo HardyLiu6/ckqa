@@ -435,7 +435,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
     - 现状：spec 决策 6 软取消语义——cancel API 立即把 status 切到 cancelling，worker 必须等当前候选 20 个样本全跑完（典型 ~8 min）才在候选边界检查到 cancelling 并落 cancelled 终态。
     - 用户感知：点中止后只看到一闪而过的 toast「已请求中止，评分将在当前候选完成后停止」，进度条仍在跑，多次点击中止以为没生效，体验混乱。
     - **Phase 5.1 UX 缓解**：cancelling 状态下显示橙色横幅 spinner + 文案「已请求中止 · 评分将在当前候选完成后停止（典型 5-10 分钟）。如已确认放弃当前进度，可直接关闭此页」；「中止评分」按钮置灰文案变「中止中…」，避免误重复点。
-    - **未覆盖的短板**：仍是软取消语义，最坏情况要等 ~8 min。要做硬取消需要 worker 持有 Python 子进程句柄 + 在 cancelling 检测到时 destroyForcibly + 子进程清理半成品文件，工程量较大，留 Phase 7+ 视用户反馈再决定是否升级。
+    - **未覆盖的短板（路线图：Phase 7「04 步评分硬取消」）**：仍是软取消语义，最坏情况要等 ~8 min。要做硬取消需要 worker 持有 Python 子进程句柄 + 在 cancelling 检测到时 destroyForcibly + 子进程清理半成品文件，工程量较大；详见 Phase 7 § "04 步评分硬取消" 落地计划。落地优先级看 UX 缓解后用户反馈：若仍嫌慢则升级 P1，否则保留软取消语义。
 
 
 ## 实施分期
@@ -531,7 +531,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 - **04 步评分样本级真进度（spec § 风险 #8）：**
   - 现状（Phase 6.5 已落地）：service 在 `projectStatus` 中按 `elapsedSeconds` 推算"估算 finished"，前端在估算值后追加「（估算）」徽标。仍是候选粒度，不是真实推进。
   - 目标：把 worker 阻塞跑 sampleTotal 个样本的过程拆成"每完成 1 个样本就把进度写回 DB"，前端拿到的就是真值。
-  - 实现路径（设计草案，留 Phase 7 实施时再细化）：
+  - 实现路径（设计草案,留 Phase 7 实施时再细化）：
     1. **Python 写进度文件**：`graphrag_pipeline/scripts/extraction_eval/run_native_extraction.py`（或其当前调用方）每完成 1 个样本就 atomic 写一次 `<workspace>/eval/<evalRunId>/progress/<candidateId>.json`，内容形如 `{"finished": N, "total": M, "lastSampleId": "...", "ts": "..."}`。atomic 写 = `tmp + rename`，避免 Java watcher 读到半截 JSON。
     2. **Java watcher 线程**：`ExtractionEvalWorker` 在派发 `runSingleCandidateExtract` 之前起一个 `ScheduledExecutorService.scheduleAtFixedRate`（间隔 1.5s，与前端轮询同源），周期性读 `progress/<currentCandidateId>.json` → `evalRunsService.updateById` 写入新增字段 `current_extract_finished:int`；候选切换或软取消时停止 watcher，避免 race。
     3. **DB 字段**：`prompt_tune_extraction_eval_runs` 新增 `current_extract_finished int` 列，service 投影时优先用此真值，缺失（旧记录或 watcher 未启动）才回退 Phase 6.5 估算逻辑；DTO `Stage.estimated` 在用真值时设 false。
@@ -540,6 +540,21 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 测试：mock progress.json 文件读写，验证 ① watcher 周期读 → DB 写；② 候选切换时清零；③ progress.json 损坏/缺失时 fallback 估算。
   - 与 Phase 8「AI 单样本抽取异步化」的协同：Phase 8 的 `prompt_tune_ai_suggestion_tasks` 表只管"任务级"状态机（pending/running/done），与本 watcher 关心的"任务内部样本进度"是两层；二者不冲突，本期只动 04 评分这一处。
   - 风险：watcher 与 Python 子进程共享磁盘，若 worker JVM 与 Python 跑在不同容器，需要确认共享 volume；本期评估留给 Phase 7 实施时根据部署形态决定。
+
+- **04 步评分硬取消（spec § 风险 #10）：**
+  - 现状（Phase 5 落地 + Phase 5.1 UX 缓解）：cancel API 立即把 status 切到 cancelling，但 worker 必须等当前候选 20 个样本全跑完（典型 ~8 min）才在候选边界检查到 cancelling 落 cancelled 终态。前端橙色横幅提示"5-10 分钟"+ 按钮置灰；语义上是"软取消"。
+  - 目标：cancelling 后 ≤ 5s 内停掉当前 Python 子进程，落 cancelled 终态。
+  - 实现路径（设计草案，留 Phase 7 实施时再细化）：
+    1. **暴露子进程句柄**：`ProcessRunner.run(...)` 当前隐式管理 `ProcessBuilder` 起的子进程，目标是让 caller 拿到 `Process` 引用。两条路径：
+       - 路径 A（推荐）：`ProcessRunner` 加 `runInteractively(argv, ..., Consumer<Process> onStart)` 重载，子进程一启动就回调 `onStart`，让 worker 把 Process 存到 `ConcurrentMap<Long, Process>`（key=evalRunId）。
+       - 路径 B：直接 `ExecutorService.submit(() -> processRunner.run(...))`，由 worker 持有 Future + 用 ProcessRunner 内部新增的 `getCurrentProcess()` getter；不推荐——Future 没法精确指向"当前正在跑的 Python 子进程"，且 ProcessRunner 全局状态污染。
+    2. **取消监听线程**：worker 现有的"每候选边界检查 cancelling"逻辑保留；新增独立 watcher——`runInternal` 进入候选循环前起一个 `ScheduledExecutorService`（与样本级真进度的 watcher 可合并），间隔 1.5s 查 evalRun.status；遇 cancelling 时 `process.destroyForcibly()` + 清当前候选半成品 + `markCancelled` 直接落终态，不等候选边界。
+    3. **半成品清理**：destroyForcibly 后 `<workspace>/eval/<evalRunId>/extraction_eval/runs/<runId>/<candidateId>.json` 可能写到一半，得手动 `Files.deleteIfExists` 当前候选输出 + `progress/<candidateId>.json`；旧候选已完成的产物保留（用户可能后续仅重跑评分）。
+    4. **race 处理**：destroyForcibly 与 worker 主线程 `runSingleCandidateExtract` 同时返回时，主线程会拿到 IOException / non-zero exitCode；用 `cancellationFlag` 防止主线程把异常当成"单候选失败"误升级到 markFailed。
+    5. **Python 子进程跨平台兼容**：destroyForcibly 在 Linux 是 SIGKILL，Python 进程不可拦截；OneAPI / GraphRAG 在中途被杀不会留下脏状态（只是丢弃当前样本），评估实际部署环境后决定是否需要 SIGTERM grace period（当前评估为不需要：用户既然要硬取消就接受丢弃当前样本）。
+  - 与样本级真进度的协同：建议两者一并落地，因为都需要 worker 持有 Python 子进程句柄 + 同一个 ScheduledExecutorService watcher 线程；DTO 加 `cancelMode:'soft'|'hard'` 标志，UI 据此调整文案（硬取消文案改"评分将在 5 秒内停止"，软取消文案保留"5-10 分钟"）。
+  - 测试：mock Process.destroyForcibly，验证 ① cancelling 检测到后 ≤ 5s 落 cancelled；② 半成品文件被清理；③ 旧已完成候选产物保留；④ destroyForcibly 与主线程 IOException race 不误转 failed。
+  - 落地优先级：spec 决策 6 当时选软取消是因为成本低，UX 缓解后用户反馈"等 8 分钟仍可接受"则可降级为 P3；若反馈"还是太久"则升级到 Phase 7 P1。
 
 #### Phase 8：并发安全与 build run 生命周期
 
