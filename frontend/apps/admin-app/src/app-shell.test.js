@@ -3205,23 +3205,31 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(componentsCss, /\.button-icon/)
 })
 
-test('侧边导航统一迁移到 Element Plus Menu 并为菜单项配置图标', () => {
+test('侧边导航采用分块式布局并暴露折叠按钮', () => {
   const sideNavigation = readFileSync(new URL('./components/shell/SideNavigation.vue', import.meta.url), 'utf8')
-  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  assert.match(sideNavigation, /<el-menu[\s\S]*class="side-menu"/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-if="group\.presentation === 'single' && group\.primaryItem"/)
-  assert.match(sideNavigation, /<el-sub-menu[\s\S]*v-else/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-for="item in group\.items"/)
+  // 新分块式布局：用 section.side-nav-group 替代 el-sub-menu，每组永远展开
+  assert.match(sideNavigation, /<section[\s\S]*class="side-nav-group"/)
+  assert.match(sideNavigation, /class="side-nav-link side-nav-link--single"/)
+  assert.match(sideNavigation, /class="side-nav-link side-nav-link--item"/)
+  assert.match(sideNavigation, /v-for="item in group\.items"/)
   assert.match(sideNavigation, /resolveGroupIcon\(group\.key\)/)
   assert.match(sideNavigation, /resolveItemIcon\(item\)/)
+  // 不再依赖 Element Plus el-menu / el-sub-menu / el-menu-item
+  assert.doesNotMatch(sideNavigation, /<el-menu\b/)
+  assert.doesNotMatch(sideNavigation, /<el-sub-menu\b/)
+  assert.doesNotMatch(sideNavigation, /<el-menu-item\b/)
+  // 不再依赖 details/summary 的可折叠 fallback
   assert.doesNotMatch(sideNavigation, /<details/)
   assert.doesNotMatch(sideNavigation, /<summary/)
-  assert.doesNotMatch(sideNavigation, /<ul class="nav-items"/)
-  assert.match(elementPlusCss, /\.side-menu\.el-menu/)
-  assert.match(elementPlusCss, /\.side-menu\s+\.el-menu-item\.is-active/)
-  assert.match(componentsCss, /\.nav-icon/)
+  // 折叠按钮 + 关键样式落在 components.scss
+  assert.match(sideNavigation, /side-nav-collapse-btn/)
+  assert.match(sideNavigation, /toggle-collapse/)
+  assert.match(componentsCss, /\.side-nav-group\b/)
+  assert.match(componentsCss, /\.side-nav-link\b/)
+  assert.match(componentsCss, /\.side-navigation--compact\b/)
+  assert.match(componentsCss, /\.side-nav-collapse-btn\b/)
 })
 
 test('主题 token 样式兼容 violet 和 legacy purple', () => {

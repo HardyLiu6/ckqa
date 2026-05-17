@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Menu, X } from 'lucide-vue-next'
+import { Menu, X, PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
 
 import AppTopbar from '../components/shell/AppTopbar.vue'
 import OfflineBanner from '../components/common/OfflineBanner.vue'
@@ -22,14 +22,14 @@ const breadcrumbItems = computed(() => buildConsoleBreadcrumbItems(route))
 const currentUser = computed(() => authStore.state.currentUser)
 const dataScopeLabel = computed(() => currentUser.value?.dataScope || '未登录')
 
-// 响应式布局状态
+// 响应式布局状态（综合视口 + 用户手动折叠）
 const sidebarMode = computed(() => layoutStore.state.sidebarMode)
 const isMobileMenuOpen = computed(() => layoutStore.state.isMobileMenuOpen)
 
 // 根据 sidebarMode 动态设置 grid-template-columns
 const layoutGridColumns = computed(() => {
-  if (sidebarMode.value === 'full') return '280px minmax(0, 1fr)'
-  if (sidebarMode.value === 'icon') return '88px minmax(0, 1fr)'
+  if (sidebarMode.value === 'full') return '256px minmax(0, 1fr)'
+  if (sidebarMode.value === 'icon') return '76px minmax(0, 1fr)'
   return 'minmax(0, 1fr)' // hidden 模式：侧边导航隐藏
 })
 
@@ -54,6 +54,10 @@ function closeMobileMenu() {
   if (isMobileMenuOpen.value) {
     layoutStore.toggleMobileMenu()
   }
+}
+
+function toggleCollapse() {
+  layoutStore.toggleCollapse()
 }
 </script>
 
@@ -90,6 +94,7 @@ function closeMobileMenu() {
       :current-path="route.path"
       :compact="sidebarMode === 'icon'"
       class="side-navigation--responsive"
+      @toggle-collapse="toggleCollapse"
     />
 
     <!-- 移动端 overlay 导航菜单 -->
