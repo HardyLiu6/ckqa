@@ -48,6 +48,22 @@ public class BuildRunWorkspaceService {
         return resolved;
     }
 
+    /**
+     * 把绝对路径相对化到 build runs root，便于持久化 build run / eval / candidate 等子目录路径
+     * 而不灌机器绝对路径到 DB。绝对路径不在 root 下时返回 null，调用方按"配置异常"兜底。
+     *
+     * <p>形式：传入 {@code <root>/user_X/kb_Y/build_Z/eval/<evalRunId>}，返回
+     * {@code "user_X/kb_Y/build_Z/eval/<evalRunId>"}（始终用 '/' 分隔，跨平台一致）。</p>
+     */
+    public String relativize(Path absolute) {
+        if (absolute == null) return null;
+        Path normalized = absolute.toAbsolutePath().normalize();
+        if (!normalized.startsWith(buildRunsRoot)) {
+            return null;
+        }
+        return buildRunsRoot.relativize(normalized).toString().replace('\\', '/');
+    }
+
     public void createLayout(String workspaceUri) throws IOException {
         Path root = resolve(workspaceUri);
         for (String directory : new String[]{

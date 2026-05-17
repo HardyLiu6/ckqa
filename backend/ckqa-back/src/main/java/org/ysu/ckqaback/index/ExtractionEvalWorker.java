@@ -487,23 +487,20 @@ public class ExtractionEvalWorker {
      * 把 worker 中的绝对 Path 转成相对 GRAPHRAG_BUILD_RUNS_ROOT 的工作区 URI（与 evalDir 字段注释一致）。
      * <p>形式：{@code user_X/kb_Y/build_Z/eval/<evalRunId>}。这样 DB 不灌机器绝对路径，
      * 真实部署可在 {@code GRAPHRAG_BUILD_RUNS_ROOT} 切换路径时无需迁移数据。</p>
+     * <p>关键：复用 {@link BuildRunWorkspaceService#relativize}——后者拿到的 root 已经做过
+     * 「未配置时退化 ${GRAPHRAG_ROOT}/runtime/kb-build-runs」fallback。worker 自己重算
+     * {@code properties.getGraphrag().getBuildRunsRoot()} 会漏掉 fallback，导致用户没显式
+     * 配 {@code GRAPHRAG_BUILD_RUNS_ROOT} 时 evalDir 退化为绝对路径，被 finalize 阶段拒绝。</p>
      */
     private String toRelativeWorkspaceUri(Path absolute) {
-        String runsRootStr = properties.getGraphrag().getBuildRunsRoot();
-        if (!StringUtils.hasText(runsRootStr)) {
-            // 配置缺失时退化为绝对路径（不应发生）
-            log.warn("GRAPHRAG_BUILD_RUNS_ROOT 未配置，evalDir 退化为绝对路径");
-            return absolute.toAbsolutePath().normalize().toString();
+        String relative = workspaceService.relativize(absolute);
+        if (relative != null) {
+            return relative;
         }
-        Path runsRoot = Path.of(runsRootStr).toAbsolutePath().normalize();
-        Path normalized = absolute.toAbsolutePath().normalize();
-        if (!normalized.startsWith(runsRoot)) {
-            // 不在 build runs root 下：兜底退化为绝对路径（极少见，只在测试或异常部署时发生）
-            log.warn("evalDir 不在 GRAPHRAG_BUILD_RUNS_ROOT 下，退化为绝对路径 abs={}, root={}",
-                    normalized, runsRoot);
-            return normalized.toString();
-        }
-        return runsRoot.relativize(normalized).toString().replace('\\', '/');
+        // root 解析失败或不在 root 下：兜底退化为绝对路径（极少见，只在测试或异常部署时发生）
+        log.warn("evalDir 不在 GRAPHRAG_BUILD_RUNS_ROOT 下，退化为绝对路径 abs={}",
+                absolute.toAbsolutePath().normalize());
+        return absolute.toAbsolutePath().normalize().toString();
     }
 
     private static String truncate(String text, int max) {
