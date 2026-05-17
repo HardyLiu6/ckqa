@@ -125,6 +125,18 @@ onBeforeRouteLeave(async (to, from, next) => {
   }
 })
 
+async function handleEnterScoring(selectedCandidateIds) {
+  const ids = Array.isArray(selectedCandidateIds) ? selectedCandidateIds : []
+  // 写到 URL，让 04 步能从 query 读取；逗号分隔便于人读
+  await router.replace({
+    query: {
+      ...route.query,
+      step: 'scoring',
+      selectedCandidates: ids.join(','),
+    },
+  })
+}
+
 async function gotoStep(stepKey) {
   if (!BUILDER_STEP_KEYS.includes(stepKey)) return
   if (!isStepUnlocked(stepKey, { seed: seed.value })) {
@@ -282,7 +294,7 @@ function returnToWizard() {
           v-else-if="activeStepKey === 'candidates'"
           :dirty="dirty"
           :current-build-run-seed="seed"
-          @start-scoring="gotoStep('scoring')"
+          @start-scoring="handleEnterScoring"
           @back="gotoPrev"
         />
         <PromptBuilderScoringStep
