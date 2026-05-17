@@ -437,6 +437,23 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
     - **Phase 5.1 UX 缓解**：cancelling 状态下显示橙色横幅 spinner + 文案「已请求中止 · 评分将在当前候选完成后停止（典型 5-10 分钟）。如已确认放弃当前进度，可直接关闭此页」；「中止评分」按钮置灰文案变「中止中…」，避免误重复点。
     - **未覆盖的短板（路线图：Phase 7「04 步评分硬取消」）**：仍是软取消语义，最坏情况要等 ~8 min。要做硬取消需要 worker 持有 Python 子进程句柄 + 在 cancelling 检测到时 destroyForcibly + 子进程清理半成品文件，工程量较大；详见 Phase 7 § "04 步评分硬取消" 落地计划。落地优先级看 UX 缓解后用户反馈：若仍嫌慢则升级 P1，否则保留软取消语义。
 
+11. **5 步流水线缺级联失效追踪**（设计期就识别但 Phase 1-6 未做）：
+    - 现状：5 步串行流水线 audit → 候选 → 评分 → finalize 的产物各自独立持久化，但**没有 fingerprint / 失效传播机制**。用户改了 02 步任一样本后：
+      - 03 候选不重生成时，部分候选（`schema_aware_directional_v2` / `schema_fewshot_distilled_v2_strict_tuple`）的 base_prompt 仍基于过期 audit 失败案例 + few-shot 样例。
+      - 04 评分不重做时，gold 已变但 finalized 分仍是旧值，召回 / 准确率全部不可信。
+      - 05 finalize 的 `customPromptDraft.sourceEvalRunId` 仍指向旧 success run，但语义上"该候选 0.95 分"已不再成立。
+    - 用户感知：改 audit 一两条样本后，03/04/05 步页面**无任何提示**，看不出"在用过期数据"，最终可能基于失效评分选定候选。
+    - **依赖关系矩阵**（决定哪一步真正受影响）：
+      - audit → 03 候选：`default` / `auto_tuned` 不依赖 audit；`schema_aware_directional_v2` / `schema_fewshot_distilled_v2_strict_tuple` 依赖（短反向规则 + few-shot 样例直接来自 audit）。
+      - audit → 04 评分：**强依赖**（audit 是 ground truth，候选 prompt 不变 gold 变了召回也变）。
+      - 03 候选 → 04 评分：**强依赖**（候选 prompt 是抽取阶段输入）。
+      - 04 评分 → 05 finalize：**强依赖**（finalize 写 evalRunId / candidateId / score 快照，重新评分后语义失效）。
+    - **方案对比**：
+      - 方案 A 硬失效（audit 改即删 03/04/05 产物）：UX 暴力，用户随手改一条样本就把 30 分钟评分冲掉，与 finalize 快照"固定下来"语义冲突。
+      - 方案 B 软失效（保留产物 + 横幅提示 + 重做按钮）：✅ 推荐——保留迭代对比能力，重做路径明确，与 finalize 快照协同。
+    - **Phase 7 落地计划**：详见 Phase 7 § "5 步流水线级联失效追踪"。
+    - **本期接受作为短板**：Phase 1-6 的用户路径假定"按顺序走完不回头"，这条风险只在用户真的回 02 步改样本时才暴露。优先级 P1 但不紧急，与 Phase 7 已记录的「样本级真进度」「硬取消」共用 worker / metadata 改造同期落地划算。
+
 
 ## 实施分期
 
@@ -555,6 +572,49 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 与样本级真进度的协同：建议两者一并落地，因为都需要 worker 持有 Python 子进程句柄 + 同一个 ScheduledExecutorService watcher 线程；DTO 加 `cancelMode:'soft'|'hard'` 标志，UI 据此调整文案（硬取消文案改"评分将在 5 秒内停止"，软取消文案保留"5-10 分钟"）。
   - 测试：mock Process.destroyForcibly，验证 ① cancelling 检测到后 ≤ 5s 落 cancelled；② 半成品文件被清理；③ 旧已完成候选产物保留；④ destroyForcibly 与主线程 IOException race 不误转 failed。
   - 落地优先级：spec 决策 6 当时选软取消是因为成本低，UX 缓解后用户反馈"等 8 分钟仍可接受"则可降级为 P3；若反馈"还是太久"则升级到 Phase 7 P1。
+
+- **5 步流水线级联失效追踪（spec § 风险 #11）：**
+  - 现状：5 步串行流水线 audit → 候选 → 评分 → finalize 的产物各自独立持久化，但**没有 fingerprint / 失效传播机制**。用户改 02 步任一样本后，03/04/05 步页面无任何提示，看不出"在用过期数据"——最终可能基于失效评分选定候选。
+  - 目标：保留产物前提下显式标记 stale + 在 03/04/05 步显示橙色横幅 + 暴露重做按钮，让用户主动决定是否重新生成 / 评分。**不**采用硬失效（避免用户随手改一条样本就把 30 分钟评分冲掉）。
+  - 依赖关系（决定哪一步真正需要重做）：
+    - audit → 03 候选：`default` / `auto_tuned` 不依赖 audit；`schema_aware_directional_v2` / `schema_fewshot_distilled_v2_strict_tuple` 依赖。
+    - audit → 04 评分：**强依赖**（audit 是 ground truth）。
+    - 03 候选 → 04 评分：**强依赖**。
+    - 04 评分 → 05 finalize：**强依赖**（finalize 写 sourceEvalRunId / candidateId / score 快照）。
+  - 实现路径（设计草案，留 Phase 7 实施时再细化）：
+    1. **指纹机制**：build run metadata 加三个 fingerprint 节点：
+       ```json
+       {
+         "auditFingerprint": {"sha256": "...", "lastModifiedAt": "...", "sampleCount": 20},
+         "candidatesFingerprint": {"lastGeneratedAt": "...", "auditFingerprintAtGeneration": "...", "candidateShaByName": {...}},
+         "evalFingerprint": {"evalRunId": 4, "auditFingerprintAtEval": "...", "candidatesFingerprintAtEval": {...}}
+       }
+       ```
+       sha256 优先，避免无意义时间戳触碰；sampleCount 仅冗余给前端展示用。
+    2. **指纹更新点**：
+       - `prompt_tune_audit_samples` 任一样本 `goldEntities` / `goldRelations` / `reviewer_decision` 变更时，由 service 层（`AuditSamplePersistenceService`）触发 `auditFingerprint` 重算并写回 buildMetadata；
+       - `CandidateService.generateCandidates` 落地时写 `candidatesFingerprint` 含 `auditFingerprintAtGeneration` 当前快照；
+       - `ExtractionEvalService.markSuccess`（worker 调）写 `evalFingerprint`。
+    3. **候选粒度依赖**：`CandidateMetadataLookup` 加 `dependsOnAudit:Boolean` 字段，`generateCandidates` 重生成时只重做 `dependsOnAudit=true` 的候选，default / auto_tuned 不动；前端「重新生成候选」按钮可拆「全部重生成 / 仅重生成依赖 audit 的候选」。
+    4. **失效计算**（前端 / 后端均可，建议后端 service 投影 status DTO 时返回 stale 标志）：
+       ```java
+       candidatesStale = candidatesFingerprint == null || hasAuditDependentCandidate &&
+                         candidatesFingerprint.auditFingerprintAtGeneration != auditFingerprint.sha256
+       evalStale = evalFingerprint == null ||
+                   evalFingerprint.auditFingerprintAtEval != auditFingerprint.sha256 ||
+                   evalFingerprint.candidatesFingerprintAtEval != currentCandidatesFingerprint
+       finalizeStale = customPromptDraft.sourceEvalRunId != latestSuccessEval.id ||
+                       evalStale  // 当前 eval 自己已 stale，finalize 当然也 stale
+       ```
+    5. **UI 入口**：
+       - 02 步：用户改样本时不弹窗，仅 service 层悄悄更新 fingerprint；
+       - 03 步：进入时若 `candidatesStale=true` 显示橙色横幅「audit 集已修改，依赖 audit 的候选可能基于过期 gold（schema_aware / schema_fewshot），点重新生成候选」；受影响候选卡片角标加「已过期」徽章；「重新生成候选」按钮提为 primary；
+       - 04 步：类似横幅「audit / 候选已修改，当前评分基于过期数据」+「重新评分」primary 按钮；排行榜「进入预览」按钮 disabled，防止基于过期分选定；
+       - 05 步：customPromptDraft 是 stale 时显示「该草稿基于已过期评分（evalRunId=X），建议先回 04 步重新评分后再选定」，但**允许查看**（不强制清空，给用户对比空间）。
+    6. **DTO**：现有 `ExtractionEvalStatusResponse.recoverableScoringEvalRunId` / `recoverableScoringOnly` 体系下加 `auditStale:Boolean / candidatesStale:Boolean / evalStale:Boolean / finalizeStale:Boolean`。
+  - 测试：mock buildMetadata 各种 fingerprint 组合，验证 ① audit 改后 evalStale=true / candidatesStale 按候选 dependsOnAudit 决定；② 候选重生成后 candidatesFingerprint 更新；③ 评分重做后 evalFingerprint 更新；④ finalize stale 判定正确含 sourceEvalRunId 不指向 latest 的场景。
+  - 落地优先级：用户路径假定"按顺序走完不回头"时这条不暴露；真有用户回 02 改 audit 才需要。建议短期最低成本先做"02 → 03 → 04 横幅 + auditDirtyAt 时间戳"，等用户反馈频繁踩坑再升级到完整 fingerprint 矩阵。
+  - 与样本级真进度 / 硬取消的协同：三者共用 buildMetadata schema 改动 + worker 写状态路径，建议 Phase 7 一并落地减少 worker / metadata 翻动。
 
 #### Phase 8：并发安全与 build run 生命周期
 
