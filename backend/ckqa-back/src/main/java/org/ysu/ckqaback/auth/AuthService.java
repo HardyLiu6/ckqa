@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.auth;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -11,6 +12,9 @@ import org.ysu.ckqaback.auth.dto.AuthLoginRequest;
 import org.ysu.ckqaback.auth.dto.AuthRegisterRequest;
 import org.ysu.ckqaback.auth.dto.AuthResponse;
 import org.ysu.ckqaback.auth.dto.AuthUserProfile;
+import org.ysu.ckqaback.auth.email.EmailCodeService;
+import org.ysu.ckqaback.auth.security.LoginRateLimiter;
+import org.ysu.ckqaback.auth.security.TurnstileVerifier;
 import org.ysu.ckqaback.entity.AuthIdentities;
 import org.ysu.ckqaback.entity.Roles;
 import org.ysu.ckqaback.entity.UserRoles;
@@ -46,19 +50,114 @@ public class AuthService {
     private final PasswordService passwordService;
     private final JwtTokenService jwtTokenService;
     private final UserAvatarService userAvatarService;
+    private final LoginRateLimiter loginRateLimiter;
+    private final TurnstileVerifier turnstileVerifier;
+    private final EmailCodeService emailCodeService;
 
     public AuthResponse loginForAudience(AuthLoginRequest request, String audience) {
+        return loginForAudience(request, audience, null);
+    }
+
+    /**
+     * 密码登录入口（含限频 + 人机验证）。
+     *
+     * @param request   登录请求
+     * @param audience  admin / student
+     * @param clientIp  客户端 IP，用于 turnstile 与限频 bucket 拼装；可空
+     */
+    public AuthResponse loginForAudience(AuthLoginRequest request, String audience, String clientIp) {
+        // 人机验证（disabled 时直接放行）
+        turnstileVerifier.verify(request.getTurnstileToken(), clientIp);
+        String bucket = bucketKey(request.getUsername(), clientIp, audience);
+        loginRateLimiter.ensureNotLocked(bucket);
+
         Users user = findUserForLogin(request.getUsername());
         if (user == null || !"active".equals(user.getStatus()) || !passwordService.matches(request.getPassword(), user.getPasswordHash())) {
+            loginRateLimiter.recordFailure(bucket);
             throw new BusinessException(ApiResultCode.AUTH_INVALID, HttpStatus.UNAUTHORIZED, "账号或密码错误");
         }
         List<String> roles = usersService.getRoleCodes(user.getId());
         if (!canLoginAudience(roles, audience)) {
+            loginRateLimiter.recordFailure(bucket);
             throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, audienceErrorMessage(audience));
         }
+        loginRateLimiter.recordSuccess(bucket);
         user.setLastLoginAt(LocalDateTime.now());
         usersService.updateById(user);
         return issueResponse(user, roles);
+    }
+
+    /**
+     * 邮箱验证码登录（admin audience，不允许学生使用此入口）。
+     */
+    public AuthResponse loginByEmailCode(String email, String code, String turnstileToken, String clientIp, String audience) {
+        turnstileVerifier.verify(turnstileToken, clientIp);
+        String bucket = bucketKey(email, clientIp, "email-" + audience);
+        loginRateLimiter.ensureNotLocked(bucket);
+
+        if (!StringUtils.hasText(email)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "邮箱不能为空");
+        }
+        Users user = usersService.getOne(new LambdaQueryWrapper<Users>()
+                .eq(Users::getEmail, email.trim().toLowerCase())
+                .eq(Users::getIsDeleted, false));
+        if (user == null || !"active".equals(user.getStatus())) {
+            loginRateLimiter.recordFailure(bucket);
+            throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.UNAUTHORIZED);
+        }
+        try {
+            emailCodeService.verifyAndConsume(email, code);
+        } catch (BusinessException ex) {
+            loginRateLimiter.recordFailure(bucket);
+            throw ex;
+        }
+        List<String> roles = usersService.getRoleCodes(user.getId());
+        if (!canLoginAudience(roles, audience)) {
+            loginRateLimiter.recordFailure(bucket);
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, audienceErrorMessage(audience));
+        }
+        loginRateLimiter.recordSuccess(bucket);
+        user.setLastLoginAt(LocalDateTime.now());
+        usersService.updateById(user);
+        return issueResponse(user, roles);
+    }
+
+    /**
+     * 通过邮箱发送验证码（限频 + 人机验证）。
+     */
+    public void sendEmailLoginCode(String email, String turnstileToken, String clientIp) {
+        turnstileVerifier.verify(turnstileToken, clientIp);
+        if (!StringUtils.hasText(email)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "邮箱不能为空");
+        }
+        // 校验邮箱已绑定到 active 用户，避免被滥用作邮件群发
+        Users user = usersService.getOne(new LambdaQueryWrapper<Users>()
+                .eq(Users::getEmail, email.trim().toLowerCase())
+                .eq(Users::getIsDeleted, false));
+        if (user == null || !"active".equals(user.getStatus())) {
+            throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.NOT_FOUND);
+        }
+        emailCodeService.sendCode(email);
+    }
+
+    private String bucketKey(String identity, String clientIp, String audience) {
+        String safeId = StringUtils.hasText(identity) ? identity.trim().toLowerCase() : "anonymous";
+        String safeIp = StringUtils.hasText(clientIp) ? clientIp.trim() : "unknown";
+        return safeId + "|" + safeIp + "|" + audience;
+    }
+
+    /** 从 HttpServletRequest 解析 client IP，用于限频与 turnstile remoteip 字段。 */
+    public static String resolveClientIp(HttpServletRequest request) {
+        if (request == null) return null;
+        String[] headers = {"X-Forwarded-For", "X-Real-IP", "Proxy-Client-IP", "WL-Proxy-Client-IP"};
+        for (String header : headers) {
+            String value = request.getHeader(header);
+            if (StringUtils.hasText(value) && !"unknown".equalsIgnoreCase(value)) {
+                int comma = value.indexOf(',');
+                return comma > 0 ? value.substring(0, comma).trim() : value.trim();
+            }
+        }
+        return request.getRemoteAddr();
     }
 
     @Transactional

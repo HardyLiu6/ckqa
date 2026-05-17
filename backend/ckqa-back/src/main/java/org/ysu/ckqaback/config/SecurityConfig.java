@@ -57,6 +57,8 @@ public class SecurityConfig {
                                 ApiPaths.AUTH + "/admin/login",
                                 ApiPaths.AUTH + "/student/login",
                                 ApiPaths.AUTH + "/student/register",
+                                ApiPaths.AUTH + "/email/send-code",
+                                ApiPaths.AUTH + "/email/admin/login",
                                 ApiPaths.SYSTEM_HEALTH,
                                 ApiPaths.API_V1 + "/course-covers/**",
                                 ApiPaths.API_V1 + "/user-avatars/**",

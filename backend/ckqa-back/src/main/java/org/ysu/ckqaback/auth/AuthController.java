@@ -20,6 +20,8 @@ import org.ysu.ckqaback.auth.dto.AuthRegisterRequest;
 import org.ysu.ckqaback.auth.dto.AuthResponse;
 import org.ysu.ckqaback.auth.dto.AuthUserProfile;
 import org.ysu.ckqaback.auth.dto.ChangePasswordRequest;
+import org.ysu.ckqaback.auth.dto.EmailCodeSendRequest;
+import org.ysu.ckqaback.auth.dto.EmailLoginRequest;
 import org.ysu.ckqaback.auth.dto.UpdateProfileRequest;
 
 /**
@@ -33,13 +35,50 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/admin/login")
-    public ApiResponse<AuthResponse> loginAdmin(@Valid @RequestBody AuthLoginRequest request) {
-        return ApiResponseUtils.success(authService.loginForAudience(request, "admin"));
+    public ApiResponse<AuthResponse> loginAdmin(
+            HttpServletRequest request,
+            @Valid @RequestBody AuthLoginRequest body
+    ) {
+        return ApiResponseUtils.success(
+                authService.loginForAudience(body, "admin", AuthService.resolveClientIp(request))
+        );
     }
 
     @PostMapping("/student/login")
-    public ApiResponse<AuthResponse> loginStudent(@Valid @RequestBody AuthLoginRequest request) {
-        return ApiResponseUtils.success(authService.loginForAudience(request, "student"));
+    public ApiResponse<AuthResponse> loginStudent(
+            HttpServletRequest request,
+            @Valid @RequestBody AuthLoginRequest body
+    ) {
+        return ApiResponseUtils.success(
+                authService.loginForAudience(body, "student", AuthService.resolveClientIp(request))
+        );
+    }
+
+    /** 申请邮箱登录验证码（限频 + 人机验证）。 */
+    @PostMapping("/email/send-code")
+    public ApiResponse<Void> sendEmailLoginCode(
+            HttpServletRequest request,
+            @Valid @RequestBody EmailCodeSendRequest body
+    ) {
+        authService.sendEmailLoginCode(body.getEmail(), body.getTurnstileToken(), AuthService.resolveClientIp(request));
+        return ApiResponseUtils.success(null);
+    }
+
+    /** 邮箱验证码登录（管理员/教师 audience）。 */
+    @PostMapping("/email/admin/login")
+    public ApiResponse<AuthResponse> loginAdminByEmail(
+            HttpServletRequest request,
+            @Valid @RequestBody EmailLoginRequest body
+    ) {
+        return ApiResponseUtils.success(
+                authService.loginByEmailCode(
+                        body.getEmail(),
+                        body.getCode(),
+                        body.getTurnstileToken(),
+                        AuthService.resolveClientIp(request),
+                        "admin"
+                )
+        );
     }
 
     @PostMapping("/student/register")

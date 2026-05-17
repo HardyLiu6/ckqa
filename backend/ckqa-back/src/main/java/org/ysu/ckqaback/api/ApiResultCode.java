@@ -241,7 +241,37 @@ public enum ApiResultCode {
     /**
      * 接口尚未实现（占位）。
      */
-    PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现");
+    PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现"),
+
+    /**
+     * 登录失败次数超限，账号或 IP 已被临时锁定。
+     */
+    LOGIN_RATE_LIMITED(4290, "登录失败次数过多，请稍后重试"),
+
+    /**
+     * 邮箱验证码请求过于频繁（冷却中）或当日额度已用完。
+     */
+    EMAIL_CODE_RATE_LIMITED(4291, "验证码发送过于频繁，请稍后重试"),
+
+    /**
+     * 邮箱验证码不正确或已过期。
+     */
+    EMAIL_CODE_INVALID(4292, "验证码不正确或已过期"),
+
+    /**
+     * 邮箱未绑定到任何用户。
+     */
+    EMAIL_NOT_REGISTERED(4293, "该邮箱尚未绑定到任何账号"),
+
+    /**
+     * 人机验证失败（Turnstile token 校验未通过）。
+     */
+    HUMAN_VERIFICATION_FAILED(4294, "人机验证未通过，请刷新后重试"),
+
+    /**
+     * 邮件发送失败（SMTP 异常或第三方服务不可用）。
+     */
+    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试");
 
     /**
      * 业务响应码。

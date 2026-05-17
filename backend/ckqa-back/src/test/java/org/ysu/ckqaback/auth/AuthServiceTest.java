@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.auth.dto.AuthLoginRequest;
 import org.ysu.ckqaback.auth.dto.AuthRegisterRequest;
 import org.ysu.ckqaback.auth.dto.AuthResponse;
+import org.ysu.ckqaback.auth.email.EmailCodeService;
+import org.ysu.ckqaback.auth.security.LoginRateLimiter;
+import org.ysu.ckqaback.auth.security.TurnstileVerifier;
 import org.ysu.ckqaback.entity.AuthIdentities;
 import org.ysu.ckqaback.entity.Roles;
 import org.ysu.ckqaback.entity.UserRoles;
@@ -34,6 +37,9 @@ class AuthServiceTest {
     private UserRolesService userRolesService;
     private AuthIdentitiesService authIdentitiesService;
     private PasswordService passwordService;
+    private LoginRateLimiter loginRateLimiter;
+    private TurnstileVerifier turnstileVerifier;
+    private EmailCodeService emailCodeService;
     private AuthService service;
 
     @BeforeEach
@@ -47,6 +53,10 @@ class AuthServiceTest {
         jwtProperties.setSecret("test-secret-that-is-long-enough-for-hmac");
         jwtProperties.setIssuer("ckqa-test");
         jwtProperties.setTtl(Duration.ofMinutes(30));
+        // 限频 / Turnstile / 邮件相关 mock：单测里默认放行 + 不发码
+        loginRateLimiter = mock(LoginRateLimiter.class);
+        turnstileVerifier = mock(TurnstileVerifier.class);
+        emailCodeService = mock(EmailCodeService.class);
         service = new AuthService(
                 usersService,
                 rolesService,
@@ -54,7 +64,10 @@ class AuthServiceTest {
                 authIdentitiesService,
                 passwordService,
                 new JwtTokenService(jwtProperties),
-                mock(UserAvatarService.class)
+                mock(UserAvatarService.class),
+                loginRateLimiter,
+                turnstileVerifier,
+                emailCodeService
         );
     }
 

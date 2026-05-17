@@ -1,16 +1,20 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   ArrowRight,
   Brain,
   FileText,
   KeyRound,
+  Mail,
   MessageSquareText,
   ShieldCheck,
   UserRound,
 } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 
+import HumanCheck from '../../components/auth/HumanCheck.vue'
+import { sendEmailLoginCode } from '../../api/auth.js'
 import { createApiError } from '../../api/client.js'
 import { LOGIN_PRESETS, authStore } from '../../stores/auth.js'
 
@@ -19,11 +23,19 @@ const router = useRouter()
 const loading = ref(false)
 const submitError = ref('')
 
+// Turnstile site key（前端环境变量；为空时 HumanCheck 走开发态占位）
+const turnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY || '').trim()
+const turnstileToken = ref(null)
+const humanCheckRef = ref(null)
+
+function onHumanVerified(token) {
+  turnstileToken.value = token
+}
+
 /**
  * "记住密码 7 天" 草案：
  * 仅前端 localStorage 保存账号 + 密码（明文）+ 过期时间戳，到期或退出登录后清除。
  * 不传到后端、不写 cookie，避免越权场景下 cookie 自动随请求泄漏。
- * 这是登录便利性 trade-off；安全要求更高的场景请关闭此开关。
  */
 const REMEMBER_STORAGE_KEY = 'ckqa.admin.remember-credentials'
 const REMEMBER_DURATION_DAYS = 7
@@ -61,7 +73,7 @@ function writeRememberedCredentials(username, password) {
       }),
     )
   } catch {
-    // 忽略 localStorage 写入异常（隐私模式 / 配额超限）
+    // 隐私模式或配额超限时忽略
   }
 }
 
@@ -70,7 +82,7 @@ function clearRememberedCredentials() {
   try {
     window.localStorage.removeItem(REMEMBER_STORAGE_KEY)
   } catch {
-    // 忽略
+    // ignore
   }
 }
 
@@ -83,25 +95,35 @@ const form = reactive({
 })
 const rememberMe = ref(Boolean(remembered))
 
+// 登录方式 tab：password / email
+const loginMethod = ref('password')
+
+// 邮箱登录表单
+const emailForm = reactive({
+  email: '',
+  code: '',
+})
+const emailCodeSending = ref(false)
+const emailCooldown = ref(0)
+let emailCooldownTimer = null
+
+function startEmailCooldown(seconds = 60) {
+  emailCooldown.value = seconds
+  if (emailCooldownTimer) clearInterval(emailCooldownTimer)
+  emailCooldownTimer = setInterval(() => {
+    emailCooldown.value -= 1
+    if (emailCooldown.value <= 0) {
+      clearInterval(emailCooldownTimer)
+      emailCooldownTimer = null
+      emailCooldown.value = 0
+    }
+  }, 1000)
+}
+
 const productPipeline = [
-  {
-    step: '01',
-    icon: FileText,
-    title: 'PDF 解析与导出',
-    detail: 'MinerU · MinIO · MySQL',
-  },
-  {
-    step: '02',
-    icon: Brain,
-    title: '知识图谱构建',
-    detail: 'GraphRAG · 提示词调优',
-  },
-  {
-    step: '03',
-    icon: MessageSquareText,
-    title: '智能问答与运维',
-    detail: '4 种检索模式 · 验证溯源',
-  },
+  { step: '01', icon: FileText, title: 'PDF 解析与导出', detail: 'MinerU · MinIO · MySQL' },
+  { step: '02', icon: Brain, title: '知识图谱构建', detail: 'GraphRAG · 提示词调优' },
+  { step: '03', icon: MessageSquareText, title: '智能问答与运维', detail: '4 种检索模式 · 验证溯源' },
 ]
 
 const activePresetDetail = computed(() =>
@@ -110,7 +132,6 @@ const activePresetDetail = computed(() =>
 
 function applyPreset(preset) {
   activePreset.value = preset.role
-  // 如果用户已经修改过账号密码，preset 切换不应该覆盖；只在初始 / preset 当前账号匹配时切换
   const matchingExisting = LOGIN_PRESETS.find(
     (p) => p.username === form.username && p.password === form.password,
   )
@@ -121,12 +142,15 @@ function applyPreset(preset) {
   submitError.value = ''
 }
 
-async function submit() {
+async function submitPasswordLogin() {
   submitError.value = ''
   loading.value = true
-
   try {
-    await authStore.login(form)
+    await authStore.login({
+      username: form.username,
+      password: form.password,
+      turnstileToken: turnstileToken.value,
+    })
     if (rememberMe.value) {
       writeRememberedCredentials(form.username, form.password)
     } else {
@@ -135,8 +159,58 @@ async function submit() {
     router.replace(resolveRedirect())
   } catch (error) {
     submitError.value = createApiError(error).message || '登录失败，请检查账号密码'
+    humanCheckRef.value?.resetWidget?.()
   } finally {
     loading.value = false
+  }
+}
+
+async function handleSendCode() {
+  if (emailCooldown.value > 0 || emailCodeSending.value) return
+  if (!emailForm.email?.trim()) {
+    ElMessage.warning('请先输入邮箱')
+    return
+  }
+  emailCodeSending.value = true
+  try {
+    await sendEmailLoginCode({
+      email: emailForm.email.trim().toLowerCase(),
+      turnstileToken: turnstileToken.value,
+    })
+    ElMessage.success('验证码已发送，请检查邮箱')
+    startEmailCooldown(60)
+  } catch (error) {
+    const apiError = createApiError(error)
+    ElMessage.error(apiError.message || '发送验证码失败')
+    humanCheckRef.value?.resetWidget?.()
+  } finally {
+    emailCodeSending.value = false
+  }
+}
+
+async function submitEmailLogin() {
+  submitError.value = ''
+  loading.value = true
+  try {
+    await authStore.loginByEmail({
+      email: emailForm.email,
+      code: emailForm.code,
+      turnstileToken: turnstileToken.value,
+    })
+    router.replace(resolveRedirect())
+  } catch (error) {
+    submitError.value = createApiError(error).message || '邮箱登录失败'
+    humanCheckRef.value?.resetWidget?.()
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleSubmit() {
+  if (loginMethod.value === 'email') {
+    submitEmailLogin()
+  } else {
+    submitPasswordLogin()
   }
 }
 
@@ -145,8 +219,12 @@ function resolveRedirect() {
   return typeof redirect === 'string' && redirect.startsWith('/app') ? redirect : '/app/dashboard'
 }
 
+watch(loginMethod, () => {
+  // 切换登录方式时清空错误，避免上一种方式的报错残留
+  submitError.value = ''
+})
+
 onMounted(() => {
-  // 路由层 logout 已经清掉 token 与 currentUser；这里只负责"取消勾选记住密码 → 立即清空持久化"。
   if (!rememberMe.value) {
     clearRememberedCredentials()
   }
@@ -176,7 +254,6 @@ onMounted(() => {
         <span class="login-aside__line login-aside__line--4">
           <span class="login-aside__pulse"></span>
         </span>
-        <!-- 浅景深漂浮粒子 -->
         <span class="login-aside__particle login-aside__particle--1"></span>
         <span class="login-aside__particle login-aside__particle--2"></span>
         <span class="login-aside__particle login-aside__particle--3"></span>
@@ -228,12 +305,38 @@ onMounted(() => {
           </span>
           <div>
             <h2 id="login-form-title" class="login-card__title">欢迎回来</h2>
-            <p class="login-card__subtitle">使用账号与密码登录控制台</p>
+            <p class="login-card__subtitle">使用账号密码或邮箱验证码登录</p>
           </div>
         </header>
 
-        <!-- 角色 preset -->
-        <div class="login-preset" role="tablist" aria-label="测试身份切换">
+        <!-- 登录方式切换 -->
+        <div class="login-method" role="tablist" aria-label="登录方式">
+          <button
+            type="button"
+            role="tab"
+            class="login-method__tab"
+            :class="{ 'is-active': loginMethod === 'password' }"
+            :aria-selected="loginMethod === 'password'"
+            @click="loginMethod = 'password'"
+          >
+            <KeyRound :size="14" aria-hidden="true" />
+            <span>账号密码</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="login-method__tab"
+            :class="{ 'is-active': loginMethod === 'email' }"
+            :aria-selected="loginMethod === 'email'"
+            @click="loginMethod = 'email'"
+          >
+            <Mail :size="14" aria-hidden="true" />
+            <span>邮箱验证码</span>
+          </button>
+        </div>
+
+        <!-- 角色 preset（仅密码模式） -->
+        <div v-if="loginMethod === 'password'" class="login-preset" role="tablist" aria-label="测试身份切换">
           <button
             v-for="preset in LOGIN_PRESETS"
             :key="preset.role"
@@ -249,46 +352,100 @@ onMounted(() => {
           </button>
         </div>
 
-        <form class="login-form" @submit.prevent="submit">
-          <label class="login-field">
-            <span class="login-field__label">账号 / 用户名</span>
-            <el-input
-              v-model.trim="form.username"
-              size="large"
-              autocomplete="username"
-              placeholder="例如：admin.heqh"
-            >
-              <template #prefix>
-                <UserRound :size="16" aria-hidden="true" />
-              </template>
-            </el-input>
-          </label>
+        <form class="login-form" @submit.prevent="handleSubmit">
+          <!-- 密码登录 -->
+          <template v-if="loginMethod === 'password'">
+            <label class="login-field">
+              <span class="login-field__label">账号 / 用户名</span>
+              <el-input
+                v-model.trim="form.username"
+                size="large"
+                autocomplete="username"
+                placeholder="例如：admin.heqh"
+              >
+                <template #prefix>
+                  <UserRound :size="16" aria-hidden="true" />
+                </template>
+              </el-input>
+            </label>
+            <label class="login-field">
+              <span class="login-field__label">密码</span>
+              <el-input
+                v-model="form.password"
+                size="large"
+                autocomplete="current-password"
+                show-password
+                type="password"
+                placeholder="请输入登录密码"
+              >
+                <template #prefix>
+                  <KeyRound :size="16" aria-hidden="true" />
+                </template>
+              </el-input>
+            </label>
+          </template>
 
-          <label class="login-field">
-            <span class="login-field__label">密码</span>
-            <el-input
-              v-model="form.password"
-              size="large"
-              autocomplete="current-password"
-              show-password
-              type="password"
-              placeholder="请输入登录密码"
-            >
-              <template #prefix>
-                <KeyRound :size="16" aria-hidden="true" />
-              </template>
-            </el-input>
-          </label>
+          <!-- 邮箱验证码登录 -->
+          <template v-else>
+            <label class="login-field">
+              <span class="login-field__label">注册邮箱</span>
+              <el-input
+                v-model.trim="emailForm.email"
+                size="large"
+                type="email"
+                autocomplete="email"
+                placeholder="example@your-domain.com"
+              >
+                <template #prefix>
+                  <Mail :size="16" aria-hidden="true" />
+                </template>
+              </el-input>
+            </label>
+            <label class="login-field">
+              <span class="login-field__label">验证码</span>
+              <div class="login-field__email-row">
+                <el-input
+                  v-model.trim="emailForm.code"
+                  size="large"
+                  inputmode="numeric"
+                  maxlength="8"
+                  placeholder="6 位数字验证码"
+                >
+                  <template #prefix>
+                    <ShieldCheck :size="16" aria-hidden="true" />
+                  </template>
+                </el-input>
+                <el-button
+                  type="primary"
+                  plain
+                  class="login-send-code"
+                  :loading="emailCodeSending"
+                  :disabled="emailCooldown > 0 || emailCodeSending"
+                  @click="handleSendCode"
+                >
+                  {{ emailCooldown > 0 ? `${emailCooldown}s` : '发送验证码' }}
+                </el-button>
+              </div>
+            </label>
+          </template>
 
-          <div class="login-form__row">
+          <!-- 人机验证 -->
+          <HumanCheck
+            ref="humanCheckRef"
+            :site-key="turnstileSiteKey"
+            @verified="onHumanVerified"
+          />
+
+          <!-- 密码模式特有：记住密码 + 忘记密码 -->
+          <div v-if="loginMethod === 'password'" class="login-form__row">
             <label class="login-remember">
               <el-checkbox v-model="rememberMe">记住密码 7 天</el-checkbox>
             </label>
             <button
               type="button"
               class="login-help-link"
-              title="本期忘记密码暂未上线，请联系管理员重置"
-              @click.prevent
+              title="本期忘记密码暂未上线，请联系管理员重置或使用邮箱验证码登录"
+              @click.prevent="loginMethod = 'email'"
             >
               忘记密码？
             </button>
@@ -306,7 +463,7 @@ onMounted(() => {
             size="large"
           >
             <ArrowRight class="button-icon" :size="16" aria-hidden="true" />
-            进入控制台
+            {{ loginMethod === 'email' ? '验证并登录' : '进入控制台' }}
           </el-button>
         </form>
 
@@ -348,7 +505,6 @@ onMounted(() => {
     linear-gradient(160deg, #1e1b4b 0%, #312e81 60%, #4338ca 130%);
 }
 
-/* 知识图谱节点装饰 */
 .login-aside__graph {
   position: absolute;
   inset: 0;
@@ -398,7 +554,6 @@ onMounted(() => {
 .login-aside__line--3 { width: 32%; top: 73%; left: 24%; transform: rotate(-12deg); }
 .login-aside__line--4 { width: 18%; top: 60%; left: 70%; transform: rotate(-22deg); }
 
-/* 流光：脉冲点沿连线移动 */
 .login-aside__pulse {
   position: absolute;
   top: 50%;
@@ -429,7 +584,6 @@ onMounted(() => {
   box-shadow: 0 0 14px rgba(236, 72, 153, 0.95);
 }
 
-/* 浅景深漂浮粒子（背景气氛） */
 .login-aside__particle {
   position: absolute;
   border-radius: 50%;
@@ -489,38 +643,20 @@ onMounted(() => {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.18); }
 }
-
-/* 流光沿线条移动并淡入淡出 */
 @keyframes login-pulse-flow {
   0% { left: 0; opacity: 0; }
   10% { opacity: 1; }
   90% { opacity: 1; }
   100% { left: 100%; opacity: 0; }
 }
-
-/* 漂浮粒子：先升起、左右漂移、再消散 */
 @keyframes login-particle-drift {
-  0% {
-    transform: translate(0, 0) scale(0.6);
-    opacity: 0;
-  }
-  20% {
-    opacity: 0.85;
-  }
-  50% {
-    transform: translate(40px, -60px) scale(1);
-    opacity: 1;
-  }
-  80% {
-    opacity: 0.6;
-  }
-  100% {
-    transform: translate(-30px, -120px) scale(0.4);
-    opacity: 0;
-  }
+  0% { transform: translate(0, 0) scale(0.6); opacity: 0; }
+  20% { opacity: 0.85; }
+  50% { transform: translate(40px, -60px) scale(1); opacity: 1; }
+  80% { opacity: 0.6; }
+  100% { transform: translate(-30px, -120px) scale(0.4); opacity: 0; }
 }
 
-/* 整体场景缓慢漂移：极光层呼吸 */
 .login-aside::before {
   content: '';
   position: absolute;
@@ -532,14 +668,12 @@ onMounted(() => {
   z-index: 0;
   animation: login-aurora-drift 18s ease-in-out infinite;
 }
-
 @keyframes login-aurora-drift {
   0%, 100% { transform: translate(0, 0) scale(1); }
   33% { transform: translate(2%, -3%) scale(1.06); }
   66% { transform: translate(-2%, 2%) scale(1.03); }
 }
 
-/* 用户开启减少动画偏好时全部停下 */
 @media (prefers-reduced-motion: reduce) {
   .login-aside__node,
   .login-aside__pulse,
@@ -549,7 +683,6 @@ onMounted(() => {
   }
 }
 
-/* 左侧 brand */
 .login-aside__brand {
   position: relative;
   z-index: 1;
@@ -578,7 +711,6 @@ onMounted(() => {
   letter-spacing: 0.04em;
 }
 
-/* 左侧 hero */
 .login-aside__hero {
   position: relative;
   z-index: 1;
@@ -617,7 +749,6 @@ onMounted(() => {
   max-width: 380px;
 }
 
-/* 生产链路卡片 */
 .login-aside__pipeline {
   display: grid;
   gap: 8px;
@@ -699,7 +830,6 @@ onMounted(() => {
     linear-gradient(160deg, #1e1b4b 0%, #312e81 100%);
 }
 
-/* 乳白卡（B 档：94% 半透 + 20px 模糊） */
 .login-card {
   width: 100%;
   max-width: 380px;
@@ -745,21 +875,59 @@ onMounted(() => {
   color: rgba(30, 27, 75, 0.66);
 }
 
-/* 角色 preset */
-.login-preset {
+/* 登录方式 tab */
+.login-method {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-bottom: 16px;
   padding: 4px;
   border: 1px solid rgba(99, 102, 241, 0.14);
   border-radius: 12px;
   background: rgba(248, 250, 252, 0.78);
 }
+.login-method__tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(30, 27, 75, 0.6);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.login-method__tab:hover {
+  color: #1e1b4b;
+}
+.login-method__tab.is-active {
+  background: #fff;
+  color: #6366f1;
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.16);
+}
+
+/* preset */
+.login-preset {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid rgba(99, 102, 241, 0.10);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.5);
+}
 .login-preset__tab {
   display: grid;
   gap: 1px;
-  padding: 9px 10px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 9px;
   background: transparent;
@@ -771,7 +939,7 @@ onMounted(() => {
     box-shadow 0.18s ease;
 }
 .login-preset__tab strong {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 .login-preset__tab small {
@@ -815,6 +983,22 @@ onMounted(() => {
 .login-field :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px #6366f1 inset, 0 0 0 4px rgba(99, 102, 241, 0.12);
   background: #fff;
+}
+
+/* 邮箱验证码：input + 发送按钮 */
+.login-field__email-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.login-send-code {
+  height: 40px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 96px;
 }
 
 .login-form__row {
@@ -893,9 +1077,6 @@ onMounted(() => {
   color: rgba(30, 27, 75, 0.55);
 }
 
-/* ──────────────────────────────────────────────
- * 响应式
- * ────────────────────────────────────────────── */
 @media (max-width: 1080px) {
   .login-shell {
     grid-template-columns: 1fr;

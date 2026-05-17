@@ -47,7 +47,7 @@ class AuthControllerWebMvcTest {
 
     @Test
     void shouldLoginAdminConsoleUser() throws Exception {
-        given(authService.loginForAudience(any(AuthLoginRequest.class), eq("admin")))
+        given(authService.loginForAudience(any(AuthLoginRequest.class), eq("admin"), any()))
                 .willReturn(response("jwt.admin", "ADM2026001", List.of("admin"), List.of("*")));
 
         mockMvc.perform(post(ApiPaths.AUTH + "/admin/login")

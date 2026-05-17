@@ -1,7 +1,7 @@
 import { createPinia, defineStore } from 'pinia'
 import { reactive, readonly } from 'vue'
 
-import { fetchCurrentUser, loginAdmin } from '../api/auth.js'
+import { fetchCurrentUser, loginAdmin, loginAdminByEmail } from '../api/auth.js'
 import { createApiError } from '../api/client.js'
 import { setAuthSessionProvider } from '../axios/index.js'
 import { getAdminPinia } from './pinia.js'
@@ -116,6 +116,21 @@ export const useAuthStore = defineStore('auth', () => {
     const response = await loginAdmin({
       username: credentials.username?.trim(),
       password: credentials.password,
+      turnstileToken: credentials.turnstileToken,
+    })
+    applySession(response)
+    return state.currentUser
+  }
+
+  /**
+   * 邮箱验证码登录（管理员/教师 audience）。
+   * @param {{ email: string, code: string, turnstileToken?: string }} credentials
+   */
+  async function loginByEmail(credentials) {
+    const response = await loginAdminByEmail({
+      email: credentials.email?.trim().toLowerCase(),
+      code: credentials.code?.trim(),
+      turnstileToken: credentials.turnstileToken,
     })
     applySession(response)
     return state.currentUser
@@ -222,6 +237,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     state: readonly(state),
     login,
+    loginByEmail,
     loginAs,
     loadCurrentUser,
     applyProfile,

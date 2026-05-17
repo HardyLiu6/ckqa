@@ -6,6 +6,24 @@ export async function loginAdmin(credentials) {
   return unwrapApiResponse(response)
 }
 
+/**
+ * 申请邮箱验证码（管理员/教师端登录用）。
+ * @param {{ email: string, turnstileToken?: string }} body
+ */
+export async function sendEmailLoginCode(body) {
+  const response = await http.post('/auth/email/send-code', body)
+  return unwrapApiResponse(response)
+}
+
+/**
+ * 邮箱验证码登录（管理员/教师 audience）。
+ * @param {{ email: string, code: string, turnstileToken?: string }} body
+ */
+export async function loginAdminByEmail(body) {
+  const response = await http.post('/auth/email/admin/login', body)
+  return unwrapApiResponse(response)
+}
+
 export async function fetchCurrentUser() {
   const response = await http.get('/auth/me')
   return unwrapApiResponse(response)
