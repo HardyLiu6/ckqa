@@ -418,6 +418,15 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
      - DTO `ExtractionEvalStatusResponse.Stage` 加 `estimated:Boolean` 标志，前端 `CandidateMatrixRow` 在估算值后追加「（估算）」徽标，避免误以为是真值。
    - **未覆盖的短板（路线图：Phase 7「04 步评分样本级真进度」）**：仍是候选粒度的"估算型"反馈；要做样本级真进度，需要让 Python `run_native_extraction.py` 每完成 1 个样本写 `progress.json`（`{finished:N}`），Java worker 起 watcher 线程定期读 progress.json → 写 DB；候选边界软取消的 race 处理需要小心。详见 Phase 7 § "04 步评分样本级真进度" 落地计划。
 
+9. **04 步评分汇总失败时「重试」会重跑 30+ 分钟抽取**（Phase 5 落地后暴露的边界）：
+   - 现状：`ExtractionEvalWorker.runInternal` 抽取阶段全部完成后（`finished_candidates` 含全部候选）才进 scoring；如果 `orchestrator.runScoring(...)` 失败（如 Python 脚本异常 / 评分汇总报告损坏），整个 evalRun 进 failed 终态。
+   - 前端「重试」按钮直接调 `triggerNewEval` → service `trigger` → 没有 active run（已 failed）→ 创建新 evalRun 重头跑抽取阶段。已在磁盘上的抽取产物（`${GRAPHRAG_ROOT}/results/extraction_eval/runs/<oldRunId>/*.json`）不被复用，浪费 30+ 分钟 LLM 调用。
+   - **Phase 5.1 已落地缓解**：
+     - DTO `ExtractionEvalStatusResponse.recoverableScoringOnly:Boolean`：service 投影时若 `status=failed && progress_stage=scoring && finished_candidates 非空`，置 true。
+     - 新端点 `POST /knowledge-base-build-runs/{id}/extraction-eval/retry-scoring`：service `retryScoring(buildRunId)` 复用最新 evalRun，重置为 running + progress_stage=scoring，dispatch 一个仅跑 scoring 的轻量任务（`ExtractionEvalWorker.runScoringOnly`），跳过抽取段。worker 启动前校验 `sharedExtractDir` 仍在，缺失则回退 markFailed 让 caller 走全量重跑。
+     - 前端 `PromptBuilderScoringStep` 在 `recoverableScoringOnly=true` 时把单按钮「重试」拆成「仅重跑评分」+「重新抽取并评分」二选一；后端拒绝（产物已被清理 / 任务非 failed 等 4106 + 409）时降级走全量重跑。
+   - **未覆盖的短板**：worker 在 `markFailed` 后没主动清理 `sharedExtractDir`，所以"产物未清理"是默认状态；下次 `runInternal` 启动时清理逻辑（`deleteIfExists(sharedExtractDir)`）只针对当前 runId，不影响旧 evalRun 的产物。如果手工清理 `${GRAPHRAG_ROOT}/results/extraction_eval/runs/` 或服务重启 + 启动恢复把任务标 failed 再清理，仅重跑会拒绝并降级。这条边界本期接受作为已知技术债。
+
 
 ## 实施分期
 

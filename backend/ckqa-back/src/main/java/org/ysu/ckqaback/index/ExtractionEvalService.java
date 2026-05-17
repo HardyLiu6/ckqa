@@ -177,6 +177,62 @@ public class ExtractionEvalService {
         log.info("评分任务请求取消 evalRunId={}", run.getId());
     }
 
+    /**
+     * Phase 5.1：仅重跑「评分汇总」。
+     *
+     * <p>找最新 run；若 status=failed、progress_stage=scoring、有 finishedCandidates，
+     * 则把该 run 重置为 running + progress_stage=scoring，dispatch 一个仅跑 scoring 的轻量任务，
+     * 跳过 30+ 分钟的抽取阶段。否则（含产物已被清理 / 任务非 failed / 还没进 scoring 阶段）
+     * 抛 IllegalStateException 让 caller 走 trigger 全量重跑。
+     *
+     * @return 复用的 evalRunId
+     */
+    @Transactional
+    public Long retryScoring(Long buildRunId) {
+        Optional<PromptTuneExtractionEvalRuns> latestOpt =
+                evalRunsService.findLatestByBuildRunId(buildRunId);
+        if (latestOpt.isEmpty()) {
+            throw new BusinessException(
+                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                    HttpStatus.NOT_FOUND
+            );
+        }
+        PromptTuneExtractionEvalRuns run = latestOpt.get();
+        boolean canRetryScoring = "failed".equals(run.getStatus())
+                && "scoring".equals(run.getProgressStage())
+                && run.getFinishedCandidates() != null
+                && !parseSelectedIds(run.getFinishedCandidates()).isEmpty();
+        if (!canRetryScoring) {
+            throw new BusinessException(
+                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                    HttpStatus.CONFLICT,
+                    "当前任务无可复用的抽取产物，请重新触发完整评分"
+            );
+        }
+
+        run.setStatus("running");
+        run.setProgressStage("scoring");
+        run.setErrorMessage(null);
+        run.setFinishedAt(null);
+        run.setLastHeartbeatAt(LocalDateTime.now());
+        run.setUpdatedAt(LocalDateTime.now());
+        evalRunsService.updateById(run);
+        Long evalRunId = run.getId();
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            worker.dispatchScoringOnly(evalRunId);
+        } else {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    worker.dispatchScoringOnly(evalRunId);
+                }
+            });
+        }
+        log.info("评分仅重跑 scoring 已派发 evalRunId={}", evalRunId);
+        return evalRunId;
+    }
+
     // -----------------------------------------------------------------
     // 辅助
     // -----------------------------------------------------------------
@@ -326,6 +382,12 @@ public class ExtractionEvalService {
                 || "failed".equals(run.getStatus())
                 || "cancelled".equals(run.getStatus());
 
+        // Phase 5.1：失败 + scoring 阶段 + 有完成候选 → 前端可显示「仅重跑评分」按钮
+        boolean recoverableScoringOnly =
+                "failed".equals(run.getStatus())
+                && "scoring".equals(run.getProgressStage())
+                && !finished.isEmpty();
+
         return ExtractionEvalStatusResponse.builder()
                 .evalRunId(run.getId())
                 .status(run.getStatus())
@@ -335,6 +397,7 @@ public class ExtractionEvalService {
                 .startedAt(run.getStartedAt())
                 .finishedAt(run.getFinishedAt())
                 .lastHeartbeatAt(run.getLastHeartbeatAt())
+                .recoverableScoringOnly(recoverableScoringOnly ? Boolean.TRUE : null)
                 .overall(overall)
                 .candidates(progresses)
                 .build();

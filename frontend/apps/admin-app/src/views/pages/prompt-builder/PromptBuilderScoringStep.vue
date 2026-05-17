@@ -11,6 +11,7 @@ import {
   getExtractionEvalStatus,
   getExtractionEvalReport,
   cancelExtractionEval,
+  retryExtractionEvalScoring,
 } from '../../../api/prompt-tune-pipeline.js'
 
 const props = defineProps({
@@ -62,6 +63,12 @@ const matrixCandidates = computed(() => status.value?.candidates ?? [])
 const reportCandidates = computed(() => report.value?.candidates ?? [])
 /** 风险 1：未进入排行榜的失败候选清单，由后端 report.failedCandidates 透传。 */
 const failedCandidates = computed(() => report.value?.failedCandidates ?? [])
+/**
+ * Phase 5.1：失败 + 抽取阶段已完成（progress_stage=scoring）+ 抽取产物未清理时，
+ * 后端会标 status.recoverableScoringOnly=true。前端据此把单按钮「重试」拆成「仅重跑评分」
+ * + 「重新抽取」两个按钮，避免动辄重跑 30+ 分钟抽取。
+ */
+const recoverableScoringOnly = computed(() => status.value?.recoverableScoringOnly === true)
 
 onMounted(initialize)
 
@@ -237,6 +244,26 @@ async function handleRetry() {
   }
   await triggerNewEval(selectedCandidatesFromQuery.value)
 }
+
+/**
+ * Phase 5.1：仅重跑评分汇总，跳过抽取阶段。
+ *
+ * <p>失败 + scoring 阶段时使用，避免重新跑 30+ 分钟抽取。后端校验失败（如抽取产物已被清理）
+ * 时返回业务错误，调用方退化到 handleRetry 走全量重跑。</p>
+ */
+async function handleRetryScoring() {
+  phase.value = 'loading'
+  try {
+    await retryExtractionEvalScoring(buildRunId.value)
+    // 重新拉一次 status 让 phase 切到 running，然后开始轮询
+    const s = await getExtractionEvalStatus(buildRunId.value)
+    handleStatusUpdate(s)
+  } catch (err) {
+    // 后端拒绝（产物已清理 / 任务非 failed）→ 降级走全量重跑
+    ElMessage.warning(err?.message ?? '无法仅重跑评分，将回退到完整重跑')
+    await handleRetry()
+  }
+}
 </script>
 
 <template>
@@ -268,7 +295,8 @@ async function handleRetry() {
     <div v-else-if="phase === 'failed'" class="scoring-state-card scoring-state-card--error">
       <p>{{ errorMessage }}</p>
       <div class="scoring-state-card__actions">
-        <el-button @click="handleRetry">重试</el-button>
+        <el-button v-if="recoverableScoringOnly" type="primary" @click="handleRetryScoring">仅重跑评分</el-button>
+        <el-button @click="handleRetry">{{ recoverableScoringOnly ? '重新抽取并评分' : '重试' }}</el-button>
         <el-button @click="$emit('back')">返回 03 步</el-button>
       </div>
     </div>

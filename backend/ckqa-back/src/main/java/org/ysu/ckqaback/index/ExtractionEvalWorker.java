@@ -81,6 +81,102 @@ public class ExtractionEvalWorker {
         });
     }
 
+    /**
+     * Phase 5.1：仅重跑「评分汇总」阶段。
+     *
+     * <p>触发条件：上次任务已 failed 在 scoring 阶段（progress_stage=scoring，已有部分 finishedCandidates），
+     * 抽取产物（{@code sharedExtractDir/<runId>_<candidateId>.json}）仍在共享磁盘上。直接重跑
+     * {@code orchestrator.runScoring(...)} → 复制产物 → markSuccess，跳过抽取阶段（30+ 分钟）。
+     * 抽取产物缺失时降级抛 IllegalStateException 让 caller 走 trigger 全量重跑。</p>
+     */
+    public void dispatchScoringOnly(Long evalRunId) {
+        extractionEvalExecutor.execute(() -> {
+            try {
+                runScoringOnly(evalRunId);
+            } catch (RuntimeException exception) {
+                log.error("评分仅重跑 scoring 异常 evalRunId={}", evalRunId, exception);
+                markFailed(evalRunId, exception.getMessage());
+            }
+        });
+    }
+
+    void runScoringOnly(Long evalRunId) {
+        PromptTuneExtractionEvalRuns run = evalRunsService.getRequiredById(evalRunId);
+        markRunning(run.getId());
+
+        KnowledgeBaseBuildRuns buildRun;
+        try {
+            buildRun = buildRunsService.getRequiredById(run.getBuildRunId());
+        } catch (RuntimeException exception) {
+            markFailed(run.getId(), "构建运行不存在: " + exception.getMessage());
+            return;
+        }
+
+        Path workspace = workspaceService.resolve(buildRun.getWorkspaceUri());
+        Path candidatesDir = workspace.resolve("prompt/candidates");
+        Path auditFile = candidatesDir.resolve("audit_with_gold.json");
+        Path evalDir = workspace.resolve("eval").resolve(String.valueOf(run.getId()));
+        Path workerLogsDir = evalDir.resolve("logs");
+        try {
+            Files.createDirectories(workerLogsDir);
+        } catch (IOException e) {
+            markFailed(run.getId(), "创建评分目录失败: " + e.getMessage());
+            return;
+        }
+
+        String runId = "eval_" + buildRun.getId() + "_" + run.getId();
+        Path sharedExtractDir = Path.of(properties.getGraphrag().getRoot())
+                .resolve("results/extraction_eval/runs").resolve(runId);
+        Path sharedReportDir = Path.of(properties.getGraphrag().getRoot())
+                .resolve("results/reports/extraction_scoring/runs").resolve(runId);
+
+        // 校验抽取产物仍在；缺失则不允许"仅重跑"，让 caller 走 trigger 全量重跑
+        if (!Files.exists(sharedExtractDir)) {
+            markFailed(run.getId(), "抽取产物已不存在，无法仅重跑评分汇总：" + sharedExtractDir);
+            return;
+        }
+
+        // 清理旧的 scoring 报告，避免与新输出混淆
+        try {
+            deleteIfExists(sharedReportDir);
+        } catch (IOException e) {
+            markFailed(run.getId(), "清理旧 scoring 报告失败: " + e.getMessage());
+            return;
+        }
+
+        // ---- scoring 阶段 ----
+        List<String> finished = parseSelectedIds(run.getFinishedCandidates());
+        updateStage(run.getId(), "scoring", null, finished);
+        try {
+            orchestrator.runScoring(runId, auditFile, workerLogsDir);
+        } catch (Exception e) {
+            markFailed(run.getId(), "评分汇总失败: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            return;
+        }
+
+        // ---- 复制产物到 evalDir + 清理共享磁盘路径 ----
+        try {
+            copyDirectory(sharedExtractDir, evalDir.resolve("extraction_eval"));
+            copyDirectory(sharedReportDir, evalDir.resolve("scoring_report"));
+            deleteIfExists(sharedExtractDir);
+            deleteIfExists(sharedReportDir);
+        } catch (IOException e) {
+            log.warn("复制评分产物到 build run workspace 失败 evalRunId={}: {}", run.getId(), e.getMessage());
+        }
+
+        Path reportFile = evalDir.resolve("scoring_report/top_candidates.json");
+        String reportJson = "";
+        try {
+            if (Files.exists(reportFile)) {
+                reportJson = Files.readString(reportFile, StandardCharsets.UTF_8);
+            }
+        } catch (IOException e) {
+            log.warn("读取 top_candidates.json 失败 evalRunId={}: {}", run.getId(), e.getMessage());
+        }
+        markSuccess(run.getId(), evalDir, reportJson, finished);
+        log.info("评分仅重跑 scoring 成功 evalRunId={}, finished={}", run.getId(), finished);
+    }
+
     void runInternal(Long evalRunId) {
         PromptTuneExtractionEvalRuns run = evalRunsService.getRequiredById(evalRunId);
         markRunning(run.getId());

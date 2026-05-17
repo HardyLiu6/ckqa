@@ -225,6 +225,17 @@ public class PromptTunePipelineController {
         return ApiResponseUtils.success(null);
     }
 
+    /**
+     * Phase 5.1：仅重跑「评分汇总」。前端在 status.recoverableScoringOnly=true 时点击
+     * 「仅重跑评分」按钮触发；不满足条件返回 4106 + CONFLICT 让 caller 走 trigger 全量重跑。
+     */
+    @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/retry-scoring")
+    public ApiResponse<Long> retryExtractionEvalScoring(
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
+    ) {
+        return ApiResponseUtils.success(extractionEvalService.retryScoring(buildRunId));
+    }
+
     // ------------------------------------------------------------
     // 05 步：预览保存
     // ------------------------------------------------------------

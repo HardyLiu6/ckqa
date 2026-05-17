@@ -39,6 +39,14 @@ public class ExtractionEvalStatusResponse {
     private final LocalDateTime finishedAt;
     private final LocalDateTime lastHeartbeatAt;
 
+    /**
+     * 失败终态下，是否可以仅重跑「评分汇总」而不重新抽取（Phase 5.1）。
+     * <p>触发条件：status=failed、progress_stage=scoring、抽取产物（sharedExtractDir/&lt;runId&gt;_*.json）
+     * 仍在磁盘上。前端据此把单按钮「重试」拆成「仅重跑评分」+「重新抽取」二选一，避免动辄重跑 30+ 分钟抽取。
+     * 其他终态或抽取产物已被清理 / 缺失时为 false（含 null），调用方走旧的 trigger 全量重跑路径。</p>
+     */
+    private final Boolean recoverableScoringOnly;
+
     private final Overall overall;
     private final List<CandidateProgress> candidates;
 
