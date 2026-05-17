@@ -96,6 +96,13 @@ public enum ApiResultCode {
     AUDIT_SAMPLE_NOT_FOUND(4051, "标注样本不存在"),
 
     /**
+     * 04 步评分任务不存在（按 id 查询时）。
+     * <p>由 Phase 5 引入，与 4106 EXTRACTION_EVAL_NOT_STARTED 区分：
+     * 4052 是"按 id 找不到记录"，4106 是"该 buildRun 尚未启动评分"。</p>
+     */
+    EXTRACTION_EVAL_RUN_NOT_FOUND(4052, "评分任务不存在"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
