@@ -58,6 +58,12 @@ public class PromptTuneWorker {
     private static final String DEFAULT_DOMAIN = "课程教材知识图谱抽取";
     private static final String DEFAULT_LANGUAGE = "中文";
 
+    /**
+     * graphrag 官方 prompt-tune 默认采样数（{@code --limit}）。
+     * <p>当输入资料 chunk 数 ≥ 该值时直接走默认行为，不传 --limit；否则按实际文档数下调。</p>
+     */
+    private static final int GRAPHRAG_PROMPT_TUNE_DEFAULT_LIMIT = 15;
+
     private final PromptTuneRunsService promptTuneRunsService;
     private final KnowledgeBasesService knowledgeBasesService;
     private final PromptTuneOrchestrator orchestrator;
@@ -129,6 +135,21 @@ public class PromptTuneWorker {
             Files.createDirectories(reportingDir);
             Path graphragLogFile = reportingDir.resolve("prompt-tuning.log");
 
+            // 自适应 --limit：扫输入目录 json 估算文档数，避免 graphrag 默认 limit=15
+            // 与小体量资料不匹配时抛 "Cannot take a larger sample than population"。
+            // 经验：每个 section_doc 经 graphrag chunking 通常 chunk_count >= doc_count，
+            // 取 doc_count 是保守下界；不足 GRAPHRAG_PROMPT_TUNE_DEFAULT_LIMIT 才下调。
+            int inputDocCount = estimateInputDocCount(inputDir);
+            int adaptiveLimit = Math.max(1, Math.min(GRAPHRAG_PROMPT_TUNE_DEFAULT_LIMIT, inputDocCount));
+            List<String> extraArgs = new java.util.ArrayList<>();
+            if (inputDocCount > 0 && inputDocCount < GRAPHRAG_PROMPT_TUNE_DEFAULT_LIMIT) {
+                extraArgs.add("--limit=" + adaptiveLimit);
+                log.info(
+                        "prompt-tune 自适应采样：runId={}, inputDocs={}, --limit={}",
+                        run.getId(), inputDocCount, adaptiveLimit
+                );
+            }
+
             PromptTuneOrchestrator.PromptTuneCommand command = PromptTuneOrchestrator.PromptTuneCommand.builder()
                     .inputDir(inputDir)
                     .candidateDir(autoTunedDir)
@@ -138,6 +159,7 @@ public class PromptTuneWorker {
                     .domain(DEFAULT_DOMAIN)
                     .language(DEFAULT_LANGUAGE)
                     .noEntityTypes(true)
+                    .extraArgs(extraArgs)
                     .build();
 
             // 启动日志 tailer：尾随 per-run 隔离的 prompt-tuning.log。
@@ -218,6 +240,38 @@ public class PromptTuneWorker {
                 objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(manifest),
                 StandardCharsets.UTF_8
         );
+    }
+
+    /**
+     * 估算输入目录里所有 GraphRAG 输入 json 文档总数。
+     * <p>graphrag 的 chunking 步会把每个 section_doc 切成若干 chunk，
+     * 一般 chunk_count >= doc_count，所以 doc_count 是采样数 {@code --limit} 的保守下界。</p>
+     * <p>解析失败时返回 0，调用方应据此跳过 --limit 注入，让 graphrag 走默认行为。</p>
+     */
+    int estimateInputDocCount(Path inputDir) {
+        if (inputDir == null || !Files.isDirectory(inputDir)) {
+            return 0;
+        }
+        int total = 0;
+        try (var stream = Files.newDirectoryStream(inputDir, "*.json")) {
+            for (Path jsonFile : stream) {
+                try {
+                    Object parsed = objectMapper.readValue(jsonFile.toFile(), Object.class);
+                    if (parsed instanceof List<?> list) {
+                        total += list.size();
+                    } else if (parsed instanceof Map<?, ?>) {
+                        total += 1;
+                    }
+                } catch (IOException ioException) {
+                    log.warn("解析 prompt-tune 输入 json 失败 file={}, msg={}",
+                            jsonFile.getFileName(), ioException.getMessage());
+                }
+            }
+        } catch (IOException ioException) {
+            log.warn("扫描 prompt-tune 输入目录失败 dir={}, msg={}", inputDir, ioException.getMessage());
+            return 0;
+        }
+        return total;
     }
 
     @Transactional

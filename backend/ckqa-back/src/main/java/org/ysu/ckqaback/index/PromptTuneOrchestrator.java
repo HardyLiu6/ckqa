@@ -130,6 +130,16 @@ public class PromptTuneOrchestrator {
         if (command.noEntityTypes) {
             argv.add("--no_entity_types");
         }
+        // 自适应透传：worker 可以基于 input 实际样本数计算 --limit 后塞进来。
+        // 每项形如 "--limit=8" 或 "--n_subset_max=300"；空白项跳过。
+        if (command.extraArgs != null) {
+            for (String item : command.extraArgs) {
+                if (item == null || item.isBlank()) {
+                    continue;
+                }
+                argv.add("--extra_args=" + item.trim());
+            }
+        }
 
         Map<String, String> env = new LinkedHashMap<>();
         // 关键：覆盖 graphrag 自身解析的输入目录，让官方 prompt-tune 看到我们的临时输入目录。
@@ -260,6 +270,13 @@ public class PromptTuneOrchestrator {
         private final String domain;
         private final String language;
         private final boolean noEntityTypes;
+        /**
+         * 透传给底层 GraphRAG CLI 的额外参数，每项形如 {@code --limit=8}。
+         * <p>会被 {@code run_graphrag_prompt_tune.py} 的 {@code --extra_args} 选项接收，
+         * 用于 worker 自适应调整采样数等场景。</p>
+         */
+        @Builder.Default
+        private final List<String> extraArgs = List.of();
     }
 
     /**

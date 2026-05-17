@@ -114,9 +114,22 @@ function disabledReasonFor(option) {
   }
 }
 
+/** 是否处于失败态：用于卡片显示失败原因 + 重试按钮（即使 seedAvailability 还没拿到） */
+const isTuneFailed = computed(() => tuneStatus.value === 'failed')
+
+/** 失败原因摘要：来自后端 errorMessage，截断到合适长度避免撑爆卡片 */
+const failureMessage = computed(() => {
+  const raw = (props.promptTuneState?.errorMessage ?? '').trim()
+  if (!raw) return '上次自动调优失败，请重试'
+  // 失败信息可能很长（带 traceback），卡片上只展示前 80 字
+  return raw.length > 80 ? `${raw.slice(0, 80)}…` : raw
+})
+
 /** graphrag_tuned 卡片是否处于"可触发"状态——seedAvailability 没让它可用、且任务非 running */
 const graphragTunedNeedsTrigger = computed(() => {
   if (isTuneRunning.value) return false
+  // failed 直接走可触发分支，不依赖 seedAvailability 接口（接口可能还没刷新）
+  if (isTuneFailed.value) return true
   const match = findAvailabilityOption('graphrag_tuned')
   if (!match) return false
   // 三种 reason 都允许卡片内触发：未启动 / 失败 / 评估失败兜底
@@ -126,8 +139,9 @@ const graphragTunedNeedsTrigger = computed(() => {
 
 /** 触发按钮文案：未启动用「立即触发」，失败用「重试调优」 */
 const triggerButtonLabel = computed(() => {
+  if (isTuneFailed.value) return '重试调优'
   const match = findAvailabilityOption('graphrag_tuned')
-  if (match?.reason === 'auto_tuned_failed' || tuneStatus.value === 'failed') return '重试调优'
+  if (match?.reason === 'auto_tuned_failed') return '重试调优'
   return '立即触发'
 })
 
@@ -176,7 +190,10 @@ function handleTriggerClick(e) {
 
         <!-- graphrag_tuned 卡片专属：可触发 / 调优中 / 失败 三态 -->
         <template v-if="option.key === 'graphrag_tuned' && graphragTunedNeedsTrigger">
-          <small class="seed-card__hint">{{ disabledReasonFor(option) || metaFor(option) }}</small>
+          <small v-if="isTuneFailed" class="seed-card__failure" role="alert">
+            ⚠ {{ failureMessage }}
+          </small>
+          <small v-else class="seed-card__hint">{{ disabledReasonFor(option) || metaFor(option) }}</small>
           <el-button
             type="primary"
             size="small"
@@ -185,7 +202,7 @@ function handleTriggerClick(e) {
             :disabled="promptTuneTriggering"
             @click="handleTriggerClick"
           >
-            <Sparkles v-if="tuneStatus !== 'failed'" :size="14" aria-hidden="true" />
+            <Sparkles v-if="!isTuneFailed" :size="14" aria-hidden="true" />
             <RefreshCw v-else :size="14" aria-hidden="true" />
             {{ triggerButtonLabel }}
           </el-button>
@@ -206,6 +223,17 @@ function handleTriggerClick(e) {
 <style scoped>
 .seed-card__hint {
   color: var(--ckqa-warning, #d97706);
+}
+.seed-card__failure {
+  display: block;
+  color: var(--ckqa-danger, #dc2626);
+  background: var(--ckqa-danger-soft, rgba(220, 38, 38, 0.08));
+  border: 1px solid var(--ckqa-danger-border, rgba(220, 38, 38, 0.25));
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 .seed-card__trigger-btn {
   margin-top: 4px;

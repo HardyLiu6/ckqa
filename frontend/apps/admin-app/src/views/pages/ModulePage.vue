@@ -2446,8 +2446,26 @@ function stopPromptTunePolling() {
 async function refreshPromptTuneStatus(buildRunId) {
   if (!buildRunId) return
   try {
+    // 记录上一轮状态，用于检测「running → failed/success」翻转，做用户反馈。
+    const previousStatus = promptTuneState.value?.status ?? null
     const status = await getBuildRunPromptTuneStatus(buildRunId)
     promptTuneState.value = status
+
+    // Phase 5.3+：轮询过程中检测到任务终态翻转时，给前端弹消息提示，
+    // 否则用户只能看到 spinner 突然消失、按钮回到「立即触发」，没有任何反馈。
+    const wasInProgress = previousStatus === 'pending' || previousStatus === 'running'
+    if (wasInProgress && status?.status === 'failed') {
+      ElMessage.error({
+        message: status.errorMessage
+          ? `自动调优失败：${status.errorMessage}`
+          : '自动调优失败，请检查日志或重试',
+        duration: 6000,
+        showClose: true,
+      })
+    } else if (wasInProgress && status?.status === 'success') {
+      ElMessage.success('自动调优完成')
+    }
+
     const interval = Number(status?.recommendedPollingIntervalMillis ?? 0)
     if (interval > 0 && (status?.status === 'pending' || status?.status === 'running')) {
       stopPromptTunePolling()
