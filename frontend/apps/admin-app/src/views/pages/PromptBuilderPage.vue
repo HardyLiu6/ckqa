@@ -21,12 +21,16 @@ import {
   isStepUnlocked,
 } from './prompt-builder/builder-step-model.js'
 import {
-  MOCK_HISTORY_DRAFTS,
   MOCK_COURSE_NAME,
 } from './prompt-builder/mocks/index.js'
+import PromptBuilderHistoryDraftDrawer from './prompt-builder/PromptBuilderHistoryDraftDrawer.vue'
 
 import { getBuildRun, saveBuildRunCustomPromptDraft } from '../../api/knowledge-bases.js'
-import { getSeedAvailability } from '../../api/prompt-tune-pipeline.js'
+import {
+  getSeedAvailability,
+  listPromptDrafts,
+  finalizePrompt,
+} from '../../api/prompt-tune-pipeline.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,6 +46,9 @@ const error = ref(null)
 
 const seed = ref(null)
 const seedAvailability = ref(null)  // Phase 4.5：3 个种子选项的可用状态
+const historyDrafts = ref([])
+const historyDraftDrawerOpen = ref(false)
+const historyDraftId = ref(null)
 const courseName = ref(MOCK_COURSE_NAME)
 
 const dirty = ref(false)
@@ -94,6 +101,9 @@ onMounted(async () => {
       // eslint-disable-next-line no-console
       console.warn('[seed-availability] 加载失败', availErr)
     }
+
+    // Phase 6：拉历史草稿列表，01 步 history_draft 卡片据此决定 disabled / 数量角标
+    await loadHistoryDrafts()
 
     dirty.value = false
   } catch (e) {
@@ -177,19 +187,16 @@ async function persistSeedToBuildRun(seedKey) {
 
 function handleSelectSeed(seedKey) {
   if (seedKey === 'history_draft') {
-    // Phase 1e：从历史草稿列表中选取最新一条作为 mock 演示
-    const latest = MOCK_HISTORY_DRAFTS[0]
-    if (latest) {
-      seed.value = 'history_draft'
-      selectedCandidateId.value = latest.sourceCandidateId ?? ''
-      saveDraftName.value = latest.name
-      saveDraftDescription.value = latest.description ?? ''
-      saveDraftNameTouched.value = true
-      dirty.value = true
-      ElMessage.success(`已加载历史草稿「${latest.name}」`)
-    } else {
-      ElMessage.info('暂无可用的历史草稿')
+    if (historyDrafts.value.length === 0) {
+      ElMessage.warning('本知识库暂无历史草稿，请先在 05 步保存并入库')
+      return
     }
+    if (historyDrafts.value.length === 1) {
+      loadHistoryDraft(historyDrafts.value[0])
+      return
+    }
+    // ≥2 条 → 打开抽屉让用户选
+    historyDraftDrawerOpen.value = true
     return
   }
   if (seed.value && seed.value !== seedKey && hasDownstreamProgress.value) {
@@ -211,20 +218,65 @@ function handleSelectSeed(seedKey) {
   }
 }
 
+/**
+ * Phase 6：拉本知识库的历史草稿列表，刷新 01 步种子卡可用性 + 抽屉数据。
+ * 失败时不阻塞主流程；列表清空，用户回退到走完整 02→03→04→05 链路。
+ */
+async function loadHistoryDrafts() {
+  if (!kbId.value) return
+  try {
+    historyDrafts.value = await listPromptDrafts(kbId.value)
+  } catch (err) {
+    historyDrafts.value = []
+    // eslint-disable-next-line no-console
+    console.warn('[prompt-builder] 加载历史草稿失败', err)
+  }
+}
+
+/**
+ * Phase 6：选定一条历史草稿后，仅注入 seed=history_draft + historyDraftId，
+ * 主动清空旧 selectedCandidateId / 03 / 04 步状态——
+ * 与 spec § "history_draft 仅是种子来源、不复用旧候选 ID" 约束一致：
+ * 用户后续仍需走完整 02→03→04→05 链路，finalize 走新候选。
+ */
+async function loadHistoryDraft(draft) {
+  seed.value = 'history_draft'
+  historyDraftId.value = draft.id
+  selectedCandidateId.value = ''
+  // 可选预填保存表单：name / description（用户后续可在 05 步覆盖）
+  saveDraftName.value = draft.name
+  saveDraftDescription.value = draft.description ?? ''
+  saveDraftNameTouched.value = true
+  saveDraftDescriptionTouched.value = !!draft.description
+  dirty.value = true
+  try {
+    await persistSeedToBuildRun('history_draft')
+    ElMessage.success(`已加载历史草稿「${draft.name}」`)
+  } catch (err) {
+    ElMessage.error(err?.message ?? '加载历史草稿失败')
+  }
+}
+
 async function handleSave(payload) {
   saving.value = true
   saveError.value = ''
   try {
-    // Phase 1a 用 mock：500ms 延迟模拟保存请求
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    // 注意：本期不真发请求，控制台打印 payload 供调试
-    // eslint-disable-next-line no-console
-    console.log('[Phase 1e mock] save payload', payload)
+    const saveAsDraft = payload.saveMode === 'build_run_with_history'
+    await finalizePrompt(buildRunId.value, {
+      candidateId: payload.selectedCandidate ?? selectedCandidateId.value,
+      saveAsDraft,
+      draftName: payload.name ?? saveDraftName.value,
+      draftDescription: payload.description ?? saveDraftDescription.value,
+    })
+    // finalize 成功后刷新历史草稿，保证 01 步下次进入时数量准确
+    if (saveAsDraft) {
+      await loadHistoryDrafts()
+    }
     dirty.value = false
-    if (payload.saveMode === 'build_run_with_history') {
-      ElMessage.success('已保存到本次构建并入库历史草稿（mock）')
+    if (saveAsDraft) {
+      ElMessage.success('已保存到本次构建并入库历史草稿')
     } else {
-      ElMessage.success('已保存到本次构建（mock）')
+      ElMessage.success('已保存到本次构建')
     }
     await router.push({
       name: 'knowledge-base-build',
@@ -283,7 +335,7 @@ function returnToWizard() {
           v-if="activeStepKey === 'seed'"
           :seed="seed"
           :seed-availability="seedAvailability"
-          :history-drafts="MOCK_HISTORY_DRAFTS"
+          :history-drafts="historyDrafts"
           @select-seed="handleSelectSeed"
         />
         <PromptBuilderPrepareStep
@@ -325,6 +377,12 @@ function returnToWizard() {
           @mark-dirty="markDirty"
           @save="handleSave"
           @back="gotoPrev"
+        />
+
+        <PromptBuilderHistoryDraftDrawer
+          v-model="historyDraftDrawerOpen"
+          :drafts="historyDrafts"
+          @select-draft="loadHistoryDraft"
         />
       </div>
 

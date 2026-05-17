@@ -31,8 +31,10 @@ function metaFor(option) {
   }
   if (option.key === 'graphrag_tuned') return '本课程当前激活的自动调优结果'
   if (option.key === 'history_draft') {
-    if (props.historyDrafts.length === 0) return 'Phase 1e 开放（暂无可选草稿）'
-    return `Phase 1e 开放（共 ${props.historyDrafts.length} 条草稿）`
+    if (props.historyDrafts.length === 0) {
+      return '本知识库暂无历史草稿，05 步保存并入库后会出现在这里'
+    }
+    return `共 ${props.historyDrafts.length} 条历史草稿可选`
   }
   return ''
 }
@@ -43,10 +45,14 @@ function findAvailabilityOption(key) {
 }
 
 function isOptionDisabled(option) {
-  // Phase 4.5：先检查 availability；缺失时只禁 history_draft
+  // Phase 4.5：先检查 availability；缺失时按 historyDrafts 列表回退判断
   const match = findAvailabilityOption(option.key)
   if (match) return !match.available
-  return option.key === 'history_draft'
+  // history_draft：列表非空就放开（与 SeedAvailability 后端 count > 0 一致）
+  if (option.key === 'history_draft') {
+    return props.historyDrafts.length === 0
+  }
+  return false
 }
 
 function disabledReasonFor(option) {
@@ -60,8 +66,8 @@ function disabledReasonFor(option) {
       return '自动调优正在执行，请稍候'
     case 'auto_tuned_failed':
       return '上次自动调优失败，请重新触发'
-    case 'phase_6_not_implemented':
-      return '历史草稿入口将在后续版本开放'
+    case 'no_history_draft':
+      return '本知识库暂无历史草稿，05 步保存并入库后会出现在这里'
     case 'evaluation_failed':
       return '无法评估自动调优产物状态'
     default:
