@@ -4,7 +4,7 @@ import {
   buildErrorMessage,
   createRequestRuntime,
   resolveResponsePayload,
-} from './config'
+} from './config.js'
 
 export const apiRuntime = createRequestRuntime(import.meta.env)
 
