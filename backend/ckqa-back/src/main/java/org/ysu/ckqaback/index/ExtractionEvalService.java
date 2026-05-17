@@ -164,6 +164,29 @@ public class ExtractionEvalService {
         return reportAssembler.assemble(run);
     }
 
+    /**
+     * 按指定 evalRunId 取报告（供失败/取消终态下"查看上次评分结果"使用）。
+     * <p>校验该 evalRun 属于传入的 buildRunId、status=success；否则抛 4106。</p>
+     */
+    public ExtractionEvalReportResponse getReportByEvalRunId(Long buildRunId, Long evalRunId) {
+        PromptTuneExtractionEvalRuns run = evalRunsService.getRequiredById(evalRunId);
+        if (!run.getBuildRunId().equals(buildRunId)) {
+            throw new BusinessException(
+                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                    HttpStatus.NOT_FOUND,
+                    "评分任务不属于当前构建运行"
+            );
+        }
+        if (!"success".equals(run.getStatus())) {
+            throw new BusinessException(
+                    ApiResultCode.EXTRACTION_EVAL_NOT_STARTED,
+                    HttpStatus.NOT_FOUND,
+                    "目标评分任务未成功完成，当前状态：" + run.getStatus()
+            );
+        }
+        return reportAssembler.assemble(run);
+    }
+
     @Transactional
     public void cancel(Long buildRunId) {
         Optional<PromptTuneExtractionEvalRuns> active =
@@ -388,6 +411,18 @@ public class ExtractionEvalService {
                 && "scoring".equals(run.getProgressStage())
                 && !finished.isEmpty();
 
+        // 失败 / 取消 / 中止终态：附带最近一次 success 的 evalRunId，让前端给「查看上次评分结果」入口。
+        // 只在非 success 终态查 DB，减少正常路径的开销。当前 run 自身就是 success 时直接复用其 id。
+        Long lastSuccessfulEvalRunId = null;
+        if ("success".equals(run.getStatus())) {
+            lastSuccessfulEvalRunId = run.getId();
+        } else if (terminal) {
+            lastSuccessfulEvalRunId = evalRunsService
+                    .findLatestSuccessByBuildRunId(run.getBuildRunId())
+                    .map(PromptTuneExtractionEvalRuns::getId)
+                    .orElse(null);
+        }
+
         return ExtractionEvalStatusResponse.builder()
                 .evalRunId(run.getId())
                 .status(run.getStatus())
@@ -398,6 +433,7 @@ public class ExtractionEvalService {
                 .finishedAt(run.getFinishedAt())
                 .lastHeartbeatAt(run.getLastHeartbeatAt())
                 .recoverableScoringOnly(recoverableScoringOnly ? Boolean.TRUE : null)
+                .lastSuccessfulEvalRunId(lastSuccessfulEvalRunId)
                 .overall(overall)
                 .candidates(progresses)
                 .build();

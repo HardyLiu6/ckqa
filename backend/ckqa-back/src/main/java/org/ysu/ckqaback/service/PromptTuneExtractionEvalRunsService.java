@@ -25,6 +25,13 @@ public interface PromptTuneExtractionEvalRunsService extends IService<PromptTune
     Optional<PromptTuneExtractionEvalRuns> findActiveByBuildRunId(Long buildRunId);
 
     /**
+     * 取指定 buildRun 下最近一条 status=success 的评分记录。
+     * <p>用于失败/取消终态下让前端"查看上次评分结果"——即便当前最新 evalRun 已 failed/cancelled，
+     * 历史 success 报告仍可访问。无 success 记录时返回 empty。</p>
+     */
+    Optional<PromptTuneExtractionEvalRuns> findLatestSuccessByBuildRunId(Long buildRunId);
+
+    /**
      * 列出心跳过期的 running 任务（用于启动恢复时把卡死的运行任务标记 failed）。
      */
     List<PromptTuneExtractionEvalRuns> listStaleRunning(LocalDateTime heartbeatBefore);

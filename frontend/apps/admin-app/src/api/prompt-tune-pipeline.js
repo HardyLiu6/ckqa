@@ -88,10 +88,21 @@ export async function getExtractionEvalStatus(buildRunId, client = http) {
   ))
 }
 
-export async function getExtractionEvalReport(buildRunId, client = http) {
-  return unwrapApiResponse(await client.get(
-    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/extraction-eval/report`,
-  ))
+export async function getExtractionEvalReport(buildRunId, optionsOrClient = {}, client = http) {
+  // 第二参兼容旧签名：直接传 client（含 .get/.post 函数）也支持，
+  // 此时把 optionsOrClient 当成 client，options 空对象。新签名是 (buildRunId, { evalRunId? }, client?)。
+  let options = {}
+  let httpClient = client
+  if (optionsOrClient && typeof optionsOrClient === 'object'
+      && (typeof optionsOrClient.get === 'function' || typeof optionsOrClient.post === 'function')) {
+    httpClient = optionsOrClient
+  } else if (optionsOrClient && typeof optionsOrClient === 'object') {
+    options = optionsOrClient
+  }
+  const { evalRunId } = options
+  const url = `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/extraction-eval/report`
+        + (evalRunId ? `?evalRunId=${encodeURIComponent(evalRunId)}` : '')
+  return unwrapApiResponse(await httpClient.get(url))
 }
 
 export async function cancelExtractionEval(buildRunId, client = http) {

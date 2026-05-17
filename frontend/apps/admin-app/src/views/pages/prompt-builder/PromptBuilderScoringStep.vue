@@ -70,6 +70,12 @@ const failedCandidates = computed(() => report.value?.failedCandidates ?? [])
  */
 const recoverableScoringOnly = computed(() => status.value?.recoverableScoringOnly === true)
 
+/**
+ * 失败 / 取消 / 中止终态下的"上次成功 evalRunId"。
+ * 前端据此显示「查看上次评分结果」按钮，让用户不用重跑评估也能看到旧报告。
+ */
+const lastSuccessfulEvalRunId = computed(() => status.value?.lastSuccessfulEvalRunId ?? null)
+
 onMounted(initialize)
 
 onBeforeUnmount(() => {
@@ -200,6 +206,30 @@ async function loadReport() {
   }
 }
 
+/**
+ * 失败 / 取消 / 中止终态下，加载并展示历史 success evalRun 的报告。
+ *
+ * <p>不修改当前 evalRun 的状态，只在前端切到 done phase 渲染排行榜（让用户能查看 / 选定旧报告中
+ * 的最佳候选）。如果用户选定旧报告中的候选并进入 05 步保存草稿，FinalizePromptService 会校验
+ * 04 评分必须 success——本期通过 lastSuccessfulEvalRun 仍指向 success 来满足该校验。</p>
+ */
+async function handleViewLastReport() {
+  if (!lastSuccessfulEvalRunId.value) return
+  phase.value = 'loading'
+  try {
+    report.value = await getExtractionEvalReport(buildRunId.value, {
+      evalRunId: lastSuccessfulEvalRunId.value,
+    })
+    const top = reportCandidates.value.find((c) => c.rank === 1)
+    if (top && !selectedId.value) selectedId.value = top.candidateId
+    phase.value = 'done'
+    stopPolling()
+  } catch (err) {
+    phase.value = 'failed'
+    errorMessage.value = err?.message ?? '加载历史评分结果失败'
+  }
+}
+
 async function handleAbort() {
   try {
     await ElMessageBox.confirm('中止评分会丢失当前进度，确定吗？', '中止评分', { type: 'warning' })
@@ -295,7 +325,10 @@ async function handleRetryScoring() {
     <div v-else-if="phase === 'failed'" class="scoring-state-card scoring-state-card--error">
       <p>{{ errorMessage }}</p>
       <div class="scoring-state-card__actions">
-        <el-button v-if="recoverableScoringOnly" type="primary" @click="handleRetryScoring">仅重跑评分</el-button>
+        <el-button v-if="lastSuccessfulEvalRunId" type="primary" @click="handleViewLastReport">
+          查看上次评分结果
+        </el-button>
+        <el-button v-if="recoverableScoringOnly" :type="lastSuccessfulEvalRunId ? 'default' : 'primary'" @click="handleRetryScoring">仅重跑评分</el-button>
         <el-button @click="handleRetry">{{ recoverableScoringOnly ? '重新抽取并评分' : '重试' }}</el-button>
         <el-button @click="$emit('back')">返回 03 步</el-button>
       </div>

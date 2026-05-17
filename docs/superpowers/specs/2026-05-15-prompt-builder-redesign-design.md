@@ -425,6 +425,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
      - DTO `ExtractionEvalStatusResponse.recoverableScoringOnly:Boolean`：service 投影时若 `status=failed && progress_stage=scoring && finished_candidates 非空`，置 true。
      - 新端点 `POST /knowledge-base-build-runs/{id}/extraction-eval/retry-scoring`：service `retryScoring(buildRunId)` 复用最新 evalRun，重置为 running + progress_stage=scoring，dispatch 一个仅跑 scoring 的轻量任务（`ExtractionEvalWorker.runScoringOnly`），跳过抽取段。worker 启动前校验 `sharedExtractDir` 仍在，缺失则回退 markFailed 让 caller 走全量重跑。
      - 前端 `PromptBuilderScoringStep` 在 `recoverableScoringOnly=true` 时把单按钮「重试」拆成「仅重跑评分」+「重新抽取并评分」二选一；后端拒绝（产物已被清理 / 任务非 failed 等 4106 + 409）时降级走全量重跑。
+     - DTO `ExtractionEvalStatusResponse.lastSuccessfulEvalRunId:Long`：service 投影非 success 终态时附带最近一次 success 的 evalRunId；前端在失败 / 取消 / 中止终态显示「查看上次评分结果」按钮，调 `GET /extraction-eval/report?evalRunId=X` 拉历史 success 报告，让用户在不重跑的前提下查看 / 选定上次最佳候选。`getReportByEvalRunId` 校验 evalRun 属于该 buildRun 且 status=success，否则抛 4106。
    - **未覆盖的短板**：worker 在 `markFailed` 后没主动清理 `sharedExtractDir`，所以"产物未清理"是默认状态；下次 `runInternal` 启动时清理逻辑（`deleteIfExists(sharedExtractDir)`）只针对当前 runId，不影响旧 evalRun 的产物。如果手工清理 `${GRAPHRAG_ROOT}/results/extraction_eval/runs/` 或服务重启 + 启动恢复把任务标 failed 再清理，仅重跑会拒绝并降级。这条边界本期接受作为已知技术债。
 
 

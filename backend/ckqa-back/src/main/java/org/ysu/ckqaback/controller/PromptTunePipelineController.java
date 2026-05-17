@@ -203,11 +203,19 @@ public class PromptTunePipelineController {
 
     /**
      * 04 步：评分完成后获取排行榜与候选指标详情。
+     *
+     * <p>默认查最新一次任务；当传入 {@code evalRunId} 查询参数时，返回该指定任务的报告
+     * （前提是它属于该 build run 且 status=success），用于失败/取消终态下查看历史 success
+     * 报告（Phase 5.1 + 中止后回顾入口）。</p>
      */
     @GetMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/report")
     public ApiResponse<ExtractionEvalReportResponse> getExtractionEvalReport(
-            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
+            @org.springframework.web.bind.annotation.RequestParam(value = "evalRunId", required = false) Long evalRunId
     ) {
+        if (evalRunId != null && evalRunId > 0) {
+            return ApiResponseUtils.success(extractionEvalService.getReportByEvalRunId(buildRunId, evalRunId));
+        }
         return ApiResponseUtils.success(extractionEvalService.getReport(buildRunId));
     }
 

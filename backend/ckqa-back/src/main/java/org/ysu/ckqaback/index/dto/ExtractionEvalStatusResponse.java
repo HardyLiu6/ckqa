@@ -47,6 +47,14 @@ public class ExtractionEvalStatusResponse {
      */
     private final Boolean recoverableScoringOnly;
 
+    /**
+     * 当前 buildRun 下最近一条 status=success 的 evalRunId（与本次任务可能不同）。
+     * <p>用于失败 / 取消 / 中止终态下让前端入口"查看上次评分结果"——即便当前最新任务异常，
+     * 历史 success 报告仍可通过 GET /extraction-eval/report?evalRunId=X 访问。无历史 success
+     * 记录时为 null，前端不显示该入口。</p>
+     */
+    private final Long lastSuccessfulEvalRunId;
+
     private final Overall overall;
     private final List<CandidateProgress> candidates;
 

@@ -41,6 +41,16 @@ public class PromptTuneExtractionEvalRunsServiceImpl
     }
 
     @Override
+    public Optional<PromptTuneExtractionEvalRuns> findLatestSuccessByBuildRunId(Long buildRunId) {
+        return this.lambdaQuery()
+                .eq(PromptTuneExtractionEvalRuns::getBuildRunId, buildRunId)
+                .eq(PromptTuneExtractionEvalRuns::getStatus, "success")
+                .orderByDesc(PromptTuneExtractionEvalRuns::getId)
+                .last("LIMIT 1")
+                .oneOpt();
+    }
+
+    @Override
     public List<PromptTuneExtractionEvalRuns> listStaleRunning(LocalDateTime heartbeatBefore) {
         return this.lambdaQuery()
                 .eq(PromptTuneExtractionEvalRuns::getStatus, "running")
