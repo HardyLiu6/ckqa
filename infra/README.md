@@ -6,6 +6,7 @@
 - MinIO `RELEASE.2025-04-22T22-12-26Z`
 - One API `latest`
 - Neo4j `2025.12.1`
+- Redis `7.4-alpine`
 
 ## 数据保留策略
 
@@ -17,6 +18,7 @@
 | MinIO | `minio` | `/home/sunlight/minio/data` |
 | One API | `one-api` | `infra/one-api/one-api/data` |
 | Neo4j | `neo4j` | `infra/neo4j/neo4j/` |
+| Redis | `redis` | `infra/redis/data` |
 
 其中 One API 和 Neo4j 的旧数据目录已随 `graphrag_pipeline/infra` 整体移动到根 `infra/`；MySQL 和 MinIO 原本就在仓库外部，因此统一 compose 默认继续挂载原路径，避免首次切换时得到空库或空对象桶。
 
@@ -80,5 +82,6 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml config
 - One API: `127.0.0.1:3301`
 - Neo4j Browser: `127.0.0.1:17474`
 - Neo4j Bolt: `127.0.0.1:17687`
+- Redis: `127.0.0.1:16379`
 
 数据库初始化脚本位于仓库根目录 `sql/`。当 MySQL 数据目录为空并首次初始化时，compose 会把 `../sql` 只读挂载到 `/docker-entrypoint-initdb.d`，自动执行其中的 SQL 文件；已有数据库不会重复执行初始化脚本。

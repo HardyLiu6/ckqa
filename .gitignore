@@ -165,6 +165,7 @@ infra/mysql/
 infra/minio/
 infra/neo4j/neo4j/
 infra/one-api/one-api/
+infra/redis/data/
 !infra/docker-compose.yml
 !infra/.env.example
 !infra/README.md

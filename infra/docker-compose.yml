@@ -98,6 +98,33 @@ services:
     networks:
       - ckqa-infra
 
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "${CKQA_REDIS_PORT:-16379}:6379"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # 通过环境变量把密码透传给 entrypoint 命令；REDIS_PASSWORD 为空时容器匿名访问。
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    # 启用 AOF 持久化 + 可选密码（密码留空则匿名访问，仅本地开发使用）。
+    command:
+      - sh
+      - -c
+      - >-
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD";
+        else
+          exec redis-server --appendonly yes --appendfsync everysec;
+        fi
+    volumes:
+      - type: bind
+        source: ./redis/data
+        target: /data
+    networks:
+      - ckqa-infra
+
 networks:
   ckqa-infra:
     name: ckqa-infra

@@ -164,10 +164,25 @@ onMounted(() => {
         <span class="login-aside__node login-aside__node--3"></span>
         <span class="login-aside__node login-aside__node--4"></span>
         <span class="login-aside__node login-aside__node--5"></span>
-        <span class="login-aside__line login-aside__line--1"></span>
-        <span class="login-aside__line login-aside__line--2"></span>
-        <span class="login-aside__line login-aside__line--3"></span>
-        <span class="login-aside__line login-aside__line--4"></span>
+        <span class="login-aside__line login-aside__line--1">
+          <span class="login-aside__pulse"></span>
+        </span>
+        <span class="login-aside__line login-aside__line--2">
+          <span class="login-aside__pulse"></span>
+        </span>
+        <span class="login-aside__line login-aside__line--3">
+          <span class="login-aside__pulse"></span>
+        </span>
+        <span class="login-aside__line login-aside__line--4">
+          <span class="login-aside__pulse"></span>
+        </span>
+        <!-- 浅景深漂浮粒子 -->
+        <span class="login-aside__particle login-aside__particle--1"></span>
+        <span class="login-aside__particle login-aside__particle--2"></span>
+        <span class="login-aside__particle login-aside__particle--3"></span>
+        <span class="login-aside__particle login-aside__particle--4"></span>
+        <span class="login-aside__particle login-aside__particle--5"></span>
+        <span class="login-aside__particle login-aside__particle--6"></span>
       </div>
 
       <header class="login-aside__brand">
@@ -376,15 +391,162 @@ onMounted(() => {
   position: absolute;
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(147, 197, 253, 0.55), transparent);
+  overflow: visible;
 }
 .login-aside__line--1 { width: 44%; top: 15%; left: 12%; transform: rotate(8deg); }
 .login-aside__line--2 { width: 24%; top: 36%; left: 60%; transform: rotate(38deg); }
 .login-aside__line--3 { width: 32%; top: 73%; left: 24%; transform: rotate(-12deg); }
 .login-aside__line--4 { width: 18%; top: 60%; left: 70%; transform: rotate(-22deg); }
 
+/* 流光：脉冲点沿连线移动 */
+.login-aside__pulse {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(147, 197, 253, 0.95);
+  box-shadow: 0 0 14px rgba(147, 197, 253, 0.95);
+  transform: translate(-4px, -4px);
+  animation: login-pulse-flow 3.6s linear infinite;
+}
+.login-aside__line--1 .login-aside__pulse { animation-delay: 0s; }
+.login-aside__line--2 .login-aside__pulse {
+  animation-delay: 1.0s;
+  animation-duration: 4.2s;
+  background: rgba(216, 180, 254, 0.95);
+  box-shadow: 0 0 14px rgba(192, 132, 252, 0.95);
+}
+.login-aside__line--3 .login-aside__pulse {
+  animation-delay: 1.8s;
+  animation-duration: 4.6s;
+}
+.login-aside__line--4 .login-aside__pulse {
+  animation-delay: 2.4s;
+  animation-duration: 3.2s;
+  background: rgba(244, 114, 182, 0.92);
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.95);
+}
+
+/* 浅景深漂浮粒子（背景气氛） */
+.login-aside__particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  animation: login-particle-drift 14s ease-in-out infinite;
+}
+.login-aside__particle--1 {
+  width: 4px; height: 4px;
+  top: 40%; left: 18%;
+  background: rgba(147, 197, 253, 0.7);
+  box-shadow: 0 0 10px rgba(147, 197, 253, 0.6);
+  animation-delay: 0s;
+}
+.login-aside__particle--2 {
+  width: 3px; height: 3px;
+  top: 22%; left: 42%;
+  background: rgba(216, 180, 254, 0.7);
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
+  animation-delay: 2s;
+  animation-duration: 16s;
+}
+.login-aside__particle--3 {
+  width: 5px; height: 5px;
+  top: 78%; left: 38%;
+  background: rgba(244, 114, 182, 0.6);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.55);
+  animation-delay: 4s;
+  animation-duration: 18s;
+}
+.login-aside__particle--4 {
+  width: 2px; height: 2px;
+  top: 50%; left: 84%;
+  background: rgba(147, 197, 253, 0.85);
+  box-shadow: 0 0 6px rgba(147, 197, 253, 0.7);
+  animation-delay: 6s;
+  animation-duration: 12s;
+}
+.login-aside__particle--5 {
+  width: 4px; height: 4px;
+  top: 88%; left: 18%;
+  background: rgba(216, 180, 254, 0.65);
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.55);
+  animation-delay: 8s;
+  animation-duration: 20s;
+}
+.login-aside__particle--6 {
+  width: 3px; height: 3px;
+  top: 12%; left: 88%;
+  background: rgba(165, 180, 252, 0.7);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+  animation-delay: 10s;
+  animation-duration: 15s;
+}
+
 @keyframes login-pulse {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.18); }
+}
+
+/* 流光沿线条移动并淡入淡出 */
+@keyframes login-pulse-flow {
+  0% { left: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* 漂浮粒子：先升起、左右漂移、再消散 */
+@keyframes login-particle-drift {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate(40px, -60px) scale(1);
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-30px, -120px) scale(0.4);
+    opacity: 0;
+  }
+}
+
+/* 整体场景缓慢漂移：极光层呼吸 */
+.login-aside::before {
+  content: '';
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(circle at 70% 30%, rgba(56, 189, 248, 0.18) 0%, transparent 38%),
+    radial-gradient(circle at 30% 70%, rgba(192, 132, 252, 0.16) 0%, transparent 42%);
+  pointer-events: none;
+  z-index: 0;
+  animation: login-aurora-drift 18s ease-in-out infinite;
+}
+
+@keyframes login-aurora-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(2%, -3%) scale(1.06); }
+  66% { transform: translate(-2%, 2%) scale(1.03); }
+}
+
+/* 用户开启减少动画偏好时全部停下 */
+@media (prefers-reduced-motion: reduce) {
+  .login-aside__node,
+  .login-aside__pulse,
+  .login-aside__particle,
+  .login-aside::before {
+    animation: none !important;
+  }
 }
 
 /* 左侧 brand */
