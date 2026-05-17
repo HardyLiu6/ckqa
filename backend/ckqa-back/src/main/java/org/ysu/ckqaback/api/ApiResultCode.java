@@ -218,6 +218,16 @@ public enum ApiResultCode {
     INVALID_EVAL_CANDIDATE_SELECTION(4108, "选定候选 ID 不在当前构建的候选清单中"),
 
     /**
+     * 05 步 finalize 时 04 评分尚未成功（pending / running / cancelled / failed）。
+     */
+    EXTRACTION_EVAL_NOT_SUCCESS(4110, "评分尚未成功，无法保存为草稿"),
+
+    /**
+     * 05 步 finalize 时传入的 candidateId 不在评分报告 candidates 中。
+     */
+    INVALID_FINALIZE_CANDIDATE(4111, "选定候选 ID 不在评分报告的候选清单中"),
+
+    /**
      * 04 步评分执行失败（脚本超时、异常退出或产物缺失）。
      */
     EXTRACTION_EVAL_FAILED(5008, "评分任务执行失败"),
