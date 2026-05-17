@@ -535,12 +535,14 @@ textarea.text-input {
 
 .console-layout {
   display: grid;
-  min-height: 100vh;
+  height: 100vh;
   grid-template-columns: 280px minmax(0, 1fr);
   grid-template-rows: 72px minmax(0, 1fr);
   background:
     linear-gradient(120deg, color-mix(in srgb, var(--ckqa-accent) 10%, transparent), transparent 34%),
     var(--ckqa-bg);
+  // 让侧栏和 main 都不溢出 viewport，main 内部 overflow:auto 自带滚动条
+  overflow: hidden;
   // 侧边导航宽度过渡（nav-collapse）
   transition: grid-template-columns var(--ckqa-duration-normal, 250ms) var(--ckqa-ease-standard, ease);
 }

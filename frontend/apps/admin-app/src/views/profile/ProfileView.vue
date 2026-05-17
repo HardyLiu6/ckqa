@@ -164,10 +164,15 @@ async function handleChangePassword() {
 
 <template>
   <div class="profile-view">
-    <p class="profile-view__lead">
-      <UserCog :size="14" aria-hidden="true" />
-      管理你的账号资料、登录密码与权限明细。头像和显示名会同步在顶部菜单展示。
-    </p>
+    <header class="profile-view__hero">
+      <h2 class="profile-view__hero-title">
+        <UserCog :size="24" aria-hidden="true" />
+        个人中心
+      </h2>
+      <p class="profile-view__lead">
+        管理你的账号资料、登录密码与权限明细。头像和显示名会同步在顶部菜单展示。
+      </p>
+    </header>
 
     <!-- 卡 1：基本信息 -->
     <section class="profile-card">
@@ -355,13 +360,24 @@ async function handleChangePassword() {
   width: 100%;
 }
 
-.profile-view__lead {
+.profile-view__hero {
+  display: grid;
+  gap: 4px;
+}
+.profile-view__hero-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ckqa-text);
+}
+.profile-view__lead {
   margin: 0;
   color: var(--ckqa-text-muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .profile-card {
