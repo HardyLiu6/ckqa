@@ -400,6 +400,8 @@ CREATE TABLE `qa_sessions` (
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
   `course_membership_id` bigint NULL DEFAULT NULL COMMENT '课程成员ID',
   `knowledge_base_id` bigint NULL DEFAULT NULL COMMENT '知识库ID',
+  `index_run_id` bigint NULL DEFAULT NULL COMMENT '本会话固化的索引运行ID',
+  `index_locked_at` timestamp NULL DEFAULT NULL COMMENT '索引版本固化时间',
   `session_type` enum('formal','smoke') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'formal' COMMENT '会话类型：formal正式问答，smoke构建冒烟验证',
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '会话标题',
   `status` enum('active','archived','deleted') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '会话状态',
@@ -409,10 +411,12 @@ CREATE TABLE `qa_sessions` (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_session_code`(`session_code` ASC) USING BTREE,
   INDEX `idx_sessions_user_created`(`user_id` ASC, `created_at` ASC) USING BTREE,
+  INDEX `idx_sessions_index_run`(`index_run_id` ASC) USING BTREE,
   CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_sessions_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_sessions_membership` FOREIGN KEY (`course_membership_id`) REFERENCES `course_memberships` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
-  CONSTRAINT `fk_sessions_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
+  CONSTRAINT `fk_sessions_kb` FOREIGN KEY (`knowledge_base_id`) REFERENCES `knowledge_bases` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
+  CONSTRAINT `fk_sessions_index_run` FOREIGN KEY (`index_run_id`) REFERENCES `index_runs` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答会话表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -467,6 +471,15 @@ ALTER TABLE `qa_retrieval_logs`
   ADD COLUMN `started_at` timestamp NULL DEFAULT NULL COMMENT '开始时间' AFTER `latest_logs`,
   ADD COLUMN `last_heartbeat_at` timestamp NULL DEFAULT NULL COMMENT '最近心跳时间' AFTER `started_at`,
   ADD COLUMN `finished_at` timestamp NULL DEFAULT NULL COMMENT '完成时间' AFTER `last_heartbeat_at`,
+  ADD COLUMN `original_query_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '学生原始问题' AFTER `query_text`,
+  ADD COLUMN `retrieval_query_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '实际发给GraphRAG的短检索问题' AFTER `original_query_text`,
+  ADD COLUMN `context_snapshot_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '本轮上下文快照' AFTER `retrieval_query_text`,
+  ADD COLUMN `context_strategy` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '上下文策略' AFTER `context_snapshot_text`,
+  ADD COLUMN `context_message_range` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '上下文消息范围' AFTER `context_strategy`,
+  ADD COLUMN `context_char_count` int NULL DEFAULT NULL COMMENT '上下文字符数估算' AFTER `context_message_range`,
+  ADD COLUMN `rewrite_applied` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否应用追问改写' AFTER `context_char_count`,
+  ADD COLUMN `rewrite_reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '追问改写原因' AFTER `rewrite_applied`,
+  ADD COLUMN `rewrite_source_message_range` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '追问改写来源消息范围' AFTER `rewrite_reason`,
   ADD INDEX `idx_retrieval_logs_session_created` (`session_id`, `created_at`),
   ADD INDEX `idx_retrieval_logs_user_message_seq` (`user_message_id`, `task_seq`),
   ADD INDEX `idx_retrieval_logs_task_status_heartbeat` (`task_status`, `last_heartbeat_at`),

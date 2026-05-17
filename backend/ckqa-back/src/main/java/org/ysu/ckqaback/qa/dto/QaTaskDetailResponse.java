@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.qa.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
@@ -28,6 +29,9 @@ public class QaTaskDetailResponse {
     private final Long recommendedPollingIntervalSeconds;
     private final Long staleTimeoutSeconds;
     private final String timeoutMessage;
+    private final Boolean contextApplied;
+    private final String contextStrategy;
+    private final ContextSizeEstimateResponse contextSizeEstimate;
 
     private QaTaskDetailResponse(
             Long taskId,
@@ -46,7 +50,10 @@ public class QaTaskDetailResponse {
             String errorMessage,
             Long recommendedPollingIntervalSeconds,
             Long staleTimeoutSeconds,
-            String timeoutMessage
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate
     ) {
         this.taskId = taskId;
         this.userMessageId = userMessageId;
@@ -65,6 +72,14 @@ public class QaTaskDetailResponse {
         this.recommendedPollingIntervalSeconds = recommendedPollingIntervalSeconds;
         this.staleTimeoutSeconds = staleTimeoutSeconds;
         this.timeoutMessage = timeoutMessage;
+        this.contextApplied = contextApplied;
+        this.contextStrategy = contextStrategy;
+        this.contextSizeEstimate = contextSizeEstimate;
+    }
+
+    @JsonIgnore
+    public String getQueryText() {
+        return queryText;
     }
 
     public static QaTaskDetailResponse of(
@@ -86,6 +101,33 @@ public class QaTaskDetailResponse {
             Long staleTimeoutSeconds,
             String timeoutMessage
     ) {
+        return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, queryText,
+                latestLogs, startedAt, lastHeartbeatAt, finishedAt, assistantMessage, errorMessage,
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none", ContextSizeEstimateResponse.of(0));
+    }
+
+    public static QaTaskDetailResponse of(
+            Long taskId,
+            Long userMessageId,
+            Long assistantMessageId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            String mode,
+            String queryText,
+            List<String> latestLogs,
+            LocalDateTime startedAt,
+            LocalDateTime lastHeartbeatAt,
+            LocalDateTime finishedAt,
+            QaMessageResponse assistantMessage,
+            String errorMessage,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate
+    ) {
         return new QaTaskDetailResponse(
                 taskId,
                 userMessageId,
@@ -103,7 +145,10 @@ public class QaTaskDetailResponse {
                 errorMessage,
                 recommendedPollingIntervalSeconds,
                 staleTimeoutSeconds,
-                timeoutMessage
+                timeoutMessage,
+                contextApplied,
+                contextStrategy,
+                contextSizeEstimate
         );
     }
 }

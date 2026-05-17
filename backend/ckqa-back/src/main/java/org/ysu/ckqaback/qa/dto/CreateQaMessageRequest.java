@@ -2,6 +2,7 @@ package org.ysu.ckqaback.qa.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,5 +22,6 @@ public class CreateQaMessageRequest {
     private String mode = "local";
 
     @NotBlank(message = "content不能为空")
+    @Size(max = 2000, message = "content长度不能超过2000")
     private String content;
 }

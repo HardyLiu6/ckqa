@@ -20,6 +20,9 @@ public class QaTaskSubmissionResponse {
     private final Long recommendedPollingIntervalSeconds;
     private final Long staleTimeoutSeconds;
     private final String timeoutMessage;
+    private final Boolean contextApplied;
+    private final String contextStrategy;
+    private final ContextSizeEstimateResponse contextSizeEstimate;
 
     private QaTaskSubmissionResponse(
             QaMessageResponse userMessage,
@@ -31,7 +34,10 @@ public class QaTaskSubmissionResponse {
             String mode,
             Long recommendedPollingIntervalSeconds,
             Long staleTimeoutSeconds,
-            String timeoutMessage
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate
     ) {
         this.userMessage = userMessage;
         this.taskId = taskId;
@@ -43,6 +49,9 @@ public class QaTaskSubmissionResponse {
         this.recommendedPollingIntervalSeconds = recommendedPollingIntervalSeconds;
         this.staleTimeoutSeconds = staleTimeoutSeconds;
         this.timeoutMessage = timeoutMessage;
+        this.contextApplied = contextApplied;
+        this.contextStrategy = contextStrategy;
+        this.contextSizeEstimate = contextSizeEstimate;
     }
 
     public static QaTaskSubmissionResponse of(
@@ -57,6 +66,25 @@ public class QaTaskSubmissionResponse {
             Long staleTimeoutSeconds,
             String timeoutMessage
     ) {
+        return of(userMessage, taskId, taskStatus, progressStage, retrievalStatus, createdAt, mode,
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none", ContextSizeEstimateResponse.of(0));
+    }
+
+    public static QaTaskSubmissionResponse of(
+            QaMessageResponse userMessage,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            LocalDateTime createdAt,
+            String mode,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate
+    ) {
         return new QaTaskSubmissionResponse(
                 userMessage,
                 taskId,
@@ -67,7 +95,10 @@ public class QaTaskSubmissionResponse {
                 mode,
                 recommendedPollingIntervalSeconds,
                 staleTimeoutSeconds,
-                timeoutMessage
+                timeoutMessage,
+                contextApplied,
+                contextStrategy,
+                contextSizeEstimate
         );
     }
 }

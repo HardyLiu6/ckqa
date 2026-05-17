@@ -17,6 +17,15 @@
         <result column="index_run_id" property="indexRunId" />
         <result column="query_mode" property="queryMode" />
         <result column="query_text" property="queryText" />
+        <result column="original_query_text" property="originalQueryText" />
+        <result column="retrieval_query_text" property="retrievalQueryText" />
+        <result column="context_snapshot_text" property="contextSnapshotText" />
+        <result column="context_strategy" property="contextStrategy" />
+        <result column="context_message_range" property="contextMessageRange" />
+        <result column="context_char_count" property="contextCharCount" />
+        <result column="rewrite_applied" property="rewriteApplied" />
+        <result column="rewrite_reason" property="rewriteReason" />
+        <result column="rewrite_source_message_range" property="rewriteSourceMessageRange" />
         <result column="retrieval_status" property="retrievalStatus" />
         <result column="error_message" property="errorMessage" />
         <result column="started_at" property="startedAt" />
@@ -28,8 +37,10 @@
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
         id, session_id, user_message_id, assistant_message_id, task_seq, task_status, progress_stage,
-        python_task_id, latest_logs, course_id, index_run_id, query_mode, query_text, retrieval_status,
-        error_message, started_at, last_heartbeat_at, finished_at, created_at
+        python_task_id, latest_logs, course_id, index_run_id, query_mode, query_text, original_query_text,
+        retrieval_query_text, context_snapshot_text, context_strategy, context_message_range,
+        context_char_count, rewrite_applied, rewrite_reason, rewrite_source_message_range,
+        retrieval_status, error_message, started_at, last_heartbeat_at, finished_at, created_at
     </sql>
 
 </mapper>
