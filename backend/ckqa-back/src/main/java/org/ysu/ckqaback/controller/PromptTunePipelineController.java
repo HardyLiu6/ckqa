@@ -20,6 +20,7 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.AiSuggestionService;
 import org.ysu.ckqaback.index.AuditSampleService;
 import org.ysu.ckqaback.index.CandidateService;
+import org.ysu.ckqaback.index.ExtractionEvalService;
 import org.ysu.ckqaback.index.SeedAvailabilityService;
 import org.ysu.ckqaback.index.dto.AiSuggestionResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleResponse;
@@ -28,6 +29,7 @@ import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.CandidateResponse;
 import org.ysu.ckqaback.index.dto.ExtractionEvalRequest;
 import org.ysu.ckqaback.index.dto.ExtractionEvalReportResponse;
+import org.ysu.ckqaback.index.dto.ExtractionEvalRunStartedResponse;
 import org.ysu.ckqaback.index.dto.ExtractionEvalStatusResponse;
 import org.ysu.ckqaback.index.dto.FinalizePromptRequest;
 import org.ysu.ckqaback.index.dto.PipelineStepResponse;
@@ -58,6 +60,7 @@ public class PromptTunePipelineController {
     private final AiSuggestionService aiSuggestionService;
     private final CandidateService candidateService;
     private final SeedAvailabilityService seedAvailabilityService;
+    private final ExtractionEvalService extractionEvalService;
 
     // ------------------------------------------------------------
     // 02 步：构建准备材料
@@ -169,26 +172,53 @@ public class PromptTunePipelineController {
     // 04 步：抽取评分
     // ------------------------------------------------------------
 
+    /**
+     * 04 步：触发候选 prompt 评分。
+     *
+     * <p>异步：立即返回 evalRunId + status=pending（或复用已有 active 任务），前端轮询
+     * status 接口跟踪进度。门控：02 ≥1 completed + 03 候选已生成 + selectedCandidates ⊆ 已生成。</p>
+     */
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval")
-    public ApiResponse<PipelineStepResponse> startExtractionEval(
-            @PathVariable @Positive(message = "id必须大于0") Long id,
+    public ApiResponse<ExtractionEvalRunStartedResponse> startExtractionEval(
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
             @Valid @RequestBody ExtractionEvalRequest request
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(extractionEvalService.trigger(buildRunId, request));
     }
 
+    /**
+     * 04 步：查询评分进度。前端按 recommendedPollingIntervalMillis 轮询；
+     * 任务终态时该字段为 null，前端停止轮询。
+     */
     @GetMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/status")
     public ApiResponse<ExtractionEvalStatusResponse> getExtractionEvalStatus(
-            @PathVariable @Positive(message = "id必须大于0") Long id
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(extractionEvalService.getStatus(buildRunId));
     }
 
+    /**
+     * 04 步：评分完成后获取排行榜与候选指标详情。
+     */
     @GetMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/report")
     public ApiResponse<ExtractionEvalReportResponse> getExtractionEvalReport(
-            @PathVariable @Positive(message = "id必须大于0") Long id
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(extractionEvalService.getReport(buildRunId));
+    }
+
+    /**
+     * 04 步：中止评分。
+     *
+     * <p>软取消：把 active 任务状态切到 cancelling，worker 在下一个候选切换前自感知后落
+     * 终态 cancelled。无 active 任务时幂等返回 200。</p>
+     */
+    @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/extraction-eval/cancel")
+    public ApiResponse<Void> cancelExtractionEval(
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId
+    ) {
+        extractionEvalService.cancel(buildRunId);
+        return ApiResponseUtils.success(null);
     }
 
     // ------------------------------------------------------------
