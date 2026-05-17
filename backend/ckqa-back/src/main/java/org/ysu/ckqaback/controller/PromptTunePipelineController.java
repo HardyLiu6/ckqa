@@ -21,6 +21,8 @@ import org.ysu.ckqaback.index.AiSuggestionService;
 import org.ysu.ckqaback.index.AuditSampleService;
 import org.ysu.ckqaback.index.CandidateService;
 import org.ysu.ckqaback.index.ExtractionEvalService;
+import org.ysu.ckqaback.index.FinalizePromptService;
+import org.ysu.ckqaback.index.PromptDraftListService;
 import org.ysu.ckqaback.index.SeedAvailabilityService;
 import org.ysu.ckqaback.index.dto.AiSuggestionResponse;
 import org.ysu.ckqaback.index.dto.AuditSampleResponse;
@@ -61,6 +63,8 @@ public class PromptTunePipelineController {
     private final CandidateService candidateService;
     private final SeedAvailabilityService seedAvailabilityService;
     private final ExtractionEvalService extractionEvalService;
+    private final FinalizePromptService finalizePromptService;
+    private final PromptDraftListService promptDraftListService;
 
     // ------------------------------------------------------------
     // 02 步：构建准备材料
@@ -227,17 +231,17 @@ public class PromptTunePipelineController {
 
     @PostMapping(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/{id}/finalize")
     public ApiResponse<BuildRunDetailResponse> finalizePrompt(
-            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @PathVariable("id") @Positive(message = "id必须大于0") Long buildRunId,
             @Valid @RequestBody FinalizePromptRequest request
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(finalizePromptService.finalizePrompt(buildRunId, request));
     }
 
     @GetMapping(ApiPaths.KNOWLEDGE_BASES + "/{kbId}/prompt-drafts")
     public ApiResponse<List<PromptDraftResponse>> listPromptDrafts(
-            @PathVariable @Positive(message = "kbId必须大于0") Long kbId
+            @PathVariable("kbId") @Positive(message = "kbId必须大于0") Long knowledgeBaseId
     ) {
-        throw notImplemented();
+        return ApiResponseUtils.success(promptDraftListService.list(knowledgeBaseId));
     }
 
     // ------------------------------------------------------------
