@@ -261,12 +261,14 @@ async function handleSave(payload) {
   saving.value = true
   saveError.value = ''
   try {
+    // payload 形态来自 buildSaveDraftPayload：
+    //   { seed, saveMode, selectedCandidate, metadata: { draftName, draftDescription, ... } }
     const saveAsDraft = payload.saveMode === 'build_run_with_history'
     await finalizePrompt(buildRunId.value, {
       candidateId: payload.selectedCandidate ?? selectedCandidateId.value,
       saveAsDraft,
-      draftName: payload.name ?? saveDraftName.value,
-      draftDescription: payload.description ?? saveDraftDescription.value,
+      draftName: payload.metadata?.draftName ?? saveDraftName.value,
+      draftDescription: payload.metadata?.draftDescription ?? saveDraftDescription.value,
     })
     // finalize 成功后刷新历史草稿，保证 01 步下次进入时数量准确
     if (saveAsDraft) {
