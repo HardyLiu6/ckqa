@@ -13,7 +13,7 @@ import {
 import { apiSampleToLocal, localSampleToUpdatePayload } from './prepare-step-api.js'
 import { generateEntityId, generateRelationId } from './entity-id-generator.js'
 
-defineEmits(['back'])
+const emit = defineEmits(['back', 'next'])
 
 const route = useRoute()
 
@@ -335,13 +335,7 @@ async function handleFinishSample(sampleId) {
   sample.status = 'done'
   try {
     await persistFields(sample, { fields: ['status'] })
-    const nextSample = samples.value.find((s) => s.status === 'not_started')
-    if (nextSample) {
-      activeSampleId.value = nextSample.id
-      ElMessage.success('已完成')
-    } else {
-      ElMessage.success('已完成 · 所有样本已处理完毕，可前往下一步')
-    }
+    advanceToNextSampleOrFinish('已完成')
   } catch {
     sample.status = previousStatus
   }
@@ -354,15 +348,39 @@ async function handleSkipSample(sampleId) {
   sample.status = 'skipped'
   try {
     await persistFields(sample, { fields: ['status'] })
-    const nextSample = samples.value.find((s) => s.status === 'not_started')
-    if (nextSample) {
-      activeSampleId.value = nextSample.id
-      ElMessage.info('已跳过')
-    } else {
-      ElMessage.success('已跳过 · 所有样本已处理完毕，可前往下一步')
-    }
+    advanceToNextSampleOrFinish('已跳过', { neutral: true })
   } catch {
     sample.status = previousStatus
+  }
+}
+
+/**
+ * 完成 / 跳过当前样本后的统一处理：
+ * - 优先切到下一条「未开始 / 进行中」的样本，让用户继续标注
+ * - 当所有样本都已处于终态（done / skipped）时，提示"已完成"并 emit('next') 让父组件切到 03 步
+ *
+ * @param {string} primaryAction - "已完成" 或 "已跳过"
+ * @param {{ neutral?: boolean }} options - neutral=true 时单条切换用 info 而非 success
+ */
+function advanceToNextSampleOrFinish(primaryAction, { neutral = false } = {}) {
+  const pending = samples.value.find(
+    (s) => s.id !== activeSampleId.value && (s.status === 'not_started' || s.status === 'in_progress'),
+  )
+  if (pending) {
+    activeSampleId.value = pending.id
+    if (neutral) ElMessage.info(primaryAction)
+    else ElMessage.success(primaryAction)
+    return
+  }
+  // 全部处于终态（done / skipped）：通知父组件切到下一步
+  const allFinalized = samples.value.every((s) => s.status === 'done' || s.status === 'skipped')
+  if (allFinalized) {
+    ElMessage.success(`${primaryAction} · 所有样本已处理完毕，正在前往下一步`)
+    emit('next')
+  } else {
+    // 兜底：理论上不会进入这里，但若存在未识别状态，至少给出非误导文案
+    if (neutral) ElMessage.info(primaryAction)
+    else ElMessage.success(primaryAction)
   }
 }
 

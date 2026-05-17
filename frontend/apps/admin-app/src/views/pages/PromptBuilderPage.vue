@@ -349,6 +349,7 @@ function returnToWizard() {
         <PromptBuilderPrepareStep
           v-else-if="activeStepKey === 'prepare'"
           @back="gotoPrev"
+          @next="gotoNext"
         />
         <PromptBuilderCandidatesStep
           v-else-if="activeStepKey === 'candidates'"
