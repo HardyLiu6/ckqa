@@ -526,10 +526,11 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
 - **Phase 5.2（✅）：03 步候选 seed-aware 过滤（spec § 风险 #12）**
   - 新增 `CandidateSeedFilter.allowedCandidatesForSeed(seed)`，按 seed 返回允许出现的候选白名单（system_default / history_draft 排除 auto_tuned；graphrag_tuned 排除 default；null 不过滤兼容 Phase 4）。
   - `CandidateService.generate` / `list` 在 manifestReader 读出 4 候选后按 seed 过滤透出 3 个；`ExtractionEvalService.trigger` 校验 `selectedCandidates` 时同步收紧用 seed-aware 白名单（防绕过前端门控提交"被冗余基线规则排除"的 candidateId，返回 4108）。
+  - `ExtractionEvalReportAssembler.parseCandidates` 投影时也按 evalRun.seed 过滤——历史 evalRun（Phase 5 时期生成）的 reportJson 里仍有 4 条候选（含 fallback_default_copy 的 auto_tuned 与 default 同分对照），投影时按 seed 回放过滤，让历史报告也只显示 3 候选。`evalRun.seed=null` 的 Phase 4 兼容老记录不过滤，仍透传全部。
   - **Python 脚本不动**：`generate_candidate_prompts.py` 仍生成 4 个 prompt 文件（避免改 Python 副作用扩散），Java 层做白名单是单点真相。
   - 前端 `PromptBuilderCandidatesStep` 候选网格 `[data-count="3"]` 强制 3 列等宽（响应式 1100px → 2 列 / 720px → 1 列），从 4 列回到一排显示；04 步 `CandidateMatrixRow` 是逐行渲染无需改动。
   - 收益：评分时长 30 min → ~22 min（-25% LLM 调用），UX 排行榜全是有意义对比组（不再有 fallback_default_copy 与 default 同分的伪对照）。
-  - 测试：后端 442 PASS / 1 skipped（修订 ExtractionEvalServiceTest 1 条用 auto_tuned 替代 default 适配新 seed-aware 校验）；前端单测 346 PASS / 构建 SUCCESS。
+  - 测试：后端 442 PASS / 1 skipped（修订 ExtractionEvalServiceTest 1 条用 auto_tuned 替代 default 适配新 seed-aware 校验；ExtractionEvalReportAssemblerTest 11 条 evalRun.seed=null 不变兼容）；前端单测 346 PASS / 构建 SUCCESS。
 
 - **Phase 6（✅）：05 步历史草稿入库 + 01 步种子打通 + PromptDisplay raw prismjs 高亮**
   - 实现 `POST /knowledge-base-build-runs/{id}/finalize` 端点：从 04 评分 run 取选定候选 prompt + composite_score；FinalizePromptService **直接写** `buildMetadata.customPromptDraft`（不复用 saveCustomPromptDraft），落库**完整 finalize 快照**：`seed` / `selectedCandidateId` / `compositeScore`（4 位小数）/ `sourceEvalRunId` / `finalizedAt`（ISO_OFFSET_DATE_TIME）/ `prompts.extract_graph.content`；当 `saveAsDraft=true` 时同事务插一条 `prompt_drafts` 行（保存范围两模式）。事务语义闭环：`promptDraftsService.save` 返 false 抛 5000 让 customPromptDraft 一并回滚（不依赖 mybatis-plus 静默 false）。

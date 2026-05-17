@@ -50,7 +50,7 @@ public class ExtractionEvalReportAssembler {
                 .evalRunId(run.getId())
                 .generatedAt(run.getFinishedAt())
                 .seed(run.getSeed())
-                .candidates(parseCandidates(run.getReportJson()))
+                .candidates(parseCandidates(run.getReportJson(), run.getSeed()))
                 .failedCandidates(parseFailedCandidates(run.getCandidateFailures()))
                 .build();
     }
@@ -83,7 +83,7 @@ public class ExtractionEvalReportAssembler {
         }
     }
 
-    private List<CandidateReport> parseCandidates(String reportJson) {
+    private List<CandidateReport> parseCandidates(String reportJson, String seed) {
         if (reportJson == null || reportJson.isBlank()) return List.of();
         Map<String, Object> root;
         try {
@@ -94,6 +94,12 @@ public class ExtractionEvalReportAssembler {
         }
         Object node = root.get("all_candidates_ranked");
         if (!(node instanceof List<?> rawList)) return List.of();
+
+        // Phase 5.2：按 seed 过滤冗余基线候选——历史 evalRun（Phase 5 时期生成）的 reportJson 里
+        // 仍有 4 个候选（含 fallback_default_copy 的 auto_tuned 与 default 同分对照），
+        // 投影时按当前 evalRun.seed 过滤回放，让历史报告也只显示 3 候选；
+        // seed=null 的老 evalRun（Phase 4 兼容）不过滤，全 4 候选透传。
+        java.util.Set<String> seedAllowed = CandidateSeedFilter.allowedCandidatesForSeed(seed);
 
         List<CandidateReport> result = new ArrayList<>();
         for (Object item : rawList) {
@@ -106,6 +112,9 @@ public class ExtractionEvalReportAssembler {
                     log.warn("评分报告含未知候选 {}，已跳过", candidateId);
                 }
                 continue;
+            }
+            if (!seedAllowed.contains(candidateId)) {
+                continue;  // 被 seed-aware 规则排除（如 system_default 时的 auto_tuned）
             }
             result.add(buildCandidateReport(candidateId, entry));
         }
