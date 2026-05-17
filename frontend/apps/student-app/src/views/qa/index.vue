@@ -28,6 +28,7 @@ import {
   getModeOption,
   resolveQaMode,
 } from './qa-mode-model'
+import QaMarkdownContent from './QaMarkdownContent.vue'
 import {
   isTerminalTaskStatus,
   hasActiveIndexChanged,
@@ -571,7 +572,7 @@ function taskStatusText(task) {
                 {{ activeModeOption.shortLabel }}
               </ModuleTag>
             </div>
-            <div class="msg-text ai-text">{{ msg.content }}</div>
+            <QaMarkdownContent :content="msg.content" />
             <div class="msg-meta">{{ formatMessageTime(msg.createdAt) }}</div>
           </GlassCard>
         </div>
@@ -871,10 +872,6 @@ function taskStatusText(task) {
   font-size: 14px;
   line-height: 1.7;
   white-space: pre-wrap;
-}
-
-.ai-text {
-  color: #0f172a;
 }
 
 .msg-meta {
