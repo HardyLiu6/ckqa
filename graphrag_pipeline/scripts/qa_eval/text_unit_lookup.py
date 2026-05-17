@@ -57,7 +57,7 @@ _DATA_SEGMENT_RE = re.compile(
     r"(Sources|Entities|Relationships|Reports)\s*\(([^)]*)\)",
     re.IGNORECASE,
 )
-_DATA_NUMBER_RE = re.compile(r"\d+")
+_DATA_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _TEXT_UNIT_TOKEN_RE = re.compile(r"[0-9a-fA-F]{8,}")
 
 
@@ -100,7 +100,9 @@ def extract_data_citations_from_answer(answer: str) -> dict[str, list[str]]:
         for raw_kind, raw_ids in _DATA_SEGMENT_RE.findall(block):
             kind = raw_kind.lower()
             bucket = citations.setdefault(kind, [])
-            for token in _DATA_NUMBER_RE.findall(raw_ids):
+            for token in _DATA_TOKEN_RE.findall(raw_ids):
+                if not token.isdigit():
+                    continue
                 if token not in bucket:
                     bucket.append(token)
     return citations

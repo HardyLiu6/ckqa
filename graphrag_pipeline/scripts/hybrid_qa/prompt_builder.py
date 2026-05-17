@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -37,6 +38,8 @@ def build_hybrid_v0_basic_injection_prompt(
         f"{question}\n\n"
         "回答要求：如果使用 LOCAL_BM25_EVIDENCE，请在答案末尾保留 "
         "[Data: Hybrid(ref1, ref2)] 形式的引用；也可以保留 GraphRAG 原始 Data 引用。"
+        "Hybrid(...) 中的 ref 必须逐字复制上方 evidence label 或 Text Unit Ref 行里的 12 位 Text Unit Ref；"
+        "禁止使用页码、章节号、列表编号、+more、LOCAL_BM25_EVIDENCE 或其他说明性文本作为 ref。"
     )
 
 
@@ -48,7 +51,7 @@ def _render_low_layer_evidence(candidates: Sequence[EvidenceCandidate]) -> str:
         f"[{candidate.source}:{candidate.ref}] score={candidate.score:.4f}\n"
         f"Text Unit Ref: {candidate.ref}\n"
         f"{candidate.text}"
-        for candidate in candidates
+        for candidate in _ordered_low_layer_for_prompt(candidates)
     )
 
 
@@ -60,3 +63,32 @@ def _render_evidence(candidates: Sequence[EvidenceCandidate]) -> str:
         f"[{candidate.source}:{candidate.ref}] score={candidate.score:.4f}\n{candidate.text}"
         for candidate in candidates
     )
+
+
+def _ordered_low_layer_for_prompt(candidates: Sequence[EvidenceCandidate]) -> list[EvidenceCandidate]:
+    return [
+        candidate
+        for _, candidate in sorted(
+            enumerate(candidates),
+            key=lambda item: (_evidence_prompt_rank(item[1]), item[0]),
+        )
+    ]
+
+
+def _evidence_prompt_rank(candidate: EvidenceCandidate) -> int:
+    text = candidate.text or ""
+    if "subsection:" in text:
+        return 0
+    heading_level = _extract_heading_level(text)
+    if heading_level is None:
+        return 0
+    if heading_level >= 3:
+        return 0
+    return 2
+
+
+def _extract_heading_level(text: str) -> int | None:
+    match = re.search(r"heading_level:\s*(\d+)", text)
+    if not match:
+        return None
+    return int(match.group(1))

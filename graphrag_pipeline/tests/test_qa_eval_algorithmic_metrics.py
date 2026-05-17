@@ -36,6 +36,39 @@ def test_extract_text_unit_refs_handles_hybrid_data_format():
     assert extract_text_unit_refs(answer) == ["d244f9016ac8", "81d99ad61e36"]
 
 
+def test_extract_text_unit_refs_treats_sources_hex_as_direct_text_unit_refs():
+    lookup = DataCitationLookup(
+        sources_by_human_id={
+            "332": ["wrong3322222"],
+            "031": ["wrong0311111"],
+            "720": ["wrong7200000"],
+        }
+    )
+    answer = "[Data: Sources (d332e031d720, fe3e4fc89c4f)]"
+
+    assert extract_text_unit_refs(answer, data_citation_lookup=lookup) == [
+        "d332e031d720",
+        "fe3e4fc89c4f",
+    ]
+
+
+def test_extract_text_unit_refs_does_not_split_hex_into_human_ids():
+    lookup = DataCitationLookup(
+        sources_by_human_id={
+            "5": ["source222222"],
+            "332": ["wrong3322222"],
+            "031": ["wrong0311111"],
+            "720": ["wrong7200000"],
+        }
+    )
+    answer = "[Data: Sources (d332e031d720, 5)]"
+
+    assert extract_text_unit_refs(answer, data_citation_lookup=lookup) == [
+        "d332e031d720",
+        "source222222",
+    ]
+
+
 def test_extract_text_unit_refs_resolves_reports_sources_entities_and_relationships():
     lookup = DataCitationLookup(
         reports_by_human_id={"21": ["report111111", "shared000000"]},
