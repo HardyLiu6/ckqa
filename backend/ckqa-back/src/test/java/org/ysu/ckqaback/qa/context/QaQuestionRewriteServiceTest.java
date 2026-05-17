@@ -22,9 +22,55 @@ class QaQuestionRewriteServiceTest {
         QaQuestionRewriteResult result = rewriteService.rewrite("basic", "它和资源分配图有什么关系？", context);
 
         assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它和资源分配图有什么关系？");
+        assertThat(result.standaloneQueryText()).isEqualTo("关于上一轮主题「死锁」：它和资源分配图有什么关系？");
         assertThat(result.rewriteApplied()).isTrue();
         assertThat(result.rewriteReason()).contains("明显指代");
         assertThat(result.rewriteSourceMessageRange()).isEqualTo("1-2");
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+    }
+
+    @Test
+    void shouldUseHighConfidenceLlmStandaloneQuery() {
+        QaQuestionRewriteService service = new QaQuestionRewriteService();
+        service.setLlmClient((question, context) -> QaLlmQuestionRewriteResult.success(
+                "死锁和资源分配图有什么关系？",
+                0.91D,
+                "消解它指代死锁",
+                "deepseek-v4-flash"
+        ));
+        QaContextAssembly context = new QaContextAssembly(
+                "recent",
+                "学生：什么是死锁？\n助手：死锁是多个进程互相等待资源的状态。",
+                "1-2",
+                40,
+                "死锁",
+                "1-2"
+        );
+
+        QaQuestionRewriteResult result = service.rewrite("basic", "它和资源分配图有什么关系？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("死锁和资源分配图有什么关系？");
+        assertThat(result.standaloneQueryText()).isEqualTo("死锁和资源分配图有什么关系？");
+        assertThat(result.rewriteMethod()).isEqualTo("llm");
+        assertThat(result.rewriteModel()).isEqualTo("deepseek-v4-flash");
+        assertThat(result.rewriteConfidence()).isEqualTo(0.91D);
+    }
+
+    @Test
+    void shouldFallbackToRuleWhenLlmConfidenceIsLow() {
+        QaQuestionRewriteService service = new QaQuestionRewriteService();
+        service.setLlmClient((question, context) -> QaLlmQuestionRewriteResult.success(
+                "它和资源分配图有什么关系？",
+                0.2D,
+                "不确定",
+                "deepseek-v4-flash"
+        ));
+        QaContextAssembly context = new QaContextAssembly("recent", "最近对话", "1-2", 20, "死锁", "1-2");
+
+        QaQuestionRewriteResult result = service.rewrite("basic", "它和资源分配图有什么关系？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它和资源分配图有什么关系？");
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
     }
 
     @Test
@@ -36,6 +82,7 @@ class QaQuestionRewriteServiceTest {
         assertThat(result.retrievalQueryText()).isEqualTo("死锁和资源分配图有什么关系？");
         assertThat(result.rewriteApplied()).isFalse();
         assertThat(result.rewriteReason()).contains("已经包含上一轮主题");
+        assertThat(result.rewriteMethod()).isEqualTo("none");
     }
 
     @Test

@@ -14,11 +14,13 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.QaMessagesService;
+import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
@@ -541,6 +543,7 @@ class QaWorkflowServiceTest {
     void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalHitsService qaRetrievalHitsService = mock(QaRetrievalHitsService.class);
         QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
         KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
         UsersService usersService = mock(UsersService.class);
@@ -555,6 +558,7 @@ class QaWorkflowServiceTest {
                 qaTaskWorker,
                 buildTaskPolicyProperties()
         );
+        workflowService.setQaRetrievalHitsService(qaRetrievalHitsService);
 
         QaSessions session = new QaSessions();
         session.setId(5L);
@@ -578,12 +582,17 @@ class QaWorkflowServiceTest {
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setId(9001L);
         task.setUserMessageId(101L);
+        task.setAssistantMessageId(102L);
         task.setTaskStatus("running");
         task.setProgressStage("running");
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(userMessage, assistantMessage));
         given(qaRetrievalLogsService.findLatestByUserMessageIds(List.of(101L))).willReturn(Map.of(101L, task));
+        given(qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(9001L))).willReturn(Map.of(
+                9001L,
+                List.of(QaSourceResponse.of(1, "doc-1", "chunk-1", "156", "操作系统教材", "第3章/死锁", 123, 124, "死锁来源片段"))
+        ));
 
         List<QaMessageResponse> responses = workflowService.listMessages(5L);
 
@@ -592,6 +601,8 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
+        assertThat(responses.get(1).getSources()).hasSize(1);
+        assertThat(responses.get(1).getSources().get(0).getSourceFile()).isEqualTo("操作系统教材");
     }
 
     @Test

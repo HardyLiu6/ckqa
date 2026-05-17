@@ -18,6 +18,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
 import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
+import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionsService;
 
@@ -49,6 +50,7 @@ public class QaTaskWorker {
     private final Function<String, String> timeoutMessageResolver;
     private final Clock clock;
     private QaSessionSummaryService qaSessionSummaryService;
+    private QaRetrievalHitsService qaRetrievalHitsService;
 
     @Autowired
     public QaTaskWorker(
@@ -156,6 +158,11 @@ public class QaTaskWorker {
         this.qaSessionSummaryService = qaSessionSummaryService;
     }
 
+    @Autowired(required = false)
+    public void setQaRetrievalHitsService(QaRetrievalHitsService qaRetrievalHitsService) {
+        this.qaRetrievalHitsService = qaRetrievalHitsService;
+    }
+
     public void processTask(Long sessionId, Long taskId) {
         GraphRagTaskSnapshot latestSnapshot = null;
         try {
@@ -180,6 +187,7 @@ public class QaTaskWorker {
                 if ("success".equals(snapshot.taskStatus())) {
                     QaMessages assistant = qaMessagesService.appendAssistantMessage(sessionId, snapshot.resultText());
                     qaSessionsService.touchLastMessageAt(sessionId);
+                    persistSources(taskId, snapshot);
                     qaRetrievalLogsService.markSuccess(taskId, assistant.getId(), joinLatestLogs(snapshot.latestLogs()), "success");
                     triggerSummaryRefresh(sessionId);
                     return;
@@ -244,12 +252,35 @@ public class QaTaskWorker {
         }
     }
 
+    private void persistSources(Long taskId, GraphRagTaskSnapshot snapshot) {
+        if (qaRetrievalHitsService == null) {
+            return;
+        }
+        try {
+            qaRetrievalHitsService.replaceHits(taskId, snapshot.sources());
+        } catch (RuntimeException ignored) {
+            // 来源卡片是可观测增强，不能影响主问答成功。
+        }
+    }
+
     private GraphRagTaskCreateResult createGraphRagTask(QaRetrievalLogs task) {
         String dataDirUri = resolveReadyOutputDirUri(task);
         if (!StringUtils.hasText(dataDirUri)) {
-            return graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText());
+            return graphRagTaskClient.createTask(
+                    task.getQueryMode(),
+                    task.getQueryText(),
+                    null,
+                    null,
+                    task.getContextSnapshotText()
+            );
         }
-        return graphRagTaskClient.createTask(task.getQueryMode(), task.getQueryText(), task.getIndexRunId(), dataDirUri);
+        return graphRagTaskClient.createTask(
+                task.getQueryMode(),
+                task.getQueryText(),
+                task.getIndexRunId(),
+                dataDirUri,
+                task.getContextSnapshotText()
+        );
     }
 
     private String resolveReadyOutputDirUri(QaRetrievalLogs task) {

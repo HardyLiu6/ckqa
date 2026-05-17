@@ -21,6 +21,7 @@ public class CkqaIntegrationProperties {
     private final PollingProperties polling = new PollingProperties();
     private final TimeoutProperties timeout = new TimeoutProperties();
     private final SummaryProperties summary = new SummaryProperties();
+    private final RewriteProperties rewrite = new RewriteProperties();
 
     public QueryTaskModePolicy resolveQueryTaskModePolicy(String rawMode) {
         String mode = normalizeMode(rawMode);
@@ -154,5 +155,18 @@ public class CkqaIntegrationProperties {
         private int triggerCharCount = 3000;
         private boolean thinkingDisabled = true;
         private long timeoutSeconds = 30L;
+    }
+
+    @Getter
+    @Setter
+    public static class RewriteProperties {
+        private boolean enabled = true;
+        private String apiBaseUrl = "http://127.0.0.1:3000/v1";
+        private String apiKey = "";
+        private String model = "deepseek-v4-flash";
+        private int maxChars = 800;
+        private double minConfidence = 0.6D;
+        private boolean thinkingDisabled = true;
+        private long timeoutSeconds = 20L;
     }
 }

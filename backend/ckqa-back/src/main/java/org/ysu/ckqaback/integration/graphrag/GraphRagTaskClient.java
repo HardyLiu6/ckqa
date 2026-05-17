@@ -46,9 +46,23 @@ public class GraphRagTaskClient {
     }
 
     public GraphRagTaskCreateResult createTask(String mode, String prompt, Long indexRunId, String dataDirUri) {
+        return createTask(mode, prompt, indexRunId, dataDirUri, null);
+    }
+
+    public GraphRagTaskCreateResult createTask(
+            String mode,
+            String prompt,
+            Long indexRunId,
+            String dataDirUri,
+            String generationContext
+    ) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("mode", mode);
         body.put("prompt", prompt);
+        body.put("retrievalQuery", prompt);
+        if (generationContext != null && !generationContext.isBlank()) {
+            body.put("generationContext", generationContext);
+        }
         if (indexRunId != null) {
             body.put("indexRunId", indexRunId);
         }

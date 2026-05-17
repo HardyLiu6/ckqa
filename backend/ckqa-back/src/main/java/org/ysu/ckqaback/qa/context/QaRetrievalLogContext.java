@@ -6,12 +6,17 @@ package org.ysu.ckqaback.qa.context;
 public record QaRetrievalLogContext(
         String originalQueryText,
         String retrievalQueryText,
+        String standaloneQueryText,
         String contextSnapshotText,
         String contextStrategy,
         String contextMessageRange,
         int contextCharCount,
         boolean rewriteApplied,
         String rewriteReason,
-        String rewriteSourceMessageRange
+        String rewriteSourceMessageRange,
+        String rewriteMethod,
+        String rewriteModel,
+        Double rewriteConfidence,
+        String contextSnapshotVersion
 ) {
 }

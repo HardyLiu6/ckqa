@@ -70,6 +70,7 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
         if (context != null) {
             task.setOriginalQueryText(context.originalQueryText());
             task.setRetrievalQueryText(context.retrievalQueryText());
+            task.setStandaloneQueryText(context.standaloneQueryText());
             task.setContextSnapshotText(context.contextSnapshotText());
             task.setContextStrategy(context.contextStrategy());
             task.setContextMessageRange(context.contextMessageRange());
@@ -77,6 +78,10 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setRewriteApplied(context.rewriteApplied());
             task.setRewriteReason(context.rewriteReason());
             task.setRewriteSourceMessageRange(context.rewriteSourceMessageRange());
+            task.setRewriteMethod(context.rewriteMethod());
+            task.setRewriteModel(context.rewriteModel());
+            task.setRewriteConfidence(context.rewriteConfidence());
+            task.setContextSnapshotVersion(context.contextSnapshotVersion());
         }
         task.setCreatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         save(task);

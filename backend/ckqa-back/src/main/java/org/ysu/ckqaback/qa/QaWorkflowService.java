@@ -19,6 +19,7 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskMo
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
 import org.ysu.ckqaback.qa.context.QaContextSummary;
+import org.ysu.ckqaback.qa.context.QaQuestionRewriteClientPort;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
@@ -26,6 +27,7 @@ import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
@@ -33,6 +35,7 @@ import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.QaMessagesService;
+import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
@@ -63,10 +66,21 @@ public class QaWorkflowService {
     private final QaContextAssembler qaContextAssembler = new QaContextAssembler();
     private final QaQuestionRewriteService qaQuestionRewriteService = new QaQuestionRewriteService();
     private QaSessionSummariesService qaSessionSummariesService;
+    private QaRetrievalHitsService qaRetrievalHitsService;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
         this.qaSessionSummariesService = qaSessionSummariesService;
+    }
+
+    @Autowired(required = false)
+    public void setQaQuestionRewriteClient(QaQuestionRewriteClientPort rewriteClient) {
+        qaQuestionRewriteService.setLlmClient(rewriteClient);
+    }
+
+    @Autowired(required = false)
+    public void setQaRetrievalHitsService(QaRetrievalHitsService qaRetrievalHitsService) {
+        this.qaRetrievalHitsService = qaRetrievalHitsService;
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -127,17 +141,23 @@ public class QaWorkflowService {
                 history,
                 loadLatestContextSummary(sessionId)
         );
+        qaQuestionRewriteService.setRewriteProperties(properties.getRewrite());
         QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),
+                rewrite.standaloneQueryText(),
                 context.snapshotText(),
                 context.strategy(),
                 context.messageRange(),
                 context.charCount(),
                 rewrite.rewriteApplied(),
                 rewrite.rewriteReason(),
-                rewrite.rewriteSourceMessageRange()
+                rewrite.rewriteSourceMessageRange(),
+                rewrite.rewriteMethod(),
+                rewrite.rewriteModel(),
+                rewrite.rewriteConfidence(),
+                "phase3-v1"
         );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
@@ -242,10 +262,14 @@ public class QaWorkflowService {
                 .map(QaMessages::getId)
                 .toList();
         Map<Long, QaRetrievalLogs> taskMap = qaRetrievalLogsService.findLatestByUserMessageIds(userMessageIds);
+        Map<Long, List<QaSourceResponse>> sourcesByAssistantMessage = loadSourcesByAssistantMessage(taskMap);
 
         return messages.stream()
                 .map(message -> {
                     QaRetrievalLogs task = "user".equals(message.getRole()) ? taskMap.get(message.getId()) : null;
+                    List<QaSourceResponse> sources = "assistant".equals(message.getRole())
+                            ? sourcesByAssistantMessage.getOrDefault(message.getId(), List.of())
+                            : List.of();
                     return QaMessageResponse.of(
                             message.getId(),
                             message.getSessionId(),
@@ -254,10 +278,32 @@ public class QaWorkflowService {
                             message.getContent(),
                             message.getCreatedAt(),
                             task == null ? null : task.getTaskStatus(),
-                            task == null ? null : task.getProgressStage()
+                            task == null ? null : task.getProgressStage(),
+                            sources
                     );
                 })
                 .toList();
+    }
+
+    private Map<Long, List<QaSourceResponse>> loadSourcesByAssistantMessage(Map<Long, QaRetrievalLogs> taskMap) {
+        if (qaRetrievalHitsService == null || taskMap == null || taskMap.isEmpty()) {
+            return Map.of();
+        }
+        List<QaRetrievalLogs> tasksWithAssistant = taskMap.values().stream()
+                .filter(task -> task.getId() != null && task.getAssistantMessageId() != null)
+                .toList();
+        if (tasksWithAssistant.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<QaSourceResponse>> sourcesByLogId = qaRetrievalHitsService.findSourcesByRetrievalLogIds(
+                tasksWithAssistant.stream().map(QaRetrievalLogs::getId).toList()
+        );
+        return tasksWithAssistant.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        QaRetrievalLogs::getAssistantMessageId,
+                        task -> sourcesByLogId.getOrDefault(task.getId(), List.of()),
+                        (left, right) -> left
+                ));
     }
 
     public QaTaskDetailResponse getTaskDetail(Long sessionId, Long taskId) {
@@ -267,7 +313,11 @@ public class QaWorkflowService {
         QaMessageResponse assistantMessage = null;
         if (task.getAssistantMessageId() != null) {
             QaMessages message = qaMessagesService.getById(task.getAssistantMessageId());
-            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message);
+            List<QaSourceResponse> sources = qaRetrievalHitsService == null
+                    ? List.of()
+                    : qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(task.getId()))
+                    .getOrDefault(task.getId(), List.of());
+            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources);
         }
 
         List<String> latestLogs = StringUtils.hasText(task.getLatestLogs())
