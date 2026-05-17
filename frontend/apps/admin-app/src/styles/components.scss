@@ -4013,10 +4013,12 @@ textarea.text-input {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--ckqa-space-3);
+  align-items: stretch;  /* Phase 5.3：3 个卡等高，避免 graphrag_tuned 内含触发按钮时高度跳跃 */
 }
 
 .seed-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   padding: var(--ckqa-space-4);
   border: 1px solid var(--ckqa-border);
@@ -4024,6 +4026,17 @@ textarea.text-input {
   background: var(--ckqa-surface);
   text-align: left;
   cursor: pointer;
+  min-height: 128px;  /* Phase 5.3：保证 3 个卡视觉一致；触发按钮态 graphrag_tuned 自然撑开 */
+}
+
+.seed-card[data-needs-trigger='true'] {
+  /* Phase 5.3：可触发的 graphrag_tuned 卡片用 warning 色边框引导用户注意 */
+  border: 1px dashed color-mix(in srgb, var(--ckqa-warning, #d97706) 50%, var(--ckqa-border));
+  background: color-mix(in srgb, var(--ckqa-warning, #d97706) 4%, var(--ckqa-surface));
+  cursor: default;
+}
+.seed-card[data-needs-trigger='true']:hover {
+  border-color: color-mix(in srgb, var(--ckqa-warning, #d97706) 70%, var(--ckqa-border));
 }
 
 .seed-card[data-selected='true'] {

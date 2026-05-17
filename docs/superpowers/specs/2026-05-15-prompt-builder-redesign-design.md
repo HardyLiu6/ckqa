@@ -532,6 +532,16 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 收益：评分时长 30 min → ~22 min（-25% LLM 调用），UX 排行榜全是有意义对比组（不再有 fallback_default_copy 与 default 同分的伪对照）。
   - 测试：后端 442 PASS / 1 skipped（修订 ExtractionEvalServiceTest 1 条用 auto_tuned 替代 default 适配新 seed-aware 校验；ExtractionEvalReportAssemblerTest 11 条 evalRun.seed=null 不变兼容）；前端单测 346 PASS / 构建 SUCCESS。
 
+- **Phase 5.3（✅）：01 步 graphrag_tuned 卡片自带触发能力**
+  - 现状（Phase 4.5 落地后的边界）：`graphrag_tuned` 种子卡未就绪时禁用 + 提示「请先在知识库构建向导触发自动调优」——用户必须跳回 build wizard 04 步触发 → 等 5-10 min → 回 prompt-builder 重新选种子，破坏心流。
+  - 修复（前端 only，不动后端）：
+    - `PromptBuilderSeedStep` 新增 `promptTuneState` / `promptTuneTriggering` props，`graphrag_tuned` 卡片改造成 4 态：`not_started` / `failed` 显示「立即触发」/「重试调优」按钮（warning 色虚线边框引导）；`pending` / `running` 显示 spinner + 进度文案 + 友好提示「可继续浏览其它页面」；`success` 才允许选择该 seed。
+    - `PromptBuilderPage` 引入 `triggerBuildRunPromptTune` / `getBuildRunPromptTuneStatus`（与 build wizard 04 步同一端点），onMounted 拉一次状态，按 `recommendedPollingIntervalMillis=1500ms` 轮询；任务到 success 终态自动重拉 `seedAvailability` 让卡片变可选。
+    - 卡片内触发按钮 `e.stopPropagation()` 防误选 seed（用户可能想触发但还没决定最终用哪个种子）。
+    - `.seed-grid` `align-items: stretch` + `.seed-card` flex column + `min-height: 128px` 保证 3 个卡等高，触发按钮态自然撑开不破坏布局。
+  - 不动后端：`POST /knowledge-base-build-runs/{id}/prompt-tune` 端点已存在（build wizard 04 步用）；prompt-builder 与 build wizard 共享同一 prompt-tune state，触发后两边都能感知。
+  - 测试：前端单测 346 PASS / 构建 SUCCESS。
+
 - **Phase 6（✅）：05 步历史草稿入库 + 01 步种子打通 + PromptDisplay raw prismjs 高亮**
   - 实现 `POST /knowledge-base-build-runs/{id}/finalize` 端点：从 04 评分 run 取选定候选 prompt + composite_score；FinalizePromptService **直接写** `buildMetadata.customPromptDraft`（不复用 saveCustomPromptDraft），落库**完整 finalize 快照**：`seed` / `selectedCandidateId` / `compositeScore`（4 位小数）/ `sourceEvalRunId` / `finalizedAt`（ISO_OFFSET_DATE_TIME）/ `prompts.extract_graph.content`；当 `saveAsDraft=true` 时同事务插一条 `prompt_drafts` 行（保存范围两模式）。事务语义闭环：`promptDraftsService.save` 返 false 抛 5000 让 customPromptDraft 一并回滚（不依赖 mybatis-plus 静默 false）。
   - 实现 `GET /knowledge-bases/{kbId}/prompt-drafts` 端点：本期重新定义为**列表摘要语义**，返回该 kb 下按 created_at 倒序的 `PromptDraftResponse`（**不含 promptsJson 大字段**），由 `PromptDraftListService` 把 entity 投影成 DTO；mapper 层用 `select` 排除 `prompts_json` 列，避免 600 KB+ 列表响应；草稿详情接口（`GET /knowledge-bases/{kbId}/prompt-drafts/{id}` + `PromptDraftDetailResponse`）留 Phase 7+。

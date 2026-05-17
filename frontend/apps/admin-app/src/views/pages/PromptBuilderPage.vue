@@ -25,7 +25,7 @@ import {
 } from './prompt-builder/mocks/index.js'
 import PromptBuilderHistoryDraftDrawer from './prompt-builder/PromptBuilderHistoryDraftDrawer.vue'
 
-import { getBuildRun, saveBuildRunCustomPromptDraft } from '../../api/knowledge-bases.js'
+import { getBuildRun, saveBuildRunCustomPromptDraft, triggerBuildRunPromptTune, getBuildRunPromptTuneStatus } from '../../api/knowledge-bases.js'
 import {
   getSeedAvailability,
   listPromptDrafts,
@@ -50,6 +50,11 @@ const historyDrafts = ref([])
 const historyDraftDrawerOpen = ref(false)
 const historyDraftId = ref(null)
 const courseName = ref(MOCK_COURSE_NAME)
+
+// Phase 5.3：自动调优 prompt-tune 任务状态 + 轮询，让 graphrag_tuned 卡片自带触发能力
+const promptTuneState = ref(null)
+const promptTuneTriggering = ref(false)
+let promptTuneTimer = null
 
 const dirty = ref(false)
 const saving = ref(false)
@@ -105,6 +110,10 @@ onMounted(async () => {
     // Phase 6：拉历史草稿列表，01 步 history_draft 卡片据此决定 disabled / 数量角标
     await loadHistoryDrafts()
 
+    // Phase 5.3：拉自动调优任务状态——seedAvailability 已经反映"是否有产物"，
+    // 但 promptTuneState 还需要单独拉来支持卡片内触发 / 进度反馈
+    await loadPromptTuneState()
+
     // Phase 6：恢复 URL ?selectedCandidate=xxx（直接进 05 步或刷新页面时使用）
     const rawSelected = Array.isArray(route.query.selectedCandidate)
       ? route.query.selectedCandidate[0]
@@ -142,6 +151,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  stopPromptTunePolling()
 })
 
 function handleBeforeUnload(event) {
@@ -260,6 +270,86 @@ async function loadHistoryDrafts() {
 }
 
 /**
+ * Phase 5.3：自动调优任务状态拉取 + 轮询 + 触发。
+ *
+ * <p>之前 graphrag_tuned 种子卡未就绪时禁用 + 提示"请回构建向导触发"——破坏心流。
+ * 现在让 SeedStep 卡片自带触发能力，调用同一个 build wizard 04 步用的 prompt-tune 端点。</p>
+ */
+async function loadPromptTuneState() {
+  if (!buildRunId.value) return
+  try {
+    const status = await getBuildRunPromptTuneStatus(buildRunId.value)
+    promptTuneState.value = status
+    const interval = Number(status?.recommendedPollingIntervalMillis ?? 0)
+    if (interval > 0) {
+      startPromptTunePolling(interval)
+    } else {
+      stopPromptTunePolling()
+    }
+    // 任务到 success 终态时刷新 seedAvailability，让 graphrag_tuned 卡变可选
+    if (status?.status === 'success') {
+      try {
+        seedAvailability.value = await getSeedAvailability(buildRunId.value)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[prompt-tune] 重新拉 seed-availability 失败', err)
+      }
+    }
+  } catch (err) {
+    // 不阻塞——seedAvailability 仍能让卡片走 disabled 兜底
+    // eslint-disable-next-line no-console
+    console.warn('[prompt-tune] 加载状态失败', err)
+  }
+}
+
+function startPromptTunePolling(intervalMs) {
+  stopPromptTunePolling()
+  promptTuneTimer = setInterval(loadPromptTuneState, intervalMs)
+}
+
+function stopPromptTunePolling() {
+  if (promptTuneTimer) {
+    clearInterval(promptTuneTimer)
+    promptTuneTimer = null
+  }
+}
+
+/**
+ * 处理 SeedStep 卡片内「立即触发」/「重试调优」按钮。
+ * @param {{ force?: boolean }} options force=true 时让后端忽略缓存重新跑。
+ */
+async function handlePromptTuneTrigger({ force = false } = {}) {
+  if (!buildRunId.value || promptTuneTriggering.value) return
+  promptTuneTriggering.value = true
+  try {
+    const response = await triggerBuildRunPromptTune(buildRunId.value, { force })
+    promptTuneState.value = response
+    if (response?.status === 'success') {
+      ElMessage.success('自动调优已就绪，可选用此种子')
+      try {
+        seedAvailability.value = await getSeedAvailability(buildRunId.value)
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[prompt-tune] 触发 success 后重拉 seed-availability 失败', e)
+      }
+    } else {
+      const interval = Number(response?.recommendedPollingIntervalMillis ?? 1500)
+      startPromptTunePolling(interval)
+      ElMessage.info('自动调优已开始，需要 5-10 分钟')
+    }
+  } catch (err) {
+    ElMessage.error(err?.message ?? '触发自动调优失败')
+  } finally {
+    promptTuneTriggering.value = false
+  }
+}
+
+function handlePromptTuneRetry() {
+  // 失败重试时强制覆盖缓存（与 build wizard 04 步行为一致）
+  handlePromptTuneTrigger({ force: true })
+}
+
+/**
  * Phase 6：选定一条历史草稿后，仅注入 seed=history_draft + historyDraftId，
  * 主动清空旧 selectedCandidateId / 03 / 04 步状态——
  * 与 spec § "history_draft 仅是种子来源、不复用旧候选 ID" 约束一致：
@@ -364,7 +454,11 @@ function returnToWizard() {
           :seed="seed"
           :seed-availability="seedAvailability"
           :history-drafts="historyDrafts"
+          :prompt-tune-state="promptTuneState"
+          :prompt-tune-triggering="promptTuneTriggering"
           @select-seed="handleSelectSeed"
+          @prompt-tune-trigger="handlePromptTuneTrigger"
+          @prompt-tune-retry="handlePromptTuneRetry"
         />
         <PromptBuilderPrepareStep
           v-else-if="activeStepKey === 'prepare'"
