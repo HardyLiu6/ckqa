@@ -110,27 +110,11 @@
   white-space: nowrap;
 }
 
-// 布局壳统一视觉风格：AuthLayout 与 ConsoleLayout 共享 accent 渐变基调，
-// 全部使用 Design Token（Surface/Border/Shadow/Space/Radius），不出现硬编码色值
-.auth-layout {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-  padding: var(--ckqa-space-6);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 14%, transparent), transparent 34%),
-    linear-gradient(225deg, color-mix(in srgb, var(--ckqa-accent-strong) 10%, transparent), transparent 36%),
-    var(--ckqa-bg);
-}
-
-.auth-panel {
-  width: min(1040px, 100%);
-  padding: var(--ckqa-space-8);
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
-  background: color-mix(in srgb, var(--ckqa-surface) 94%, transparent);
-  box-shadow: var(--ckqa-elevation-raised);
-}
+// AuthLayout 已迁移到 layouts/AuthLayout.vue 内部 scoped style。
+// 旧的 .auth-layout / .auth-panel 全局样式已移除，避免 LoginView 等视图被
+// 多包一层 1040px 卡片容器导致四周留白。
+//
+// LoginView 自带完整的双栏 + 极光背景，不需要外层壳。
 
 .login-view {
   display: grid;
@@ -4064,10 +4048,6 @@ textarea.text-input {
 }
 
 @media (max-width: 560px) {
-  .auth-panel {
-    padding: var(--ckqa-space-6);
-  }
-
   .login-split {
     grid-template-columns: 1fr;
   }
