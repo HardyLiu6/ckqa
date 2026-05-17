@@ -7,6 +7,7 @@ import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.index.dto.PromptTuneRunResponse;
 import org.ysu.ckqaback.index.dto.SeedAvailabilityResponse;
 import org.ysu.ckqaback.service.KnowledgeBaseBuildRunsService;
+import org.ysu.ckqaback.service.PromptDraftsService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -17,13 +18,17 @@ class SeedAvailabilityServiceTest {
 
     private KnowledgeBaseBuildRunsService buildRunsStore;
     private PromptTuneService promptTuneService;
+    private PromptDraftsService promptDraftsService;
     private SeedAvailabilityService service;
 
     @BeforeEach
     void setUp() {
         buildRunsStore = mock(KnowledgeBaseBuildRunsService.class);
         promptTuneService = mock(PromptTuneService.class);
-        service = new SeedAvailabilityService(buildRunsStore, promptTuneService, new ObjectMapper());
+        promptDraftsService = mock(PromptDraftsService.class);
+        service = new SeedAvailabilityService(
+                buildRunsStore, promptTuneService, new ObjectMapper(), promptDraftsService
+        );
     }
 
     @Test
@@ -114,15 +119,33 @@ class SeedAvailabilityServiceTest {
     }
 
     @Test
-    void historyDraftAlwaysUnavailableInThisPhase() {
+    void historyDraftIsAvailableWhenCountGreaterThanZero() {
+        // count > 0 → available=true / reason=null / summary 含数量
         when(buildRunsStore.getRequiredById(18L)).thenReturn(buildRun(null));
         when(promptTuneService.probeBySelection(any(), any(), any()))
                 .thenReturn(PromptTuneRunResponse.notStarted(null, "abc"));
+        when(promptDraftsService.countByKnowledgeBaseId(5L)).thenReturn(3L);
+
+        SeedAvailabilityResponse response = service.evaluate(18L);
+        SeedAvailabilityResponse.SeedOption opt = findOption(response, "history_draft");
+        assertThat(opt.getAvailable()).isTrue();
+        assertThat(opt.getReason()).isNull();
+        assertThat(opt.getSummary()).contains("3");
+    }
+
+    @Test
+    void historyDraftIsUnavailableWhenCountIsZero() {
+        // count = 0 → available=false / reason="no_history_draft"
+        when(buildRunsStore.getRequiredById(18L)).thenReturn(buildRun(null));
+        when(promptTuneService.probeBySelection(any(), any(), any()))
+                .thenReturn(PromptTuneRunResponse.notStarted(null, "abc"));
+        when(promptDraftsService.countByKnowledgeBaseId(5L)).thenReturn(0L);
 
         SeedAvailabilityResponse response = service.evaluate(18L);
         SeedAvailabilityResponse.SeedOption opt = findOption(response, "history_draft");
         assertThat(opt.getAvailable()).isFalse();
-        assertThat(opt.getReason()).isEqualTo("phase_6_not_implemented");
+        assertThat(opt.getReason()).isEqualTo("no_history_draft");
+        assertThat(opt.getSummary()).contains("暂无");
     }
 
     @Test

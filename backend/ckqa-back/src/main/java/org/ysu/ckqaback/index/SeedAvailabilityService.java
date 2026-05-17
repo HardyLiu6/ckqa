@@ -22,7 +22,7 @@ import java.util.List;
  * <ul>
  *   <li>{@code system_default}：始终可用</li>
  *   <li>{@code graphrag_tuned}：当且仅当当前 build run 选材的 prompt-tune 缓存为 success 时可用</li>
- *   <li>{@code history_draft}：本期始终不可用（Phase 6 落地）</li>
+ *   <li>{@code history_draft}：当且仅当本 kb 已有 ≥1 条 prompt_drafts 记录时可用（Phase 6 落地）</li>
  * </ul>
  */
 @Service
@@ -34,6 +34,7 @@ public class SeedAvailabilityService {
     private final KnowledgeBaseBuildRunsService buildRunsStore;
     private final PromptTuneService promptTuneService;
     private final ObjectMapper objectMapper;
+    private final org.ysu.ckqaback.service.PromptDraftsService promptDraftsService;
 
     public SeedAvailabilityResponse evaluate(Long buildRunId) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
@@ -42,7 +43,7 @@ public class SeedAvailabilityService {
         List<SeedOption> options = new ArrayList<>();
         options.add(buildSystemDefault());
         options.add(buildGraphragTuned(buildRun));
-        options.add(buildHistoryDraft());
+        options.add(buildHistoryDraft(buildRun));
 
         return SeedAvailabilityResponse.builder()
                 .currentSeed(currentSeed)
@@ -97,12 +98,26 @@ public class SeedAvailabilityService {
         }
     }
 
-    private SeedOption buildHistoryDraft() {
+    /**
+     * 历史草稿种子：当且仅当本知识库已有 ≥1 条 prompt_drafts 记录时可点。
+     * <p>Phase 6 落地：count 由 {@link org.ysu.ckqaback.service.PromptDraftsService#countByKnowledgeBaseId} 给出；
+     * 具体哪条草稿由前端在用户点 history_draft 卡片时再拉列表决定。</p>
+     */
+    private SeedOption buildHistoryDraft(KnowledgeBaseBuildRuns buildRun) {
+        long count = promptDraftsService.countByKnowledgeBaseId(buildRun.getKnowledgeBaseId());
+        if (count <= 0) {
+            return SeedOption.builder()
+                    .key("history_draft")
+                    .available(false)
+                    .reason("no_history_draft")
+                    .summary("本知识库暂无历史草稿，05 步保存并入库后会出现在这里")
+                    .build();
+        }
         return SeedOption.builder()
                 .key("history_draft")
-                .available(false)
-                .reason("phase_6_not_implemented")
-                .summary("历史草稿入口将在 Phase 6 开放")
+                .available(true)
+                .reason(null)
+                .summary("共 " + count + " 条历史草稿可选，点击进入选择")
                 .build();
     }
 
