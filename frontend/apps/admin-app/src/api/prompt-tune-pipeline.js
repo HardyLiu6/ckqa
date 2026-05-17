@@ -94,6 +94,12 @@ export async function getExtractionEvalReport(buildRunId, client = http) {
   ))
 }
 
+export async function cancelExtractionEval(buildRunId, client = http) {
+  return unwrapApiResponse(await client.post(
+    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/extraction-eval/cancel`,
+  ))
+}
+
 // ----- 05 步：预览保存 -----
 
 export async function finalizePrompt(buildRunId, payload, client = http) {
