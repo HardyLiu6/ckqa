@@ -208,6 +208,21 @@ public enum ApiResultCode {
     CANDIDATES_NOT_GENERATED(4105, "本次构建尚未生成候选 Prompt，请先调用生成接口"),
 
     /**
+     * 04 步评分尚未触发或已结束，前端依赖 status 接口判断。
+     */
+    EXTRACTION_EVAL_NOT_STARTED(4106, "本次构建尚未启动评分任务"),
+
+    /**
+     * 用户传入的 selectedCandidates 含未生成候选 ID（绕过前端门控直接调 API）。
+     */
+    INVALID_EVAL_CANDIDATE_SELECTION(4108, "选定候选 ID 不在当前构建的候选清单中"),
+
+    /**
+     * 04 步评分执行失败（脚本超时、异常退出或产物缺失）。
+     */
+    EXTRACTION_EVAL_FAILED(5008, "评分任务执行失败"),
+
+    /**
      * 用户选择 graphrag_tuned 但当前 build run 选材对应的自动调优产物不存在或失效。
      * 由 Phase 4.5 引入。
      */
