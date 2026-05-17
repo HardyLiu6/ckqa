@@ -239,10 +239,10 @@ public class ExtractionEvalService {
             run = latestOpt.get();
         }
 
-        // 复用产物的判定：(failed 或 cancelled) + 已进入 scoring 阶段（即抽取已完成或大部分完成）+ 有 finished 候选
+        // 复用产物的判定：(failed 或 cancelled) + 有 finished 候选（finished_candidates 非空）。
+        // 不依赖 progress_stage——markFailed/markCancelled 把它重置为 'done' 丢失阶段信息。
         boolean canRetryScoring =
                 ("failed".equals(run.getStatus()) || "cancelled".equals(run.getStatus()))
-                && "scoring".equals(run.getProgressStage())
                 && run.getFinishedCandidates() != null
                 && !parseSelectedIds(run.getFinishedCandidates()).isEmpty();
         if (!canRetryScoring) {
@@ -443,10 +443,12 @@ public class ExtractionEvalService {
                 || "failed".equals(run.getStatus())
                 || "cancelled".equals(run.getStatus());
 
-        // Phase 5.1：失败 + scoring 阶段 + 有完成候选 → 前端可显示「仅重跑评分」按钮
+        // Phase 5.1：失败 + 有完成候选 → 前端可显示「仅重跑评分」按钮。
+        // 不依赖 progress_stage——markFailed/markCancelled 会把它重置为 'done'。
+        // 仅此处保留 failed-only（cancelled 走更宽的 recoverableScoringEvalRunId 路径），
+        // 因为 cancelled 是用户主动终止，不应默认推"仅重跑评分"按钮，需让用户显式按"按上次产物补跑评分"。
         boolean recoverableScoringOnly =
                 "failed".equals(run.getStatus())
-                && "scoring".equals(run.getProgressStage())
                 && !finished.isEmpty();
 
         // 失败 / 取消 / 中止终态：附带最近一次 success 的 evalRunId，让前端给「查看上次评分结果」入口。

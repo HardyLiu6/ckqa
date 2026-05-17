@@ -52,10 +52,13 @@ public class PromptTuneExtractionEvalRunsServiceImpl
 
     @Override
     public Optional<PromptTuneExtractionEvalRuns> findLatestRecoverableScoringByBuildRunId(Long buildRunId) {
+        // 判定：(failed 或 cancelled) + finished_candidates 非空。
+        // 不再卡 progress_stage='scoring'——markFailed/markCancelled 会把 progress_stage 重置为 'done'，
+        // 丢失了"失败时所处阶段"信息。finished_candidates 是真正"抽取已完成或大部分完成"的事实证据，
+        // 只要它非空就说明磁盘上至少有一个候选的产物可复用。
         return this.lambdaQuery()
                 .eq(PromptTuneExtractionEvalRuns::getBuildRunId, buildRunId)
                 .in(PromptTuneExtractionEvalRuns::getStatus, "failed", "cancelled")
-                .eq(PromptTuneExtractionEvalRuns::getProgressStage, "scoring")
                 .isNotNull(PromptTuneExtractionEvalRuns::getFinishedCandidates)
                 .ne(PromptTuneExtractionEvalRuns::getFinishedCandidates, "[]")
                 .orderByDesc(PromptTuneExtractionEvalRuns::getId)
