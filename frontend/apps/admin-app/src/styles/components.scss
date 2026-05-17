@@ -647,7 +647,7 @@ textarea.text-input {
 .app-topbar {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: minmax(190px, 260px) minmax(180px, 1fr) auto auto auto auto;
+  grid-template-columns: minmax(190px, 260px) auto auto 1fr auto auto;
   align-items: center;
   gap: var(--ckqa-space-3);
   padding: 0 var(--ckqa-space-5) 0 var(--ckqa-space-6);

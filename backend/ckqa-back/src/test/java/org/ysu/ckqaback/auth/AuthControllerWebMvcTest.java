@@ -25,6 +25,7 @@ import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -153,6 +154,95 @@ class AuthControllerWebMvcTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(4001));
 
+        then(authService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void shouldUpdateCurrentUserDisplayName() throws Exception {
+        AuthenticatedUser currentUser = new AuthenticatedUser(
+                1L,
+                "ADM2026001",
+                "admin.heqh",
+                "何启航",
+                List.of("admin"),
+                List.of("*")
+        );
+        AuthUserProfile updatedProfile = AuthUserProfile.builder()
+                .id(1L)
+                .userCode("ADM2026001")
+                .username("admin.heqh")
+                .displayName("何启航（已更新）")
+                .avatarUrl("/api/v1/user-avatars/default-user-avatar.svg")
+                .roles(List.of("admin"))
+                .permissions(List.of("*"))
+                .dataScope("全部课程")
+                .build();
+        given(authService.updateCurrentProfile(eq(currentUser), eq("何启航（已更新）"))).willReturn(updatedProfile);
+
+        mockMvc.perform(put(ApiPaths.AUTH + "/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, currentUser)
+                        .content("""
+                                {
+                                  "displayName": "何启航（已更新）"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.displayName").value("何启航（已更新）"));
+    }
+
+    @Test
+    void shouldRejectBlankDisplayNameOnUpdate() throws Exception {
+        mockMvc.perform(put(ApiPaths.AUTH + "/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "displayName": ""
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001));
+        then(authService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void shouldChangeCurrentUserPassword() throws Exception {
+        AuthenticatedUser currentUser = new AuthenticatedUser(
+                1L,
+                "ADM2026001",
+                "admin.heqh",
+                "何启航",
+                List.of("admin"),
+                List.of("*")
+        );
+
+        mockMvc.perform(put(ApiPaths.AUTH + "/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, currentUser)
+                        .content("""
+                                {
+                                  "oldPassword": "Ckqa@2026",
+                                  "newPassword": "Ckqa@2027new"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+
+        then(authService).should().changeCurrentPassword(currentUser, "Ckqa@2026", "Ckqa@2027new");
+    }
+
+    @Test
+    void shouldRejectShortNewPasswordOnChange() throws Exception {
+        mockMvc.perform(put(ApiPaths.AUTH + "/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "oldPassword": "Ckqa@2026",
+                                  "newPassword": "abc"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001));
         then(authService).shouldHaveNoInteractions();
     }
 

@@ -71,6 +71,21 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/profile',
+    name: 'profile',
+    componentKey: 'ProfileView',
+    meta: {
+      title: '个人中心',
+      layout: 'console',
+      // 任意已登录用户都可访问，不要求特定业务 permission
+      permissions: [],
+      status: 'mvp',
+      // 不进入主侧边栏分组（隐藏在 navigation-model 中），仅顶部头像菜单可达
+      navGroup: 'profile',
+      hidden: true,
+    },
+  },
+  {
     path: '/app/system',
     name: 'system',
     redirect: '/app/health',

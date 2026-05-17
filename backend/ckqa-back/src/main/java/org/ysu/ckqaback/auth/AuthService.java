@@ -115,6 +115,61 @@ public class AuthService {
         return toProfile(updatedUser, currentUser.roles(), currentUser.permissions());
     }
 
+    /**
+     * 个人中心：更新当前用户的显示名。
+     * <p>仅允许修改 displayName，其它字段（用户代码、用户名、角色、权限）由管理员维护。</p>
+     */
+    @Transactional
+    public AuthUserProfile updateCurrentProfile(AuthenticatedUser currentUser, String displayName) {
+        if (currentUser == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        if (!StringUtils.hasText(displayName)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "显示名不能为空");
+        }
+        String trimmed = displayName.trim();
+        if (trimmed.length() > 128) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "显示名长度不能超过 128 字符");
+        }
+        Users user = usersService.getRequiredById(currentUser.id());
+        user.setDisplayName(trimmed);
+        usersService.updateById(user);
+        return toProfile(user, currentUser.roles(), currentUser.permissions());
+    }
+
+    /**
+     * 个人中心：修改当前用户密码。
+     * <p>校验：旧密码与库内 hash 匹配；新密码与旧密码不同；新密码满足强度规则
+     * （≥ 8 字符 + 至少一个字母 + 至少一个数字）。其它字段未触碰。</p>
+     */
+    @Transactional
+    public void changeCurrentPassword(AuthenticatedUser currentUser, String oldPassword, String newPassword) {
+        if (currentUser == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        if (!StringUtils.hasText(oldPassword)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "原密码不能为空");
+        }
+        if (!StringUtils.hasText(newPassword)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码不能为空");
+        }
+        if (newPassword.length() < 8 || newPassword.length() > 64) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码长度需在 8-64 字符之间");
+        }
+        if (newPassword.equals(oldPassword)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码不能与原密码相同");
+        }
+        if (!newPassword.matches(".*[A-Za-z].*") || !newPassword.matches(".*\\d.*")) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码需同时包含字母与数字");
+        }
+        Users user = usersService.getRequiredById(currentUser.id());
+        if (!passwordService.matches(oldPassword, user.getPasswordHash())) {
+            throw new BusinessException(ApiResultCode.AUTH_INVALID, HttpStatus.UNAUTHORIZED, "原密码不正确");
+        }
+        user.setPasswordHash(passwordService.hash(newPassword));
+        usersService.updateById(user);
+    }
+
     private Users findUserForLogin(String usernameOrCode) {
         String identity = usernameOrCode == null ? "" : usernameOrCode.trim();
         if (!StringUtils.hasText(identity)) {
@@ -157,6 +212,7 @@ public class AuthService {
                 .roles(roles == null ? List.of() : roles)
                 .permissions(permissions == null ? List.of() : permissions)
                 .dataScope(resolveDataScope(roles))
+                .lastLoginAt(user.getLastLoginAt())
                 .build();
     }
 

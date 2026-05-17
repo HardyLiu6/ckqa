@@ -3143,8 +3143,12 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(modulePage, /<select[\s\S]*creationForm/)
   assert.doesNotMatch(modulePage, /<textarea/)
 
-  assert.match(topbar, /<el-input[\s\S]*class="topbar-search-input"/)
+  // 顶部 topbar 改为：搜索 chip（待接入态占位）+ identity dropdown 头像菜单
+  assert.match(topbar, /class="topbar-search-chip"/)
   assert.match(topbar, /class="identity-avatar"/)
+  assert.match(topbar, /<el-dropdown[\s\S]*class="identity-dropdown"/)
+  assert.match(topbar, /command="profile"/)
+  assert.match(topbar, /command="logout"/)
   assert.doesNotMatch(topbar, /role-switch/)
   assert.doesNotMatch(topbar, /role-switch-select/)
   assert.doesNotMatch(topbar, /role-change/)
@@ -3195,7 +3199,8 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(modulePage, /<component\s+:is="primaryActionIcon"/)
   assert.match(tableShell, /<el-button[\s\S]*tag="router-link"[\s\S]*:to="action\.to"/)
   assert.match(workflowStepper, /<el-button[\s\S]*class="workflow-progress-rail__step"/)
-  assert.match(topbar, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--ghost"/)
+  // topbar 退出按钮已迁移到 identity-dropdown 内部，topbar 不再直接出现 ghost el-button
+  assert.match(topbar, /<el-dropdown-item[\s\S]*command="logout"/)
   assert.match(loginView, /<el-button[\s\S]*native-type="submit"/)
   assert.match(unifiedErrorView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
   assert.match(healthView, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
@@ -3569,4 +3574,49 @@ test('健康响应同时保留 reachable 和 ready', () => {
     message: 'active build run missing',
     tone: 'warning',
   })
+})
+
+
+test('个人中心路由在 routeRecords 中注册并通过 hidden 元信息从侧栏排除', () => {
+  const profileRoute = routeRecords.find((route) => route.name === 'profile')
+  assert.ok(profileRoute, 'profile 路由必须存在')
+  assert.equal(profileRoute.path, '/app/profile')
+  assert.equal(profileRoute.componentKey, 'ProfileView')
+  assert.equal(profileRoute.meta.hidden, true)
+  assert.equal(profileRoute.meta.layout, 'console')
+  // 个人中心应该不被任何业务 permission 限制
+  assert.deepEqual(profileRoute.meta.permissions, [])
+
+  const groups = buildNavigationGroups(routeRecords, () => true)
+  const allItemPaths = groups.flatMap((group) => group.items).map((item) => item.path)
+  assert.equal(
+    allItemPaths.includes('/app/profile'),
+    false,
+    '个人中心不应出现在主侧栏导航分组中',
+  )
+})
+
+test('顶部导航 dropdown 暴露个人中心和退出菜单', () => {
+  const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
+  const profileView = readFileSync(new URL('./views/profile/ProfileView.vue', import.meta.url), 'utf8')
+  const authApi = readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8')
+
+  // topbar 用 el-dropdown 替代独立退出按钮，含 profile/logout 两个 command
+  assert.match(topbar, /<el-dropdown\b[\s\S]*class="identity-dropdown"/)
+  assert.match(topbar, /<el-dropdown-item\b[\s\S]*command="profile"/)
+  assert.match(topbar, /<el-dropdown-item\b[\s\S]*command="logout"/)
+  assert.match(topbar, /handleDropdownCommand/)
+  // dropdown 头部展示 displayName / username / dataScopeLabel
+  assert.match(topbar, /class="identity-menu__header"/)
+
+  // ProfileView 含三块卡片（基本信息 / 修改密码 / 权限明细）
+  assert.match(profileView, /class="profile-card"/)
+  assert.match(profileView, /handleSaveDisplayName/)
+  assert.match(profileView, /handleChangePassword/)
+  assert.match(profileView, /handleAvatarSelected/)
+
+  // api 层暴露三个个人中心方法
+  assert.match(authApi, /export async function updateCurrentProfile/)
+  assert.match(authApi, /export async function changeCurrentPassword/)
+  assert.match(authApi, /export async function uploadCurrentAvatar/)
 })
