@@ -105,6 +105,12 @@ onMounted(async () => {
     // Phase 6：拉历史草稿列表，01 步 history_draft 卡片据此决定 disabled / 数量角标
     await loadHistoryDrafts()
 
+    // Phase 6：恢复 URL ?selectedCandidate=xxx（直接进 05 步或刷新页面时使用）
+    const rawSelected = Array.isArray(route.query.selectedCandidate)
+      ? route.query.selectedCandidate[0]
+      : route.query.selectedCandidate
+    if (rawSelected) selectedCandidateId.value = String(rawSelected)
+
     dirty.value = false
   } catch (e) {
     error.value = { message: e?.message ?? '加载草稿失败' }
