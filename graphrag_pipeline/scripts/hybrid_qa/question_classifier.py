@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -52,6 +53,11 @@ _RULE_PATTERNS: dict[HybridLayer, tuple[str, ...]] = {
     ),
 }
 
+_SUMMARY_VERBS_RE = r"(?:总结|概括|归纳)"
+_CHAPTER_RE = r"第\s*[一二三四五六七八九十百千万\d]+\s*章"
+_SECTION_MARKER_RE = re.compile(r"(?:\d+\.\d+|第\s*[一二三四五六七八九十百千万\d]+\s*节)")
+_CHAPTER_SUMMARY_RE = re.compile(rf"{_SUMMARY_VERBS_RE}.{{0,12}}{_CHAPTER_RE}|{_CHAPTER_RE}.{{0,12}}{_SUMMARY_VERBS_RE}")
+
 
 def classify_question(question: str) -> QuestionClassification:
     normalized_question = question.strip()
@@ -76,12 +82,22 @@ def classify_question(question: str) -> QuestionClassification:
 
 
 def _collect_rule_hits(question: str) -> list[dict[str, str]]:
-    return [
+    hits = [
         {"layer": layer.value, "pattern": pattern}
         for layer, patterns in _RULE_PATTERNS.items()
         for pattern in patterns
         if pattern in question
     ]
+    hits.extend(_chapter_summary_rule_hits(question))
+    return hits
+
+
+def _chapter_summary_rule_hits(question: str) -> list[dict[str, str]]:
+    if not _CHAPTER_SUMMARY_RE.search(question):
+        return []
+    if _SECTION_MARKER_RE.search(question):
+        return [{"layer": HybridLayer.MIXED.value, "pattern": "section_summary"}]
+    return [{"layer": HybridLayer.HIGH.value, "pattern": "broad_chapter_summary"}]
 
 
 def _select_layer(hit_counts: dict[HybridLayer, int]) -> HybridLayer:

@@ -48,6 +48,20 @@ def test_summary_question_records_rule_hits():
     assert classification.diagnostics["rule_hits"]
 
 
+def test_broad_chapter_summary_routes_to_high():
+    classification = classify_question("请概括第五章「虚拟存储器」的核心内容。")
+
+    assert classification.layer is HybridLayer.HIGH
+    assert any(hit["pattern"] == "broad_chapter_summary" for hit in classification.diagnostics["rule_hits"])
+
+
+def test_specific_section_summary_stays_mixed():
+    classification = classify_question("请概括第一章 1.4「操作系统的主要功能」的学习重点。")
+
+    assert classification.layer is HybridLayer.MIXED
+    assert any(hit["pattern"] == "section_summary" for hit in classification.diagnostics["rule_hits"])
+
+
 def test_unmatched_question_defaults_to_low():
     classification = classify_question("请详细说明这个概念")
 
