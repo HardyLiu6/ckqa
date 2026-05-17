@@ -416,7 +416,7 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
      - SQL 加 `prompt_tune_extraction_eval_runs.sample_total` 列；`ExtractionEvalWorker.runInternal` 启动时读 `audit_with_gold.json` 真实长度回填，service 投影时用此值替换硬编码 20，分母随 build_audit_extraction_set 实际产出动态走（旧记录或回填失败时仍按 20 兜底）。
      - service 在 `projectStatus` 对当前 `extracting_candidate_id` 的候选按 `elapsedSeconds` 推算"估算 finished"——用 `已用秒数 / 单样本预估秒数`，限 0..sampleTotal-1，永远不到分母（避免抢真值）；overall 的 `finishedCalls` / `tokensUsed` / `estimatedRemainingSeconds` 同步按 sampleTotal 比例缩放。
      - DTO `ExtractionEvalStatusResponse.Stage` 加 `estimated:Boolean` 标志，前端 `CandidateMatrixRow` 在估算值后追加「（估算）」徽标，避免误以为是真值。
-   - **未覆盖的短板（留 Phase 7+）**：仍是候选粒度的"估算型"反馈；要做样本级真进度，需要让 Python `run_native_extraction.py` 每完成 1 个样本写 `progress.json`（`{finished:N}`），Java worker 起 watcher 线程定期读 progress.json → 写 DB；候选边界软取消的 race 处理需要小心。本期未做。
+   - **未覆盖的短板（路线图：Phase 7「04 步评分样本级真进度」）**：仍是候选粒度的"估算型"反馈；要做样本级真进度，需要让 Python `run_native_extraction.py` 每完成 1 个样本写 `progress.json`（`{finished:N}`），Java worker 起 watcher 线程定期读 progress.json → 写 DB；候选边界软取消的 race 处理需要小心。详见 Phase 7 § "04 步评分样本级真进度" 落地计划。
 
 
 ## 实施分期
@@ -508,6 +508,19 @@ URL 是真值之源：所有"返回上一步 / 浏览器后退"操作都改 quer
   - 是否按 `name + type` 双键匹配可配置（默认 `name` 单键，避免 LLM 抖动改了类型导致漏过滤；用户在偏好设置开启严格模式后切到双键）。
   - 测试：单测覆盖"已采纳实体过滤"、"关系两端引用已采纳实体仍保留"、"已采纳实体名称改变后不再误过滤"三条路径。
   - 这一步落在 Phase 7 而不是 Phase 3 的原因：Phase 3 的核心是把 AI 候选链路打通（端到端 + 持久化），去重属于体验优化；过早做去重会让"我刚才采纳的怎么不见了"的回归测试变复杂。
+
+- **04 步评分样本级真进度（spec § 风险 #8）：**
+  - 现状（Phase 6.5 已落地）：service 在 `projectStatus` 中按 `elapsedSeconds` 推算"估算 finished"，前端在估算值后追加「（估算）」徽标。仍是候选粒度，不是真实推进。
+  - 目标：把 worker 阻塞跑 sampleTotal 个样本的过程拆成"每完成 1 个样本就把进度写回 DB"，前端拿到的就是真值。
+  - 实现路径（设计草案，留 Phase 7 实施时再细化）：
+    1. **Python 写进度文件**：`graphrag_pipeline/scripts/extraction_eval/run_native_extraction.py`（或其当前调用方）每完成 1 个样本就 atomic 写一次 `<workspace>/eval/<evalRunId>/progress/<candidateId>.json`，内容形如 `{"finished": N, "total": M, "lastSampleId": "...", "ts": "..."}`。atomic 写 = `tmp + rename`，避免 Java watcher 读到半截 JSON。
+    2. **Java watcher 线程**：`ExtractionEvalWorker` 在派发 `runSingleCandidateExtract` 之前起一个 `ScheduledExecutorService.scheduleAtFixedRate`（间隔 1.5s，与前端轮询同源），周期性读 `progress/<currentCandidateId>.json` → `evalRunsService.updateById` 写入新增字段 `current_extract_finished:int`；候选切换或软取消时停止 watcher，避免 race。
+    3. **DB 字段**：`prompt_tune_extraction_eval_runs` 新增 `current_extract_finished int` 列，service 投影时优先用此真值，缺失（旧记录或 watcher 未启动）才回退 Phase 6.5 估算逻辑；DTO `Stage.estimated` 在用真值时设 false。
+    4. **候选边界软取消的 race 处理**：worker 在 `cancelling` 状态检测到时先 `shutdownNow()` watcher，避免 watcher 在候选 done 后继续读已删除的 progress.json 报错；watcher 异常一律 swallow + 写 log（不能阻塞主流程）。
+    5. **Phase 5 已有的"候选边界更新 finished_candidates"保留**：watcher 写的是"当前候选内部进度"；候选完成时仍由 worker 主流程在事务里把 candidateId 追加到 `finished_candidates`，并把 `current_extract_finished` 清零给下一候选用。
+  - 测试：mock progress.json 文件读写，验证 ① watcher 周期读 → DB 写；② 候选切换时清零；③ progress.json 损坏/缺失时 fallback 估算。
+  - 与 Phase 8「AI 单样本抽取异步化」的协同：Phase 8 的 `prompt_tune_ai_suggestion_tasks` 表只管"任务级"状态机（pending/running/done），与本 watcher 关心的"任务内部样本进度"是两层；二者不冲突，本期只动 04 评分这一处。
+  - 风险：watcher 与 Python 子进程共享磁盘，若 worker JVM 与 Python 跑在不同容器，需要确认共享 volume；本期评估留给 Phase 7 实施时根据部署形态决定。
 
 #### Phase 8：并发安全与 build run 生命周期
 
