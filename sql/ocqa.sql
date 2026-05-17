@@ -134,6 +134,10 @@ CREATE TABLE `users` (
   `display_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '展示名称',
   `password_hash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '密码哈希（登录注册未接入时可为空）',
   `status` enum('active','disabled','locked','pending') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '用户状态',
+  `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '联系邮箱（个人中心可编辑，唯一性留待邮箱登录上线时启用）',
+  `phone` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '联系手机号（建议 E.164 格式）',
+  `email_verified_at` timestamp NULL DEFAULT NULL COMMENT '邮箱验证通过时间，未启用邮箱登录前保持 NULL',
+  `phone_verified_at` timestamp NULL DEFAULT NULL COMMENT '手机号验证通过时间，未启用手机登录前保持 NULL',
   `last_login_at` timestamp NULL DEFAULT NULL COMMENT '最后登录时间',
   `avatar_bucket` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '头像MinIO存储桶',
   `avatar_object_key` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '头像MinIO对象键',
@@ -145,7 +149,10 @@ CREATE TABLE `users` (
   `is_deleted` tinyint(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_code`(`user_code` ASC) USING BTREE,
-  UNIQUE INDEX `uk_username`(`username` ASC) USING BTREE
+  UNIQUE INDEX `uk_username`(`username` ASC) USING BTREE,
+  -- email / phone 暂仅普通索引，唯一性留待邮箱、手机号验证登录上线时再加
+  INDEX `idx_users_email`(`email` ASC) USING BTREE,
+  INDEX `idx_users_phone`(`phone` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '平台用户表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------

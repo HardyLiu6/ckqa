@@ -91,6 +91,9 @@ export function cloneProfile(profile = {}) {
     permissions: [...permissions],
     // 个人中心需要展示的最近登录时间，后端 PUT/GET /auth/me 都会带上
     lastLoginAt: profile.lastLoginAt ?? null,
+    // 联系信息字段：null 表示未绑定
+    email: profile.email ?? null,
+    phone: profile.phone ?? null,
   }
 }
 

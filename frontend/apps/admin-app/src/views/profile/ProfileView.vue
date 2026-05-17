@@ -5,6 +5,7 @@ import {
   Camera,
   KeyRound,
   Mail,
+  Phone,
   Save,
   ShieldCheck,
   Star,
@@ -23,6 +24,8 @@ const currentUser = computed(() => authStore.state.currentUser)
 
 // 显示名草稿
 const displayNameDraft = ref(currentUser.value?.displayName ?? '')
+const emailDraft = ref(currentUser.value?.email ?? '')
+const phoneDraft = ref(currentUser.value?.phone ?? '')
 const savingProfile = ref(false)
 const avatarUploading = ref(false)
 const fileInput = ref(null)
@@ -39,6 +42,29 @@ const changingPassword = ref(false)
 const displayNameDirty = computed(
   () => (displayNameDraft.value ?? '').trim() !== (currentUser.value?.displayName ?? '').trim(),
 )
+const emailDirty = computed(
+  () => (emailDraft.value ?? '').trim() !== (currentUser.value?.email ?? '').trim(),
+)
+const phoneDirty = computed(
+  () => (phoneDraft.value ?? '').trim() !== (currentUser.value?.phone ?? '').trim(),
+)
+const profileDirty = computed(
+  () => displayNameDirty.value || emailDirty.value || phoneDirty.value,
+)
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_PATTERN = /^\+?\d{8,15}$/
+
+function validateProfileForm() {
+  if (!displayNameDraft.value.trim()) return '显示名不能为空'
+  const email = (emailDraft.value ?? '').trim()
+  if (email && !EMAIL_PATTERN.test(email)) return '邮箱格式不正确'
+  if (email.length > 255) return '邮箱长度不能超过 255 字符'
+  const phone = (phoneDraft.value ?? '').trim()
+  if (phone && !PHONE_PATTERN.test(phone)) return '手机号需为 8-15 位纯数字，可选 + 前缀'
+  if (phone.length > 32) return '手机号长度不能超过 32 字符'
+  return null
+}
 
 const avatarUrl = computed(() => currentUser.value?.avatarUrl ?? '')
 const avatarInitial = computed(() => {
@@ -63,22 +89,28 @@ const permissionList = computed(() => {
   return ps
 })
 
-async function handleSaveDisplayName() {
-  const trimmed = displayNameDraft.value.trim()
-  if (!trimmed) {
-    ElMessage.warning('显示名不能为空')
+async function handleSaveProfile() {
+  const validationError = validateProfileForm()
+  if (validationError) {
+    ElMessage.warning(validationError)
     return
   }
-  if (!displayNameDirty.value) {
+  if (!profileDirty.value) {
     ElMessage.info('未做更改')
     return
   }
   savingProfile.value = true
   try {
-    const updated = await updateCurrentProfile({ displayName: trimmed })
+    const updated = await updateCurrentProfile({
+      displayName: displayNameDraft.value.trim(),
+      email: (emailDraft.value ?? '').trim(),
+      phone: (phoneDraft.value ?? '').trim(),
+    })
     authStore.applyProfile(updated)
-    displayNameDraft.value = updated.displayName ?? trimmed
-    ElMessage.success('显示名已更新')
+    displayNameDraft.value = updated.displayName ?? ''
+    emailDraft.value = updated.email ?? ''
+    phoneDraft.value = updated.phone ?? ''
+    ElMessage.success('资料已更新')
   } catch (error) {
     const msg = error?.message || error?.response?.data?.message || '保存失败'
     ElMessage.error(msg)
@@ -241,32 +273,73 @@ async function handleChangePassword() {
             <dt>最近登录</dt>
             <dd>{{ lastLoginLabel }}</dd>
           </div>
-          <div class="profile-meta-grid__full">
-            <dt>显示名</dt>
-            <dd>
-              <div class="profile-display-name-row">
-                <el-input
-                  v-model="displayNameDraft"
-                  maxlength="128"
-                  show-word-limit
-                  clearable
-                  placeholder="请输入显示名"
-                  class="profile-display-name-input"
-                />
-                <el-button
-                  type="primary"
-                  class="ckqa-el-button ckqa-el-button--primary"
-                  :loading="savingProfile"
-                  :disabled="!displayNameDirty || savingProfile"
-                  @click="handleSaveDisplayName"
-                >
-                  <Save :size="14" aria-hidden="true" />
-                  保存
-                </el-button>
-              </div>
-            </dd>
-          </div>
         </dl>
+      </div>
+    </section>
+
+    <!-- 卡 1.5：可编辑资料（显示名 / 邮箱 / 手机号） -->
+    <section class="profile-card">
+      <header class="profile-card__header">
+        <h3>
+          <Save :size="16" aria-hidden="true" />
+          可编辑资料
+        </h3>
+        <small>显示名会同步到顶部导航栏；邮箱与手机号本期仅作联系方式，验证登录后续上线。</small>
+      </header>
+      <div class="profile-card__body">
+        <div class="profile-edit-form">
+          <label class="profile-edit-form__field profile-edit-form__field--full">
+            <span>显示名</span>
+            <el-input
+              v-model="displayNameDraft"
+              maxlength="128"
+              show-word-limit
+              clearable
+              placeholder="请输入显示名"
+            />
+          </label>
+          <label class="profile-edit-form__field">
+            <span>
+              <Mail :size="13" aria-hidden="true" />
+              邮箱
+            </span>
+            <el-input
+              v-model="emailDraft"
+              type="email"
+              maxlength="255"
+              clearable
+              placeholder="example@your-domain.com"
+              autocomplete="email"
+            />
+            <em class="profile-edit-form__hint">未绑定可留空，邮箱验证登录敬请期待</em>
+          </label>
+          <label class="profile-edit-form__field">
+            <span>
+              <Phone :size="13" aria-hidden="true" />
+              手机号
+            </span>
+            <el-input
+              v-model="phoneDraft"
+              maxlength="32"
+              clearable
+              placeholder="+86 138 0000 0000"
+              autocomplete="tel"
+            />
+            <em class="profile-edit-form__hint">8-15 位纯数字，可选 + 前缀；短信验证登录敬请期待</em>
+          </label>
+          <div class="profile-edit-form__actions">
+            <el-button
+              type="primary"
+              class="ckqa-el-button ckqa-el-button--primary"
+              :loading="savingProfile"
+              :disabled="!profileDirty || savingProfile"
+              @click="handleSaveProfile"
+            >
+              <Save :size="14" aria-hidden="true" />
+              保存修改
+            </el-button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -531,12 +604,44 @@ async function handleChangePassword() {
   color: var(--ckqa-text-muted);
 }
 
-.profile-display-name-row {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
+.profile-edit-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
 }
-.profile-display-name-input { flex: 1; }
+.profile-edit-form__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.profile-edit-form__field--full {
+  grid-column: 1 / -1;
+}
+.profile-edit-form__field > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ckqa-text-muted);
+  font-weight: 500;
+}
+.profile-edit-form__hint {
+  color: var(--ckqa-text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+.profile-edit-form__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .profile-edit-form {
+    grid-template-columns: 1fr;
+  }
+}
 
 .profile-password-form {
   display: grid;

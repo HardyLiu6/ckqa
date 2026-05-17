@@ -143,166 +143,19 @@
   gap: var(--ckqa-space-6);
 }
 
-.login-positioning,
-.login-card {
-  display: grid;
-  align-content: start;
-  gap: var(--ckqa-space-6);
-  min-width: 0;
-}
+/*
+ * 旧版 LoginView 的全局样式已废弃。
+ * 当前 LoginView 用 scoped style 自带主题，参见
+ * frontend/apps/admin-app/src/views/auth/LoginView.vue。
+ * 仅保留 route-state__facts 给 RouteState 组件复用。
+ */
 
-.login-positioning {
-  padding: var(--ckqa-space-1) var(--ckqa-space-2) var(--ckqa-space-1) 0;
-}
-
-.login-card {
-  padding: var(--ckqa-space-6);
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--ckqa-accent) 8%, transparent), transparent 44%),
-    var(--ckqa-surface-muted);
-}
-
-.login-brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--ckqa-space-4);
-}
-
-.login-copy {
-  color: var(--ckqa-text-muted);
-  line-height: 1.7;
-}
-
-.login-card__header {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--ckqa-space-4);
-}
-
-.login-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ckqa-space-2);
-  padding: var(--ckqa-space-2) var(--ckqa-space-3);
-  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 26%, var(--ckqa-border));
-  border-radius: var(--ckqa-radius-full);
-  color: var(--ckqa-accent-strong);
-  background: color-mix(in srgb, var(--ckqa-accent) 10%, var(--ckqa-surface));
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.login-flow {
-  display: grid;
-  gap: var(--ckqa-space-3);
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.login-flow li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--ckqa-space-3);
-  align-items: start;
-  padding: var(--ckqa-space-3);
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-sm);
-  background: var(--ckqa-surface);
-}
-
-.login-flow__index {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: var(--ckqa-radius-full);
-  color: var(--ckqa-accent-strong);
-  background: color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
-  font-family: var(--ckqa-font-mono);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.login-flow strong,
-.login-flow small {
-  display: block;
-}
-
-.login-flow small {
-  margin-top: 3px;
-}
-
-.eyebrow {
-  color: var(--ckqa-accent-strong);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.login-form,
-.login-form label {
-  display: grid;
-  gap: var(--ckqa-space-3);
-}
-
-.login-preset-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--ckqa-space-3);
-}
-
-.login-preset {
-  display: grid;
-  min-width: 0;
-  gap: var(--ckqa-space-1);
-  padding: var(--ckqa-space-3);
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-sm);
-  color: var(--ckqa-text);
-  background: var(--ckqa-surface);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    border-color var(--ckqa-duration-fast) ease,
-    box-shadow var(--ckqa-duration-fast) ease,
-    transform var(--ckqa-duration-fast) ease;
-}
-
-.login-preset strong,
-.login-preset span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.login-preset span {
-  color: var(--ckqa-text-muted);
-  font-size: 12px;
-}
-
-.login-preset:hover,
-.login-preset.active {
-  border-color: color-mix(in srgb, var(--ckqa-accent) 42%, var(--ckqa-border));
-  box-shadow: 0 12px 24px color-mix(in srgb, var(--ckqa-accent) 11%, transparent);
-  transform: translateY(-1px);
-}
-
-.login-role-facts,
 .route-state__facts {
   display: grid;
   gap: var(--ckqa-space-2);
   margin: 0;
 }
 
-.login-role-facts div,
 .route-state__facts div {
   display: grid;
   grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
@@ -314,13 +167,11 @@
   background: var(--ckqa-surface);
 }
 
-.login-role-facts dt,
 .route-state__facts dt {
   color: var(--ckqa-text-muted);
   font-size: 12px;
 }
 
-.login-role-facts dd,
 .route-state__facts dd {
   min-width: 0;
   margin: 0;
@@ -328,29 +179,12 @@
   overflow-wrap: anywhere;
 }
 
-.login-form label span {
-  color: var(--ckqa-text-muted);
-  font-size: 13px;
-}
-
-.login-role-select,
-.login-input {
-  width: 100%;
-}
-
-.login-form-error {
-  padding: var(--ckqa-space-3);
-  margin: 0;
-  border: 1px solid color-mix(in srgb, var(--ckqa-danger) 36%, var(--ckqa-border));
-  border-radius: var(--ckqa-radius-sm);
-  color: var(--ckqa-danger);
-  background: color-mix(in srgb, var(--ckqa-danger) 8%, var(--ckqa-surface));
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.login-submit {
-  width: 100%;
+.eyebrow {
+  color: var(--ckqa-accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .field-label {
@@ -4238,15 +4072,6 @@ textarea.text-input {
     grid-template-columns: 1fr;
   }
 
-  .login-positioning {
-    padding: 0;
-  }
-
-  .login-card {
-    padding: var(--ckqa-space-5);
-  }
-
-  .login-role-facts div,
   .route-state__facts div {
     grid-template-columns: 1fr;
   }

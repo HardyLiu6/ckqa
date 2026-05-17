@@ -24,6 +24,16 @@ public class AuthUserProfile {
     private final String dataScope;
 
     /**
+     * 联系邮箱（个人中心展示与编辑），可空。
+     */
+    private final String email;
+
+    /**
+     * 联系手机号（个人中心展示与编辑），可空。
+     */
+    private final String phone;
+
+    /**
      * 最近一次登录时间，按 Asia/Shanghai 时区，offset-free 字符串。
      * <p>未曾登录时为 null。</p>
      */

@@ -2971,15 +2971,21 @@ test('全局样式入口在 base 和 components 之间加载 Element Plus 覆盖
   assert.match(elementPlusCss, /\.el-drawer/)
 })
 
-test('登录页使用真实账号密码输入并保留满宽样式', () => {
+test('登录页使用真实账号密码输入并按 LOGIN_PRESETS 切换身份', () => {
   const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
-  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
+  // 账号密码输入复用 el-input + lucide 图标 prefix
   assert.match(loginView, /<el-input\s+v-model\.trim="form\.username"[\s\S]*autocomplete="username"/)
   assert.match(loginView, /<el-input[\s\S]*v-model="form\.password"[\s\S]*type="password"/)
+  // preset 角色切换仍按 LOGIN_PRESETS 数据驱动
   assert.match(loginView, /v-for="preset in LOGIN_PRESETS"/)
+  // 不再使用旧的 selectedRole 下拉
   assert.doesNotMatch(loginView, /<select\s+v-model="selectedRole"/)
-  assert.match(componentsCss, /\.login-role-select,\s*[\s\S]*\.login-input\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
+  // 重设计后版面：左侧 aside + 右侧 card
+  assert.match(loginView, /class="login-shell"/)
+  assert.match(loginView, /class="login-aside"/)
+  assert.match(loginView, /class="login-card"/)
+  assert.match(loginView, /class="login-preset"/)
 })
 
 test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
@@ -3613,11 +3619,17 @@ test('顶部导航 dropdown 暴露个人中心和退出菜单', () => {
   // dropdown 头部展示 displayName / username / dataScopeLabel
   assert.match(topbar, /class="identity-menu__header"/)
 
-  // ProfileView 含三块卡片（基本信息 / 修改密码 / 权限明细）
+  // ProfileView 含基本信息 / 可编辑资料（显示名 + 邮箱 + 手机号）/
+  // 修改密码 / 权限明细 4 块卡片
   assert.match(profileView, /class="profile-card"/)
-  assert.match(profileView, /handleSaveDisplayName/)
+  assert.match(profileView, /handleSaveProfile/)
   assert.match(profileView, /handleChangePassword/)
   assert.match(profileView, /handleAvatarSelected/)
+  // 邮箱 + 手机号草稿与校验
+  assert.match(profileView, /emailDraft/)
+  assert.match(profileView, /phoneDraft/)
+  assert.match(profileView, /EMAIL_PATTERN/)
+  assert.match(profileView, /PHONE_PATTERN/)
 
   // api 层暴露三个个人中心方法
   assert.match(authApi, /export async function updateCurrentProfile/)

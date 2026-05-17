@@ -53,7 +53,7 @@ public class AuthController {
     }
 
     /**
-     * 个人中心：更新当前用户的显示名。
+     * 个人中心：更新当前用户的显示名 / 邮箱 / 手机号。
      */
     @PutMapping("/me")
     public ApiResponse<AuthUserProfile> updateCurrentUser(
@@ -61,7 +61,9 @@ public class AuthController {
             @Valid @RequestBody UpdateProfileRequest body
     ) {
         AuthenticatedUser current = AuthContext.fromRequestOrCurrentJwt(request);
-        return ApiResponseUtils.success(authService.updateCurrentProfile(current, body.getDisplayName()));
+        return ApiResponseUtils.success(
+                authService.updateCurrentProfile(current, body.getDisplayName(), body.getEmail(), body.getPhone())
+        );
     }
 
     /**

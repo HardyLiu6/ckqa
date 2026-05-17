@@ -65,6 +65,30 @@ public class Users implements Serializable {
     private String status;
 
     /**
+     * 联系邮箱（个人中心可编辑，唯一性留待邮箱登录上线时启用）。
+     */
+    @TableField("email")
+    private String email;
+
+    /**
+     * 联系手机号（建议 E.164 格式）。
+     */
+    @TableField("phone")
+    private String phone;
+
+    /**
+     * 邮箱验证通过时间，未启用邮箱登录前保持 null。
+     */
+    @TableField("email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
+    /**
+     * 手机号验证通过时间，未启用手机登录前保持 null。
+     */
+    @TableField("phone_verified_at")
+    private LocalDateTime phoneVerifiedAt;
+
+    /**
      * 最后登录时间
      */
     @TableField("last_login_at")

@@ -176,19 +176,60 @@ class AuthControllerWebMvcTest {
                 .roles(List.of("admin"))
                 .permissions(List.of("*"))
                 .dataScope("全部课程")
+                .email("admin@example.com")
+                .phone("+8613800001111")
                 .build();
-        given(authService.updateCurrentProfile(eq(currentUser), eq("何启航（已更新）"))).willReturn(updatedProfile);
+        given(authService.updateCurrentProfile(
+                eq(currentUser),
+                eq("何启航（已更新）"),
+                eq("admin@example.com"),
+                eq("+8613800001111")
+        )).willReturn(updatedProfile);
 
         mockMvc.perform(put(ApiPaths.AUTH + "/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, currentUser)
                         .content("""
                                 {
-                                  "displayName": "何启航（已更新）"
+                                  "displayName": "何启航（已更新）",
+                                  "email": "admin@example.com",
+                                  "phone": "+8613800001111"
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.displayName").value("何启航（已更新）"));
+                .andExpect(jsonPath("$.data.displayName").value("何启航（已更新）"))
+                .andExpect(jsonPath("$.data.email").value("admin@example.com"))
+                .andExpect(jsonPath("$.data.phone").value("+8613800001111"));
+    }
+
+    @Test
+    void shouldRejectInvalidEmailOnUpdate() throws Exception {
+        mockMvc.perform(put(ApiPaths.AUTH + "/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "displayName": "何启航",
+                                  "email": "not-an-email"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001));
+        then(authService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void shouldRejectInvalidPhoneOnUpdate() throws Exception {
+        mockMvc.perform(put(ApiPaths.AUTH + "/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "displayName": "何启航",
+                                  "phone": "abc-1234"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4001));
+        then(authService).shouldHaveNoInteractions();
     }
 
     @Test

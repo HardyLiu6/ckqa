@@ -116,23 +116,37 @@ public class AuthService {
     }
 
     /**
-     * 个人中心：更新当前用户的显示名。
-     * <p>仅允许修改 displayName，其它字段（用户代码、用户名、角色、权限）由管理员维护。</p>
+     * 个人中心：更新当前用户的显示名 / 邮箱 / 手机号。
+     * <p>三字段全部按「null=不动 / 空串=清空 / 有值=更新」语义处理。
+     * 用户代码、用户名、角色、权限由管理员维护。</p>
      */
     @Transactional
-    public AuthUserProfile updateCurrentProfile(AuthenticatedUser currentUser, String displayName) {
+    public AuthUserProfile updateCurrentProfile(
+            AuthenticatedUser currentUser,
+            String displayName,
+            String email,
+            String phone
+    ) {
         if (currentUser == null) {
             throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
         }
         if (!StringUtils.hasText(displayName)) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "显示名不能为空");
         }
-        String trimmed = displayName.trim();
-        if (trimmed.length() > 128) {
+        String trimmedName = displayName.trim();
+        if (trimmedName.length() > 128) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "显示名长度不能超过 128 字符");
         }
         Users user = usersService.getRequiredById(currentUser.id());
-        user.setDisplayName(trimmed);
+        user.setDisplayName(trimmedName);
+        if (email != null) {
+            String trimmedEmail = email.trim();
+            user.setEmail(trimmedEmail.isEmpty() ? null : trimmedEmail);
+        }
+        if (phone != null) {
+            String trimmedPhone = phone.trim();
+            user.setPhone(trimmedPhone.isEmpty() ? null : trimmedPhone);
+        }
         usersService.updateById(user);
         return toProfile(user, currentUser.roles(), currentUser.permissions());
     }
@@ -212,6 +226,8 @@ public class AuthService {
                 .roles(roles == null ? List.of() : roles)
                 .permissions(permissions == null ? List.of() : permissions)
                 .dataScope(resolveDataScope(roles))
+                .email(user.getEmail())
+                .phone(user.getPhone())
                 .lastLoginAt(user.getLastLoginAt())
                 .build();
     }
