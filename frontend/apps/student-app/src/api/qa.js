@@ -1,6 +1,6 @@
-import { get, patch, post } from '../axios/index.js'
+import { del, get, patch, post } from '../axios/index.js'
 
-export function createQaApi(client = { get, post }) {
+export function createQaApi(client = { del, get, patch, post }) {
   return {
     listQaSessions(params = {}) {
       const { userId, ...safeParams } = params ?? {}
@@ -27,6 +27,13 @@ export function createQaApi(client = { get, post }) {
     warmupHybrid(payload) {
       return client.post('/qa-sessions/hybrid-warmup', payload)
     },
+    submitQaFeedback(payload) {
+      const { userId, ...safePayload } = payload ?? {}
+      return client.post('/qa-message-feedback', safePayload)
+    },
+    deleteQaFeedback(messageId) {
+      return client.delete(`/qa-message-feedback/${encodeURIComponent(messageId)}`)
+    },
   }
 }
 
@@ -40,3 +47,5 @@ export const sendQaMessage = qaApi.sendQaMessage
 export const getQaTask = qaApi.getQaTask
 export const listQaMessages = qaApi.listQaMessages
 export const warmupHybrid = qaApi.warmupHybrid
+export const submitQaFeedback = qaApi.submitQaFeedback
+export const deleteQaFeedback = qaApi.deleteQaFeedback

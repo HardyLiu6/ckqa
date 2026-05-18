@@ -17,7 +17,17 @@ import {
 } from '@element-plus/icons-vue'
 
 import { listCourses, listCourseKnowledgeBases } from '@/api/courses'
-import { createQaSession, getQaSession, getQaTask, listQaMessages, sendQaMessage, updateQaSession, warmupHybrid } from '@/api/qa'
+import {
+  createQaSession,
+  deleteQaFeedback,
+  getQaSession,
+  getQaTask,
+  listQaMessages,
+  sendQaMessage,
+  submitQaFeedback,
+  updateQaSession,
+  warmupHybrid,
+} from '@/api/qa'
 import GlassCard from '@/components/common/GlassCard.vue'
 import ModuleTag from '@/components/common/ModuleTag.vue'
 import { useUserStore } from '@/stores/user'
@@ -37,6 +47,7 @@ import {
   matchCourseForQuestion,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
+  normalizeQaFeedback,
   normalizeQaMessage,
   normalizeQaSession,
   resolveSessionLifecycleStatusText,
@@ -67,9 +78,18 @@ const loadingCourses = ref(false)
 const loadingKnowledgeBases = ref(false)
 const restoringSession = ref(false)
 const sending = ref(false)
+const feedbackSubmittingMessageId = ref(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
 let pollTimer = null
+
+const FEEDBACK_ACTIONS = [
+  { key: 'helpful', label: '有用', rating: 'helpful', tags: [] },
+  { key: 'unhelpful', label: '无用', rating: 'unhelpful', tags: [] },
+  { key: 'source_irrelevant', label: '来源不相关', rating: 'needs_improvement', tags: ['source_irrelevant'] },
+  { key: 'too_long', label: '太长', rating: 'needs_improvement', tags: ['too_long'] },
+  { key: 'wants_example', label: '希望举例', rating: 'needs_improvement', tags: ['wants_example'] },
+]
 
 const selectedCourse = computed(() => (
   courses.value.find((course) => course.courseId === selectedCourseId.value) ?? null
@@ -499,6 +519,51 @@ function updateUserMessageTask(detail) {
   ))
 }
 
+function isFeedbackActionActive(message, action) {
+  const feedback = message?.feedback
+  if (!feedback) {
+    return false
+  }
+  if (action.tags.length > 0) {
+    return action.tags.every((tag) => feedback.tags.includes(tag))
+  }
+  return feedback.rating === action.rating && feedback.tags.length === 0
+}
+
+async function handleFeedback(message, action) {
+  if (!message?.id || feedbackSubmittingMessageId.value) {
+    return
+  }
+
+  feedbackSubmittingMessageId.value = message.id
+  try {
+    if (isFeedbackActionActive(message, action)) {
+      await deleteQaFeedback(message.id)
+      updateMessageFeedback(message.id, null)
+      ElMessage.success('已取消反馈')
+      return
+    }
+
+    const feedback = await submitQaFeedback({
+      messageId: message.id,
+      rating: action.rating,
+      tags: action.tags,
+    })
+    updateMessageFeedback(message.id, normalizeQaFeedback(feedback))
+    ElMessage.success('反馈已记录')
+  } catch (error) {
+    ElMessage.error(error?.message || '反馈提交失败')
+  } finally {
+    feedbackSubmittingMessageId.value = null
+  }
+}
+
+function updateMessageFeedback(messageId, feedback) {
+  messages.value = messages.value.map((message) => (
+    message.id === messageId ? { ...message, feedback } : message
+  ))
+}
+
 function clearPollTimer() {
   if (pollTimer) {
     window.clearTimeout(pollTimer)
@@ -758,6 +823,19 @@ function sourceTypeLabel(source) {
                 </li>
               </ol>
             </details>
+            <div class="message-feedback" aria-label="回答反馈">
+              <button
+                v-for="action in FEEDBACK_ACTIONS"
+                :key="action.key"
+                class="feedback-action"
+                :class="{ active: isFeedbackActionActive(msg, action) }"
+                type="button"
+                :disabled="feedbackSubmittingMessageId === msg.id"
+                @click="handleFeedback(msg, action)"
+              >
+                {{ action.label }}
+              </button>
+            </div>
             <div class="msg-meta">{{ formatMessageTime(msg.createdAt) }}</div>
           </GlassCard>
         </div>
@@ -1162,6 +1240,42 @@ function sourceTypeLabel(source) {
   font-size: 12px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+
+.message-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.feedback-action {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  transition: border-color $duration-fast $ease-out, color $duration-fast $ease-out, background $duration-fast $ease-out;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(147, 51, 234, 0.42);
+    color: var(--qa-primary-strong);
+  }
+
+  &.active {
+    border-color: rgba(20, 184, 166, 0.42);
+    background: rgba(20, 184, 166, 0.12);
+    color: #0f766e;
+  }
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
 }
 
 .msg-meta {

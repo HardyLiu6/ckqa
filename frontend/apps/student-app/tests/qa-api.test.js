@@ -21,6 +21,10 @@ function createClientRecorder() {
         calls.push({ method: 'patch', url, data, config })
         return Promise.resolve({ ok: true })
       },
+      delete(url, config = {}) {
+        calls.push({ method: 'delete', url, config })
+        return Promise.resolve({ ok: true })
+      },
     },
   }
 }
@@ -58,6 +62,13 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.getQaTask(8, 99)
   await api.listQaMessages(8)
   await api.warmupHybrid({ courseId: 'os', knowledgeBaseId: 2 })
+  await api.submitQaFeedback({
+    messageId: 33,
+    rating: 'needs_improvement',
+    tags: ['source_irrelevant'],
+    userId: 999,
+  })
+  await api.deleteQaFeedback(33)
 
   assert.deepEqual(calls, [
     {
@@ -102,6 +113,17 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
       method: 'post',
       url: '/qa-sessions/hybrid-warmup',
       data: { courseId: 'os', knowledgeBaseId: 2 },
+      config: {},
+    },
+    {
+      method: 'post',
+      url: '/qa-message-feedback',
+      data: { messageId: 33, rating: 'needs_improvement', tags: ['source_irrelevant'] },
+      config: {},
+    },
+    {
+      method: 'delete',
+      url: '/qa-message-feedback/33',
       config: {},
     },
   ])

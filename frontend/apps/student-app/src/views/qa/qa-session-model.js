@@ -130,6 +130,23 @@ export function normalizeQaMessage(message) {
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
     sources: normalizeQaSources(message.sources),
+    feedback: normalizeQaFeedback(message.feedback),
+  }
+}
+
+export function normalizeQaFeedback(feedback) {
+  if (!feedback || typeof feedback !== 'object') {
+    return null
+  }
+  return {
+    id: feedback.id ?? null,
+    messageId: feedback.messageId ?? null,
+    retrievalLogId: feedback.retrievalLogId ?? null,
+    rating: feedback.rating ?? '',
+    tags: Array.isArray(feedback.tags) ? feedback.tags.map((tag) => String(tag)) : [],
+    comment: feedback.comment ?? '',
+    createdAt: feedback.createdAt ?? '',
+    updatedAt: feedback.updatedAt ?? '',
   }
 }
 

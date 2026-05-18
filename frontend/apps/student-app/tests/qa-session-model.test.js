@@ -104,6 +104,7 @@ test('消息与任务状态规范化为前端展示模型', () => {
       taskStatus: null,
       progressStage: null,
       sources: [],
+      feedback: null,
     },
   )
 
@@ -111,6 +112,34 @@ test('消息与任务状态规范化为前端展示模型', () => {
   assert.equal(isTerminalTaskStatus('running'), false)
   assert.equal(resolvePollingDelaySeconds({ recommendedPollingIntervalSeconds: 30 }), 30)
   assert.equal(resolvePollingDelaySeconds({ mode: 'basic' }), 10)
+})
+
+test('学生反馈规范化为消息内轻量状态', () => {
+  const message = normalizeQaMessage({
+    id: 11,
+    role: 'assistant',
+    content: '回答内容',
+    feedback: {
+      id: 2,
+      messageId: 11,
+      retrievalLogId: 8,
+      rating: 'needs_improvement',
+      tags: ['source_irrelevant'],
+      comment: '',
+      createdAt: '2026-05-18T10:20:30',
+    },
+  })
+
+  assert.deepEqual(message.feedback, {
+    id: 2,
+    messageId: 11,
+    retrievalLogId: 8,
+    rating: 'needs_improvement',
+    tags: ['source_irrelevant'],
+    comment: '',
+    createdAt: '2026-05-18T10:20:30',
+    updatedAt: '',
+  })
 })
 
 test('来源卡片数据规范化为学生端展示模型', () => {
