@@ -1,7 +1,14 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { LogOut, Search, Server, ShieldCheck } from 'lucide-vue-next'
-import { RouterLink } from 'vue-router'
+import {
+  ChevronDown,
+  LogOut,
+  Search,
+  Server,
+  ShieldCheck,
+  UserCog,
+} from 'lucide-vue-next'
+import { RouterLink, useRouter } from 'vue-router'
 
 import ThemeControl from './ThemeControl.vue'
 
@@ -12,6 +19,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['logout'])
+const router = useRouter()
 const avatarLoadFailed = ref(false)
 
 function formatApiBaseline(apiBaseUrl) {
@@ -24,71 +32,296 @@ function formatApiBaseline(apiBaseUrl) {
 }
 
 const apiBaseline = computed(() => formatApiBaseline(props.apiBaseUrl))
-const identityLabel = computed(() => props.currentUser?.name || '未登录')
+const identityLabel = computed(() => props.currentUser?.displayName || props.currentUser?.name || '未登录')
+const username = computed(() => props.currentUser?.username || '')
 const avatarUrl = computed(() => props.currentUser?.avatarUrl || '')
 const identityInitial = computed(() => identityLabel.value.trim().charAt(0) || 'U')
 
 watch(avatarUrl, () => {
   avatarLoadFailed.value = false
 })
+
+function handleDropdownCommand(cmd) {
+  if (cmd === 'profile') {
+    router.push({ name: 'profile' })
+  } else if (cmd === 'logout') {
+    emit('logout')
+  }
+}
 </script>
 
 <template>
   <header class="app-topbar">
     <slot name="prepend" />
     <RouterLink class="brand" to="/app/dashboard" aria-label="返回工作台">
-      <span class="brand-mark">CK</span>
+      <img class="brand-mark" src="/logo.png" alt="智课问答" />
       <span>
-        <strong>CKQA 运维台</strong>
-        <small>课程知识库构建与运维平台</small>
+        <strong>智课问答</strong>
+        <small>课程资料 · 知识库 · 智能问答</small>
       </span>
     </RouterLink>
 
-    <el-input
-      class="topbar-search-input"
-      model-value="搜索待接入"
-      type="search"
-      aria-disabled="true"
-      disabled
-      readonly
-      aria-label="全局搜索待接入"
-    >
-      <template #prefix>
-        <Search :size="16" aria-hidden="true" />
-      </template>
-    </el-input>
-
-    <span class="runtime-chip" title="当前请求基线">
-      <Server :size="15" aria-hidden="true" />
-      <strong>{{ apiBaseline }}</strong>
-    </span>
-
-    <ThemeControl />
-
-    <div class="identity-cluster">
-      <span class="identity-chip" title="当前身份和数据范围">
-        <span class="identity-avatar" aria-hidden="true">
-          <img
-            v-if="avatarUrl && !avatarLoadFailed"
-            :src="avatarUrl"
-            :alt="`${identityLabel}头像`"
-            @error="avatarLoadFailed = true"
-          />
-          <span v-else>{{ identityInitial }}</span>
-        </span>
-        <ShieldCheck :size="15" aria-hidden="true" />
-        <strong>{{ identityLabel }}</strong>
-        <span>{{ dataScopeLabel }}</span>
-      </span>
+    <!-- 搜索（待接入）：拉长成现代搜索条样式占位 -->
+    <div class="topbar-search" role="search">
+      <Search :size="16" class="topbar-search__icon" aria-hidden="true" />
+      <input
+        type="search"
+        class="topbar-search__input"
+        placeholder="搜索课程、知识库、问答会话…（暂未开放）"
+        disabled
+        readonly
+        aria-disabled="true"
+        aria-label="全局搜索（暂未开放）"
+      />
+      <span class="topbar-search__hint">⌘K</span>
     </div>
 
-    <el-button
-      class="ckqa-el-button ckqa-el-button--ghost"
-      native-type="button"
-      @click="emit('logout')"
-    >
-      <LogOut class="button-icon" :size="16" aria-hidden="true" />
-      退出
-    </el-button>
+    <div class="topbar-actions">
+      <span class="runtime-chip" title="当前请求基线">
+        <Server :size="15" aria-hidden="true" />
+        <strong>{{ apiBaseline }}</strong>
+      </span>
+
+      <ThemeControl />
+
+      <!-- 身份 dropdown：头像按钮 + 下拉菜单（含个人中心 / 退出） -->
+      <el-dropdown
+        class="identity-dropdown"
+        trigger="click"
+        :hide-on-click="true"
+        @command="handleDropdownCommand"
+      >
+        <button
+          type="button"
+          class="identity-trigger"
+          :title="`${identityLabel}（${dataScopeLabel}）`"
+          aria-label="账号菜单"
+        >
+          <span class="identity-avatar" aria-hidden="true">
+            <img
+              v-if="avatarUrl && !avatarLoadFailed"
+              :src="avatarUrl"
+              :alt="`${identityLabel}头像`"
+              @error="avatarLoadFailed = true"
+            />
+            <span v-else>{{ identityInitial }}</span>
+          </span>
+          <span class="identity-trigger__copy">
+            <strong>{{ identityLabel }}</strong>
+            <small>{{ dataScopeLabel }}</small>
+          </span>
+          <ChevronDown :size="14" class="identity-trigger__chevron" aria-hidden="true" />
+        </button>
+        <template #dropdown>
+          <el-dropdown-menu class="identity-menu">
+            <header class="identity-menu__header">
+              <span class="identity-avatar identity-avatar--lg" aria-hidden="true">
+                <img
+                  v-if="avatarUrl && !avatarLoadFailed"
+                  :src="avatarUrl"
+                  :alt="`${identityLabel}头像`"
+                />
+                <span v-else>{{ identityInitial }}</span>
+              </span>
+              <span class="identity-menu__copy">
+                <strong>{{ identityLabel }}</strong>
+                <small v-if="username">@{{ username }}</small>
+                <span class="identity-menu__scope">
+                  <ShieldCheck :size="12" aria-hidden="true" />
+                  {{ dataScopeLabel }}
+                </span>
+              </span>
+            </header>
+            <el-dropdown-item command="profile" :icon="UserCog">
+              个人中心
+            </el-dropdown-item>
+            <el-dropdown-item command="logout" :icon="LogOut" divided>
+              退出登录
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
   </header>
 </template>
+
+<style scoped>
+/* 全局搜索条占位：宽度铺满中部主轴 */
+.topbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-full, 999px);
+  background: color-mix(in srgb, var(--ckqa-surface-muted) 85%, transparent);
+  transition: border-color 0.18s ease, background 0.18s ease;
+  min-width: 280px;
+  max-width: 540px;
+  width: 100%;
+}
+.topbar-search:hover {
+  border-color: color-mix(in srgb, var(--ckqa-accent) 35%, var(--ckqa-border));
+  background: var(--ckqa-surface);
+}
+
+.topbar-search__icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ckqa-text-muted);
+  flex-shrink: 0;
+}
+
+.topbar-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ckqa-text);
+  font: inherit;
+  font-size: 13px;
+}
+.topbar-search__input::placeholder {
+  color: var(--ckqa-text-muted);
+  font-style: normal;
+}
+.topbar-search__input:disabled {
+  cursor: not-allowed;
+  color: var(--ckqa-text-muted);
+}
+
+.topbar-search__hint {
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: 4px;
+  background: var(--ckqa-surface);
+  color: var(--ckqa-text-muted);
+  font-family: var(--ckqa-font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* 右侧 actions 聚合容器：所有非品牌、非搜索元素紧凑成一组 */
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ckqa-space-2, 8px);
+  flex-shrink: 0;
+}
+
+.identity-dropdown {
+  display: inline-flex;
+  align-items: center;
+}
+
+.identity-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  height: 36px;
+  border: 1px solid var(--ckqa-border);
+  border-radius: var(--ckqa-radius-full, 999px);
+  background: color-mix(in srgb, var(--ckqa-surface) 88%, transparent);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  font: inherit;
+  color: var(--ckqa-text);
+}
+.identity-trigger:hover {
+  border-color: var(--ckqa-accent);
+  background: color-mix(in srgb, var(--ckqa-accent) 8%, var(--ckqa-surface));
+}
+.identity-trigger:focus-visible {
+  outline: 2px solid var(--ckqa-accent);
+  outline-offset: 2px;
+}
+
+.identity-trigger__copy {
+  display: inline-flex;
+  flex-direction: column;
+  line-height: 1.1;
+  text-align: left;
+  min-width: 0;
+}
+.identity-trigger__copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ckqa-text);
+}
+.identity-trigger__copy small {
+  font-size: 11px;
+  color: var(--ckqa-text-muted);
+}
+.identity-trigger__chevron {
+  color: var(--ckqa-text-muted);
+  flex-shrink: 0;
+}
+
+.identity-avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+/* 中等屏：搜索 + runtime chip 都很挤时收起 chip */
+@media (max-width: 1280px) {
+  .topbar-search { min-width: 220px; max-width: 380px; }
+}
+@media (max-width: 1080px) {
+  .topbar-actions .runtime-chip { display: none; }
+}
+@media (max-width: 900px) {
+  .topbar-search { display: none; }
+  .identity-trigger__copy { display: none; }
+  .identity-trigger { padding: 4px; }
+}
+</style>
+
+<style>
+/* 全局：dropdown 弹层菜单头部样式（el-dropdown 弹层会被 teleport 出当前 scope，
+   因此放在非 scoped style 中） */
+.identity-menu .identity-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ckqa-border);
+  margin-bottom: 4px;
+  min-width: 200px;
+}
+.identity-menu .identity-menu__copy {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.identity-menu .identity-menu__copy strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ckqa-text);
+}
+.identity-menu .identity-menu__copy small {
+  font-size: 11px;
+  color: var(--ckqa-text-muted);
+  font-family: var(--ckqa-font-mono);
+}
+.identity-menu .identity-menu__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ckqa-accent-strong);
+}
+</style>

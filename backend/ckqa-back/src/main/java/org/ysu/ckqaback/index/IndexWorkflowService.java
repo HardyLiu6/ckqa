@@ -49,6 +49,7 @@ public class IndexWorkflowService {
     private final BuildRunWorkspaceService workspaceService;
     private final IndexArtifactRegistryService artifactRegistryService;
     private final ActiveIndexRunService activeIndexRunService;
+    private final BuildRunPromptMaterializer promptMaterializer;
 
     @Autowired
     public IndexWorkflowService(
@@ -59,6 +60,7 @@ public class IndexWorkflowService {
             BuildRunWorkspaceService workspaceService,
             IndexArtifactRegistryService artifactRegistryService,
             ActiveIndexRunService activeIndexRunService,
+            BuildRunPromptMaterializer promptMaterializer,
             CkqaIntegrationProperties properties
     ) {
         this(
@@ -70,7 +72,8 @@ public class IndexWorkflowService {
                 buildRunService,
                 workspaceService,
                 artifactRegistryService,
-                activeIndexRunService
+                activeIndexRunService,
+                promptMaterializer
         );
     }
 
@@ -81,7 +84,18 @@ public class IndexWorkflowService {
             ObjectMapper objectMapper,
             Duration staleThreshold
     ) {
-        this(indexRunsService, knowledgeBasesService, graphRagIndexOrchestrator, objectMapper, staleThreshold, null, null, null, null);
+        this(
+                indexRunsService,
+                knowledgeBasesService,
+                graphRagIndexOrchestrator,
+                objectMapper,
+                staleThreshold,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     IndexWorkflowService(
@@ -95,6 +109,32 @@ public class IndexWorkflowService {
             IndexArtifactRegistryService artifactRegistryService,
             ActiveIndexRunService activeIndexRunService
     ) {
+        this(
+                indexRunsService,
+                knowledgeBasesService,
+                graphRagIndexOrchestrator,
+                objectMapper,
+                staleThreshold,
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService,
+                null
+        );
+    }
+
+    IndexWorkflowService(
+            IndexRunsService indexRunsService,
+            KnowledgeBasesService knowledgeBasesService,
+            GraphRagIndexOrchestrator graphRagIndexOrchestrator,
+            ObjectMapper objectMapper,
+            Duration staleThreshold,
+            KnowledgeBaseBuildRunService buildRunService,
+            BuildRunWorkspaceService workspaceService,
+            IndexArtifactRegistryService artifactRegistryService,
+            ActiveIndexRunService activeIndexRunService,
+            BuildRunPromptMaterializer promptMaterializer
+    ) {
         this.indexRunsService = indexRunsService;
         this.knowledgeBasesService = knowledgeBasesService;
         this.graphRagIndexOrchestrator = graphRagIndexOrchestrator;
@@ -104,6 +144,7 @@ public class IndexWorkflowService {
         this.workspaceService = workspaceService;
         this.artifactRegistryService = artifactRegistryService;
         this.activeIndexRunService = activeIndexRunService;
+        this.promptMaterializer = promptMaterializer;
     }
 
     public IndexRunResponse createIndexRun(Long knowledgeBaseId) throws IOException, InterruptedException {
@@ -185,6 +226,7 @@ public class IndexWorkflowService {
         }
 
         BuildRunDetailResponse buildRun = buildRunService.getBuildRun(buildRunId);
+        assertPromptConfirmed(buildRun);
         KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(buildRun.getKnowledgeBaseId());
         indexRunsService.recoverStaleRunningRuns(knowledgeBase.getId(), staleThreshold);
         if (indexRunsService.findActiveRunningByKnowledgeBaseId(knowledgeBase.getId()).isPresent()) {
@@ -194,11 +236,29 @@ public class IndexWorkflowService {
         String indexVersion = ENGINE + "-" + INDEX_VERSION_FORMATTER.format(LocalDateTime.now());
         IndexRuns run = indexRunsService.createPendingRun(knowledgeBase.getId(), buildRunId, indexVersion);
         indexRunsService.markRunning(run.getId());
+        // 真正后台进程即将启动：把 buildRun 显式标记成 running，让前端列表与 archiveBuildRun
+        // 判定能识别"这条记录确实在跑"。同时推进 currentStage 到 index。
+        buildRunService.markIndexStarted(buildRunId);
         Path workspaceRoot = workspaceService.resolve(buildRun.getWorkspaceUri());
 
         try {
             prepareIndexInput(run, knowledgeBase, buildRun, workspaceRoot);
-            ProcessExecutionResult indexResult = graphRagIndexOrchestrator.runIndex(run, workspaceRoot);
+            Path entityExtractionPromptFile = null;
+            String materializedStrategy = null;
+            String materializedSha256 = null;
+            String fallbackReason = null;
+            if (promptMaterializer != null) {
+                MaterializedPromptResult materialized = promptMaterializer.materialize(buildRun);
+                entityExtractionPromptFile = materialized.getEntityExtractionPromptFile();
+                materializedStrategy = materialized.getStrategy();
+                materializedSha256 = materialized.getContentSha256();
+                fallbackReason = materialized.getFallbackReason();
+            }
+            ProcessExecutionResult indexResult = graphRagIndexOrchestrator.runIndex(
+                    run,
+                    workspaceRoot,
+                    entityExtractionPromptFile
+            );
             if (indexResult.isTimedOut() || indexResult.getExitCode() != 0) {
                 indexRunsService.markFailed(
                         run.getId(),
@@ -210,11 +270,26 @@ public class IndexWorkflowService {
                                 false
                         )
                 );
+                buildRunService.markIndexFailed(buildRunId,
+                        indexResult.isTimedOut() ? "索引命令执行超时" : defaultErrorSummary(indexResult.getStderr(), "索引构建失败"));
                 throw new BusinessException(ApiResultCode.INDEX_RUN_EXECUTION_FAILED, HttpStatus.INTERNAL_SERVER_ERROR, "索引构建失败");
             }
 
-            String metadata = toMetadataJson(INDEX_COMMAND, indexResult.getElapsedSeconds(), indexResult.getExitCode(), null, false);
-            indexRunsService.markSuccess(run.getId(), metadata);
+            String metadata = toMetadataJson(
+                    INDEX_COMMAND,
+                    indexResult.getElapsedSeconds(),
+                    indexResult.getExitCode(),
+                    null,
+                    false,
+                    materializedStrategy,
+                    materializedSha256,
+                    fallbackReason
+            );
+            // 索引成功后跑一次 utils/index_summary.py，把图谱体量和阶段耗时塞进 metadata.graphSummary。
+            // 任何失败（python 缺失、parquet 读取异常、JSON 解析失败）都降级为 null，不阻断主流程。
+            IndexRunMetadata.GraphSummary graphSummary = collectGraphSummary(workspaceRoot);
+            String metadataWithSummary = mergeGraphSummary(metadata, graphSummary);
+            indexRunsService.markSuccess(run.getId(), metadataWithSummary);
             IndexRuns refreshedRun = indexRunsService.getRequiredById(run.getId());
             artifactRegistryService.scanAndRegister(refreshedRun, workspaceRoot, buildRun.getWorkspaceUri());
 
@@ -224,16 +299,37 @@ public class IndexWorkflowService {
             } else if (activateOnSuccess) {
                 indexRunsService.markSuccess(
                         run.getId(),
-                        toMetadataJson(INDEX_COMMAND, indexResult.getElapsedSeconds(), indexResult.getExitCode(), "skipped_newer_build_exists", false)
+                        mergeGraphSummary(toMetadataJson(
+                                INDEX_COMMAND,
+                                indexResult.getElapsedSeconds(),
+                                indexResult.getExitCode(),
+                                "skipped_newer_build_exists",
+                                false,
+                                materializedStrategy,
+                                materializedSha256,
+                                fallbackReason
+                        ), graphSummary)
                 );
             }
-            buildRunService.markIndexSuccessDone(buildRunId, "skipped");
+            buildRunService.markIndexSuccessDone(
+                    buildRunId,
+                    "skipped",
+                    materializedStrategy,
+                    materializedSha256,
+                    fallbackReason
+            );
             return IndexRunResponse.fromEntity(indexRunsService.getRequiredById(run.getId()));
+        } catch (BusinessException exception) {
+            // BusinessException 来自 prepareIndexInput / 索引执行失败分支，已经 markFailed 过 indexRun，
+            // 这里统一回收 buildRun 状态，避免遗留 running 阻挡归档
+            buildRunService.markIndexFailed(buildRunId, exception.getMessage());
+            throw exception;
         } catch (IOException exception) {
             indexRunsService.markFailed(
                     run.getId(),
                     toMetadataJson(INDEX_COMMAND, null, null, defaultErrorSummary(exception.getMessage(), "索引任务执行异常"), false)
             );
+            buildRunService.markIndexFailed(buildRunId, defaultErrorSummary(exception.getMessage(), "索引任务执行异常"));
             throw exception;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -241,6 +337,7 @@ public class IndexWorkflowService {
                     run.getId(),
                     toMetadataJson(INDEX_COMMAND, null, null, "索引任务被中断", false)
             );
+            buildRunService.markIndexFailed(buildRunId, "索引任务被中断");
             throw exception;
         }
     }
@@ -263,6 +360,19 @@ public class IndexWorkflowService {
             String errorSummary,
             boolean staleTimeoutRecovered
     ) {
+        return toMetadataJson(command, elapsedSeconds, exitCode, errorSummary, staleTimeoutRecovered, null, null, null);
+    }
+
+    private String toMetadataJson(
+            String command,
+            Long elapsedSeconds,
+            Integer exitCode,
+            String errorSummary,
+            boolean staleTimeoutRecovered,
+            String promptStrategy,
+            String promptContentSha256,
+            String promptFallbackReason
+    ) {
         try {
             return objectMapper.writeValueAsString(IndexRunMetadata.builder()
                     .command(command)
@@ -270,6 +380,9 @@ public class IndexWorkflowService {
                     .exitCode(exitCode)
                     .errorSummary(errorSummary)
                     .staleTimeoutRecovered(staleTimeoutRecovered)
+                    .promptStrategy(promptStrategy)
+                    .promptContentSha256(promptContentSha256)
+                    .promptFallbackReason(promptFallbackReason)
                     .build());
         } catch (Exception exception) {
             return "{\"command\":\"metadata-serialization-failed\",\"errorSummary\":\"" + escapeJson(errorSummary) + "\"}";
@@ -373,5 +486,88 @@ public class IndexWorkflowService {
             return "";
         }
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /**
+     * 调用 utils/index_summary.py 读取 parquet/stats.json 摘要。
+     * 任何异常一律降级返回 null —— 摘要只是辅助展示，不能阻塞索引主流程。
+     */
+    private IndexRunMetadata.GraphSummary collectGraphSummary(Path workspaceRoot) {
+        Path outputDir = workspaceRoot.resolve("index/output");
+        if (!Files.isDirectory(outputDir)) {
+            return null;
+        }
+        try {
+            ProcessExecutionResult result = graphRagIndexOrchestrator.summarizeIndex(outputDir);
+            if (result.isTimedOut() || result.getExitCode() != 0) {
+                return null;
+            }
+            String stdout = result.getStdout();
+            if (stdout == null || stdout.isBlank()) {
+                return null;
+            }
+            // 脚本只输出单行 JSON，但兼容多行场景：取第一行非空 JSON。
+            String json = stdout.lines()
+                    .map(String::trim)
+                    .filter(s -> s.startsWith("{"))
+                    .findFirst()
+                    .orElse(null);
+            if (json == null) {
+                return null;
+            }
+            return objectMapper.readValue(json, IndexRunMetadata.GraphSummary.class);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 把 graphSummary 合并到现有 metadata JSON 的 graphSummary 字段。
+     * 现有 metadata 由 toMetadataJson 生成（IndexRunMetadata 序列化），
+     * 这里反序列回 IndexRunMetadata 后追加 graphSummary 再序列化，保持字段顺序与 NON_NULL 语义。
+     */
+    private String mergeGraphSummary(String existingMetadata, IndexRunMetadata.GraphSummary graphSummary) {
+        if (graphSummary == null) {
+            return existingMetadata;
+        }
+        try {
+            IndexRunMetadata original = objectMapper.readValue(existingMetadata, IndexRunMetadata.class);
+            IndexRunMetadata merged = IndexRunMetadata.builder()
+                    .command(original.getCommand())
+                    .elapsedSeconds(original.getElapsedSeconds())
+                    .exitCode(original.getExitCode())
+                    .errorSummary(original.getErrorSummary())
+                    .staleTimeoutRecovered(original.getStaleTimeoutRecovered())
+                    .promptStrategy(original.getPromptStrategy())
+                    .promptContentSha256(original.getPromptContentSha256())
+                    .promptFallbackReason(original.getPromptFallbackReason())
+                    .graphSummary(graphSummary)
+                    .build();
+            return objectMapper.writeValueAsString(merged);
+        } catch (Exception ex) {
+            // 合并失败回退到原 metadata，前端拿不到 graphSummary 但 indexRun 仍是 success
+            return existingMetadata;
+        }
+    }
+
+    /**
+     * 兜底校验：确保构建流水线已确认提示词策略，防止通过 URL 伪造跳过确认步骤。
+     */
+    private void assertPromptConfirmed(BuildRunDetailResponse buildRun) {
+        String metadata = buildRun.getBuildMetadata();
+        if (!org.springframework.util.StringUtils.hasText(metadata)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "请先确认提示词策略");
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadata);
+            if (!node.path("promptConfirmed").asBoolean(false)) {
+                throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                        "请先确认提示词策略");
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "构建元数据格式无效");
+        }
     }
 }

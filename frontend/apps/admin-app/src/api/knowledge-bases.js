@@ -81,6 +81,13 @@ export async function confirmBuildRunPrompt(id, payload, client = http) {
   ))
 }
 
+export async function saveBuildRunCustomPromptDraft(id, payload, client = http) {
+  return unwrapApiResponse(await client.put(
+    `/knowledge-base-build-runs/${encodeURIComponent(id)}/custom-prompt-draft`,
+    payload,
+  ))
+}
+
 export async function createBuildRunIndexRun(id, payload, client = http) {
   return unwrapApiResponse(await client.post(`/knowledge-base-build-runs/${encodeURIComponent(id)}/index-runs`, payload))
 }
@@ -93,6 +100,31 @@ export async function activateIndexRun(knowledgeBaseId, indexRunId, client = htt
   return unwrapApiResponse(await client.post(
     `/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/active-index-run`,
     { indexRunId },
+  ))
+}
+
+export async function probePromptTuneAvailability(knowledgeBaseId, materialIds, client = http) {
+  const params = new URLSearchParams()
+  for (const id of materialIds ?? []) {
+    if (id != null && id !== '') params.append('materialIds', id)
+  }
+  const query = params.toString()
+  const url = query
+    ? `/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/prompt-tune-availability?${query}`
+    : `/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/prompt-tune-availability`
+  return unwrapApiResponse(await client.get(url))
+}
+
+export async function triggerBuildRunPromptTune(buildRunId, payload = {}, client = http) {
+  return unwrapApiResponse(await client.post(
+    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/prompt-tune`,
+    payload,
+  ))
+}
+
+export async function getBuildRunPromptTuneStatus(buildRunId, client = http) {
+  return unwrapApiResponse(await client.get(
+    `/knowledge-base-build-runs/${encodeURIComponent(buildRunId)}/prompt-tune`,
   ))
 }
 

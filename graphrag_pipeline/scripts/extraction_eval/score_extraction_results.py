@@ -119,7 +119,13 @@ def _candidate_should_be_skipped(eval_file: Path, *, root: Path, include_fallbac
     manifest_file = _resolve_manifest_from_eval_payload(payload, root=root)
     if manifest_file is None or not manifest_file.exists():
         return None
-    manifest_payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+    # run_native_extraction.py 在写 eval_file 时用 prompt.txt 路径占位 manifest_file 字段（见
+    # result_writer.py 注释「用 prompt 文件路径代替 manifest」），并不是真正的 manifest.json。
+    # 这里解析失败按「不跳过」处理——只影响 fallback auto_tuned 的过滤优化，不影响评分主流程。
+    try:
+        manifest_payload = json.loads(manifest_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
     raw_candidates = manifest_payload.get("candidates") or []
     for entry in raw_candidates:
         if isinstance(entry, dict) and is_fallback_auto_tuned_entry(entry):

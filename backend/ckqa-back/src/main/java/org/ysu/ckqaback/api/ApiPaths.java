@@ -28,6 +28,7 @@ public final class ApiPaths {
     public static final String QA_RETRIEVAL_HITS = API_V1 + "/qa-retrieval-hits";
     public static final String QA_RETRIEVAL_LOGS = API_V1 + "/qa-retrieval-logs";
     public static final String QA_SESSIONS = API_V1 + "/qa-sessions";
+    public static final String RELATION_SCHEMAS = API_V1 + "/relation-schemas";
     public static final String ROLE_PERMISSIONS = API_V1 + "/role-permissions";
     public static final String ROLES = API_V1 + "/roles";
     public static final String SYSTEM_HEALTH = API_V1 + "/system/health";

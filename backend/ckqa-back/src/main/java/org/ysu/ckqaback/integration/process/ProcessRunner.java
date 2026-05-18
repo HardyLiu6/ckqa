@@ -3,7 +3,11 @@ package org.ysu.ckqaback.integration.process;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,14 +24,12 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 统一执行外部命令并跟踪活跃子进程。
- * <p>
- * 正常停机过程中，子进程输出读取线程可能因为执行器关闭而被中断，
- * 由此产生的“读取进程输出失败”属于可接受的停机路径表现，
- * 不应直接按业务失败语义解读。
- * </p>
+ * <p>stdout/stderr 按行边读边 tee 写入 {@link ProcessContext#getLogFile()}，
+ * 因此长任务（如 graphrag index）跑到一半时也能从日志文件读到进度。</p>
  */
 @Component
 public class ProcessRunner implements DisposableBean {
@@ -47,6 +49,24 @@ public class ProcessRunner implements DisposableBean {
         long key = sequence.getAndIncrement();
         long startedAt = System.nanoTime();
 
+        Path logFile = context == null ? null : context.getLogFile();
+        if (logFile != null) {
+            Path parent = logFile.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            // 同一 indexRun 重跑时，旧日志要先清掉，避免解析到上一次的 Workflow complete
+            Files.writeString(
+                    logFile,
+                    "",
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE
+            );
+        }
+        ReentrantLock logLock = new ReentrantLock();
+
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(workDir.toFile());
         builder.environment().putAll(environment);
@@ -55,9 +75,9 @@ public class ProcessRunner implements DisposableBean {
         activeProcesses.put(key, process);
 
         Future<String> stdoutFuture = streamReaderExecutor.submit(() ->
-                new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+                drainAndTee(process.getInputStream(), "stdout", logFile, logLock));
         Future<String> stderrFuture = streamReaderExecutor.submit(() ->
-                new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8));
+                drainAndTee(process.getErrorStream(), "stderr", logFile, logLock));
 
         try {
             boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -67,7 +87,6 @@ public class ProcessRunner implements DisposableBean {
 
             String stdout = stdoutFuture.get();
             String stderr = stderrFuture.get();
-            writeLogFile(context, stdout, stderr);
 
             return ProcessExecutionResult.builder()
                     .command(command)
@@ -85,42 +104,32 @@ public class ProcessRunner implements DisposableBean {
         }
     }
 
-    private void writeLogFile(ProcessContext context, String stdout, String stderr) throws IOException {
-        if (context == null || context.getLogFile() == null) {
-            return;
-        }
-        Path logFile = context.getLogFile();
-        Path parent = logFile.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        StringBuilder builder = new StringBuilder();
-        appendLogLines(builder, "stdout", stdout);
-        appendLogLines(builder, "stderr", stderr);
-        Files.writeString(
-                logFile,
-                builder.toString(),
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE
-        );
-    }
-
-    private void appendLogLines(StringBuilder builder, String streamName, String output) {
-        if (output == null || output.isEmpty()) {
-            return;
-        }
-        for (String line : output.split("\\R", -1)) {
-            if (line.isEmpty()) {
-                continue;
+    /**
+     * 同步读取一条输入流：每读到一行，加锁追加到日志文件并累加到返回字符串。
+     */
+    private String drainAndTee(InputStream stream, String streamName, Path logFile, ReentrantLock lock) throws IOException {
+        StringBuilder accumulator = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                accumulator.append(line).append(System.lineSeparator());
+                if (logFile == null) {
+                    continue;
+                }
+                String logLine = "[" + streamName + "] " + line + System.lineSeparator();
+                lock.lock();
+                try (BufferedWriter writer = Files.newBufferedWriter(
+                        logFile,
+                        StandardCharsets.UTF_8,
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.APPEND)) {
+                    writer.write(logLine);
+                } finally {
+                    lock.unlock();
+                }
             }
-            builder.append('[')
-                    .append(streamName)
-                    .append("] ")
-                    .append(line)
-                    .append(System.lineSeparator());
         }
+        return accumulator.toString();
     }
 
     int activeProcessCount() {

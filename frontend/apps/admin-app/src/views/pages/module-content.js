@@ -7,7 +7,7 @@ export const BUILD_STEP_LABELS = {
   material: '资料选择',
   parse: '解析检查',
   export: '生成图谱输入',
-  prompt: 'Prompt确认',
+  prompt: '提示词确认',
   index: '索引构建',
   qa_check: '问答验证',
 }
@@ -236,13 +236,42 @@ const configs = {
     columns: ['知识库', '所属课程', '状态', '激活索引', '最近运行', '更新时间'],
     rows: [],
   },
+  'knowledge-base-build-runs': {
+    variant: 'table',
+    dataSource: 'live',
+    eyebrow: 'Build History',
+    tableTitle: '构建历史',
+    summary: '本知识库的所有构建流水线运行记录，可重新打开向导继续编辑或归档不再需要的运行。',
+    search: {
+      placeholder: '搜索构建版本号',
+      ariaLabel: '搜索构建历史',
+    },
+    primaryAction: null,
+    secondaryAction: null,
+    filters: [
+      {
+        key: 'status',
+        label: '运行状态',
+        columnIndex: 1,
+        options: [
+          { label: '全部状态', value: '' },
+          { label: '待开始', value: 'pending' },
+          { label: '运行中', value: 'running' },
+          { label: '已完成', value: 'success' },
+          { label: '失败', value: 'failed' },
+        ],
+      },
+    ],
+    columns: ['构建版本', '状态', '当前阶段', 'QA 状态', '激活索引', '创建时间', '更新时间'],
+    rows: [],
+  },
   'knowledge-base-detail': {
     variant: 'overview',
     dataSource: 'live',
     eyebrow: 'Knowledge Base Detail',
     summary: '知识库详情突出当前激活版本、文档映射、索引运行、问答验证与运行日志。',
     primaryAction: { label: '进入构建向导', permission: 'kb:write' },
-    secondaryAction: { label: '查看索引运行', permission: 'kb:read' },
+    secondaryAction: { label: '查看构建历史', permission: 'kb:read' },
     facts: ['概览', '文档映射', '索引运行', '问答验证', '运行日志'],
     timeline: [
       { label: '文档映射', state: 'ready', detail: '等待真实文档列表接入' },
@@ -285,19 +314,19 @@ const configs = {
         label: '生成图谱输入',
         state: 'ready',
         status: 'ready',
-        detail: '生成 normalized / section / page 图谱输入',
-        shortLabel: 'normalized / section / page 就绪',
+        detail: '导出本次构建所需的图谱输入文件',
+        shortLabel: '导出图谱输入',
         conditions: ['解析结果存在', '标准化文档通过导出校验'],
         actionLabel: '生成缺失图谱输入',
         logLabel: '查看导出记录',
       },
       {
         key: 'prompt',
-        label: 'Prompt确认',
+        label: '提示词确认',
         state: 'blocked',
         status: 'blocked',
-        detail: '确认本次索引沿用当前活动提示词',
-        shortLabel: '确认活动提示词',
+        detail: '选择本次索引使用的提示词策略',
+        shortLabel: '确认提示词策略',
         conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
         actionLabel: '确认提示词策略',
         logLabel: '查看提示词策略',
@@ -618,6 +647,51 @@ export function resolveParseTaskRows(materials = []) {
   })
 }
 
+/**
+ * 把 SSE 推送的解析快照合并到构建向导的 parseTasks 行里。
+ * 解析快照来自 PDF 解析事件流（snapshot 事件 payload），
+ * 字段格式与 mineru 输出一致：parseStatus / parseProgress (可能是 number 或 {percent, stage, stageLabel, detail, estimated}).
+ *
+ * @param {Object} row 由 resolveParseTaskRows 输出的行
+ * @param {Object} snapshot SSE 快照
+ * @returns {Object} 合并后的行（保留原 id 与 title），percent / status / detail 实时刷新
+ */
+export function applyParseSnapshotToTaskRow(row = {}, snapshot = {}) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return row
+  }
+  const status = normalizeParseStatus(
+    snapshot.parseStatus ?? snapshot.parseState ?? snapshot.status ?? row.status,
+  )
+  const progress = snapshot.parseProgress
+  const progressIsObject = progress && typeof progress === 'object'
+  const rawPercent = Number(
+    progressIsObject ? progress.percent : (progress ?? snapshot.progress),
+  )
+  const hasPercent = Number.isFinite(rawPercent)
+  const percentByStatus = {
+    done: 100,
+    pending: 0,
+    running: hasPercent ? rawPercent : 50,
+    failed: hasPercent ? rawPercent : 0,
+  }
+  const stageLabel = progressIsObject ? progress.stageLabel ?? progress.detail : null
+  const fallbackDetailByStatus = {
+    done: '解析完成',
+    pending: '等待解析',
+    running: stageLabel ?? '解析进行中',
+    failed: progressIsObject
+      ? progress.detail ?? snapshot.parseErrorMsg ?? '解析失败'
+      : snapshot.parseErrorMsg ?? snapshot.failureReason ?? '解析失败',
+  }
+  return {
+    ...row,
+    status,
+    percent: clampPercent(percentByStatus[status] ?? row.percent ?? 0),
+    detail: fallbackDetailByStatus[status] ?? row.detail,
+  }
+}
+
 export function resolveExportArtifactRows(materials = [], parseResultsByMaterialId = {}) {
   const rows = materials.map((material) => {
     const id = String(material.id ?? material.materialId ?? material.pdfFileId ?? '')
@@ -646,23 +720,137 @@ export function resolveExportArtifactRows(materials = [], parseResultsByMaterial
   }
 }
 
-export function resolvePromptConfirmState(query = {}, exportState = {}) {
+const SUPPORTED_PROMPT_STRATEGIES = new Set(['default', 'graphrag_tuned', 'custom_pipeline'])
+
+function normalizePromptStrategy(raw) {
+  if (raw === null || raw === undefined) return 'default'
+  const trimmed = String(raw).trim()
+  if (trimmed === '') return 'default'
+  if (trimmed.toLowerCase() === 'active') return 'default'
+  if (SUPPORTED_PROMPT_STRATEGIES.has(trimmed)) return trimmed
+  return 'default'
+}
+
+function parseBuildMetadata(metadata) {
+  if (!metadata) return {}
+  if (typeof metadata === 'object') return metadata
+  try {
+    return JSON.parse(metadata)
+  } catch {
+    return {}
+  }
+}
+
+export function resolvePromptConfirmState(query = {}, exportState = {}, metadata = null) {
+  const meta = parseBuildMetadata(metadata)
   const exportComplete = isExportStateComplete(exportState)
-  const confirmed = exportComplete && isQueryConfirmed(query.promptConfirmed)
+
+  const hasMeta = metadata !== null && metadata !== undefined
+  const metaConfirmed = meta.promptConfirmed === true
+  const queryConfirmed = isQueryConfirmed(query.promptConfirmed)
+  const strategy = normalizePromptStrategy(meta.promptStrategy)
+
+  const draft = meta.customPromptDraft ?? null
+  const draftContent = draft?.prompts?.extract_graph?.content ?? ''
+  const customDraftReady = String(draftContent).trim() !== ''
+
+  // 当 metadata 不存在时，保持旧行为：以 query 为确认来源
+  const confirmed = hasMeta
+    ? (exportComplete && metaConfirmed)
+    : (exportComplete && queryConfirmed)
 
   if (!exportComplete) {
     return {
       status: 'blocked',
       confirmed: false,
-      shouldCleanPromptConfirmed: isQueryConfirmed(query.promptConfirmed),
+      readonly: false,
+      strategy,
+      shouldCleanPromptConfirmed: queryConfirmed,
+      shouldCleanPromptStrategyQuery: false,
+      customDraft: draft,
+      customDraftReady,
+      graphragTunedSummary: meta.graphragTunedSummary ?? null,
+      disabledReason: null,
     }
   }
 
   return {
     status: confirmed ? 'done' : 'ready',
     confirmed,
-    shouldCleanPromptConfirmed: false,
+    readonly: confirmed,
+    strategy,
+    shouldCleanPromptConfirmed: hasMeta ? (queryConfirmed && !metaConfirmed) : false,
+    shouldCleanPromptStrategyQuery:
+      Boolean(query.promptStrategy) && confirmed
+      && normalizePromptStrategy(query.promptStrategy) !== strategy,
+    customDraft: draft,
+    customDraftReady,
+    graphragTunedSummary: meta.graphragTunedSummary ?? null,
+    disabledReason: null,
   }
+}
+
+/**
+ * 基于本次 build_run 的索引运行列表计算索引可用状态。
+ *
+ * <p>与 {@link resolveIndexAvailabilityState} 不同：本函数完全不看 KB 上的 latestIndexRunId/Status
+ * 字段（这俩是跨 build_run 的全 KB 视角），只看「本次 build_run 自己的索引运行」。这样新建一个
+ * build_run 进入索引步骤时，即便 KB 上其他历史 build_run 留下了 success/failed 索引，本步骤也能
+ * 准确回到 ready 让用户触发首次构建。</p>
+ *
+ * @param knowledgeBase KB 实体；只读 activeIndexRunId 用于判断是否已激活最新索引
+ * @param buildRunIndexRuns 本次 build_run 的索引运行列表（已按 startedAt desc 排序，items[0] 为最新）
+ * @param options 额外选项（兼容 resolveIndexAvailabilityState 的 syncPollTimedOut）
+ */
+export function resolveBuildRunIndexAvailabilityState(knowledgeBase = {}, buildRunIndexRuns = [], options = {}) {
+  const list = Array.isArray(buildRunIndexRuns) ? buildRunIndexRuns : []
+  // 本次 build_run 还没触发过索引：直接 ready，让 BuildStepIndex.vue 进入 idle 大按钮态
+  if (list.length === 0) {
+    return { status: 'ready', availability: 'no-run' }
+  }
+
+  const latestRun = list[0]
+  const latestRunId = latestRun?.id ?? latestRun?.indexRunId ?? null
+  const latestRunStatus = normalizeIndexStatus(latestRun?.status ?? latestRun?.state)
+  const activeIndexRunId = firstPresent(
+    knowledgeBase.activeIndexRunId,
+    knowledgeBase.activeIndexId,
+    knowledgeBase.activeIndex?.id,
+  )
+  const activeMatchesLatest = Boolean(activeIndexRunId && latestRunId)
+    && String(activeIndexRunId) === String(latestRunId)
+
+  if (latestRunStatus === 'success' && activeMatchesLatest) {
+    return { status: 'done', availability: 'available' }
+  }
+
+  if (latestRunStatus === 'running') {
+    return { status: 'running', availability: 'building' }
+  }
+
+  if (latestRunStatus === 'success') {
+    // 索引已成功但 active 还没切过来：等待后端激活策略推进
+    if (options.syncPollTimedOut) {
+      return {
+        status: 'running',
+        availability: 'sync-timeout',
+        warning: '可用状态同步超时',
+        primaryAction: { label: '手动刷新', operationKey: 'index-refresh', disabled: false },
+      }
+    }
+    return {
+      status: 'running',
+      availability: 'syncing',
+      warning: '等待后端激活最新索引',
+      primaryAction: { label: '刷新可用状态', operationKey: 'index-refresh', disabled: false },
+    }
+  }
+
+  if (latestRunStatus === 'failed') {
+    return { status: 'failed', availability: 'failed' }
+  }
+
+  return { status: 'ready', availability: 'no-run' }
 }
 
 export function resolveIndexAvailabilityState(knowledgeBase = {}, indexRuns = [], options = {}) {
@@ -844,7 +1032,7 @@ function resolveExportPrimaryAction(context = {}) {
     const { promptConfirmed, ...queryWithoutPromptConfirm } = queryWithConfirm
 
     return createBuildAction({
-      label: '确认图谱输入并进入 Prompt 确认',
+      label: '确认图谱输入并进入提示词确认',
       operationKey: 'export-confirm',
       nextStepKey: 'prompt',
       nextQuery: resolveBuildStepQuery(queryWithoutPromptConfirm, 'prompt'),
@@ -852,7 +1040,7 @@ function resolveExportPrimaryAction(context = {}) {
   }
 
   return createBuildAction({
-    label: '进入 Prompt 确认',
+    label: '进入提示词确认',
     operationKey: 'step-prompt',
     nextStepKey: 'prompt',
     nextQuery: resolveBuildStepQuery(context.query ?? {}, 'prompt'),
@@ -871,22 +1059,37 @@ function resolvePromptPrimaryAction(context = {}) {
     })
   }
 
-  if (!promptState.confirmed) {
-    const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'promptConfirmed', true)
-
+  if (promptState.confirmed) {
     return createBuildAction({
-      label: '确认提示词策略',
-      operationKey: 'prompt-confirm',
+      label: '进入创建索引',
+      operationKey: 'step-index',
       nextStepKey: 'index',
-      nextQuery: resolveBuildStepQuery(queryWithConfirm, 'index'),
+      nextQuery: resolveBuildStepQuery(context.query ?? {}, 'index'),
     })
   }
 
+  // 切换中态：query 中的 promptStrategy 优先（用户刚点了策略卡，URL 已 replace），否则用 promptState 中已存的
+  const queryStrategy = context.query?.promptStrategy
+  const selectedStrategy = queryStrategy
+    ? normalizePromptStrategy(queryStrategy)
+    : promptState.strategy ?? 'default'
+
+  if (selectedStrategy === 'custom_pipeline' && !promptState.customDraftReady) {
+    return createBuildAction({
+      label: '确认提示词策略',
+      operationKey: 'prompt-confirm',
+      disabled: true,
+      disabledReason: '请先完成手动调优提示词构建',
+    })
+  }
+
+  const queryWithConfirm = resolveBuildConfirmQuery(context.query ?? {}, 'promptConfirmed', true)
+
   return createBuildAction({
-    label: '进入创建索引',
-    operationKey: 'step-index',
+    label: '确认提示词策略',
+    operationKey: 'prompt-confirm',
     nextStepKey: 'index',
-    nextQuery: resolveBuildStepQuery(context.query ?? {}, 'index'),
+    nextQuery: resolveBuildStepQuery({ ...queryWithConfirm, promptStrategy: selectedStrategy }, 'index'),
   })
 }
 
@@ -1087,4 +1290,25 @@ function clampPercent(value) {
   }
 
   return Math.min(100, Math.max(0, Math.round(value)))
+}
+
+/**
+ * GraphRAG workflow key 到中文标签的字典。
+ * 用于 BuildStepIndex 渲染当前阶段名；百分比与阶段顺序均来自后端 indexProgress，不在前端做权重计算。
+ */
+export const INDEX_STAGE_LABELS = {
+  load_input_documents: '加载输入文档',
+  create_base_text_units: '创建文本单元',
+  create_final_documents: '生成文档索引',
+  extract_graph: '抽取知识图谱',
+  finalize_graph: '图谱后处理',
+  extract_covariates: '抽取协变量',
+  create_communities: '构建社区',
+  create_final_text_units: '生成最终文本单元',
+  create_community_reports: '生成社区报告',
+  generate_text_embeddings: '生成文本嵌入',
+}
+
+export function resolveIndexStageLabel(key) {
+  return INDEX_STAGE_LABELS[key] ?? key ?? '准备中'
 }

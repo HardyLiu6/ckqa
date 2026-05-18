@@ -20,6 +20,9 @@ const activeStep = computed(() => {
 const progress = computed(() => resolveBuildProgress(props.steps))
 
 function selectStep(step) {
+  if (step.status === 'blocked') {
+    return
+  }
   emit('update:activeKey', step.key)
 }
 </script>
@@ -32,7 +35,7 @@ function selectStep(step) {
         <strong>{{ progress.summary }}</strong>
         <small>{{ progress.detail || '暂无阻塞项' }}</small>
       </div>
-      <el-progress :percentage="progress.percent" :show-text="false" />
+      <el-progress class="ckqa-el-progress" :percentage="progress.percent" :show-text="false" />
     </header>
 
     <ol class="workflow-progress-rail__steps" aria-label="构建步骤">
@@ -45,7 +48,8 @@ function selectStep(step) {
           class="workflow-progress-rail__step"
           native-type="button"
           :data-status="step.status"
-          :title="step.detail"
+          :disabled="step.status === 'blocked'"
+          :title="step.status === 'blocked' ? '请先完成前置步骤' : step.detail"
           @click="selectStep(step)"
         >
           <span class="workflow-step-index">{{ String(index + 1).padStart(2, '0') }}</span>

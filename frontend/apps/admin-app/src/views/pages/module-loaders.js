@@ -14,22 +14,30 @@ import {
   listParseResults,
 } from '../../api/materials.js'
 import {
+  deleteBuildRun,
   getBuildRun,
   getIndexRun,
   getKnowledgeBase,
   listIndexRuns,
+  listIndexRunArtifacts,
+  listKnowledgeBaseBuildRuns,
   listKnowledgeBases,
 } from '../../api/knowledge-bases.js'
 import {
   BUILD_STEP_LABELS,
   resolveBuildDefaultStepKey,
   resolveBuildPrimaryAction,
+  resolveBuildRunIndexAvailabilityState,
   resolveExportArtifactRows,
-  resolveIndexAvailabilityState,
   resolveParseTaskRows,
   resolvePromptConfirmState,
 } from './module-content.js'
 import { resolveBuildRunIdQuery, resolveBuildSelectionFromQuery } from './module-page-model.js'
+import {
+  BUILD_RUN_COLUMNS,
+  buildBuildRunListParams,
+  mapBuildRunRow,
+} from './build-run-list-model.js'
 
 export const DEFAULT_COURSE_COVER_URL = '/api/v1/course-covers/default-course-cover.svg'
 
@@ -127,7 +135,9 @@ const defaultServices = {
   getKnowledgeBase,
   getBuildRun,
   listIndexRuns,
+  listIndexRunArtifacts,
   listKnowledgeBases,
+  listKnowledgeBaseBuildRuns,
 }
 
 export async function loadModulePage(route, query = {}, services = defaultServices) {
@@ -141,6 +151,10 @@ export async function loadModulePage(route, query = {}, services = defaultServic
 
   if (route.name === 'knowledge-base-build') {
     return loadKnowledgeBaseBuild(route, query, services)
+  }
+
+  if (route.name === 'knowledge-base-build-runs') {
+    return loadKnowledgeBaseBuildRunList(route, query, services)
   }
 
   if (route.name === 'index-run-detail') {
@@ -793,7 +807,9 @@ function mapKnowledgeBaseRow(knowledgeBase = {}) {
       ? [
           { label: '详情', to: `/app/knowledge-bases/${id}` },
           { label: '编辑', key: 'edit-knowledge-base', icon: 'edit', variant: 'primary' },
-          ...(!archived ? [{ label: '构建', to: `/app/knowledge-bases/${id}/build`, variant: 'primary' }] : []),
+          // 构建动作改为受控 key：点击时由 ModulePage 检测未完成 buildRun，
+          // 决定直接进入新建向导还是弹出「继续 / 新建」选择对话框
+          ...(!archived ? [{ label: '构建', key: 'open-build', icon: 'parse', variant: 'primary' }] : []),
           { label: '删除', key: 'delete-knowledge-base', icon: 'delete', variant: 'danger' },
         ]
       : [],
@@ -878,7 +894,21 @@ async function loadIndexRunDetail(route, services) {
   const indexRunId = route.params?.indexRunId
 
   try {
-    const indexRun = await services.getIndexRun(indexRunId)
+    // 并发加载 indexRun 详情和产物列表；产物失败降级展示
+    const [indexRunResult, artifactsResult] = await Promise.allSettled([
+      services.getIndexRun(indexRunId),
+      typeof services.listIndexRunArtifacts === 'function'
+        ? services.listIndexRunArtifacts(indexRunId)
+        : Promise.resolve([]),
+    ])
+
+    if (indexRunResult.status === 'rejected') {
+      throw indexRunResult.reason
+    }
+    const indexRun = indexRunResult.value
+    const artifacts = artifactsResult.status === 'fulfilled'
+      ? (Array.isArray(artifactsResult.value) ? artifactsResult.value : (artifactsResult.value?.items ?? []))
+      : []
 
     return createOverviewLoaderResult({
       requestState: 'success',
@@ -890,6 +920,14 @@ async function loadIndexRunDetail(route, services) {
           state: 'success',
           item: indexRun,
           facts: buildIndexRunFacts(indexRun),
+        },
+        indexRunArtifacts: {
+          state: artifactsResult.status === 'fulfilled'
+            ? (artifacts.length > 0 ? 'success' : 'empty')
+            : 'error',
+          items: artifacts.map(mapIndexArtifactItem),
+          summary: summarizeIndexArtifacts(artifacts),
+          error: artifactsResult.status === 'rejected' ? createApiError(artifactsResult.reason) : null,
         },
       },
       raw: indexRun,
@@ -919,7 +957,35 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
   const buildRunBlock = createBuildRunBlock(buildRunResult, buildRunId)
   const buildRun = buildRunBlock.item ?? null
-  const selectionQuery = resolveBuildSelectionFromBuildRun(buildRun) ?? resolveBuildSelectionFromQuery(query)
+  // 按 buildRunId 过滤出本次构建的索引运行（成功 + 失败重试都在内），按 startedAt 倒排
+  // 继承 indexRunsBlock 的错误态——接口失败不会被吞成 empty
+  const buildRunIndexRunsBlock = (() => {
+    if (indexRunsBlock.state !== 'success') {
+      return { ...indexRunsBlock, items: [] }
+    }
+    const filtered = (indexRunsBlock.items ?? [])
+      .filter((item) => item.buildRunId != null && String(item.buildRunId) === String(buildRunId))
+      .sort((a, b) => {
+        const ta = a.startedAt ? new Date(a.startedAt).getTime() : 0
+        const tb = b.startedAt ? new Date(b.startedAt).getTime() : 0
+        const taSafe = Number.isNaN(ta) ? 0 : ta
+        const tbSafe = Number.isNaN(tb) ? 0 : tb
+        return tbSafe - taSafe
+      })
+    return {
+      state: filtered.length > 0 ? 'success' : 'empty',
+      items: filtered,
+    }
+  })()
+  // 选择来源仲裁：
+  //   1. 如果 URL 显式带了 materialIds / selectionKey / 旧版 materialId，使用 URL（用户编辑态优先）
+  //   2. URL 没有显式选择时，回退到 buildRun.selectedMaterialIds（页面初次加载或刷新时使用）
+  // 注意：之前的实现是「buildRun 存在 → 永远盖掉 URL」，会导致用户在第一步勾选 / 取消时被 loadPage
+  // 用旧值反向覆盖，出现「点两次才勾上 / 取消反而恢复 / 下一步用的还是旧值」的 bug。
+  const querySelection = resolveBuildSelectionFromQuery(query)
+  const selectionQuery = (querySelection.materialIds.length > 0 || querySelection.selectionKey)
+    ? querySelection
+    : (resolveBuildSelectionFromBuildRun(buildRun) ?? querySelection)
   const selection = await resolveBuildSelection({
     selectionQuery,
     knowledgeBase,
@@ -930,8 +996,10 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const exportArtifacts = resolveExportArtifactRows(selection.materials, selection.parseResultsByMaterialId)
   const promptState = resolvePromptConfirmState(query, {
     complete: selection.materials.length > 0 && exportArtifacts.missingCount === 0,
-  })
-  const indexState = resolveIndexAvailabilityState(knowledgeBase, indexRuns)
+  }, buildRun?.buildMetadata)
+  // 索引可用状态以「本次 build_run 自己的索引运行」为准，不再受 KB 上其他历史 build_run 的成功/失败影响。
+  // 这样新建 build_run 进入 05 步时即便 KB 上有其他索引也能正确显示 idle。
+  const indexState = resolveBuildRunIndexAvailabilityState(knowledgeBase, buildRunIndexRunsBlock.items ?? [])
   const workflowSteps = buildKnowledgeBaseWorkflowSteps({
     query,
     knowledgeBase,
@@ -964,6 +1032,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
       },
       materials: materialsBlock,
       indexRuns: indexRunsBlock,
+      buildRunIndexRuns: buildRunIndexRunsBlock,
       buildRun: buildRunBlock,
       selection,
       parseTasks: {
@@ -1123,11 +1192,28 @@ export function buildKnowledgeBaseWorkflowSteps({
   const exportComplete = hasMaterialSelection
     && exportArtifacts.rows?.length === materialIds.length
     && Number(exportArtifacts.missingCount ?? 0) === 0
-  const materialConfirmed = isBuildQueryConfirmed(query.materialConfirmed)
-  const exportConfirmed = isBuildQueryConfirmed(query.exportConfirmed)
-  const promptConfirmed = isBuildQueryConfirmed(query.promptConfirmed)
-  const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete })
-  const indexAvailability = indexState ?? resolveIndexAvailabilityState(knowledgeBase, [])
+  // exportConfirmed / promptConfirmed 优先以 buildRun.currentStage 为权威来源：
+  // 用户在阶段 X 点"进入下一步"按钮才会推进 currentStage 到下一阶段，
+  // 因此 currentStage 推进到下一阶段意味着前阶段已被用户确认。
+  // 例如 currentStage='prompt' 意味着 export 已确认；用户在 prompt 步骤点击"确认提示词"后
+  // metadata.promptConfirmed=true（即使 currentStage 仍为 prompt）。
+  // URL query 仅作为 fallback。
+  const stageReached = buildRunStageReached(buildRun?.currentStage)
+  const materialConfirmed = stageReached('parse')
+    || isBuildQueryConfirmed(query.materialConfirmed)
+  const exportConfirmed = stageReached('prompt')
+    || isBuildQueryConfirmed(query.exportConfirmed)
+  const prompt = promptState ?? resolvePromptConfirmState(query, { complete: exportComplete }, buildRun?.buildMetadata)
+  // promptConfirmed 来源：
+  // 1) prompt.confirmed 来自 metadata.promptConfirmed（用户已点过"确认提示词策略"按钮）；
+  // 2) currentStage 已推进到 'index' 或更后（一般已经包含 1）；
+  // 3) URL query 兜底。
+  const promptConfirmed = prompt?.confirmed
+    || stageReached('index')
+    || isBuildQueryConfirmed(query.promptConfirmed)
+  // fallback：当调用方未显式传 indexState 时，按 build_run 维度的空列表回退到 ready，
+  // 不再读 KB 上的 latestIndexRunId/Status 字段（那些是跨 build_run 的全 KB 视角）。
+  const indexAvailability = indexState ?? resolveBuildRunIndexAvailabilityState(knowledgeBase, [])
   const materialStatus = hasMaterialSelection && materialConfirmed ? 'done' : 'ready'
   const parseStatus = resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed })
   const exportStatus = resolveExportStepStatus({ allParsed, exportComplete, exportConfirmed })
@@ -1135,7 +1221,13 @@ export function buildKnowledgeBaseWorkflowSteps({
   const indexStatus = !exportConfirmed || !promptConfirmed || !exportComplete
     ? 'blocked'
     : indexAvailability.status
-  const qaStatus = activeIndexRunId ? 'ready' : 'blocked'
+  // qa_check 必须满足两个条件才能 ready：
+  //   1. index 步骤已经 done（本次 build_run 的索引构建跑完且激活）
+  //   2. KB 上有 activeIndexRunId（基本前提）
+  // 仅"index 非 blocked + 有 activeIndexRunId"是不够的：
+  //   - index 还在 running/ready 时不应允许跳过本次构建直接验证旧索引
+  //   - index failed 时也不该绕过失败结果用旧索引
+  const qaStatus = indexStatus === 'done' && activeIndexRunId ? 'ready' : 'blocked'
   const statusByStep = applyBuildRunStageStatuses({
     material: materialStatus,
     parse: parseStatus,
@@ -1177,10 +1269,10 @@ export function buildKnowledgeBaseWorkflowSteps({
     createWorkflowStep({
       key: 'export',
       status: statusByStep.export,
-      detail: exportComplete ? 'GraphRAG 必需输入产物已完整' : '需要 normalized、section 与 page 导出产物',
-      shortLabel: 'normalized / section / page 就绪',
-      conditions: ['解析结果存在', 'section_docs/page_docs 已导出'],
-      actionLabel: exportComplete ? '确认图谱输入并进入 Prompt 确认' : '生成缺失图谱输入',
+      detail: exportComplete ? '图谱输入已就绪' : '需要先生成图谱输入文件',
+      shortLabel: '导出图谱输入',
+      conditions: ['解析结果存在', '图谱输入已导出'],
+      actionLabel: exportComplete ? '确认图谱输入并进入提示词确认' : '生成缺失图谱输入',
       logLabel: '查看导出记录',
       primaryAction: resolveBuildPrimaryAction('export', {
         query,
@@ -1195,9 +1287,9 @@ export function buildKnowledgeBaseWorkflowSteps({
     createWorkflowStep({
       key: 'prompt',
       status: statusByStep.prompt,
-      detail: promptConfirmed ? '已确认沿用当前活动提示词' : '确认本次索引沿用 GraphRAG 当前活动提示词',
-      shortLabel: '确认活动提示词',
-      conditions: ['图谱输入已确认', '当前活动提示词可用于索引'],
+      detail: promptConfirmed ? '已确认提示词策略' : '选择本次索引使用的提示词策略',
+      shortLabel: '确认提示词策略',
+      conditions: ['图谱输入已确认', '当前提示词可用于索引'],
       actionLabel: promptConfirmed ? '进入创建索引' : '确认提示词策略',
       logLabel: '查看提示词策略',
       primaryAction: resolveBuildPrimaryAction('prompt', {
@@ -1327,6 +1419,32 @@ const BUILD_RUN_STAGE_TO_STEP = {
 
 const BUILD_RUN_STEP_ORDER = ['material', 'parse', 'export', 'prompt', 'index', 'qa_check']
 
+/**
+ * 返回一个谓词：判断当前 buildRun 的 currentStage 是否已推进到指定步骤之后。
+ *
+ * 例如 stageReached('prompt') 为 true 表示 currentStage 至少已到 prompt 阶段，
+ * 也就意味着前面的 material/parse/export 都已被用户确认。
+ *
+ * 当 currentStage 缺失或为 done 时，分别返回总是 false / 总是 true 的谓词。
+ */
+function buildRunStageReached(currentStage) {
+  const stageKey = BUILD_RUN_STAGE_TO_STEP[String(currentStage ?? '').toLowerCase()]
+
+  if (!stageKey) {
+    return () => false
+  }
+
+  if (stageKey === 'done') {
+    return () => true
+  }
+
+  const reachedIndex = BUILD_RUN_STEP_ORDER.indexOf(stageKey)
+  return (targetStepKey) => {
+    const targetIndex = BUILD_RUN_STEP_ORDER.indexOf(targetStepKey)
+    return targetIndex >= 0 && reachedIndex >= targetIndex
+  }
+}
+
 function applyBuildRunStageStatuses(baseStatuses, buildRun) {
   const stageKey = BUILD_RUN_STAGE_TO_STEP[String(buildRun?.currentStage ?? '').toLowerCase()]
 
@@ -1361,6 +1479,11 @@ function applyBuildRunStageStatuses(baseStatuses, buildRun) {
         : baseStatuses.material
   } else if (['parse', 'export'].includes(stageKey) && runStatus !== 'failed') {
     nextStatuses[stageKey] = baseStatuses[stageKey]
+  } else if (stageKey === 'prompt') {
+    // prompt 不是持续后台任务，当 buildRun.status 为空（归一化为 ready）时
+    // 应使用 baseStatuses 中根据 metadata 计算的状态（done/ready/blocked）；
+    // 但如果 buildRun.status 明确为 running（如自动调优进行中）或 failed，则保留
+    nextStatuses[stageKey] = runStatus === 'ready' ? baseStatuses[stageKey] : runStatus
   } else {
     nextStatuses[stageKey] = runStatus
   }
@@ -1390,7 +1513,9 @@ function normalizeBuildRunStatus(status) {
 function mergeQaStatus(baseStatus, qaStatus) {
   const normalized = String(qaStatus ?? '').toLowerCase()
 
-  if (!normalized || normalized === 'not_started') {
+  // 'skipped' 是 buildRun 创建时的默认值，表示尚未执行 QA 验证；
+  // 'not_started' 同语义。两者都应回退到 baseStatus（由前置步骤推导）。
+  if (!normalized || normalized === 'not_started' || normalized === 'skipped') {
     return baseStatus
   }
 
@@ -1904,8 +2029,9 @@ function buildMaterialFacts(material = {}) {
 }
 
 function buildKnowledgeBaseFacts(knowledgeBase = {}) {
+  // 概览只保留 7 个核心字段，确保宽屏一行排开；
+  // 知识库 ID 和构建历史入口分别由顶部 hero 和「查看构建历史」按钮承担
   return [
-    { label: '知识库 ID', value: knowledgeBase.id ?? '-' },
     { label: '知识库编码', value: knowledgeBase.kbCode ?? '-' },
     { label: '名称', value: knowledgeBase.name ?? '-' },
     { label: '所属课程', value: knowledgeBase.courseId ?? '-' },
@@ -1917,16 +2043,126 @@ function buildKnowledgeBaseFacts(knowledgeBase = {}) {
 }
 
 function buildIndexRunFacts(indexRun = {}) {
-  return [
-    { label: '索引运行 ID', value: indexRun.id ?? '-' },
-    { label: '知识库 ID', value: indexRun.knowledgeBaseId ?? '-' },
-    { label: '引擎', value: indexRun.engine ?? indexRun.engineName ?? '-' },
+  // 用户视角下，索引运行最有用的就是「跑得怎么样、跑了多久、用了什么策略、属于哪次构建」。
+  // 把 ID / 引擎 / 知识库 ID 等骨架信息留给页面侧边或折叠详情，不当作主信息位。
+  const metadata = parseIndexRunMetadata(indexRun.runMetadata)
+  const facts = [
     { label: '索引版本', value: indexRun.indexVersion ?? '-' },
-    { label: '状态', value: indexRun.status ?? '-' },
-    { label: '开始时间', value: indexRun.startedAt ?? '-' },
-    { label: '结束时间', value: indexRun.finishedAt ?? '-' },
-    { label: '失败信息', value: indexRun.errorMessage ?? '-' },
+    { label: '所属构建', value: indexRun.buildRunId != null ? `#${indexRun.buildRunId}` : '-' },
+    {
+      label: '实际耗时',
+      value: metadata?.elapsedSeconds != null ? formatElapsedSeconds(metadata.elapsedSeconds) : '-',
+    },
+    { label: '开始时间', value: formatTimestamp(indexRun.startedAt) },
+    { label: '结束时间', value: formatTimestamp(indexRun.finishedAt) },
+    { label: '提示词策略', value: resolvePromptStrategyLabel(metadata?.promptStrategy) },
   ]
+  if (metadata?.errorSummary) {
+    facts.push({ label: '失败/备注', value: metadata.errorSummary })
+  }
+  return facts
+}
+
+function formatElapsedSeconds(seconds) {
+  const s = Number(seconds)
+  if (!Number.isFinite(s) || s < 0) return '-'
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = Math.round(s % 60)
+  if (h > 0) return `${h} 时 ${m} 分 ${r} 秒`
+  if (m > 0) return `${m} 分 ${r} 秒`
+  return `${r} 秒`
+}
+
+function formatTimestamp(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+const PROMPT_STRATEGY_DETAIL_LABELS = {
+  default: '默认 GraphRAG 提示词',
+  graphrag_tuned: '自动调优版本',
+  custom_pipeline: '自定义提示词',
+}
+
+function resolvePromptStrategyLabel(strategy) {
+  if (!strategy) return '-'
+  return PROMPT_STRATEGY_DETAIL_LABELS[strategy] ?? strategy
+}
+
+const ARTIFACT_TYPE_LABELS = {
+  input_json: '输入文档',
+  output_dir: '输出目录',
+  parquet: 'Parquet 数据',
+  lancedb: '向量索引',
+  report: '报告',
+  cache: '缓存',
+  manifest: '清单',
+  log: '运行日志',
+  qa_smoke: '问答验证',
+  graphrag_output: 'GraphRAG 输出',
+  other: '其他',
+}
+
+const ARTIFACT_TYPE_ORDER = [
+  'parquet', 'lancedb', 'report', 'log',
+  'output_dir', 'graphrag_output', 'manifest', 'input_json',
+  'cache', 'qa_smoke', 'other',
+]
+
+function resolveArtifactTypeLabel(type) {
+  return ARTIFACT_TYPE_LABELS[type] ?? type ?? '其他'
+}
+
+function mapIndexArtifactItem(artifact = {}) {
+  const id = artifact.id
+  const type = artifact.artifactType ?? artifact.type ?? 'other'
+  const status = String(artifact.artifactStatus ?? artifact.status ?? 'ready').toLowerCase()
+  const fileSize = artifact.fileSize ?? artifact.byteSize ?? null
+  return {
+    id,
+    type,
+    typeLabel: resolveArtifactTypeLabel(type),
+    displayName: artifact.displayName ?? artifact.fileName ?? '-',
+    storageUri: artifact.storageUri ?? artifact.path ?? '',
+    storageScope: artifact.storageScope ?? 'local',
+    status,
+    fileSize,
+    fileSizeLabel: formatFileSize(fileSize),
+    checksum: artifact.checksum ?? null,
+    createdAt: artifact.createdAt ?? null,
+    to: id ? `/app/index-artifacts/${id}` : '',
+  }
+}
+
+function summarizeIndexArtifacts(artifacts = []) {
+  const groups = {}
+  let totalSize = 0
+  let readyCount = 0
+  artifacts.forEach((a) => {
+    const type = a.artifactType ?? a.type ?? 'other'
+    const size = Number(a.fileSize ?? a.byteSize ?? 0) || 0
+    if (!groups[type]) {
+      groups[type] = { type, label: resolveArtifactTypeLabel(type), count: 0, totalSize: 0 }
+    }
+    groups[type].count += 1
+    groups[type].totalSize += size
+    totalSize += size
+    if ((a.artifactStatus ?? a.status ?? 'ready') === 'ready') readyCount += 1
+  })
+  const groupRows = Object.values(groups)
+    .sort((a, b) => ARTIFACT_TYPE_ORDER.indexOf(a.type) - ARTIFACT_TYPE_ORDER.indexOf(b.type))
+    .map((g) => ({ ...g, totalSizeLabel: formatFileSize(g.totalSize) }))
+  return {
+    total: artifacts.length,
+    readyCount,
+    totalSize,
+    totalSizeLabel: formatFileSize(totalSize),
+    groups: groupRows,
+  }
 }
 
 function mapMaterialItem(material = {}) {
@@ -2079,14 +2315,37 @@ function classifyParseResult(item = {}) {
   return 'other'
 }
 
-function mapIndexRunItem(indexRun = {}) {
+export function mapIndexRunItem(indexRun = {}) {
   const id = indexRun.id ?? indexRun.indexRunId
+  // runMetadata 是后端 IndexRunMetadata 序列化的 JSON 字符串。
+  // 在 build_run done 视图里要展示 graphSummary（图谱体量 + 阶段耗时），
+  // 这里安全解析一次，失败时降级为 null，不影响其他字段。
+  const metadata = parseIndexRunMetadata(indexRun.runMetadata)
   return {
     id,
+    buildRunId: indexRun.buildRunId ?? null,
+    status: indexRun.status ?? null,
+    startedAt: indexRun.startedAt ?? null,
+    finishedAt: indexRun.finishedAt ?? null,
+    indexVersion: indexRun.indexVersion ?? null,
+    elapsedSeconds: metadata?.elapsedSeconds ?? null,
+    promptStrategy: metadata?.promptStrategy ?? null,
+    errorSummary: metadata?.errorSummary ?? null,
+    graphSummary: metadata?.graphSummary ?? null,
     title: id ? `索引运行 #${id}` : '索引运行',
     meta: indexRun.status ?? '-',
     detail: indexRun.createdAt ?? indexRun.startedAt ?? indexRun.updatedAt ?? '',
     to: id ? `/app/index-runs/${id}` : '',
+  }
+}
+
+function parseIndexRunMetadata(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(String(raw))
+  } catch {
+    return null
   }
 }
 
@@ -2147,4 +2406,71 @@ function resolveMaterialActions(material = {}, parseResults = [], options = {}) 
 
 function formatCount(value) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : '-'
+}
+
+async function loadKnowledgeBaseBuildRunList(route, query, services) {
+  const kbId = route.params?.kbId
+  if (!kbId) {
+    return {
+      source: 'live',
+      requestState: 'error',
+      refreshedAt: '',
+      columns: BUILD_RUN_COLUMNS,
+      rows: [],
+      pagination: null,
+      facts: [],
+      workflowSteps: [],
+      blocks: {},
+      error: createApiError({ message: '缺少知识库 ID' }),
+      raw: null,
+    }
+  }
+  try {
+    const [knowledgeBaseResult, pageResult] = await Promise.allSettled([
+      services.getKnowledgeBase(kbId),
+      services.listKnowledgeBaseBuildRuns(kbId, buildBuildRunListParams(query)),
+    ])
+    // 🔴 修复 review #1：pageResult rejected 时必须走 error 分支，不能静默 fallback 成 empty
+    if (pageResult.status === 'rejected') {
+      throw pageResult.reason
+    }
+    const pageData = pageResult.value
+    const rows = (pageData.items ?? []).map((buildRun) => mapBuildRunRow(kbId, buildRun))
+    const knowledgeBase = knowledgeBaseResult.status === 'fulfilled'
+      ? knowledgeBaseResult.value
+      : null
+    return {
+      source: 'live',
+      requestState: rows.length > 0 ? 'success' : 'empty',
+      refreshedAt: new Date().toISOString(),
+      columns: BUILD_RUN_COLUMNS,
+      rows,
+      pagination: pageData.pagination ?? null,
+      facts: knowledgeBase
+        ? [
+            knowledgeBase.name ?? knowledgeBase.kbCode ?? `知识库 ${kbId}`,
+            knowledgeBase.courseId ? `课程 ${knowledgeBase.courseId}` : '',
+          ].filter(Boolean)
+        : [],
+      workflowSteps: [],
+      blocks: {
+        knowledgeBase: { state: knowledgeBase ? 'success' : 'empty', item: knowledgeBase },
+      },
+      raw: pageData.raw,
+    }
+  } catch (error) {
+    return {
+      source: 'live',
+      requestState: 'error',
+      refreshedAt: '',
+      columns: BUILD_RUN_COLUMNS,
+      rows: [],
+      pagination: null,
+      facts: [],
+      workflowSteps: [],
+      blocks: {},
+      error: createApiError(error),
+      raw: error?.raw ?? error,
+    }
+  }
 }

@@ -153,7 +153,28 @@ class IndexWorkflowServiceTest {
         fixture.workflowService.createBuildRunIndexRun(28L, new BuildRunIndexRequest());
 
         then(fixture.activeIndexRunService).should().activate(5L, 18L, false);
-        then(fixture.buildRunService).should().markIndexSuccessDone(28L, "skipped");
+        then(fixture.buildRunService).should().markIndexSuccessDone(
+                eq(28L),
+                eq("skipped"),
+                eq("default"),
+                anyString(),
+                org.mockito.ArgumentMatchers.isNull()
+        );
+    }
+
+    @Test
+    void shouldMaterializePromptAndPassPromptFileToOrchestrator() throws Exception {
+        Fixture fixture = buildRunFixture(33L);
+        given(fixture.buildRunService.isLatestBuildRun(33L)).willReturn(true);
+
+        fixture.workflowService.createBuildRunIndexRun(33L, new BuildRunIndexRequest());
+
+        Path expectedPromptFile = fixture.workspace.resolve("prompt/extract_graph.txt");
+        org.assertj.core.api.Assertions.assertThat(expectedPromptFile).exists();
+        org.assertj.core.api.Assertions.assertThat(Files.readString(expectedPromptFile))
+                .isEqualTo("SHARED_DEFAULT_PROMPT");
+
+        then(fixture.orchestrator).should().runIndex(any(IndexRuns.class), eq(fixture.workspace), eq(expectedPromptFile));
     }
 
     @Test
@@ -166,6 +187,108 @@ class IndexWorkflowServiceTest {
 
         org.assertj.core.api.Assertions.assertThat(fixture.workspace.resolve("index/input/stale.json")).doesNotExist();
         org.assertj.core.api.Assertions.assertThat(fixture.workspace.resolve("index/input/material_3.section_docs.json")).exists();
+    }
+
+    @Test
+    void createBuildRunIndexRun_rejectsWhenPromptNotConfirmed() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(1L)).willReturn(BuildRunDetailResponse.builder()
+                .id(1L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata("{\"stage\":\"prompt\",\"promptConfirmed\":false}")
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(1L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先确认提示词策略");
+    }
+
+    @Test
+    void createBuildRunIndexRun_rejectsWhenMetadataMissing() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(2L)).willReturn(BuildRunDetailResponse.builder()
+                .id(2L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata(null)
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(2L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("请先确认提示词策略");
+    }
+
+    @Test
+    void createBuildRunIndexRun_rejectsWhenMetadataInvalid() {
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        given(buildRunService.getBuildRun(3L)).willReturn(BuildRunDetailResponse.builder()
+                .id(3L)
+                .knowledgeBaseId(5L)
+                .courseId("os")
+                .buildMetadata("{invalid json")
+                .build());
+
+        assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(3L, new BuildRunIndexRequest()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("构建元数据格式无效");
     }
 
     private ProcessExecutionResult successResult(List<String> command) {
@@ -187,11 +310,25 @@ class IndexWorkflowServiceTest {
         KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
         IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
         ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
-        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+
+        Path graphragRoot = tempDir.resolve("graphrag");
+        Files.createDirectories(graphragRoot.resolve("prompts"));
+        Files.writeString(graphragRoot.resolve("prompts/extract_graph.txt"), "SHARED_DEFAULT_PROMPT");
+
+        Path buildRunsRoot = tempDir.resolve("kb-build-runs");
+        Files.createDirectories(buildRunsRoot);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(buildRunsRoot.toString());
+
+        org.ysu.ckqaback.integration.config.CkqaIntegrationProperties properties =
+                new org.ysu.ckqaback.integration.config.CkqaIntegrationProperties();
+        properties.getGraphrag().setRoot(graphragRoot.toString());
+        properties.getGraphrag().setBuildRunsRoot(buildRunsRoot.toString());
+        BuildRunPromptMaterializer promptMaterializer = new BuildRunPromptMaterializer(workspaceService, properties);
 
         String workspaceUri = "user_0/kb_5/build_" + buildRunId;
-        Path workspace = tempDir.resolve(workspaceUri);
+        Path workspace = buildRunsRoot.resolve(workspaceUri);
         Files.createDirectories(workspace.resolve("graph-input"));
+        Files.createDirectories(workspace.resolve("prompt"));
         Files.writeString(workspace.resolve("graph-input/material_3.section_docs.json"), "[{\"text\":\"ok\"}]");
 
         KnowledgeBases kb = new KnowledgeBases();
@@ -220,13 +357,15 @@ class IndexWorkflowServiceTest {
                 .courseId("os")
                 .selectedMaterialIds("[3]")
                 .workspaceUri(workspaceUri)
+                .buildMetadata("{\"stage\":\"prompt\",\"promptConfirmed\":true,\"promptStrategy\":\"default\"}")
                 .build());
         given(knowledgeBasesService.getRequiredById(5L)).willReturn(kb);
         given(indexRunsService.recoverStaleRunningRuns(5L, Duration.ofSeconds(2400))).willReturn(List.of());
         given(indexRunsService.findActiveRunningByKnowledgeBaseId(5L)).willReturn(Optional.empty());
         given(indexRunsService.createPendingRun(eq(5L), eq(buildRunId), anyString())).willReturn(pendingRun);
         given(indexRunsService.getRequiredById(18L)).willReturn(successRun);
-        given(orchestrator.runIndex(eq(pendingRun), any(Path.class))).willReturn(successResult(List.of("python", "-m", "graphrag", "index", "--root", ".")));
+        given(orchestrator.runIndex(eq(pendingRun), any(Path.class), any()))
+                .willReturn(successResult(List.of("python", "-m", "graphrag", "index", "--root", ".")));
 
         IndexWorkflowService workflowService = new IndexWorkflowService(
                 indexRunsService,
@@ -237,9 +376,10 @@ class IndexWorkflowServiceTest {
                 buildRunService,
                 workspaceService,
                 artifactRegistryService,
-                activeIndexRunService
+                activeIndexRunService,
+                promptMaterializer
         );
-        return new Fixture(workflowService, indexRunsService, buildRunService, activeIndexRunService, workspace);
+        return new Fixture(workflowService, indexRunsService, buildRunService, activeIndexRunService, orchestrator, workspace);
     }
 
     private record Fixture(
@@ -247,6 +387,7 @@ class IndexWorkflowServiceTest {
             IndexRunsService indexRunsService,
             KnowledgeBaseBuildRunService buildRunService,
             ActiveIndexRunService activeIndexRunService,
+            GraphRagIndexOrchestrator orchestrator,
             Path workspace
     ) {
     }

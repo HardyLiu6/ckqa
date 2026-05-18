@@ -177,6 +177,8 @@ export function resolveOperationFeedback(operationKey, state, snapshot = {}) {
     detail: operation.detail,
     meta: resolveOperationMeta(apiError),
     status: normalizedState === 'confirming' ? 'running' : normalizedState,
+    elapsedSeconds: snapshot?.elapsedSeconds ?? null,
+    indexProgress: snapshot?.indexProgress ?? null,
   }
 }
 

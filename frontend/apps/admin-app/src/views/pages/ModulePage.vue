@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   BookOpen,
   Brain,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Check,
   DatabaseZap,
   Download,
@@ -12,6 +14,7 @@ import {
   Pencil,
   Archive,
   Hammer,
+  History,
   ImagePlus,
   Play,
   Plus,
@@ -46,11 +49,15 @@ import {
   createBuildRunIndexRun,
   createKnowledgeBase,
   deleteKnowledgeBase,
+  listKnowledgeBaseBuildRuns,
   runBuildRunQaSmoke,
   syncBuildRunGraphInput,
   updateKnowledgeBase,
   updateBuildRunMaterialSelection as submitBuildRunMaterialSelection,
   getBuildRun,
+  triggerBuildRunPromptTune,
+  getBuildRunPromptTuneStatus,
+  deleteBuildRun,
 } from '../../api/knowledge-bases.js'
 import {
   deleteCourseMaterial,
@@ -78,12 +85,14 @@ import BuildStepMaterial from '../../components/build-wizard/BuildStepMaterial.v
 import BuildStepParse from '../../components/build-wizard/BuildStepParse.vue'
 import BuildStepPrompt from '../../components/build-wizard/BuildStepPrompt.vue'
 import BuildStepQaCheck from '../../components/build-wizard/BuildStepQaCheck.vue'
+import ResumeBuildDialog from '../../components/knowledge-base/ResumeBuildDialog.vue'
 import {
   LONG_TASK_LIMITS,
   createLongTaskController,
   resolveLongTaskState,
 } from './long-task-state.js'
 import {
+  applyParseSnapshotToTaskRow,
   getModulePageConfig,
   resolveBuildStepNavigation,
 } from './module-content.js'
@@ -120,6 +129,7 @@ import {
   resolveOperationFeedback,
 } from './module-page-model.js'
 import { validateCourseMaterialFile } from './material-file-model.js'
+import { pickResumableBuildRuns, toResumeCard } from './resume-build-model.js'
 
 const DEFAULT_SMOKE_QUESTION = '请用一句话概括当前知识库的主要内容。'
 const DEFAULT_SMOKE_MODE = 'basic'
@@ -169,10 +179,31 @@ const actionState = ref('idle')
 const actionSnapshot = ref(null)
 const activeOperationKey = ref('')
 const activeOperationTargetId = ref('')
+// 索引按钮按下的时间戳；仅在客户端使用，刷新页面后丢失，BuildStepIndex 自带 0 秒兜底
+const indexStartedAtMs = ref(0)
+// 每秒触发一次让 elapsed/百分比 computed 重新计算
+const elapsedTickToken = ref(0)
+let elapsedTickTimer = null
+function startElapsedTick() {
+  stopElapsedTick()
+  elapsedTickTimer = setInterval(() => {
+    elapsedTickToken.value += 1
+  }, 1000)
+}
+function stopElapsedTick() {
+  if (elapsedTickTimer) {
+    clearInterval(elapsedTickTimer)
+    elapsedTickTimer = null
+  }
+}
 const parseStreamSnapshots = ref({})
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
 const smokeResult = ref(null)
+const selectedPromptStrategy = ref('default')
+const promptTuneState = ref(null)
+const promptTuneTriggering = ref(false)
+let promptTunePollTimer = null
 const creationDialog = ref('')
 const creationState = ref('idle')
 const creationError = ref(null)
@@ -198,6 +229,15 @@ const knowledgeBaseActionState = ref('idle')
 const knowledgeBaseActionError = ref(null)
 const knowledgeBaseActionTarget = ref(null)
 const knowledgeBaseEditForm = ref(createKnowledgeBaseEditForm())
+// 构建按钮的「继续 / 新建」对话框：lazy fetch 未完成 buildRun，仅在点击时拉取
+const resumeBuildDialog = ref({
+  visible: false,
+  knowledgeBaseId: null,
+  knowledgeBaseName: '',
+  candidates: [],
+  loading: false,
+  fallbackTo: '',
+})
 const memberActionDialog = ref('')
 const memberActionState = ref('idle')
 const memberActionError = ref(null)
@@ -316,7 +356,7 @@ const creationSubmitDisabled = computed(() => (
 ))
 const pageTitle = computed(() => route.meta.title || config.value.eyebrow)
 const tableTitle = computed(() => config.value.tableTitle || pageTitle.value)
-const showModuleHeroTitle = computed(() => config.value.variant !== 'table' && route.name !== 'material-detail')
+const showModuleHeroTitle = computed(() => route.name !== 'material-detail')
 const activeBuildStep = computed(() => {
   const steps = config.value.workflowSteps ?? []
   return steps.find((step) => step.key === activeStepKey.value)
@@ -329,6 +369,35 @@ const buildPrimaryAction = computed(() => (
 ))
 const activeBuildStepComponent = computed(() => buildStepComponents[activeBuildStep.value?.key] ?? BuildStepMaterial)
 const buildNavigation = computed(() => resolveBuildStepNavigation(config.value.workflowSteps ?? [], activeBuildStep.value?.key))
+
+/**
+ * 把 SSE 推送的 parseStreamSnapshots 实时合并到 blocks.parseTasks.items，
+ * 让构建向导第 02 步「解析检查」的进度条不依赖整页 reload，与资料管理页保持一致。
+ */
+const activeBuildBlocks = computed(() => {
+  const baseBlocks = config.value.blocks ?? {}
+  const parseTasks = baseBlocks.parseTasks
+  const items = parseTasks?.items
+  if (!items || items.length === 0) {
+    return baseBlocks
+  }
+  const snapshots = parseStreamSnapshots.value
+  const hasSnapshot = items.some((row) => snapshots[String(row?.id ?? '')])
+  if (!hasSnapshot) {
+    return baseBlocks
+  }
+  const merged = items.map((row) => {
+    const snapshot = snapshots[String(row?.id ?? '')]
+    return snapshot ? applyParseSnapshotToTaskRow(row, snapshot) : row
+  })
+  return {
+    ...baseBlocks,
+    parseTasks: {
+      ...parseTasks,
+      items: merged,
+    },
+  }
+})
 const buildStepIndexLabel = computed(() => {
   const index = (config.value.workflowSteps ?? []).findIndex((step) => step.key === activeBuildStep.value?.key)
   return index >= 0 ? String(index + 1).padStart(2, '0') : '01'
@@ -439,6 +508,7 @@ const primaryActionIcon = computed(() => {
 })
 const secondaryActionIcon = computed(() => {
   if (route.name === 'material-detail') return UploadCloud
+  if (route.name === 'knowledge-base-detail') return History
   return DatabaseZap
 })
 const creationDialogTitle = computed(() => creationDialog.value === 'knowledge-base' ? '新建知识库' : '新建课程')
@@ -447,11 +517,20 @@ const primaryHeroButtonClass = computed(() => [
   route.name === 'course-detail' ? 'ckqa-el-button--secondary' : 'ckqa-el-button--primary',
 ])
 const primaryHeroButtonType = computed(() => route.name === 'course-detail' ? 'default' : 'primary')
-const operationFeedback = computed(() => resolveOperationFeedback(
-  activeOperationKey.value,
-  actionState.value,
-  actionSnapshot.value,
-))
+const operationFeedback = computed(() => {
+  void elapsedTickToken.value
+  const baseSnapshot = actionSnapshot.value && typeof actionSnapshot.value === 'object'
+    ? { ...actionSnapshot.value }
+    : null
+  if (baseSnapshot && indexStartedAtMs.value > 0 && activeOperationKey.value === 'index-build') {
+    baseSnapshot.elapsedSeconds = Math.max(0, Math.round((Date.now() - indexStartedAtMs.value) / 1000))
+  }
+  return resolveOperationFeedback(
+    activeOperationKey.value,
+    actionState.value,
+    baseSnapshot,
+  )
+})
 const materialOperationFeedback = computed(() => (
   operationFeedback.value?.scope === 'material' ? operationFeedback.value : null
 ))
@@ -495,6 +574,25 @@ const parseResultGroups = computed(() => {
 })
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+// 索引运行卡片折叠：超过阈值时默认收起，本地状态由本组件维护，列表切换刷新会自然 reset
+const INDEX_RUN_COLLAPSE_THRESHOLD = 12
+const indexRunsExpanded = ref(false)
+const indexRunsTotal = computed(() => indexRunsBlock.value?.items?.length ?? 0)
+const indexRunsCanCollapse = computed(() => indexRunsTotal.value > INDEX_RUN_COLLAPSE_THRESHOLD)
+const visibleIndexRuns = computed(() => {
+  const items = indexRunsBlock.value?.items ?? []
+  if (!indexRunsCanCollapse.value || indexRunsExpanded.value) {
+    return items
+  }
+  return items.slice(0, INDEX_RUN_COLLAPSE_THRESHOLD)
+})
+function toggleIndexRunsExpanded() {
+  indexRunsExpanded.value = !indexRunsExpanded.value
+}
+// 切换知识库或刷新数据时，把折叠状态恢复成默认收起，避免不同库之间的状态串扰
+watch(indexRunsBlock, () => {
+  indexRunsExpanded.value = false
+})
 const materialParseProgress = computed(() => (
   resolveMaterialParseProgress(streamedMaterialItem.value, {
     active: activeOperationKey.value === 'material-parse',
@@ -633,6 +731,12 @@ async function loadPage(query = route.query) {
       nextQuery = resolveBuildConfirmQuery(nextQuery, 'promptConfirmed', false)
     }
 
+    if (result.blocks?.prompt?.shouldCleanPromptStrategyQuery) {
+      const cleaned = { ...nextQuery }
+      delete cleaned.promptStrategy
+      nextQuery = cleaned
+    }
+
     if (route.query.step && stepKeys.length > 0) {
       nextQuery = resolveCleanBuildStepQuery(nextQuery, stepKeys)
     }
@@ -643,6 +747,39 @@ async function loadPage(query = route.query) {
   }
 
   syncMaterialParseStreams(result)
+
+  if (route.name === 'knowledge-base-build') {
+    syncSelectedPromptStrategy()
+    syncPromptTuneState()
+  }
+}
+
+function syncSelectedPromptStrategy() {
+  const queryStrategy = firstQueryValue(route.query?.promptStrategy)
+  const metaStrategy = config.value.blocks?.prompt?.strategy
+  selectedPromptStrategy.value = queryStrategy || metaStrategy || 'default'
+}
+
+function syncPromptTuneState() {
+  const buildRunId = currentBuildRunId()
+  if (!buildRunId) {
+    promptTuneState.value = null
+    stopPromptTunePolling()
+    return
+  }
+  refreshPromptTuneStatus(buildRunId)
+}
+
+function updateBuildPromptStrategy(strategyKey) {
+  if (selectedPromptStrategy.value === strategyKey) return
+  selectedPromptStrategy.value = strategyKey
+  if (strategyKey === 'graphrag_tuned') {
+    syncPromptTuneState()
+  }
+  const nextQuery = { ...route.query, promptStrategy: strategyKey }
+  if (!isSameQuery(route.query, nextQuery)) {
+    router.replace({ query: nextQuery })
+  }
 }
 
 function isSameQuery(left = {}, right = {}) {
@@ -892,6 +1029,11 @@ async function handleSecondaryAction() {
     return
   }
 
+  if (route.name === 'knowledge-base-detail') {
+    await router.push(`/app/knowledge-bases/${encodeURIComponent(String(route.params.kbId ?? ''))}/build-runs`)
+    return
+  }
+
   if (route.name !== 'material-detail') {
     return
   }
@@ -936,6 +1078,12 @@ function handleTableRowAction({ row, action } = {}) {
     return
   }
 
+  if (route.name === 'knowledge-base-build-runs') {
+    // 构建历史列表的删除按钮走同一个 handler，避免直接 fallthrough 到 courses 分支
+    handleKnowledgeBaseRowAction(row, action)
+    return
+  }
+
   if (route.name !== 'courses') {
     return
   }
@@ -973,6 +1121,81 @@ function handleKnowledgeBaseRowAction(row, action) {
 
   if (action?.key === 'delete-knowledge-base') {
     openKnowledgeBaseDeleteDialog(knowledgeBase)
+  }
+
+  if (action?.key === 'open-build') {
+    void openResumeBuildDialog(knowledgeBase)
+    return
+  }
+
+  if (action?.key === 'delete-build-run') {
+    void handleDeleteBuildRun(row)
+    return
+  }
+}
+
+// 「构建」按钮入口：先 lazy fetch buildRun 列表，按未完成数量决定弹对话框还是直接进入新建
+async function openResumeBuildDialog(knowledgeBase = {}) {
+  const knowledgeBaseId = knowledgeBase?.id
+  if (!knowledgeBaseId) {
+    return
+  }
+  const fallbackTo = `/app/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/build`
+  resumeBuildDialog.value = {
+    visible: true,
+    knowledgeBaseId,
+    knowledgeBaseName: knowledgeBase.name ?? knowledgeBase.kbName ?? '',
+    candidates: [],
+    loading: true,
+    fallbackTo,
+  }
+
+  try {
+    // 拉一页就够了，分页大小 20，足以覆盖常见未完成场景；按 updatedAt 倒序由后端排序
+    const page = await listKnowledgeBaseBuildRuns(knowledgeBaseId, { page: 1, size: 20 })
+    const items = Array.isArray(page?.items) ? page.items : []
+    const candidates = pickResumableBuildRuns(items, 5).map((buildRun) => toResumeCard(knowledgeBaseId, buildRun))
+    if (resumeBuildDialog.value.knowledgeBaseId !== knowledgeBaseId) {
+      // 用户在加载完成前点了别的知识库，丢弃过期结果
+      return
+    }
+    if (candidates.length === 0) {
+      // 没有未完成构建：关闭对话框直接进入新建向导，体验和原先一致
+      resumeBuildDialog.value = {
+        ...resumeBuildDialog.value,
+        visible: false,
+        loading: false,
+      }
+      await router.push(fallbackTo)
+      return
+    }
+    resumeBuildDialog.value = {
+      ...resumeBuildDialog.value,
+      candidates,
+      loading: false,
+    }
+  } catch (error) {
+    // 拉取失败兜底：直接放行到新建向导，避免因为可继续检测把用户挡住
+    resumeBuildDialog.value = {
+      ...resumeBuildDialog.value,
+      visible: false,
+      loading: false,
+    }
+    ElMessage.warning('未能检测未完成的构建，已直接进入新建流程')
+    await router.push(fallbackTo)
+  }
+}
+
+async function handleResumeBuildSelected(card) {
+  if (card?.to) {
+    await router.push(card.to)
+  }
+}
+
+async function handleResumeBuildStartNew() {
+  const fallbackTo = resumeBuildDialog.value.fallbackTo
+  if (fallbackTo) {
+    await router.push(fallbackTo)
   }
 }
 
@@ -1236,15 +1459,21 @@ async function submitMaterialUpload() {
       materialType: materialForm.value.materialType,
       onUploadProgress: (event) => {
         if (event.total) {
-          materialUploadProgress.value = Math.min(100, Math.round((event.loaded / event.total) * 100))
+          // 浏览器到后端的字节传输进度（最高到 99%，留 1% 给后端确认）
+          // 后端响应成功时再推到 100%，避免失败时误显示 100%
+          const ratio = Math.round((event.loaded / event.total) * 100)
+          materialUploadProgress.value = Math.min(99, ratio)
         }
       },
     })
+    // 后端确认成功后才置 100%
     materialUploadProgress.value = 100
     materialActionState.value = 'success'
     closeMaterialActionDialog()
     await loadPage()
   } catch (error) {
+    // 失败时进度条复位，避免"100% + 错误信息"误导用户
+    materialUploadProgress.value = 0
     materialActionState.value = 'failed'
     materialActionError.value = createApiError(error)
   }
@@ -1828,13 +2057,13 @@ function syncMaterialParseStreams(pageState = null) {
   for (const id of desiredIds) {
     void openMaterialParseStream(id, {
       targetId: id,
-      refreshOnTerminal: ['material-detail', 'parse-results'].includes(route.name),
+      refreshOnTerminal: ['material-detail', 'parse-results', 'knowledge-base-build'].includes(route.name),
     })
   }
 }
 
 function resolveProcessingMaterialIds(pageState = null) {
-  if (!['course-materials', 'material-detail', 'parse-results'].includes(route.name)) {
+  if (!['course-materials', 'material-detail', 'parse-results', 'knowledge-base-build'].includes(route.name)) {
     closeAllMaterialParseStreams()
     return []
   }
@@ -1845,6 +2074,27 @@ function resolveProcessingMaterialIds(pageState = null) {
       .filter((material) => String(material?.parseStatus ?? '').toLowerCase() === 'processing')
       .map((material) => String(material.id ?? material.materialId ?? ''))
       .filter(Boolean)
+  }
+
+  if (route.name === 'knowledge-base-build') {
+    // 构建向导的 parseTasks.items 不带原始 parseStatus 字段，
+    // 借由 row.status 的 running/processing 状态推断需要订阅 SSE 的资料。
+    // 同时也涵盖 selection.materials（首次进入向导时尚未拉取 parseTasks）。
+    const parseTaskRows = pageState?.blocks?.parseTasks?.items ?? []
+    const taskIds = parseTaskRows
+      .filter((row) => ['running', 'processing', 'pending'].includes(String(row?.status ?? '').toLowerCase()))
+      .map((row) => String(row.id ?? ''))
+      .filter(Boolean)
+
+    const selectionMaterials = pageState?.raw?.selectedMaterials
+      ?? pageState?.blocks?.selection?.materials
+      ?? []
+    const selectionIds = selectionMaterials
+      .filter((material) => String(material?.parseStatus ?? '').toLowerCase() === 'processing')
+      .map((material) => String(material.id ?? material.materialId ?? ''))
+      .filter(Boolean)
+
+    return Array.from(new Set([...taskIds, ...selectionIds]))
   }
 
   const material = pageState?.blocks?.material?.item
@@ -2164,14 +2414,131 @@ async function runBuildGraphInput(action) {
 }
 
 async function runBuildPromptConfirmation(action) {
+  const strategy = selectedPromptStrategy.value || 'default'
   await runBuildRunRequest({
     operationKey: 'prompt-confirm',
     request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
       confirmed: true,
-      promptStrategy: 'active',
+      promptStrategy: strategy,
     }),
-    nextQuery: action.nextQuery,
+    nextQuery: { ...(action.nextQuery ?? {}), promptStrategy: strategy },
   })
+}
+
+async function resetBuildPromptConfirmation() {
+  try {
+    await ElMessageBox.confirm('确定要重新选择提示词策略吗？将清除当前确认状态。',
+      '重新选择策略', { type: 'warning' })
+  } catch {
+    return
+  }
+  const strategy = selectedPromptStrategy.value || config.value.blocks?.prompt?.strategy || 'default'
+  const nextQuery = { ...route.query }
+  delete nextQuery.promptConfirmed
+  await runBuildRunRequest({
+    operationKey: 'prompt-reset',
+    request: (buildRunId) => confirmBuildRunPrompt(buildRunId, {
+      confirmed: false,
+      promptStrategy: strategy,
+    }),
+    nextQuery,
+  })
+}
+
+function gotoPromptBuilder() {
+  const kbId = String(route.params?.kbId ?? '')
+  const buildRunId = config.value.blocks?.buildRun?.item?.id
+    ?? firstQueryValue(route.query?.buildRunId)
+  if (!kbId || !buildRunId) return
+  router.push({
+    name: 'knowledge-base-prompt-builder',
+    params: { kbId },
+    query: { buildRunId: String(buildRunId) },
+  })
+}
+
+function currentBuildRunId() {
+  return config.value.blocks?.buildRun?.item?.id
+    ?? firstQueryValue(route.query?.buildRunId)
+}
+
+function stopPromptTunePolling() {
+  if (promptTunePollTimer != null) {
+    clearTimeout(promptTunePollTimer)
+    promptTunePollTimer = null
+  }
+}
+
+async function refreshPromptTuneStatus(buildRunId) {
+  if (!buildRunId) return
+  try {
+    // 记录上一轮状态，用于检测「running → failed/success」翻转，做用户反馈。
+    const previousStatus = promptTuneState.value?.status ?? null
+    const status = await getBuildRunPromptTuneStatus(buildRunId)
+    promptTuneState.value = status
+
+    // Phase 5.3+：轮询过程中检测到任务终态翻转时，给前端弹消息提示，
+    // 否则用户只能看到 spinner 突然消失、按钮回到「立即触发」，没有任何反馈。
+    const wasInProgress = previousStatus === 'pending' || previousStatus === 'running'
+    if (wasInProgress && status?.status === 'failed') {
+      ElMessage.error({
+        message: status.errorMessage
+          ? `自动调优失败：${status.errorMessage}`
+          : '自动调优失败，请检查日志或重试',
+        duration: 6000,
+        showClose: true,
+      })
+    } else if (wasInProgress && status?.status === 'success') {
+      ElMessage.success('自动调优完成')
+    }
+
+    const interval = Number(status?.recommendedPollingIntervalMillis ?? 0)
+    if (interval > 0 && (status?.status === 'pending' || status?.status === 'running')) {
+      stopPromptTunePolling()
+      promptTunePollTimer = setTimeout(() => refreshPromptTuneStatus(buildRunId), interval)
+    } else {
+      stopPromptTunePolling()
+    }
+  } catch (error) {
+    // 轮询失败不打扰用户，下一次状态切换时再尝试。
+    console.warn('[prompt-tune] 状态轮询失败', error)
+    stopPromptTunePolling()
+  }
+}
+
+async function triggerPromptTune({ force = false } = {}) {
+  const buildRunId = currentBuildRunId()
+  if (!buildRunId || promptTuneTriggering.value) return
+  promptTuneTriggering.value = true
+  try {
+    const response = await triggerBuildRunPromptTune(buildRunId, { force })
+    promptTuneState.value = response
+    if (response?.status === 'success') {
+      ElMessage.success(response.cacheHit ? '已复用历史调优结果' : '自动调优完成')
+    } else if (response?.status === 'pending' || response?.status === 'running') {
+      // 启动轮询（容错处理）
+      stopPromptTunePolling()
+      promptTunePollTimer = setTimeout(() => refreshPromptTuneStatus(buildRunId), 1500)
+    } else if (response?.status === 'failed') {
+      ElMessage.error(response.errorMessage || '自动调优失败，请稍后重试')
+    }
+  } catch (error) {
+    ElMessage.error(resolveApiErrorAction(error)?.message || '触发自动调优失败')
+  } finally {
+    promptTuneTriggering.value = false
+  }
+}
+
+function handlePromptTuneTrigger() {
+  triggerPromptTune({ force: false })
+}
+
+function handlePromptTuneRetry() {
+  triggerPromptTune({ force: false })
+}
+
+function handlePromptTuneRegenerate() {
+  triggerPromptTune({ force: true })
 }
 
 async function runBuildRunRequest({ operationKey, request, nextQuery }) {
@@ -2249,7 +2616,11 @@ async function navigateAfterBuildRunAction(buildRunId, nextQuery = null) {
 async function runKnowledgeBaseIndex() {
   const indexStep = config.value.workflowSteps?.find((step) => step.key === 'index')
 
-  if (indexStep?.status !== 'ready' || actionRunning.value) {
+  // 允许 ready（首次）和 done/failed（重建）触发；正在跑则直接 return
+  if (actionRunning.value) {
+    return
+  }
+  if (!['ready', 'done', 'failed'].includes(indexStep?.status)) {
     return
   }
 
@@ -2267,14 +2638,31 @@ async function runKnowledgeBaseIndex() {
   cancelLongTask()
   activeOperationKey.value = 'index-build'
   actionSnapshot.value = null
+  indexStartedAtMs.value = Date.now()
+  startElapsedTick()
   activeLongTaskController = createLongTaskController({
-    trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    // 后端 createBuildRunIndexRun 是同步阻塞调用 graphrag index（INDEX_TIMEOUT_SECONDS 兜底，
+    // 当前 1800s）。axios 全局默认 15s 会在后端返回前抛 ECONNABORTED，这里显式 timeout=0
+    // 让单次请求不在客户端超时，由后端硬上限作单一来源真理；用户取消时仍由 signal 中止。
+    trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, {
+      post: (url, payload) => http.post(url, payload, { signal, timeout: 0 }),
+    }),
     poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
     isSuccess: isBuildRunIndexSuccess,
     isFailed: (snapshot) => normalizeRunState(snapshot?.status) === 'failed',
+    // trigger 是 5-30 分钟的同步阻塞调用，不能 await；fire-and-forget 后立即开始轮询
+    // 才能让 BuildStepIndex.vue 的 indexProgress 跑动起来
+    pollDuringTrigger: true,
     onState: (state, snapshot) => {
       actionState.value = state
-      actionSnapshot.value = snapshot ?? null
+      const enriched = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {}
+      if (indexStartedAtMs.value > 0) {
+        enriched.elapsedSeconds = Math.max(0, Math.round((Date.now() - indexStartedAtMs.value) / 1000))
+      }
+      actionSnapshot.value = enriched
+      if (['success', 'failed'].includes(state)) {
+        stopElapsedTick()
+      }
     },
     onSuccess: async () => {
       await navigateAfterBuildRunAction(buildRunId, resolveBuildStepQuery(route.query, 'qa_check'))
@@ -2323,13 +2711,16 @@ async function runQaSmoke() {
   }
 
   activeLongTaskController = createLongTaskController({
+    // 同 runKnowledgeBaseIndex：后端同步调用 graphrag query，前端单次请求不要客户端超时
     trigger: ({ signal }) => runBuildRunQaSmoke(buildRunId, {
       question,
       mode: DEFAULT_SMOKE_MODE,
-    }, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    }, { post: (url, payload) => http.post(url, payload, { signal, timeout: 0 }) }),
     poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
     isSuccess: isBuildRunQaSmokeSuccess,
     isFailed: isBuildRunQaSmokeFailed,
+    // QA 同步链路也阻塞 1-2 分钟，期间用户应能从轮询拿到 buildRun 状态
+    pollDuringTrigger: true,
     onState: (state, snapshot) => {
       actionState.value = state
       actionSnapshot.value = snapshot ?? null
@@ -2448,12 +2839,47 @@ function resolveMaterialProgressStatus(status) {
   return undefined
 }
 
+/**
+ * 根据进度百分比与状态派生进度条 tone（用于 .ckqa-el-progress 配色）：
+ * 冷蓝 → 青 → 暖橙 → 火橙（≥ 90%）/ 翠绿（done）/ 红（failed）。
+ * 与 BuildStepParse / DataTableShell 等所有进度条共享同一套色阶。
+ */
+function resolveProgressTone(percent, status) {
+  const normalized = String(status ?? '').toLowerCase()
+  if (['failed', 'error', 'exception'].includes(normalized)) return 'danger'
+  if (['done', 'success', 'complete', 'completed'].includes(normalized)) return 'success'
+  const value = Number(percent)
+  if (!Number.isFinite(value)) return 'cold'
+  if (value >= 90) return 'hot'
+  if (value >= 60) return 'warm'
+  if (value >= 30) return 'cool'
+  return 'cold'
+}
+
 function renderFactValue(field) {
   return typeof field === 'string' ? '待确认' : field.value
 }
 
 function renderFactLabel(field) {
   return typeof field === 'string' ? field : field.label
+}
+
+// 索引运行卡片的时间副文本：将 ISO 时间格式化成 yyyy-MM-dd HH:mm，否则原样返回
+function formatIndexRunDetail(value) {
+  if (!value) {
+    return '时间未知'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const pad = (n) => String(n).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hour = pad(date.getHours())
+  const minute = pad(date.getMinutes())
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 function handleInlineImageError(event) {
@@ -2530,10 +2956,52 @@ function resolveKnowledgeBaseStatusLabel(status) {
   }[status] ?? status
 }
 
-watch(() => [route.name, route.params, route.query], () => loadPage(), { deep: true, immediate: true })
+// 仅做本地 UI 状态的 query 键，变化时不触发 loadPage
+const UI_ONLY_QUERY_KEYS = new Set(['promptStrategy'])
+
+watch(() => [route.name, route.params, route.query], (next, prev) => {
+  // route.name 或 params 变化时始终 reload
+  if (next[0] !== prev?.[0] || JSON.stringify(next[1]) !== JSON.stringify(prev?.[1])) {
+    loadPage()
+    return
+  }
+  // query 变化时，检查是否只有 UI-only 键发生了变化
+  const nextQuery = next[2] ?? {}
+  const prevQuery = prev?.[2] ?? {}
+  const allKeys = new Set([...Object.keys(nextQuery), ...Object.keys(prevQuery)])
+  const onlyUiKeysChanged = [...allKeys].every((key) =>
+    UI_ONLY_QUERY_KEYS.has(key) || JSON.stringify(nextQuery[key]) === JSON.stringify(prevQuery[key]),
+  )
+  if (!onlyUiKeysChanged) {
+    loadPage()
+  }
+}, { deep: true, immediate: true })
+async function handleDeleteBuildRun(row) {
+  const id = row?.id
+  if (!id) return
+  try {
+    await ElMessageBox.confirm(
+      '删除后该构建流水线记录将被永久移除，磁盘工作区也会被清理。此操作不可恢复，是否继续？',
+      '删除构建流水线',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'error' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteBuildRun(id, { keepArtifacts: false, deleteWorkspace: true })
+    ElMessage.success('已删除')
+    await loadPage()
+  } catch (error) {
+    ElMessage.error(createApiError(error)?.message ?? '删除失败')
+  }
+}
+
 onBeforeUnmount(() => {
   cancelLongTask()
   closeAllMaterialParseStreams()
+  stopPromptTunePolling()
+  stopElapsedTick()
 })
 </script>
 
@@ -3223,6 +3691,16 @@ onBeforeUnmount(() => {
     </section>
   </div>
 
+  <ResumeBuildDialog
+    :visible="resumeBuildDialog.visible"
+    :knowledge-base-name="resumeBuildDialog.knowledgeBaseName"
+    :candidates="resumeBuildDialog.candidates"
+    :loading="resumeBuildDialog.loading"
+    @update:visible="(value) => (resumeBuildDialog.visible = value)"
+    @resume="handleResumeBuildSelected"
+    @start-new="handleResumeBuildStartNew"
+  />
+
   <div v-if="memberActionDialog === 'add'" class="dialog-backdrop" role="presentation">
     <section
       class="creation-dialog course-action-dialog"
@@ -3437,7 +3915,11 @@ onBeforeUnmount(() => {
           class="creation-form__wide upload-progress-panel"
         >
           <span>上传进度</span>
-          <el-progress :percentage="materialUploadProgress" />
+          <el-progress
+            class="ckqa-el-progress"
+            :percentage="materialUploadProgress"
+            :data-active="materialActionRunning ? 'true' : 'false'"
+          />
         </div>
         <el-alert
           v-if="materialActionError"
@@ -3515,35 +3997,58 @@ onBeforeUnmount(() => {
         <h2>{{ activeBuildStep?.label }}</h2>
         <p>{{ activeBuildStep?.detail }}</p>
       </div>
-      <StatusBadge
-        :status="activeBuildStep?.status"
-        :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
-      />
+      <div class="build-step-stage__header-tail">
+        <div class="build-step-stage__header-chips">
+          <el-tag
+            v-for="chip in buildSummaryChips"
+            :key="chip.label"
+            :type="chip.tone === 'warn' ? 'warning' : (chip.tone === 'ok' ? 'success' : 'info')"
+            size="default"
+            effect="light"
+            round
+            class="build-step-stage__header-chip"
+          >
+            {{ chip.label }} {{ chip.value }}
+          </el-tag>
+          <StatusBadge
+            :status="activeBuildStep?.status"
+            :label="activeBuildStep?.displayStatus || activeBuildStep?.status"
+          />
+        </div>
+        <el-button
+          v-if="activeBuildStep?.key === 'prompt' && config.blocks?.prompt?.confirmed"
+          class="build-step-stage__reset-chip"
+          native-type="button"
+          :disabled="actionRunning"
+          round
+          @click="resetBuildPromptConfirmation"
+        >
+          ↺ 重新选择策略
+        </el-button>
+      </div>
     </header>
-
-    <div class="build-summary-strip">
-      <span
-        v-for="chip in buildSummaryChips"
-        :key="chip.label"
-        class="build-summary-chip"
-        :data-tone="chip.tone"
-      >
-        <strong>{{ chip.label }}</strong>
-        <span>{{ chip.value }}</span>
-      </span>
-    </div>
 
     <div class="build-step-stage__body">
       <component
         :is="activeBuildStepComponent"
-        :blocks="config.blocks"
+        :blocks="activeBuildBlocks"
         :step="activeBuildStep"
         :action-running="actionRunning"
         :operation-feedback="activeBuildOperationFeedback"
+        :selected-strategy="selectedPromptStrategy"
         :smoke-question="smokeQuestion"
         :smoke-result="smokeResult"
+        :prompt-tune-state="promptTuneState"
+        :prompt-tune-triggering="promptTuneTriggering"
         @select-materials="updateBuildMaterialSelection"
         @update-smoke-question="updateSmokeQuestion"
+        @update:strategy="updateBuildPromptStrategy"
+        @goto-builder="gotoPromptBuilder"
+        @prompt-tune-trigger="handlePromptTuneTrigger"
+        @prompt-tune-retry="handlePromptTuneRetry"
+        @prompt-tune-regenerate="handlePromptTuneRegenerate"
+        @start-index="runKnowledgeBaseIndex"
+        @rebuild-index="runKnowledgeBaseIndex"
       />
     </div>
 
@@ -3723,11 +4228,13 @@ onBeforeUnmount(() => {
           class="course-progress-strip__item"
         >
           <el-progress
+            class="ckqa-el-progress--circle"
             type="circle"
             :width="52"
             :stroke-width="6"
             :percentage="Number(metric.percent ?? 0)"
             :status="resolveMetricProgressStatus(metric.status)"
+            :data-tone="resolveProgressTone(metric.percent, metric.status)"
             :aria-label="`${metric.label}：${metric.value}`"
           />
           <div>
@@ -3844,10 +4351,12 @@ onBeforeUnmount(() => {
           />
         </div>
         <el-progress
+          class="ckqa-el-progress"
           :percentage="getMaterialProgressPercentage(materialParseProgress)"
           :status="resolveMaterialProgressStatus(materialParseProgress.status)"
           :indeterminate="!materialParseProgress.hasPercent && materialParseProgress.status === 'processing'"
           :format="formatMaterialProgressLabel"
+          :data-tone="resolveProgressTone(getMaterialProgressPercentage(materialParseProgress), materialParseProgress.status)"
         />
         <p>{{ materialParseProgress.detail }}</p>
         <small>{{ materialParseProgress.pollHint }}</small>
@@ -3972,49 +4481,176 @@ onBeforeUnmount(() => {
     </article>
   </section>
 
-  <section v-else-if="knowledgeBaseBlock || config.blocks?.indexRun" class="content-grid two-columns">
-    <article class="panel">
-      <div class="panel-heading">
-        <h2>{{ knowledgeBaseBlock ? '知识库概览' : '索引运行概览' }}</h2>
+  <!-- 知识库详情页：上下分区卡片式布局
+       上分区：知识库概览（panel + field-grid）
+       下分区：索引运行（panel + index-run-grid 响应式卡片网格） -->
+  <section v-else-if="knowledgeBaseBlock" class="kb-detail-stack">
+    <article class="panel kb-overview-panel">
+      <header class="panel-heading kb-overview-heading">
+        <div class="kb-overview-heading__title">
+          <h2>知识库概览</h2>
+          <p v-if="knowledgeBaseBlock.item?.name" class="kb-overview-heading__name">
+            {{ knowledgeBaseBlock.item.name }}
+          </p>
+        </div>
         <StatusBadge
-          :status="knowledgeBaseBlock?.item?.status ?? config.blocks?.indexRun?.item?.status"
-          :label="knowledgeBaseBlock ? resolveKnowledgeBaseStatusLabel(knowledgeBaseBlock.item?.status) : ''"
+          :status="knowledgeBaseBlock.item?.status"
+          :label="resolveKnowledgeBaseStatusLabel(knowledgeBaseBlock.item?.status)"
         />
-      </div>
-      <div class="field-grid">
+      </header>
+      <div class="field-grid kb-overview-grid">
         <div
-          v-for="field in (knowledgeBaseBlock?.facts ?? config.blocks?.indexRun?.facts)"
+          v-for="field in knowledgeBaseBlock.facts"
           :key="field.label"
           class="field-tile"
         >
           <span>{{ renderFactLabel(field) }}</span>
-          <strong>{{ renderFactValue(field) }}</strong>
+          <RouterLink v-if="field.to" :to="field.to" class="field-tile__link">
+            {{ renderFactValue(field) }}
+          </RouterLink>
+          <strong v-else>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
     </article>
 
-    <article v-if="indexRunsBlock" class="panel">
-      <div class="panel-heading">
-        <h2>索引运行</h2>
-      </div>
-      <!-- list-stagger：索引运行时间线逐条渐入，Requirements 4.2 -->
+    <article v-if="indexRunsBlock" class="panel index-run-panel">
+      <header class="panel-heading index-run-heading">
+        <div class="index-run-heading__title">
+          <h2>索引运行</h2>
+          <span v-if="indexRunsBlock.items?.length" class="index-run-heading__count">
+            共 {{ indexRunsBlock.items.length }} 条
+          </span>
+        </div>
+        <RouterLink
+          v-if="knowledgeBaseBlock.item?.id"
+          :to="`/app/knowledge-bases/${knowledgeBaseBlock.item.id}/build-runs`"
+          class="panel-heading__link"
+        >
+          查看完整构建历史 →
+        </RouterLink>
+      </header>
+      <!-- list-stagger：索引运行卡片逐条渐入，Requirements 4.2 -->
       <TransitionGroup
+        v-if="indexRunsBlock.items?.length"
         name="list-stagger"
-        tag="ol"
-        class="timeline-list"
+        tag="div"
+        class="index-run-grid"
         appear
       >
-        <li
-          v-for="(item, index) in indexRunsBlock.items"
+        <RouterLink
+          v-for="(item, index) in visibleIndexRuns"
           :key="item.id"
+          :to="item.to"
+          class="index-run-card"
+          :data-status="item.meta"
           :style="{ '--stagger-index': index }"
         >
-          <StatusBadge :status="item.meta" />
-          <RouterLink :to="item.to">{{ item.title }}</RouterLink>
-          <small>{{ item.detail }}</small>
-        </li>
+          <div class="index-run-card__head">
+            <StatusBadge :status="item.meta" />
+            <span class="index-run-card__id">#{{ item.id }}</span>
+          </div>
+          <div class="index-run-card__body">
+            <strong>{{ item.title }}</strong>
+            <small>{{ formatIndexRunDetail(item.detail) }}</small>
+          </div>
+          <span class="index-run-card__foot">查看详情 →</span>
+        </RouterLink>
       </TransitionGroup>
-      <p v-if="indexRunsBlock.state === 'empty'">暂无索引运行。</p>
+      <!-- 超过阈值时显示「展开剩余 N 条 / 收起」按钮，避免页面被拉得过长 -->
+      <div v-if="indexRunsCanCollapse" class="index-run-toggle">
+        <el-button
+          class="ckqa-el-button ckqa-el-button--secondary"
+          native-type="button"
+          @click="toggleIndexRunsExpanded"
+        >
+          <component
+            :is="indexRunsExpanded ? ChevronUp : ChevronDown"
+            class="button-icon"
+            :size="15"
+            aria-hidden="true"
+          />
+          {{
+            indexRunsExpanded
+              ? '收起'
+              : `展开剩余 ${indexRunsTotal - INDEX_RUN_COLLAPSE_THRESHOLD} 条`
+          }}
+        </el-button>
+      </div>
+      <p v-if="!indexRunsBlock.items?.length" class="index-run-empty">暂无索引运行。触发首次构建后，这里会显示运行卡片。</p>
+    </article>
+  </section>
+
+  <section v-else-if="config.blocks?.indexRun" class="content-grid index-run-detail-grid">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>索引运行概览</h2>
+        <StatusBadge :status="config.blocks?.indexRun?.item?.status" />
+      </div>
+      <div class="field-grid">
+        <div
+          v-for="field in config.blocks?.indexRun?.facts"
+          :key="field.label"
+          class="field-tile"
+        >
+          <span>{{ renderFactLabel(field) }}</span>
+          <RouterLink v-if="field.to" :to="field.to" class="field-tile__link">
+            {{ renderFactValue(field) }}
+          </RouterLink>
+          <strong v-else>{{ renderFactValue(field) }}</strong>
+        </div>
+      </div>
+    </article>
+
+    <article class="panel index-run-artifacts-panel">
+      <div class="panel-heading">
+        <h2>索引产物</h2>
+        <span v-if="config.blocks?.indexRunArtifacts?.summary?.total" class="record-count">
+          共 {{ config.blocks.indexRunArtifacts.summary.total }} 个 ·
+          {{ config.blocks.indexRunArtifacts.summary.totalSizeLabel }}
+        </span>
+      </div>
+
+      <p v-if="config.blocks?.indexRunArtifacts?.state === 'empty'" class="index-run-empty">
+        暂无产物记录。索引运行成功后，产物会自动登记。
+      </p>
+      <p v-else-if="config.blocks?.indexRunArtifacts?.state === 'error'" class="index-run-empty">
+        产物列表加载失败：{{ config.blocks.indexRunArtifacts.error?.message ?? '未知错误' }}
+      </p>
+
+      <!-- 按类型分组的统计行 -->
+      <ul
+        v-if="config.blocks?.indexRunArtifacts?.summary?.groups?.length"
+        class="artifact-group-list"
+      >
+        <li v-for="group in config.blocks.indexRunArtifacts.summary.groups" :key="group.type">
+          <strong>{{ group.label }}</strong>
+          <span>{{ group.count }} 个</span>
+          <span class="artifact-group-list__size">{{ group.totalSizeLabel }}</span>
+        </li>
+      </ul>
+
+      <!-- 详细产物列表 -->
+      <ol v-if="config.blocks?.indexRunArtifacts?.items?.length" class="artifact-list">
+        <li
+          v-for="item in config.blocks.indexRunArtifacts.items"
+          :key="item.id"
+          class="artifact-list__item"
+        >
+          <header class="artifact-list__head">
+            <div class="artifact-list__title">
+              <span class="artifact-list__type-tag" :data-type="item.type">{{ item.typeLabel }}</span>
+              <strong>{{ item.displayName }}</strong>
+            </div>
+            <StatusBadge :status="item.status" />
+          </header>
+          <div class="artifact-list__meta">
+            <span v-if="item.fileSizeLabel !== '-'">大小 {{ item.fileSizeLabel }}</span>
+            <span class="artifact-list__path" :title="item.storageUri">
+              {{ item.storageScope === 'minio' ? 'minio://' : '' }}{{ item.storageUri }}
+            </span>
+          </div>
+        </li>
+      </ol>
     </article>
   </section>
 

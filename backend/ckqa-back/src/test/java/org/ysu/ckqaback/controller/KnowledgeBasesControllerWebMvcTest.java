@@ -43,6 +43,7 @@ class KnowledgeBasesControllerWebMvcTest {
     private KnowledgeBaseLookupService knowledgeBaseLookupService;
     private KnowledgeBaseBuildRunService buildRunService;
     private ActiveIndexRunService activeIndexRunService;
+    private org.ysu.ckqaback.index.PromptTuneService promptTuneService;
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -51,10 +52,11 @@ class KnowledgeBasesControllerWebMvcTest {
         knowledgeBaseLookupService = Mockito.mock(KnowledgeBaseLookupService.class);
         buildRunService = Mockito.mock(KnowledgeBaseBuildRunService.class);
         activeIndexRunService = Mockito.mock(ActiveIndexRunService.class);
+        promptTuneService = Mockito.mock(org.ysu.ckqaback.index.PromptTuneService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new KnowledgeBasesController(indexWorkflowService, knowledgeBaseLookupService, buildRunService, activeIndexRunService))
+                        new KnowledgeBasesController(indexWorkflowService, knowledgeBaseLookupService, buildRunService, activeIndexRunService, promptTuneService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -195,6 +197,7 @@ class KnowledgeBasesControllerWebMvcTest {
         IndexRunResponse response = IndexRunResponse.of(
                 18L,
                 5L,
+                null,
                 "graphrag",
                 "graphrag-20260421153000",
                 "running",
@@ -216,6 +219,7 @@ class KnowledgeBasesControllerWebMvcTest {
                 IndexRunResponse.of(
                         18L,
                         5L,
+                        null,
                         "graphrag",
                         "graphrag-20260421153000",
                         "success",

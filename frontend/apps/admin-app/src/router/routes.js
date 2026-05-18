@@ -71,6 +71,22 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/profile',
+    name: 'profile',
+    componentKey: 'ProfileView',
+    meta: {
+      title: '个人中心',
+      // 全屏 layout：不渲染左侧导航，仅顶部 topbar + 返回按钮
+      layout: 'fullscreen',
+      // 任意已登录用户都可访问，不要求特定业务 permission
+      permissions: [],
+      status: 'mvp',
+      // 不进入主侧边栏分组（也不会被 navigation-model 挑出来）
+      navGroup: 'profile',
+      hidden: true,
+    },
+  },
+  {
     path: '/app/system',
     name: 'system',
     redirect: '/app/health',
@@ -80,6 +96,9 @@ export const APP_ROUTES = [
       permissions: ['system:read'],
       status: 'mvp',
       navGroup: 'system',
+      // 仅作为 redirect 入口供 primaryNavigation 使用；
+      // 不要在侧栏分组内重复展示「系统与审计」条目。
+      hidden: true,
     },
   },
   {
@@ -219,17 +238,45 @@ export const APP_ROUTES = [
     },
   },
   {
+    path: '/app/knowledge-bases/:kbId/build/prompt-builder',
+    name: 'knowledge-base-prompt-builder',
+    componentKey: 'PromptBuilderPage',
+    meta: {
+      title: '手动调优提示词',
+      layout: 'workflow',
+      permissions: ['kb:index'],
+      status: 'mvp',
+      navGroup: 'knowledge',
+      resource: 'knowledgeBase',
+      scope: 'course',
+    },
+  },
+  {
+    path: '/app/knowledge-bases/:kbId/build-runs',
+    name: 'knowledge-base-build-runs',
+    componentKey: 'ModulePage',
+    meta: {
+      title: '构建历史',
+      layout: 'console',
+      permissions: ['kb:read'],
+      status: 'mvp',
+      navGroup: 'knowledge',
+      resource: 'knowledgeBase',
+      scope: 'course',
+      keepAlive: true,
+    },
+  },
+  {
     path: '/app/knowledge-bases/:kbId/index-runs',
     name: 'index-runs',
-    componentKey: 'RouteState',
-    props: { state: 'coming-soon' },
+    redirect: (to) => ({
+      name: 'knowledge-base-build-runs',
+      params: { kbId: to.params.kbId },
+      query: to.query,
+    }),
     meta: {
-      title: '索引运行列表',
-      layout: 'detail',
+      hidden: true,
       permissions: ['kb:read'],
-      status: 'upcoming',
-      routeState: 'coming-soon',
-      navGroup: 'knowledge',
     },
   },
   {

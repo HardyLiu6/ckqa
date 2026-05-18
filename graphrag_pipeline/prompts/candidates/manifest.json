@@ -2,7 +2,7 @@
   "task": "candidate_prompt_generation",
   "schema_version": "v1",
   "generated_at": "2026-05-11T11:17:20+08:00",
-  "last_updated_at": "2026-05-11T21:00:00+08:00",
+  "last_updated_at": "2026-05-14T14:25:16+08:00",
   "language": "zh",
   "output_dir": "prompts/candidates",
   "notes": [
@@ -46,21 +46,21 @@
     {
       "candidate_name": "auto_tuned",
       "source_type": "graphrag_prompt_tune",
-      "base_prompt_source": "prompts/candidates/auto_tuned/extract_graph.txt",
+      "base_prompt_source": "/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/prompt-tune-cache/5d4bb57de1cfec5f369c3b862ca8c7a318cfc394b262759e42b91ce7490b7a89/run_5/auto_tuned/extract_graph.txt",
       "schema_used": false,
       "audit_used": false,
       "fewshot_used": false,
       "fewshot_example_count": 0,
       "fewshot_strategy": null,
-      "generation_time": "2026-05-11T11:17:20+08:00",
+      "generation_time": "2026-05-14T14:25:16+08:00",
       "files": {
-        "prompt": "prompts/candidates/auto_tuned/prompt.txt",
-        "readme": "prompts/candidates/auto_tuned/README.md"
+        "prompt": "/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/prompt-tune-cache/5d4bb57de1cfec5f369c3b862ca8c7a318cfc394b262759e42b91ce7490b7a89/run_5/auto_tuned/prompt.txt",
+        "readme": "/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/prompt-tune-cache/5d4bb57de1cfec5f369c3b862ca8c7a318cfc394b262759e42b91ce7490b7a89/run_5/auto_tuned/README.md"
       },
       "notes": [
         "auto_tuned 候选由 GraphRAG 官方 prompt-tune 生成。",
         "主要 Prompt 文件：extract_graph.txt",
-        "作为 GraphRAG 官方自动调优基线对照。"
+        "auto_tuned 示例输出存在未在输入文本中出现的实体：用户验证、所知、用户特征。"
       ],
       "generation_method": "graphrag_official_prompt_tune",
       "graphrag_invocation": "python -m graphrag prompt-tune",
@@ -70,7 +70,10 @@
         "extract_graph.txt",
         "prompt.txt",
         "summarize_descriptions.txt"
-      ]
+      ],
+      "root_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline",
+      "config_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/settings.yaml",
+      "output_path": "/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs/prompt-tune-cache/5d4bb57de1cfec5f369c3b862ca8c7a318cfc394b262759e42b91ce7490b7a89/run_5/auto_tuned"
     },
     {
       "candidate_name": "schema_aware_directional_v2",

@@ -57,6 +57,7 @@ public class KnowledgeBasesController {
     private final KnowledgeBaseLookupService knowledgeBaseLookupService;
     private final KnowledgeBaseBuildRunService buildRunService;
     private final ActiveIndexRunService activeIndexRunService;
+    private final org.ysu.ckqaback.index.PromptTuneService promptTuneService;
 
     @GetMapping
     public ApiResponse<ApiPageData<KnowledgeBaseSummaryResponse>> listKnowledgeBases(
@@ -138,5 +139,18 @@ public class KnowledgeBasesController {
             @Valid @RequestBody ActiveIndexRunRequest request
     ) {
         return ApiResponseUtils.success(activeIndexRunService.activate(id, request.getIndexRunId(), true));
+    }
+
+    @GetMapping("/{id}/prompt-tune-availability")
+    public ApiResponse<org.ysu.ckqaback.index.dto.PromptTuneRunResponse> probePromptTuneAvailability(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @RequestParam(value = "materialIds", required = false) java.util.List<Long> materialIds
+    ) {
+        var knowledgeBase = knowledgeBaseLookupService.getKnowledgeBase(id);
+        return ApiResponseUtils.success(promptTuneService.probeBySelection(
+                id,
+                knowledgeBase.getCourseId(),
+                materialIds == null ? java.util.List.of() : materialIds
+        ));
     }
 }

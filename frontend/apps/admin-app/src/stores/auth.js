@@ -1,7 +1,7 @@
 import { createPinia, defineStore } from 'pinia'
 import { reactive, readonly } from 'vue'
 
-import { fetchCurrentUser, loginAdmin } from '../api/auth.js'
+import { fetchCurrentUser, loginAdmin, loginAdminByEmail } from '../api/auth.js'
 import { createApiError } from '../api/client.js'
 import { setAuthSessionProvider } from '../axios/index.js'
 import { getAdminPinia } from './pinia.js'
@@ -89,6 +89,11 @@ export function cloneProfile(profile = {}) {
     roles,
     dataScope: profile.dataScope ?? '授权课程',
     permissions: [...permissions],
+    // 个人中心需要展示的最近登录时间，后端 PUT/GET /auth/me 都会带上
+    lastLoginAt: profile.lastLoginAt ?? null,
+    // 联系信息字段：null 表示未绑定
+    email: profile.email ?? null,
+    phone: profile.phone ?? null,
   }
 }
 
@@ -111,6 +116,21 @@ export const useAuthStore = defineStore('auth', () => {
     const response = await loginAdmin({
       username: credentials.username?.trim(),
       password: credentials.password,
+      turnstileToken: credentials.turnstileToken,
+    })
+    applySession(response)
+    return state.currentUser
+  }
+
+  /**
+   * 邮箱验证码登录（管理员/教师 audience）。
+   * @param {{ email: string, code: string, turnstileToken?: string }} credentials
+   */
+  async function loginByEmail(credentials) {
+    const response = await loginAdminByEmail({
+      email: credentials.email?.trim().toLowerCase(),
+      code: credentials.code?.trim(),
+      turnstileToken: credentials.turnstileToken,
     })
     applySession(response)
     return state.currentUser
@@ -136,6 +156,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * 用 GET/PUT /auth/me 返回的最新 profile 替换内存与本地缓存。
+   * 个人中心的更新显示名 / 修改密码 / 上传头像调用都会得到新的 profile，
+   * 通过此方法把 currentUser 与 sessionStorage 同步刷新。
+   */
+  function applyProfile(profile) {
+    if (!profile) return null
+    state.currentUser = cloneProfile(profile)
+    state.isAuthenticated = Boolean(state.token && state.currentUser)
+    writeStoredSession(snapshotSession())
+    return state.currentUser
+  }
   function restoreSession() {
     const session = readStoredSession()
     if (!session?.accessToken || !session?.user) {
@@ -205,8 +237,10 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     state: readonly(state),
     login,
+    loginByEmail,
     loginAs,
     loadCurrentUser,
+    applyProfile,
     restoreSession,
     logout,
     canAccess,

@@ -72,6 +72,12 @@ const filteredRows = computed(() => filterRowsBySearchAndFilters(
 ))
 const recordCount = computed(() => resolveTableRecordCount(filteredRows.value, paginationState.value))
 const hasRowActions = computed(() => filteredRows.value.some((row) => getRowActions(row).length > 0))
+const actionColumnWidth = computed(() => {
+  // 每个按钮约 90px（图标 + 文字 + padding），加上容器 gap 和 padding
+  const maxActions = filteredRows.value.reduce((max, row) => Math.max(max, getRowActions(row).length), 0)
+  if (maxActions <= 0) return 0
+  return Math.max(140, maxActions * 95 + 24)
+})
 
 function isStatusCell(column, cell) {
   return cell?.kind === 'status' || column.includes('状态') || STATUS_VALUES.has(String(cell))
@@ -114,6 +120,12 @@ function getCellLabel(row, index) {
 function getColumnMinWidth(index) {
   const column = props.columns[index] ?? ''
   if (index === 0) return 260
+  // 进度型 cell 视觉是「42px 圆环 + 8px gap + 两行文本」，整体不能小于 164px，
+  // 否则像「解析状态」这种圆环列的 summary/detail（如「已完成 / 100%」）会被截断。
+  // 这里通过扫描当前行集判定该列是否为 progress 列，若是则强制最小列宽。
+  if (filteredRows.value.some((row) => isProgressCell(getRowCells(row)[index]))) {
+    return 188
+  }
   if (column.includes('状态')) return 112
   if (column.includes('进度') || column.includes('知识库')) return 190
   if (column.includes('更新时间')) return 168
@@ -226,20 +238,30 @@ function getProgressFormat(cell) {
 
   return `${getProgressPercentage(cell)}%`
 }
+
+/**
+ * 派生进度条 tone（与全局 .ckqa-el-progress 的 data-tone 配色一致）。
+ */
+function resolveProgressTone(cell) {
+  const status = String(cell?.status ?? '').toLowerCase()
+  if (['failed', 'error', 'exception'].includes(status)) return 'danger'
+  if (['done', 'success', 'complete', 'completed'].includes(status)) return 'success'
+  const percent = getProgressPercentage(cell)
+  if (percent >= 90) return 'hot'
+  if (percent >= 60) return 'warm'
+  if (percent >= 30) return 'cool'
+  return 'cold'
+}
 </script>
 
 <template>
   <section class="panel data-table-shell" :aria-labelledby="`${title}-table-title`">
-    <div class="panel-heading">
-      <h2 :id="`${title}-table-title`">{{ title }}</h2>
-      <span class="record-count">{{ recordCount }} 条</span>
-    </div>
+    <h2 :id="`${title}-table-title`" class="data-table-shell__sr-title">{{ title }}</h2>
 
     <p v-if="tableError" class="inline-error">{{ tableError }}</p>
 
     <div v-if="searchConfig || filters.length" class="table-toolbar" aria-label="列表检索与筛选">
       <label v-if="searchConfig" class="table-toolbar-field table-toolbar-field--search">
-        <el-tag class="table-toolbar-tag" type="primary" effect="light">检索</el-tag>
         <el-input
           class="table-search-input"
           :model-value="effectiveSearchText"
@@ -276,6 +298,8 @@ function getProgressFormat(cell) {
           />
         </el-select>
       </label>
+
+      <span class="table-toolbar-count" aria-live="polite">共 {{ recordCount }} 条</span>
     </div>
 
     <Transition name="skeleton-fade">
@@ -318,13 +342,14 @@ function getProgressFormat(cell) {
             </template>
             <div v-else-if="isProgressCell(getCell(row, index))" class="table-progress-cell">
               <el-progress
-                class="table-progress-cell__ring"
+                class="table-progress-cell__ring ckqa-el-progress--circle"
                 type="circle"
                 :width="42"
                 :stroke-width="5"
                 :percentage="getProgressPercentage(getCell(row, index))"
                 :status="resolveProgressStatus(getCell(row, index).status)"
                 :format="() => getProgressFormat(getCell(row, index))"
+                :data-tone="resolveProgressTone(getCell(row, index))"
                 :aria-label="`${column}：${getCell(row, index).summary}`"
               />
               <div class="table-progress-cell__copy">
@@ -347,7 +372,7 @@ function getProgressFormat(cell) {
           v-if="hasRowActions"
           label="操作"
           fixed="right"
-          width="390"
+          :width="actionColumnWidth"
           class-name="ckqa-el-table__action-column"
           header-class-name="ckqa-el-table__action-column"
         >

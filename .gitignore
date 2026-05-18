@@ -154,6 +154,19 @@ graphrag_pipeline/results/extraction_eval/runs/
 graphrag_pipeline/results/extraction_raw/
 graphrag_pipeline/results/errors/
 graphrag_pipeline/results/reports/extraction_scoring/
+graphrag_pipeline/results/prompt_tune_runs/
+
+# 共享路径上的脚本产物——这些文件在 build_run 隔离实施前会被多次跑覆盖，
+# 现在 Java 已强制把它们重定向到 build_run workspace 内，仓库根级的副本仅
+# CLI 手动调用时会写入，不应被 tracked，否则继续产生跨 build_run 互相覆盖的 diff。
+graphrag_pipeline/results/reports/audit_sampling_report.json
+graphrag_pipeline/results/reports/prompt_generation_report.json
+graphrag_pipeline/data/eval/audit_sampling_report.json
+graphrag_pipeline/data/eval/audit_extraction_set.json
+# audit_annotation_guidelines.md 是脚本动态生成产物（基于 schema_catalog 实时构造），
+# CLI 手动跑会覆盖；继续保留 tracked 仅是为了让首次拉代码的开发者有参考文案。
+# 保留 tracked，但若发生 diff 一律视为本地脏数据。
+
 
 # LanceDB
 graphrag_pipeline/**/lancedb/
@@ -164,6 +177,7 @@ infra/mysql/
 infra/minio/
 infra/neo4j/neo4j/
 infra/one-api/one-api/
+infra/redis/data/
 !infra/docker-compose.yml
 !infra/.env.example
 !infra/README.md

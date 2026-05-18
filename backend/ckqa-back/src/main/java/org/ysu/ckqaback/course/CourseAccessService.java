@@ -46,11 +46,20 @@ public class CourseAccessService {
         if (course == null) {
             throw new BusinessException(ApiResultCode.COURSE_NOT_FOUND, HttpStatus.NOT_FOUND);
         }
-        if ("public".equalsIgnoreCase(course.getAccessPolicy())) {
-            return CourseAccessDecision.granted(courseId, null, normalize(actorUserCode), null, null, "public-course");
-        }
 
         Users actor = findActiveUserByCode(actorUserCode);
+
+        if ("public".equalsIgnoreCase(course.getAccessPolicy())) {
+            // 公开课程对读访问无门槛；如果调用方携带了有效身份，
+            // 优先返回 admin-override（让写权限校验能够识别管理员身份），
+            // 否则回退为 public-course（仅授权读取）。
+            if (actor != null && usersService.hasRole(actor.getId(), "admin")) {
+                return CourseAccessDecision.granted(courseId, actor.getId(), actor.getUserCode(), null, null, "admin-override");
+            }
+            return CourseAccessDecision.granted(courseId, actor == null ? null : actor.getId(),
+                    actor == null ? normalize(actorUserCode) : actor.getUserCode(), null, null, "public-course");
+        }
+
         if (actor == null) {
             return CourseAccessDecision.denied(courseId, null, normalize(actorUserCode), "actor-not-found");
         }
@@ -107,6 +116,33 @@ public class CourseAccessService {
         String role = decision.getMembershipRole();
         if (!"teacher".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程成员管理权限");
+        }
+    }
+
+    /**
+     * 校验课程资料读写权限（上传 / 编辑 / 删除）。
+     * 与 assertCourseMembershipWritable 区分开：
+     * - 该方法用于资料管理操作，授权语义不同，错误消息直观（"无课程资料管理权限"）。
+     * - 管理员通过 admin-override 直接放行；
+     * - 教师 / 助教持有 active membership 即可操作课程资料；
+     * - 其他角色（如学生）和无 membership 的非管理员被拒绝。
+     */
+    public void assertCourseMaterialWritable(String courseId, String actorUserCode) {
+        Courses course = getRequiredCourse(courseId);
+        assertCourseWritable(course);
+        if (!StringUtils.hasText(actorUserCode)) {
+            return;
+        }
+        CourseAccessDecision decision = resolveAccess(course, actorUserCode);
+        if (!decision.isGranted()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程资料管理权限");
+        }
+        if ("admin-override".equals(decision.getReason())) {
+            return;
+        }
+        String role = decision.getMembershipRole();
+        if (!"teacher".equalsIgnoreCase(role) && !"assistant".equalsIgnoreCase(role)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程资料管理权限");
         }
     }
 

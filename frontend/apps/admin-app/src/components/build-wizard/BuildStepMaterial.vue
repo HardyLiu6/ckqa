@@ -51,8 +51,19 @@ const filteredMaterials = computed(() => materials.value.filter((item) => {
   return title.toLowerCase().includes(keyword.value.trim().toLowerCase()) && parseMatched && exportMatched
 }))
 
+// 把 props 的 materialIds 同步到本地 selectedIds，但仅在两边集合不同时同步，
+// 避免在用户刚切换 checkbox 后 loadPage 完成时，watch 把"刚 emit 出去又被回灌"的同值序列再触发一轮回写，
+// 进而打断后续连续点击。
+function sameSelection(left, right) {
+  if (left.length !== right.length) return false
+  const set = new Set(left)
+  return right.every((id) => set.has(id))
+}
+
 watch(materialIds, (next) => {
-  selectedIds.value = [...next.map((id) => String(id))]
+  const normalized = next.map((id) => String(id))
+  if (sameSelection(selectedIds.value, normalized)) return
+  selectedIds.value = normalized
 }, { immediate: true })
 
 function resolveExportStatus(id) {

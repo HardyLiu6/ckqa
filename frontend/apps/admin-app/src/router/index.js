@@ -4,11 +4,14 @@ import { markRaw } from 'vue'
 import AuthLayout from '../layouts/AuthLayout.vue'
 import ConsoleLayout from '../layouts/ConsoleLayout.vue'
 import DetailLayout from '../layouts/DetailLayout.vue'
+import FullscreenLayout from '../layouts/FullscreenLayout.vue'
 import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import DashboardView from '../views/dashboard/DashboardView.vue'
 import HealthView from '../views/system/HealthView.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
+import ProfileView from '../views/profile/ProfileView.vue'
+import PromptBuilderPage from '../views/pages/PromptBuilderPage.vue'
 import RouteState from '../views/status/RouteState.vue'
 import UnifiedErrorView from '../views/status/UnifiedErrorView.vue'
 import { getAdminPinia } from '../stores/pinia.js'
@@ -20,6 +23,8 @@ const componentMap = {
   DashboardView,
   HealthView,
   ModulePage,
+  ProfileView,
+  PromptBuilderPage,
   RouteState,
   UnifiedErrorView,
 }
@@ -28,6 +33,7 @@ const layoutMap = {
   auth: markRaw(AuthLayout),
   console: markRaw(ConsoleLayout),
   detail: markRaw(DetailLayout),
+  fullscreen: markRaw(FullscreenLayout),
   workflow: markRaw(WorkflowLayout),
 }
 

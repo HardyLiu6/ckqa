@@ -31,7 +31,9 @@ import {
 } from './components/common/data-table-shell-model.js'
 import {
   DATA_SOURCE_LABELS,
+  STATUS_LABELS,
   getDataSourceLabel,
+  getStatusLabel,
   getStatusTone,
 } from './components/common/status-model.js'
 import { routeRecords } from './router/routes.js'
@@ -57,6 +59,7 @@ import {
   resolveBuildDefaultStepKey,
   resolveBuildPrimaryAction,
   resolveBuildProgress,
+  resolveBuildRunIndexAvailabilityState,
   resolveBuildStepNavigation,
   resolveExportArtifactRows,
   resolveIndexAvailabilityState,
@@ -74,6 +77,7 @@ import {
   createCoursesLoaderResult,
   loadCourseDetailBlock,
   loadModulePage,
+  mapIndexRunItem,
   resolveCoursesRequestState,
 } from './views/pages/module-loaders.js'
 import {
@@ -196,6 +200,9 @@ test('路由骨架包含首版关键入口和后续页面状态', () => {
 
   const systemRoute = routeRecords.find((route) => route.path === '/app/system')
   assert.equal(systemRoute.redirect, '/app/health')
+  // /app/system 仅作为 primaryNavigation 的 redirect 入口，
+  // 不应在侧栏分组内重复展示「系统与审计」条目（隐藏）
+  assert.equal(systemRoute.meta.hidden, true)
 
   const auditRoute = routeRecords.find((route) => route.path === '/app/authorization-audit-logs')
   assert.equal(auditRoute.meta.status, 'upcoming')
@@ -1124,6 +1131,73 @@ test('长任务 controller 对 running 回执继续轮询直到成功', async ()
   assert.equal(successSnapshot.id, 15)
 })
 
+test('pollDuringTrigger 让同步阻塞 trigger 期间 poll 即时跑动并把 indexProgress 透传给 onState', async () => {
+  // 模拟：trigger 阻塞 60ms（实际场景是 graphrag index 跑 5-30 分钟）
+  // 期间 poll 每 5ms 一次，每次都拿到 indexProgress 字段，前端应能在 trigger 完成之前
+  // 通过 onState('confirming', snapshot) 拿到中间进度
+  const states = []
+  const snapshots = []
+  let pollCount = 0
+  const controller = createLongTaskController({
+    trigger: () => new Promise((resolve) => setTimeout(() => resolve({ id: 11, status: 'success' }), 60)),
+    poll: async () => {
+      pollCount += 1
+      // 模拟后端按工作流推进逐步更新 percentage
+      return {
+        id: 12,
+        status: 'running',
+        currentStage: 'index',
+        indexProgress: { percentage: pollCount * 10, currentWorkflowKey: 'extract_graph' },
+      }
+    },
+    onState: (state, snapshot) => {
+      states.push(state)
+      if (snapshot) snapshots.push(snapshot)
+    },
+    pollDuringTrigger: true,
+    limits: { intervalMs: 5, timeoutMs: 1000 },
+  })
+
+  controller.start()
+  // 等够时间让 poll 至少跑 2 次再让 trigger 完成
+  await new Promise((resolve) => setTimeout(resolve, 90))
+
+  // trigger 完成前已经至少有一次 confirming 含 indexProgress
+  const confirmingWithProgress = snapshots.filter((s) => s.indexProgress?.percentage > 0)
+  assert.ok(confirmingWithProgress.length >= 1, '应在 trigger 完成前从 poll 拿到 indexProgress')
+  assert.equal(confirmingWithProgress[0].indexProgress.currentWorkflowKey, 'extract_graph')
+
+  // trigger 最终成功后 onState 切到 success
+  assert.ok(states.includes('success'), 'trigger 完成后应进入 success 终态')
+})
+
+test('pollDuringTrigger 模式下 trigger 抛错时不直接失败，由 poll 兜底确认实际状态', async () => {
+  // 场景：网络抖动让 trigger 端 axios 报 ECONNABORTED，但后端实际还在跑
+  const states = []
+  let pollCount = 0
+  const controller = createLongTaskController({
+    trigger: async () => {
+      // 立即抛错
+      throw { code: 'ECONNABORTED', message: 'timeout' }
+    },
+    poll: async () => {
+      pollCount += 1
+      if (pollCount < 3) return { id: 12, status: 'running', indexProgress: { percentage: 50 } }
+      return { id: 12, status: 'success' }
+    },
+    onState: (state) => states.push(state),
+    pollDuringTrigger: true,
+    limits: { intervalMs: 5, timeoutMs: 1000 },
+  })
+
+  controller.start()
+  await new Promise((resolve) => setTimeout(resolve, 80))
+
+  // trigger 抛错不应直接 failed；最终 poll 拿到 success 才切终态
+  assert.ok(!states.includes('failed'), 'trigger 抛错时不应直接失败')
+  assert.ok(states.includes('success'), 'poll 最终应能拿到成功状态')
+})
+
 test('索引 fallback 只发起一次 POST 并从运行列表选择最新终态候选', async () => {
   const candidate = selectLatestRunningOrSuccess([
     { id: 11, status: 'failed', createdAt: '2026-04-28T10:00:00' },
@@ -1892,10 +1966,155 @@ test('知识库构建 loader 仅在 buildRunId 存在时加载 build-run 且不�
   assert.equal(runResult.workflowSteps.find((step) => step.key === 'prompt').status, 'running')
 })
 
-test('知识库构建 loader 优先从 build-run 详情恢复资料选择', async () => {
+test('知识库构建 loader 索引步骤按 build_run 维度判定，不被 KB 上其他历史 build_run 的成功索引污染', async () => {
+  // 复刻 KB 4 真实场景：KB 上已经有过其他 build_run 的成功索引（id=8），且已激活；
+  // 现在新建一个 buildRun 30，全部前置步骤都已确认到 prompt 完成，但本次 build_run 自己
+  // 还没触发任何索引运行。期望：index 步骤回到 ready，不应被 KB 全局视图的 latest=success
+  // 误判成 done / running。
+  const services = {
+    getKnowledgeBase: async () => ({
+      id: 4,
+      courseId: 'os',
+      activeIndexRunId: 8,
+      latestIndexRunId: 8,
+      latestIndexRunStatus: 'success',
+    }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+    ],
+    listIndexRuns: async () => [
+      // 跨 build_run 的全 KB 索引列表：id=7,8 来自历史 build_run 3/4
+      { id: 8, status: 'success', buildRunId: 4, startedAt: '2026-05-05T20:19:58' },
+      { id: 7, status: 'success', buildRunId: 3, startedAt: '2026-05-05T20:15:37' },
+    ],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+    getBuildRun: async () => ({
+      id: 30,
+      knowledgeBaseId: 4,
+      currentStage: 'prompt',
+      status: 'pending',
+      qaStatus: 'skipped',
+      selectedMaterialIds: [9],
+      buildMetadata: { stage: 'prompt', promptConfirmed: true, promptStrategy: 'graphrag_tuned' },
+    }),
+  }
+
   const result = await loadModulePage(
-    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
-    { buildRunId: '27', materialIds: '9' },
+    { name: 'knowledge-base-build', query: { buildRunId: '30', materialIds: '9' }, params: { kbId: '4' } },
+    { buildRunId: '30', materialIds: '9' },
+    services,
+  )
+
+  // buildRunIndexRuns block 按 buildRunId=30 过滤后应为空
+  assert.equal(result.blocks.buildRunIndexRuns.state, 'empty')
+  assert.equal(result.blocks.buildRunIndexRuns.items.length, 0)
+
+  // 索引步骤应该是 ready，按钮可用 —— 这是修复的核心断言
+  const indexStep = result.workflowSteps.find((step) => step.key === 'index')
+  assert.equal(indexStep.status, 'ready')
+  assert.equal(indexStep.primaryAction.disabled, false)
+  assert.equal(indexStep.primaryAction.operationKey, 'index-build')
+
+  // 而 KB 全局视角的 indexAvailability block 仍按旧语义保留（`已就绪`），
+  // 给侧边卡片用，不影响步骤判定
+  assert.equal(result.blocks.indexAvailability.availability, 'no-run')
+})
+
+test('知识库构建 loader 在本次 build_run 索引成功并激活后，索引步骤应该 done', async () => {
+  const services = {
+    getKnowledgeBase: async () => ({
+      id: 4,
+      courseId: 'os',
+      activeIndexRunId: 31,
+    }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+    ],
+    listIndexRuns: async () => [
+      { id: 31, status: 'success', buildRunId: 30, startedAt: '2026-05-18T20:00:00' },
+      { id: 8, status: 'success', buildRunId: 4, startedAt: '2026-05-05T20:19:58' },
+    ],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+    getBuildRun: async () => ({
+      id: 30,
+      knowledgeBaseId: 4,
+      currentStage: 'index',
+      status: 'success',
+      qaStatus: 'skipped',
+      selectedMaterialIds: [9],
+      buildMetadata: { stage: 'index', promptConfirmed: true },
+    }),
+  }
+
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '30', materialIds: '9' }, params: { kbId: '4' } },
+    { buildRunId: '30', materialIds: '9' },
+    services,
+  )
+
+  assert.equal(result.blocks.buildRunIndexRuns.state, 'success')
+  assert.equal(result.blocks.buildRunIndexRuns.items[0].id, 31)
+
+  const indexStep = result.workflowSteps.find((step) => step.key === 'index')
+  assert.equal(indexStep.status, 'done')
+})
+
+test('知识库构建 loader 索引步骤按 build_run 维度判定时，本次 build_run 的索引失败应映射为 failed', async () => {
+  const services = {
+    getKnowledgeBase: async () => ({
+      id: 4,
+      courseId: 'os',
+      activeIndexRunId: 8,
+    }),
+    listCourseMaterials: async () => [
+      { id: 9, fileName: 'book.pdf', parseStatus: 'done' },
+    ],
+    listIndexRuns: async () => [
+      { id: 32, status: 'failed', buildRunId: 30, startedAt: '2026-05-18T21:00:00' },
+      { id: 8, status: 'success', buildRunId: 4, startedAt: '2026-05-05T20:19:58' },
+    ],
+    getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
+    listParseResults: async () => [
+      { fileName: 'graphrag_normalized_docs.json' },
+      { fileName: 'graphrag_section_docs.json' },
+      { fileName: 'graphrag_page_docs.json' },
+    ],
+    getBuildRun: async () => ({
+      id: 30,
+      knowledgeBaseId: 4,
+      currentStage: 'index',
+      status: 'failed',
+      qaStatus: 'skipped',
+      selectedMaterialIds: [9],
+      buildMetadata: { stage: 'index' },
+    }),
+  }
+
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '30', materialIds: '9' }, params: { kbId: '4' } },
+    { buildRunId: '30', materialIds: '9' },
+    services,
+  )
+
+  const indexStep = result.workflowSteps.find((step) => step.key === 'index')
+  assert.equal(indexStep.status, 'failed')
+})
+
+test('知识库构建 loader 在 URL 没有显式资料选择时回退 build-run.selectedMaterialIds', async () => {
+  // 场景：用户首次进入构建页或刷新（URL 不带 materialIds），从 buildRun 持久化值恢复选择。
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '27' }, params: { kbId: '7' } },
+    { buildRunId: '27' },
     {
       getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
       listCourseMaterials: async () => [
@@ -1927,6 +2146,46 @@ test('知识库构建 loader 优先从 build-run 详情恢复资料选择', asyn
   assert.deepEqual(result.blocks.selection.materialIds, ['10'])
   assert.equal(result.blocks.selection.selectionSource, 'buildRun')
   assert.equal(result.raw.selectedMaterials[0].fileName, 'selected.pdf')
+})
+
+test('知识库构建 loader 在 URL 显式给出 materialIds 时以 URL 为准（用户编辑态优先于 build-run 持久化值）', async () => {
+  // 修复前：buildRun.selectedMaterialIds=[10] 永远盖过 URL 的 materialIds=9，导致用户在第一步勾选/取消
+  // 时被 loadPage 反向回灌旧值，出现「点两次才能勾上 / 取消反而恢复 / 下一步用的还是旧值」。
+  // 修复后：URL 显式承载选择即视为用户编辑态优先。
+  const result = await loadModulePage(
+    { name: 'knowledge-base-build', query: { buildRunId: '27', materialIds: '9' }, params: { kbId: '7' } },
+    { buildRunId: '27', materialIds: '9' },
+    {
+      getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: null }),
+      listCourseMaterials: async () => [
+        { id: 9, fileName: 'legacy.pdf', parseStatus: 'done' },
+        { id: 10, fileName: 'selected.pdf', parseStatus: 'done' },
+      ],
+      listIndexRuns: async () => [],
+      getMaterial: async (id) => ({
+        id: Number(id),
+        courseId: 'os',
+        fileName: id === '10' ? 'selected.pdf' : 'legacy.pdf',
+        parseStatus: 'done',
+      }),
+      listParseResults: async () => [
+        { fileName: 'graphrag_normalized_docs.json' },
+        { fileName: 'graphrag_section_docs.json' },
+        { fileName: 'graphrag_page_docs.json' },
+      ],
+      getBuildRun: async () => ({
+        id: 27,
+        currentStage: 'parse_check',
+        status: 'running',
+        selectedMaterialIds: '[10]',
+        materialIds: [9],
+      }),
+    },
+  )
+
+  assert.deepEqual(result.blocks.selection.materialIds, ['9'])
+  assert.equal(result.blocks.selection.selectionSource, 'materialIds')
+  assert.equal(result.raw.selectedMaterials[0].fileName, 'legacy.pdf')
 })
 
 test('知识库构建 loader 在 selectionKey 本地缺失时降级读取 materialIds', async () => {
@@ -2157,7 +2416,7 @@ test('六步构建工作流进度、默认步骤和返回目标保持稳定语�
     { key: 'material', label: '资料选择', status: 'done' },
     { key: 'parse', label: '解析检查', status: 'done' },
     { key: 'export', label: '生成图谱输入', status: 'ready' },
-    { key: 'prompt', label: 'Prompt确认', status: 'blocked' },
+    { key: 'prompt', label: '提示词确认', status: 'blocked' },
     { key: 'index', label: '创建索引', status: 'blocked' },
     { key: 'qa_check', label: '问答效果验证', status: 'blocked' },
   ]
@@ -2253,26 +2512,33 @@ test('解析任务行和多资料导出产物矩阵使用纯数据模型', () =>
 })
 
 test('提示词确认状态和索引可用性覆盖阻塞、确认、同步超时', () => {
-  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1' }, { complete: true }), {
-    status: 'ready',
-    confirmed: false,
-    shouldCleanPromptConfirmed: false,
-  })
-  assert.deepEqual(resolvePromptConfirmState({ exportConfirmed: '1', promptConfirmed: '1' }, { complete: false }), {
-    status: 'blocked',
-    confirmed: false,
-    shouldCleanPromptConfirmed: true,
-  })
-  assert.deepEqual(resolvePromptConfirmState({ promptConfirmed: '1' }, { status: 'complete' }), {
-    status: 'done',
-    confirmed: true,
-    shouldCleanPromptConfirmed: false,
-  })
-  assert.deepEqual(resolvePromptConfirmState({}, { status: 'complete' }), {
-    status: 'ready',
-    confirmed: false,
-    shouldCleanPromptConfirmed: false,
-  })
+  const readyState = resolvePromptConfirmState({ exportConfirmed: '1' }, { complete: true })
+  assert.equal(readyState.status, 'ready')
+  assert.equal(readyState.confirmed, false)
+  assert.equal(readyState.shouldCleanPromptConfirmed, false)
+  assert.equal(readyState.strategy, 'default')
+  assert.equal(readyState.customDraftReady, false)
+
+  const blockedState = resolvePromptConfirmState({ exportConfirmed: '1', promptConfirmed: '1' }, { complete: false })
+  assert.equal(blockedState.status, 'blocked')
+  assert.equal(blockedState.confirmed, false)
+  assert.equal(blockedState.shouldCleanPromptConfirmed, true)
+  assert.equal(blockedState.strategy, 'default')
+  assert.equal(blockedState.customDraftReady, false)
+
+  const doneState = resolvePromptConfirmState({ promptConfirmed: '1' }, { status: 'complete' })
+  assert.equal(doneState.status, 'done')
+  assert.equal(doneState.confirmed, true)
+  assert.equal(doneState.shouldCleanPromptConfirmed, false)
+  assert.equal(doneState.strategy, 'default')
+  assert.equal(doneState.customDraftReady, false)
+
+  const noConfirmState = resolvePromptConfirmState({}, { status: 'complete' })
+  assert.equal(noConfirmState.status, 'ready')
+  assert.equal(noConfirmState.confirmed, false)
+  assert.equal(noConfirmState.shouldCleanPromptConfirmed, false)
+  assert.equal(noConfirmState.strategy, 'default')
+  assert.equal(noConfirmState.customDraftReady, false)
 
   assert.deepEqual(
     resolveIndexAvailabilityState(
@@ -2290,6 +2556,65 @@ test('提示词确认状态和索引可用性覆盖阻塞、确认、同步超�
   assert.deepEqual(
     resolveIndexAvailabilityState({ activeIndexRunId: 13 }, [{ id: 13, status: 'success' }]),
     { status: 'done', availability: 'available' },
+  )
+})
+
+test('resolveBuildRunIndexAvailabilityState 完全脱离 KB latest 全局视角，按本次 build_run 的索引列表判定', () => {
+  // 1. 本次 build_run 没有任何索引运行：直接 ready，让 BuildStepIndex 进入 idle 大按钮态
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState({ activeIndexRunId: 8 }, []),
+    { status: 'ready', availability: 'no-run' },
+  )
+
+  // 2. 即便 KB 的 latestIndexRunId/Status 表示有其他历史成功索引（来自其他 build_run），
+  //    本次 build_run 自己没索引时仍应返回 ready —— 这是修复 KB 4 active=7 / latest=8 矛盾的关键
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState(
+      { activeIndexRunId: 7, latestIndexRunId: 8, latestIndexRunStatus: 'success' },
+      [],
+    ),
+    { status: 'ready', availability: 'no-run' },
+  )
+
+  // 3. 本次 build_run 的最新索引成功 + 已被激活：done
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState(
+      { activeIndexRunId: 21 },
+      [{ id: 21, status: 'success' }],
+    ),
+    { status: 'done', availability: 'available' },
+  )
+
+  // 4. 本次 build_run 的最新索引正在运行：running
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState(
+      { activeIndexRunId: 8 },
+      [{ id: 22, status: 'running' }],
+    ),
+    { status: 'running', availability: 'building' },
+  )
+
+  // 5. 最新索引成功但 active 还没切过来：syncing
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState(
+      { activeIndexRunId: 8 },
+      [{ id: 22, status: 'success' }],
+    ),
+    {
+      status: 'running',
+      availability: 'syncing',
+      warning: '等待后端激活最新索引',
+      primaryAction: { label: '刷新可用状态', operationKey: 'index-refresh', disabled: false },
+    },
+  )
+
+  // 6. 最新索引失败：failed
+  assert.deepEqual(
+    resolveBuildRunIndexAvailabilityState(
+      { activeIndexRunId: 8 },
+      [{ id: 22, status: 'failed' }],
+    ),
+    { status: 'failed', availability: 'failed' },
   )
 })
 
@@ -2331,7 +2656,7 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
     exportState: { status: 'complete' },
     query: { materialIds: '9', promptConfirmed: '1' },
   })
-  assert.equal(completeExportAction.label, '确认图谱输入并进入 Prompt 确认')
+  assert.equal(completeExportAction.label, '确认图谱输入并进入提示词确认')
   assert.deepEqual(completeExportAction.nextQuery, {
     materialIds: '9',
     exportConfirmed: '1',
@@ -2341,7 +2666,7 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
     parseRows: [{ id: '9', status: 'done' }],
     exportState: { status: 'complete' },
     query: { materialIds: '9', exportConfirmed: '1' },
-  }).label, '进入 Prompt 确认')
+  }).label, '进入提示词确认')
   assert.deepEqual(resolveBuildPrimaryAction('prompt', {
     promptState: { status: 'ready', confirmed: false },
     query: { materialIds: '9', exportConfirmed: '1' },
@@ -2349,6 +2674,7 @@ test('构建向导主操作映射生成下一步和确认 query', () => {
     materialIds: '9',
     exportConfirmed: '1',
     promptConfirmed: '1',
+    promptStrategy: 'default',
     step: 'index',
   })
 
@@ -2362,6 +2688,7 @@ test('知识库构建六步状态使用确认态、长任务状态和激活索�
   const route = {
     name: 'knowledge-base-build',
     query: {
+      buildRunId: '40',
       materialIds: '9',
       materialConfirmed: '1',
       exportConfirmed: '1',
@@ -2372,13 +2699,24 @@ test('知识库构建六步状态使用确认态、长任务状态和激活索�
   const result = await loadModulePage(route, route.query, {
     getKnowledgeBase: async () => ({ id: 7, courseId: 'os', activeIndexRunId: 15 }),
     listCourseMaterials: async () => [{ id: 9, fileName: 'book.pdf', parseStatus: 'done' }],
-    listIndexRuns: async () => [{ id: 15, status: 'success', createdAt: '2026-04-28T10:00:00' }],
+    // 索引 #15 属于本次 build_run 40，满足 build_run 维度的 done 判定
+    listIndexRuns: async () => [{ id: 15, status: 'success', buildRunId: 40, createdAt: '2026-04-28T10:00:00' }],
     getMaterial: async () => ({ id: 9, courseId: 'os', fileName: 'book.pdf', parseStatus: 'done' }),
     listParseResults: async () => [
       { fileName: 'graphrag_normalized_docs.json' },
       { fileName: 'graphrag_section_docs.json' },
       { fileName: 'graphrag_page_docs.json' },
     ],
+    getBuildRun: async () => ({
+      id: 40,
+      knowledgeBaseId: 7,
+      currentStage: 'index',
+      status: 'success',
+      qaStatus: 'skipped',
+      activeIndexRunId: 15,
+      selectedMaterialIds: [9],
+      buildMetadata: { stage: 'index', promptConfirmed: true },
+    }),
   })
 
   assert.deepEqual(result.workflowSteps.map((step) => [step.key, step.status]), [
@@ -2550,11 +2888,31 @@ test('知识库构建问答验证步骤必须等待激活索引并暴露真实�
   const blockedSteps = buildKnowledgeBaseWorkflowSteps({
     knowledgeBase: { id: 7, activeIndexRunId: null },
   })
+  // 前置步骤已确认 + 本次 build_run 索引已成功并激活 → qa_check 才可进入
   const readySteps = buildKnowledgeBaseWorkflowSteps({
+    query: { exportConfirmed: '1', promptConfirmed: '1' },
+    knowledgeBase: { id: 7, activeIndexRunId: 15 },
+    exportArtifacts: { rows: [{}], missingCount: 0, completeCount: 1 },
+    selection: { materialIds: ['1'], materials: [{ id: 1 }] },
+    indexState: { status: 'done', availability: 'available' },
+  })
+  // 有激活索引但本次 build_run 的索引步骤还没 done（index 还在 ready/running/failed）
+  // qa_check 也应阻塞，否则会出现"index 还没跑完就能点 06"的逻辑漏洞
+  const blockedDuringIndexing = buildKnowledgeBaseWorkflowSteps({
+    query: { exportConfirmed: '1', promptConfirmed: '1' },
+    knowledgeBase: { id: 7, activeIndexRunId: 8 },
+    exportArtifacts: { rows: [{}], missingCount: 0, completeCount: 1 },
+    selection: { materialIds: ['1'], materials: [{ id: 1 }] },
+    indexState: { status: 'running', availability: 'building' },
+  })
+  // 有激活索引但前置步骤未确认时仍应阻塞
+  const blockedByPrereqSteps = buildKnowledgeBaseWorkflowSteps({
     knowledgeBase: { id: 7, activeIndexRunId: 15 },
   })
   const blockedSmoke = blockedSteps.find((step) => step.key === 'qa_check')
   const readySmoke = readySteps.find((step) => step.key === 'qa_check')
+  const blockedDuringIndexingSmoke = blockedDuringIndexing.find((step) => step.key === 'qa_check')
+  const blockedByPrereq = blockedByPrereqSteps.find((step) => step.key === 'qa_check')
 
   assert.equal(blockedSmoke.status, 'blocked')
   assert.equal(blockedSmoke.actionDisabled, true)
@@ -2562,6 +2920,39 @@ test('知识库构建问答验证步骤必须等待激活索引并暴露真实�
   assert.equal(readySmoke.status, 'ready')
   assert.equal(readySmoke.actionDisabled, false)
   assert.equal(readySmoke.actionLabel, '发起问答验证')
+  assert.equal(blockedDuringIndexingSmoke.status, 'blocked', '本次构建索引还在跑时 qa_check 应阻塞')
+  assert.equal(blockedByPrereq.status, 'blocked', '前置步骤未确认时 qa_check 应阻塞')
+})
+
+test('buildRun.currentStage 是前置步骤的权威来源，URL query 缺失时仍可识别确认状态', () => {
+  // 用户已完成提示词确认（currentStage=prompt），但 URL 中没有 confirmed 标记
+  // 例如用户用 stepper 跳转或浏览器后退后导致 query 丢失
+  const stepsAfterPromptConfirm = buildKnowledgeBaseWorkflowSteps({
+    query: { step: 'index' }, // URL 没有 promptConfirmed=1 也没有 exportConfirmed=1
+    knowledgeBase: { id: 7, courseId: 'os', activeIndexRunId: null },
+    selection: {
+      materialIds: ['9'],
+      materials: [{ id: 9, parseStatus: 'done' }],
+    },
+    parseTaskRows: [{ id: '9', status: 'done' }],
+    exportArtifacts: { rows: [{ id: '9', status: 'complete' }], missingCount: 0, completeCount: 1 },
+    buildRun: {
+      currentStage: 'prompt',
+      status: null, // confirmPrompt 不会写 status，所以是 null
+      qaStatus: 'skipped', // 创建时的默认值
+      buildMetadata: '{"stage":"prompt","promptConfirmed":true,"promptStrategy":"default"}',
+    },
+  })
+
+  const stepStatuses = Object.fromEntries(
+    stepsAfterPromptConfirm.map((step) => [step.key, step.status]),
+  )
+  assert.equal(stepStatuses.material, 'done', 'material 应推断为已完成')
+  assert.equal(stepStatuses.parse, 'done', 'parse 应推断为已完成')
+  assert.equal(stepStatuses.export, 'done', 'export 应推断为已完成')
+  assert.equal(stepStatuses.prompt, 'done', '提示词已确认应显示完成')
+  assert.equal(stepStatuses.index, 'ready', '索引步骤应可执行')
+  assert.equal(stepStatuses.qa_check, 'blocked', '没构建索引时问答验证应阻塞')
 })
 
 test('模块页翻页以 URL query 为单一来源并丢弃陈旧请求', () => {
@@ -2634,7 +3025,7 @@ test('构建向导页面模型暴露可执行步骤和问答冒烟验证语义',
     ['material', 'parse', 'export', 'prompt', 'index', 'qa_check'],
   )
   assert.equal(config.workflowSteps.find((step) => step.key === 'export').label, '生成图谱输入')
-  assert.equal(config.workflowSteps.find((step) => step.key === 'export').shortLabel, 'normalized / section / page 就绪')
+  assert.equal(config.workflowSteps.find((step) => step.key === 'export').shortLabel, '导出图谱输入')
   assert.equal(config.workflowSteps.at(-1).label, '问答效果验证')
 })
 
@@ -2731,7 +3122,7 @@ test('业务页模型显式声明数据来源和主操作', () => {
   assert.equal(knowledgeBases.primaryAction.title, '创建知识库')
   assert.equal(knowledgeBases.secondaryAction, null)
   assert.equal(knowledgeBaseDetail.dataSource, 'live')
-  assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看索引运行')
+  assert.equal(knowledgeBaseDetail.secondaryAction.label, '查看构建历史')
   assert.equal(materialDetail.dataSource, 'live')
   assert.equal(materialDetail.eyebrow, '')
   assert.equal(parseResults.dataSource, 'live')
@@ -2878,15 +3269,21 @@ test('全局样式入口在 base 和 components 之间加载 Element Plus 覆盖
   assert.match(elementPlusCss, /\.el-drawer/)
 })
 
-test('登录页使用真实账号密码输入并保留满宽样式', () => {
+test('登录页使用真实账号密码输入并按 LOGIN_PRESETS 切换身份', () => {
   const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
-  const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  assert.match(loginView, /<el-input\s+v-model\.trim="form\.username"[\s\S]*autocomplete="username"/)
-  assert.match(loginView, /<el-input[\s\S]*v-model="form\.password"[\s\S]*type="password"/)
+  // 账号密码输入复用 el-input + lucide 图标 prefix
+  assert.match(loginView, /<el-input\s+v-model\.trim="loginForm\.username"[\s\S]*autocomplete="username"/)
+  assert.match(loginView, /<el-input[\s\S]*v-model="loginForm\.password"[\s\S]*type="password"/)
+  // preset 角色切换仍按 LOGIN_PRESETS 数据驱动
   assert.match(loginView, /v-for="preset in LOGIN_PRESETS"/)
+  // 不再使用旧的 selectedRole 下拉
   assert.doesNotMatch(loginView, /<select\s+v-model="selectedRole"/)
-  assert.match(componentsCss, /\.login-role-select,\s*[\s\S]*\.login-input\s*\{[\s\S]*width:\s*100%;[\s\S]*\}/)
+  // 重设计后版面：左侧 aside + 右侧 card
+  assert.match(loginView, /class="login-shell"/)
+  assert.match(loginView, /class="login-aside"/)
+  assert.match(loginView, /class="login-card"/)
+  assert.match(loginView, /class="login-preset"/)
 })
 
 test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
@@ -2902,11 +3299,11 @@ test('统一表格壳使用 Element Plus Table 并接入主题覆盖', () => {
   assert.match(tableShell, /:model-value="getFilterValue\(filter\)"/)
   assert.match(tableShell, /@update:model-value="handleFilterChange\(filter\.key, \$event\)"/)
   assert.match(tableShell, /@update:model-value="handleSearchInput"/)
-  assert.match(tableShell, /<el-tag class="table-toolbar-tag" type="primary" effect="light">检索<\/el-tag>/)
+  assert.match(tableShell, /class="table-toolbar-count"/)
   assert.match(tableShell, /<el-tag class="table-toolbar-tag" :type="getFilterTagType\(index\)" effect="light">/)
   assert.match(tableShell, /class="table-progress-cell"/)
   assert.match(tableShell, /type="circle"/)
-  assert.match(tableShell, /class="table-progress-cell__ring"/)
+  assert.match(tableShell, /class="table-progress-cell__ring ckqa-el-progress--circle"/)
   assert.match(tableShell, /fixed="right"/)
   assert.match(tableShell, /<el-pagination[\s\S]*@current-change="handlePageChange"/)
   assert.doesNotMatch(tableShell, /<table\s/)
@@ -2923,7 +3320,7 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
   const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
 
-  assert.match(tableShell, /label="操作"[\s\S]*width="390"/)
+  assert.match(tableShell, /label="操作"[\s\S]*:width="actionColumnWidth"/)
   assert.match(tableShell, /'rowAction'/)
   assert.match(tableShell, /header-class-name="ckqa-el-table__action-column"/)
   assert.match(tableShell, /fixed="right"/)
@@ -2932,13 +3329,13 @@ test('表格操作列按钮使用紧凑横排且不覆盖内容列', () => {
   assert.match(componentsCss, /\.table-scroll\s*\{[\s\S]*overflow:\s*hidden;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-progress-cell\s*\{[\s\S]*display:\s*flex;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-toolbar\s*\{[\s\S]*align-items:\s*center;[\s\S]*\}/)
-  assert.match(componentsCss, /\.table-toolbar-field--search\s*\{[\s\S]*flex:\s*1 1 320px;[\s\S]*\}/)
+  assert.match(componentsCss, /\.table-toolbar-field--search\s*\{[\s\S]*flex:\s*1 1 280px;[\s\S]*\}/)
   assert.match(componentsCss, /\.data-table__actions\s+\.el-button\s*\+\s*\.el-button\s*\{[\s\S]*margin-left:\s*0;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.el-button\s*\{[\s\S]*width:\s*auto;[\s\S]*min-width:\s*64px;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.ckqa-el-button--primary\.el-button\s*\{[\s\S]*min-width:\s*70px;[\s\S]*\}/)
   assert.match(componentsCss, /\.table-action-button\.el-button\s*>\s*span\s*\{[\s\S]*gap:\s*var\(--ckqa-space-2\);[\s\S]*\}/)
   assert.match(elementPlusCss, /\.ckqa-el-button--danger/)
-  assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:\s*1px solid var\(--ckqa-border-subtle\);[\s\S]*\}/)
+  assert.match(elementPlusCss, /\.ckqa-el-table\s+\.ckqa-el-table__action-column\s*\{[\s\S]*border-left:/)
   assert.doesNotMatch(elementPlusCss, /scrollbar-gutter:\s*stable/)
   assert.doesNotMatch(elementPlusCss, /el-table-fixed-column--right[\s\S]*box-shadow/)
 })
@@ -2963,7 +3360,7 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
 
   assert.match(workflowStepper, /class="workflow-progress-rail"/)
   assert.match(workflowStepper, /progress\.summary/)
-  assert.match(workflowStepper, /:title="step\.detail"/)
+  assert.match(workflowStepper, /:title="step\.status === 'blocked' \? '请先完成前置步骤' : step\.detail"/)
   assert.match(workflowStepper, /:data-status="step\.status"/)
   assert.doesNotMatch(workflowStepper, /当前动作/)
   assert.match(modulePage, /class="build-step-stage"/)
@@ -2983,10 +3380,9 @@ test('构建向导使用顶部进度轨和单一主舞台结构', () => {
   assert.doesNotMatch(materialStep, /row\.updatedAt \|\| row\.detail/)
   assert.doesNotMatch(materialStep, /未勾选/)
   assert.match(componentsCss, /\.build-step-stage\s*\{/)
-  assert.match(componentsCss, /\.build-summary-chip\s*\{/)
-  assert.match(componentsCss, /grid-template-columns:\s*repeat\(3,\s*minmax\(220px,\s*1fr\)\)/)
+  assert.match(componentsCss, /\.build-step-stage__header-tail\s*\{/)
   assert.match(componentsCss, /white-space:\s*normal/)
-  assert.doesNotMatch(workflowStepsCss, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/)
+  assert.match(workflowStepsCss, /grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/)
   for (const file of buildStepFiles) {
     assert.equal(existsSync(new URL(file, import.meta.url)), true)
   }
@@ -3023,7 +3419,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /@filter-change="handleTableFilterChange"/)
   assert.match(modulePage, /@row-action="handleTableRowAction"/)
   assert.match(modulePage, /v-if="config\.eyebrow"/)
-  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => config\.value\.variant !== 'table' && route\.name !== 'material-detail'\)/)
+  assert.match(modulePage, /const showModuleHeroTitle = computed\(\(\) => route\.name !== 'material-detail'\)/)
   assert.match(modulePage, /const materialParseProgress = computed/)
   assert.match(modulePage, /const hasPrimaryAction = computed/)
   assert.match(modulePage, /v-if="hasPrimaryAction && route\.name !== 'knowledge-base-build' && !showsEmptyState"/)
@@ -3044,7 +3440,7 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.match(modulePage, /submitCourseArchive/)
   assert.match(modulePage, /openCourseKnowledgeAction/)
   assert.match(modulePage, /openCreationDialog\('knowledge-base', \{ courseId \}\)/)
-  assert.match(modulePage, /import \{ ElMessage \} from 'element-plus'/)
+  assert.match(modulePage, /import \{ ElMessage, ElMessageBox \} from 'element-plus'/)
   assert.match(modulePage, /ElMessage\.warning\(message\)/)
   assert.match(modulePage, /<el-alert[\s\S]*:title="materialActionError\.message"/)
   const qaCheckStep = readFileSync(new URL('./components/build-wizard/BuildStepQaCheck.vue', import.meta.url), 'utf8')
@@ -3054,8 +3450,12 @@ test('创建表单使用 Element Plus 输入组件且顶部身份区保持只读
   assert.doesNotMatch(modulePage, /<select[\s\S]*creationForm/)
   assert.doesNotMatch(modulePage, /<textarea/)
 
-  assert.match(topbar, /<el-input[\s\S]*class="topbar-search-input"/)
+  // 顶部 topbar 改为：搜索条 topbar-search（占据中间主轴）+ identity dropdown 头像菜单
+  assert.match(topbar, /class="topbar-search"/)
   assert.match(topbar, /class="identity-avatar"/)
+  assert.match(topbar, /<el-dropdown[\s\S]*class="identity-dropdown"/)
+  assert.match(topbar, /command="profile"/)
+  assert.match(topbar, /command="logout"/)
   assert.doesNotMatch(topbar, /role-switch/)
   assert.doesNotMatch(topbar, /role-switch-select/)
   assert.doesNotMatch(topbar, /role-change/)
@@ -3106,7 +3506,8 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(modulePage, /<component\s+:is="primaryActionIcon"/)
   assert.match(tableShell, /<el-button[\s\S]*tag="router-link"[\s\S]*:to="action\.to"/)
   assert.match(workflowStepper, /<el-button[\s\S]*class="workflow-progress-rail__step"/)
-  assert.match(topbar, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--ghost"/)
+  // topbar 退出按钮已迁移到 identity-dropdown 内部，topbar 不再直接出现 ghost el-button
+  assert.match(topbar, /<el-dropdown-item[\s\S]*command="logout"/)
   assert.match(loginView, /<el-button[\s\S]*native-type="submit"/)
   assert.match(unifiedErrorView, /<el-button[\s\S]*tag="router-link"[\s\S]*to="\/app\/dashboard"/)
   assert.match(healthView, /<el-button[\s\S]*class="ckqa-el-button ckqa-el-button--primary"/)
@@ -3116,23 +3517,31 @@ test('操作按钮统一迁移到 Element Plus Button 并配置图标与高级�
   assert.match(componentsCss, /\.button-icon/)
 })
 
-test('侧边导航统一迁移到 Element Plus Menu 并为菜单项配置图标', () => {
+test('侧边导航采用分块式布局并暴露折叠按钮', () => {
   const sideNavigation = readFileSync(new URL('./components/shell/SideNavigation.vue', import.meta.url), 'utf8')
-  const elementPlusCss = readFileSync(new URL('./styles/element-plus.scss', import.meta.url), 'utf8')
   const componentsCss = readFileSync(new URL('./styles/components.scss', import.meta.url), 'utf8')
 
-  assert.match(sideNavigation, /<el-menu[\s\S]*class="side-menu"/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-if="group\.presentation === 'single' && group\.primaryItem"/)
-  assert.match(sideNavigation, /<el-sub-menu[\s\S]*v-else/)
-  assert.match(sideNavigation, /<el-menu-item[\s\S]*v-for="item in group\.items"/)
+  // 新分块式布局：用 section.side-nav-group 替代 el-sub-menu，每组永远展开
+  assert.match(sideNavigation, /<section[\s\S]*class="side-nav-group"/)
+  assert.match(sideNavigation, /class="side-nav-link side-nav-link--single"/)
+  assert.match(sideNavigation, /class="side-nav-link side-nav-link--item"/)
+  assert.match(sideNavigation, /v-for="item in group\.items"/)
   assert.match(sideNavigation, /resolveGroupIcon\(group\.key\)/)
   assert.match(sideNavigation, /resolveItemIcon\(item\)/)
+  // 不再依赖 Element Plus el-menu / el-sub-menu / el-menu-item
+  assert.doesNotMatch(sideNavigation, /<el-menu\b/)
+  assert.doesNotMatch(sideNavigation, /<el-sub-menu\b/)
+  assert.doesNotMatch(sideNavigation, /<el-menu-item\b/)
+  // 不再依赖 details/summary 的可折叠 fallback
   assert.doesNotMatch(sideNavigation, /<details/)
   assert.doesNotMatch(sideNavigation, /<summary/)
-  assert.doesNotMatch(sideNavigation, /<ul class="nav-items"/)
-  assert.match(elementPlusCss, /\.side-menu\.el-menu/)
-  assert.match(elementPlusCss, /\.side-menu\s+\.el-menu-item\.is-active/)
-  assert.match(componentsCss, /\.nav-icon/)
+  // 折叠按钮 + 关键样式落在 components.scss
+  assert.match(sideNavigation, /side-nav-collapse-btn/)
+  assert.match(sideNavigation, /toggle-collapse/)
+  assert.match(componentsCss, /\.side-nav-group\b/)
+  assert.match(componentsCss, /\.side-nav-link\b/)
+  assert.match(componentsCss, /\.side-navigation--compact\b/)
+  assert.match(componentsCss, /\.side-nav-collapse-btn\b/)
 })
 
 test('主题 token 样式兼容 violet 和 legacy purple', () => {
@@ -3418,6 +3827,92 @@ test('课程详情源码只保留课程域成员管理跳转', () => {
   assert.match(modulePage, /管理成员/)
 })
 
+test('索引详情 loader 同时拉 indexRun 和产物清单，按类型聚合并提供产物总大小', async () => {
+  const calls = []
+  const result = await loadModulePage(
+    { name: 'index-run-detail', params: { indexRunId: '11' }, query: {} },
+    {},
+    {
+      getIndexRun: async (id) => {
+        calls.push(['getIndexRun', id])
+        return {
+          id: 11,
+          knowledgeBaseId: 4,
+          buildRunId: 12,
+          status: 'success',
+          indexVersion: 'graphrag-20260518192711',
+          startedAt: '2026-05-18T19:27:11',
+          finishedAt: '2026-05-18T19:32:41',
+          runMetadata: JSON.stringify({
+            elapsedSeconds: 329,
+            promptStrategy: 'graphrag_tuned',
+            errorSummary: null,
+          }),
+        }
+      },
+      listIndexRunArtifacts: async (id) => {
+        calls.push(['listIndexRunArtifacts', id])
+        return [
+          { id: 50, artifactType: 'parquet', displayName: 'entities.parquet', fileSize: 13544, storageUri: 'user_0/kb_4/build_12/index/output/entities.parquet', artifactStatus: 'ready' },
+          { id: 51, artifactType: 'parquet', displayName: 'relationships.parquet', fileSize: 11957, storageUri: 'user_0/kb_4/build_12/index/output/relationships.parquet', artifactStatus: 'ready' },
+          { id: 60, artifactType: 'lancedb', displayName: 'lancedb', fileSize: 0, storageUri: 'user_0/kb_4/build_12/index/output/lancedb', artifactStatus: 'ready' },
+          { id: 70, artifactType: 'log', displayName: 'process.log', fileSize: 9925, storageUri: 'user_0/kb_4/build_12/index/logs/process.log', artifactStatus: 'ready' },
+        ]
+      },
+    },
+  )
+
+  assert.deepEqual(calls, [['getIndexRun', '11'], ['listIndexRunArtifacts', '11']])
+
+  // facts：去掉 ID/引擎/裸 status，保留用户最关心的版本/耗时/构建归属/策略
+  const factLabels = result.blocks.indexRun.facts.map((f) => f.label)
+  assert.ok(factLabels.includes('索引版本'), 'facts 应包含索引版本')
+  assert.ok(factLabels.includes('实际耗时'), 'facts 应包含实际耗时')
+  assert.ok(factLabels.includes('所属构建'), 'facts 应包含所属构建')
+  assert.ok(factLabels.includes('提示词策略'), 'facts 应包含提示词策略')
+  assert.ok(!factLabels.includes('索引运行 ID'), 'facts 不再包含 ID 骨架字段')
+  assert.ok(!factLabels.includes('引擎'), 'facts 不再包含引擎')
+  assert.ok(!factLabels.includes('状态'), '状态由右上角徽章承担，不重复进 facts')
+
+  const elapsedFact = result.blocks.indexRun.facts.find((f) => f.label === '实际耗时')
+  assert.ok(/分.*秒/.test(elapsedFact.value), '实际耗时应渲染为中文时长')
+
+  // artifacts：按类型聚合，提供总大小
+  const artifactsBlock = result.blocks.indexRunArtifacts
+  assert.equal(artifactsBlock.state, 'success')
+  assert.equal(artifactsBlock.items.length, 4)
+  assert.equal(artifactsBlock.summary.total, 4)
+  assert.equal(artifactsBlock.summary.totalSize, 13544 + 11957 + 9925)
+  // 类型分组：parquet 2 个、lancedb 1 个、log 1 个
+  const groupByType = Object.fromEntries(artifactsBlock.summary.groups.map((g) => [g.type, g]))
+  assert.equal(groupByType.parquet.count, 2)
+  assert.equal(groupByType.parquet.label, 'Parquet 数据')
+  assert.equal(groupByType.lancedb.count, 1)
+  assert.equal(groupByType.log.count, 1)
+
+  // 单条 artifact 暴露中文 typeLabel 与格式化后的 fileSizeLabel
+  const parquetItem = artifactsBlock.items.find((i) => i.displayName === 'entities.parquet')
+  assert.equal(parquetItem.typeLabel, 'Parquet 数据')
+  assert.equal(parquetItem.fileSizeLabel, '13.2 KB')
+})
+
+test('索引详情 loader 在产物 API 失败时降级展示，不影响主响应', async () => {
+  const result = await loadModulePage(
+    { name: 'index-run-detail', params: { indexRunId: '11' }, query: {} },
+    {},
+    {
+      getIndexRun: async () => ({ id: 11, status: 'success' }),
+      listIndexRunArtifacts: async () => {
+        throw { status: 500, message: 'artifact service down' }
+      },
+    },
+  )
+  assert.equal(result.requestState, 'success')
+  assert.equal(result.blocks.indexRunArtifacts.state, 'error')
+  assert.equal(result.blocks.indexRunArtifacts.items.length, 0)
+  assert.match(result.blocks.indexRunArtifacts.error.message, /artifact service down/)
+})
+
 test('状态和数据来源有稳定映射', () => {
   assert.equal(getStatusTone('failed'), 'danger')
   assert.equal(getStatusTone('running'), 'running')
@@ -3426,6 +3921,29 @@ test('状态和数据来源有稳定映射', () => {
   assert.equal(getDataSourceLabel('mock'), '示例数据')
   assert.equal(getDataSourceLabel('live'), '实时数据')
   assert.equal(DATA_SOURCE_LABELS.skeleton, '页面骨架')
+})
+
+test('getStatusLabel 把英文状态裸值兜底为中文，未识别的原值透传', () => {
+  // 跑详情页 / StatusBadge 兜底用：把后端 status 直接给 UI 也不能出现 "success" / "running"
+  assert.equal(getStatusLabel('success'), '成功')
+  assert.equal(getStatusLabel('failed'), '失败')
+  assert.equal(getStatusLabel('running'), '运行中')
+  assert.equal(getStatusLabel('skipped'), '已跳过')
+  assert.equal(getStatusLabel('partial'), '部分完成')
+  // 大小写不敏感
+  assert.equal(getStatusLabel('SUCCESS'), '成功')
+  // 未识别状态返回原值，避免吞业务自定义
+  assert.equal(getStatusLabel('custom_state'), 'custom_state')
+  // 空值返回空串
+  assert.equal(getStatusLabel(null), '')
+  assert.equal(getStatusLabel(undefined), '')
+  // 字典完整性：保证 STATUS_TONES 里的状态都有中文映射
+  Object.keys({
+    done: 1, success: 1, ready: 1, running: 1, processing: 1, failed: 1,
+    pending: 1, skipped: 1, blocked: 1, archived: 1,
+  }).forEach((key) => {
+    assert.ok(STATUS_LABELS[key], `缺少 ${key} 的中文映射`)
+  })
 })
 
 test('生产链路节点按失败优先规则归一化', () => {
@@ -3472,4 +3990,127 @@ test('健康响应同时保留 reachable 和 ready', () => {
     message: 'active build run missing',
     tone: 'warning',
   })
+})
+
+
+test('个人中心路由在 routeRecords 中注册并通过 hidden 元信息从侧栏排除', () => {
+  const profileRoute = routeRecords.find((route) => route.name === 'profile')
+  assert.ok(profileRoute, 'profile 路由必须存在')
+  assert.equal(profileRoute.path, '/app/profile')
+  assert.equal(profileRoute.componentKey, 'ProfileView')
+  assert.equal(profileRoute.meta.hidden, true)
+  // 全屏 layout：不渲染左侧导航，仅顶部 topbar + 返回按钮
+  assert.equal(profileRoute.meta.layout, 'fullscreen')
+  // 个人中心应该不被任何业务 permission 限制
+  assert.deepEqual(profileRoute.meta.permissions, [])
+
+  const groups = buildNavigationGroups(routeRecords, () => true)
+  const allItemPaths = groups.flatMap((group) => group.items).map((item) => item.path)
+  assert.equal(
+    allItemPaths.includes('/app/profile'),
+    false,
+    '个人中心不应出现在主侧栏导航分组中',
+  )
+})
+
+test('顶部导航 dropdown 暴露个人中心和退出菜单', () => {
+  const topbar = readFileSync(new URL('./components/shell/AppTopbar.vue', import.meta.url), 'utf8')
+  const profileView = readFileSync(new URL('./views/profile/ProfileView.vue', import.meta.url), 'utf8')
+  const authApi = readFileSync(new URL('./api/auth.js', import.meta.url), 'utf8')
+
+  // topbar 用 el-dropdown 替代独立退出按钮，含 profile/logout 两个 command
+  assert.match(topbar, /<el-dropdown\b[\s\S]*class="identity-dropdown"/)
+  assert.match(topbar, /<el-dropdown-item\b[\s\S]*command="profile"/)
+  assert.match(topbar, /<el-dropdown-item\b[\s\S]*command="logout"/)
+  assert.match(topbar, /handleDropdownCommand/)
+  // dropdown 头部展示 displayName / username / dataScopeLabel
+  assert.match(topbar, /class="identity-menu__header"/)
+
+  // ProfileView 含基本信息 / 可编辑资料（显示名 + 邮箱 + 手机号）/
+  // 修改密码 / 权限明细 4 块卡片
+  assert.match(profileView, /class="profile-card"/)
+  assert.match(profileView, /handleSaveProfile/)
+  assert.match(profileView, /handleChangePassword/)
+  assert.match(profileView, /handleAvatarSelected/)
+  // 邮箱 + 手机号草稿与校验
+  assert.match(profileView, /emailDraft/)
+  assert.match(profileView, /phoneDraft/)
+  assert.match(profileView, /EMAIL_PATTERN/)
+  assert.match(profileView, /PHONE_PATTERN/)
+
+  // api 层暴露三个个人中心方法
+  assert.match(authApi, /export async function updateCurrentProfile/)
+  assert.match(authApi, /export async function changeCurrentPassword/)
+  assert.match(authApi, /export async function uploadCurrentAvatar/)
+})
+
+test('mapIndexRunItem 暴露 buildRunId / status / startedAt 供 build_run 维度过滤使用', () => {
+  const item = mapIndexRunItem({
+    id: 7,
+    buildRunId: 42,
+    status: 'running',
+    startedAt: '2026-05-18T10:00:00',
+    createdAt: '2026-05-18T09:59:50',
+  })
+  assert.equal(item.id, 7)
+  assert.equal(item.buildRunId, 42)
+  assert.equal(item.status, 'running')
+  assert.equal(item.startedAt, '2026-05-18T10:00:00')
+  assert.equal(item.meta, 'running')
+
+  // 缺字段时安全回退
+  const minimal = mapIndexRunItem({ id: 8 })
+  assert.equal(minimal.buildRunId, null)
+  assert.equal(minimal.status, null)
+  assert.equal(minimal.startedAt, null)
+  assert.equal(minimal.indexVersion, null)
+  assert.equal(minimal.elapsedSeconds, null)
+  assert.equal(minimal.graphSummary, null)
+})
+
+test('mapIndexRunItem 解析 runMetadata 中的 graphSummary / elapsedSeconds / promptStrategy 暴露给 done 视图', () => {
+  // 后端 runMetadata 是 JSON 字符串；前端要解构后展示，否则视图拿不到图谱体量等字段
+  const item = mapIndexRunItem({
+    id: 11,
+    buildRunId: 12,
+    status: 'success',
+    indexVersion: 'graphrag-20260518192711',
+    finishedAt: '2026-05-18T19:32:41',
+    runMetadata: JSON.stringify({
+      command: 'python -m graphrag index --root .',
+      elapsedSeconds: 329,
+      exitCode: 0,
+      errorSummary: 'skipped_newer_build_exists',
+      promptStrategy: 'graphrag_tuned',
+      graphSummary: {
+        entityCount: 40,
+        relationshipCount: 38,
+        communityCount: 8,
+        communityReportCount: 8,
+        documentCount: 9,
+        textUnitCount: 9,
+        totalRuntimeSeconds: 309.109,
+        workflowDurations: { extract_graph: 83.55, create_community_reports: 216.247 },
+      },
+    }),
+  })
+  assert.equal(item.indexVersion, 'graphrag-20260518192711')
+  assert.equal(item.elapsedSeconds, 329)
+  assert.equal(item.promptStrategy, 'graphrag_tuned')
+  assert.equal(item.errorSummary, 'skipped_newer_build_exists')
+  assert.equal(item.graphSummary.entityCount, 40)
+  assert.equal(item.graphSummary.relationshipCount, 38)
+  assert.equal(item.graphSummary.workflowDurations.extract_graph, 83.55)
+
+  // runMetadata 是已解析对象时也要支持（防御性）
+  const objItem = mapIndexRunItem({
+    id: 12,
+    runMetadata: { graphSummary: { entityCount: 5 } },
+  })
+  assert.equal(objItem.graphSummary.entityCount, 5)
+
+  // runMetadata 解析失败不应炸
+  const bad = mapIndexRunItem({ id: 13, runMetadata: '{ not valid json' })
+  assert.equal(bad.graphSummary, null)
+  assert.equal(bad.elapsedSeconds, null)
 })

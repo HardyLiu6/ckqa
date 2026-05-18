@@ -1,0 +1,1373 @@
+# 手动调优提示词向导 · Phase 1a 骨架
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 把现有 3 步前端向导扩为 **5 步骨架**：选模板 → 构建准备材料 → 生成候选 → 抽取评分 → 预览保存。本期只做骨架（02-04 步用"即将开放"占位组件，05 用最简表单），目标是让 5 步切换、URL query 同步、解锁规则、保存流程都能跑通；真实业务 UI 留给 Phase 1b/1c/1d/1e。
+
+**Architecture:** URL `step` query 切换 5 步组件，组件加载在 `PromptBuilderPage.vue`。新建 `builder-step-model.js` 统一管理步骤定义、URL ↔ key 映射、推进/回退/解锁。`mocks/` 子目录占位（本期只放 `index.js` + `MOCK_HISTORY_DRAFTS` + `MOCK_COURSE_NAME`），实际 mock 数据在后续 sub-phase 补齐。
+
+**Tech Stack:** Vue 3 + Vite + Element Plus 2.13 + vue-router + node:test。新增 npm 依赖：`markdown-it`、`prismjs`（本期安装但暂不引用，下游 sub-phase 会用）。
+
+**关联 Spec:** `docs/superpowers/specs/2026-05-15-prompt-builder-redesign-design.md`
+
+**范围说明：本计划只覆盖 Phase 1a（骨架）。**
+
+| 子计划 | 范围 |
+| --- | --- |
+| 1a（本计划） | 5 步骨架 + 占位组件 + 简版保存 |
+| 1b | 02 步标注 IDE 完整 UI |
+| 1c | 03 步候选勾选完整 UI |
+| 1d | 04 步候选矩阵 + 排行榜 + 详情抽屉 |
+| 1e | 05 步 PromptDisplay 三视图 + 完整保存（含历史草稿入库 mock） |
+
+每个 sub-phase 都能独立交付一个浏览器可看的产物。
+
+---
+
+## 文件结构
+
+| 路径 | 操作 | 责任 |
+| --- | --- | --- |
+| `frontend/apps/admin-app/package.json` | 修改 | 新增 `markdown-it`、`prismjs` 依赖 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/builder-step-model.js` | 新建 | 5 步定义、URL query ↔ 步骤映射、推进/回退/解锁 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js` | 新建 | 05 步草稿名生成 / 表单校验 / payload 构造 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js` | 新建 | mock 总入口（本期只放历史草稿、课程名） |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPlaceholderStep.vue` | 新建 | 通用"即将开放"占位组件（02/03/04 用） |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue` | 新建 | 05 步：简版草稿名 + 说明 + 保存（不含 PromptDisplay） |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSeedStep.vue` | 修改 | 接入 mock 历史草稿；事件命名对齐 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue` | 标记 | 顶部加 deprecated 注释，等待 Phase 1b/1e 删除 |
+| `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPreviewStep.vue` | 标记 | 同上 |
+| `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue` | 大改 | 切换为 5 步骨架 |
+| `frontend/apps/admin-app/src/styles/components.scss` | 末尾追加 | 占位组件、保存表单样式 |
+| `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-step-model.test.js` | 新建 | Task 2 |
+| `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js` | 新建 | Task 3 |
+
+**测试运行命令**：`pnpm --filter admin-app test`（项目用 `node --test` 跑 `*.test.js`）。
+
+**测试约束**：仓库前端没有 vitest 与 vue-test-utils；所有测试只能纯 JS 单元测试，不渲染 Vue 组件。所有可测逻辑必须从 `.vue` SFC 抽到 `.js` 文件中。
+
+---
+
+## Task 1：引入新依赖
+
+`markdown-it` 和 `prismjs` 本期不直接使用，但 Phase 1e 会引用。提前安装确保后续 sub-phase 不需要再单独装。
+
+**Files:**
+- Modify: `frontend/apps/admin-app/package.json`
+
+- [ ] **Step 1: 安装依赖**
+
+```bash
+cd frontend/apps/admin-app && pnpm add markdown-it@^14.1.0 prismjs@^1.29.0
+```
+
+Expected: `package.json` 中 `dependencies` 多出 `markdown-it` 与 `prismjs`，`pnpm-lock.yaml` 同步更新。
+
+- [ ] **Step 2: 验证 build 不报错**
+
+Run: `cd frontend/apps/admin-app && pnpm build`
+
+Expected: build 成功（虽然新依赖暂未被 import，但安装本身不应破坏现有 build）。
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add frontend/apps/admin-app/package.json frontend/apps/admin-app/pnpm-lock.yaml
+git commit -m "chore(prompt-builder): 引入 markdown-it 与 prismjs 依赖 (Phase 1a)"
+```
+
+---
+
+## Task 2：5 步步骤模型与单元测试
+
+定义 5 步顺序、URL query 映射、推进/回退/解锁规则。先写测试。
+
+**Files:**
+- Test: `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-step-model.test.js`
+- Create: `frontend/apps/admin-app/src/views/pages/prompt-builder/builder-step-model.js`
+
+- [ ] **Step 1: 写失败测试 — 步骤定义和顺序**
+
+```javascript
+// frontend/apps/admin-app/src/__tests__/unit/prompt-builder-step-model.test.js
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  BUILDER_STEP_KEYS,
+  BUILDER_STEPS,
+  resolveActiveStepKey,
+  resolveNextStepKey,
+  resolvePrevStepKey,
+  isStepUnlocked,
+} from '../../views/pages/prompt-builder/builder-step-model.js'
+
+describe('builder-step-model', () => {
+  it('exposes 5 steps in fixed order', () => {
+    assert.deepEqual(BUILDER_STEP_KEYS, ['seed', 'prepare', 'candidates', 'scoring', 'save'])
+    assert.equal(BUILDER_STEPS.length, 5)
+    assert.deepEqual(
+      BUILDER_STEPS.map((s) => s.key),
+      ['seed', 'prepare', 'candidates', 'scoring', 'save']
+    )
+  })
+
+  it('every step has label and detail', () => {
+    for (const step of BUILDER_STEPS) {
+      assert.ok(step.label && step.detail, `step ${step.key} missing label/detail`)
+    }
+  })
+})
+```
+
+- [ ] **Step 2: 跑测试，确认失败**
+
+Run: `cd frontend/apps/admin-app && pnpm test src/__tests__/unit/prompt-builder-step-model.test.js`
+
+Expected: FAIL with `Cannot find module '.../builder-step-model.js'`
+
+- [ ] **Step 3: 实现最小常量与导出**
+
+```javascript
+// frontend/apps/admin-app/src/views/pages/prompt-builder/builder-step-model.js
+export const BUILDER_STEP_KEYS = ['seed', 'prepare', 'candidates', 'scoring', 'save']
+
+export const BUILDER_STEPS = [
+  { key: 'seed',       label: '选模板',       detail: '从模板或现有版本起步' },
+  { key: 'prepare',    label: '构建准备材料', detail: '生成样本与校准集' },
+  { key: 'candidates', label: '生成候选',     detail: '生成多版候选提示词' },
+  { key: 'scoring',    label: '抽取评分',     detail: '在校准集上对候选打分' },
+  { key: 'save',       label: '预览保存',     detail: '确认后入库' },
+]
+```
+
+- [ ] **Step 4: 跑测试，确认通过**
+
+Expected: 2 个 it PASS
+
+- [ ] **Step 5: 加 URL query 映射测试**
+
+向同一测试文件追加：
+
+```javascript
+describe('resolveActiveStepKey', () => {
+  it('returns the query step when valid', () => {
+    assert.equal(resolveActiveStepKey({ step: 'prepare' }), 'prepare')
+    assert.equal(resolveActiveStepKey({ step: 'save' }), 'save')
+  })
+
+  it('falls back to seed when step is missing or invalid', () => {
+    assert.equal(resolveActiveStepKey({}), 'seed')
+    assert.equal(resolveActiveStepKey({ step: 'unknown' }), 'seed')
+    assert.equal(resolveActiveStepKey({ step: '' }), 'seed')
+  })
+
+  it('handles array step query', () => {
+    assert.equal(resolveActiveStepKey({ step: ['scoring', 'save'] }), 'scoring')
+  })
+})
+```
+
+- [ ] **Step 6: 跑测试，确认失败**
+
+Expected: 3 新 it FAIL
+
+- [ ] **Step 7: 实现 resolveActiveStepKey**
+
+向 `builder-step-model.js` 追加：
+
+```javascript
+function firstQueryValue(value) {
+  if (Array.isArray(value)) return value[0] ?? ''
+  return value ?? ''
+}
+
+export function resolveActiveStepKey(query = {}) {
+  const candidate = String(firstQueryValue(query.step) ?? '').trim()
+  if (BUILDER_STEP_KEYS.includes(candidate)) return candidate
+  return 'seed'
+}
+```
+
+- [ ] **Step 8: 跑测试，确认通过**
+
+Expected: 5 个 it PASS
+
+- [ ] **Step 9: 加推进/回退/解锁单元测试**
+
+向同一文件追加：
+
+```javascript
+describe('resolveNextStepKey / resolvePrevStepKey', () => {
+  it('returns next key in order', () => {
+    assert.equal(resolveNextStepKey('seed'), 'prepare')
+    assert.equal(resolveNextStepKey('candidates'), 'scoring')
+  })
+  it('returns null on the last step', () => {
+    assert.equal(resolveNextStepKey('save'), null)
+  })
+  it('returns prev key in order', () => {
+    assert.equal(resolvePrevStepKey('save'), 'scoring')
+    assert.equal(resolvePrevStepKey('prepare'), 'seed')
+  })
+  it('returns null on the first step', () => {
+    assert.equal(resolvePrevStepKey('seed'), null)
+  })
+})
+
+describe('isStepUnlocked', () => {
+  // Phase 1a 解锁规则：seed 永远解锁；其余步骤当 seed 已选（system_default 或 graphrag_tuned）时解锁
+  it('seed is always unlocked', () => {
+    assert.equal(isStepUnlocked('seed', { seed: null }), true)
+    assert.equal(isStepUnlocked('seed', { seed: 'system_default' }), true)
+  })
+
+  it('non-seed steps require a non-history seed selection', () => {
+    for (const key of ['prepare', 'candidates', 'scoring', 'save']) {
+      assert.equal(isStepUnlocked(key, { seed: null }), false, `${key} blocked when seed=null`)
+      assert.equal(isStepUnlocked(key, { seed: 'system_default' }), true, `${key} unlocked when seed=system_default`)
+      assert.equal(isStepUnlocked(key, { seed: 'graphrag_tuned' }), true, `${key} unlocked when seed=graphrag_tuned`)
+    }
+  })
+
+  it('history_draft seed treats subsequent steps as locked (Phase 1a 不开放)', () => {
+    for (const key of ['prepare', 'candidates', 'scoring', 'save']) {
+      assert.equal(isStepUnlocked(key, { seed: 'history_draft' }), false)
+    }
+  })
+})
+```
+
+- [ ] **Step 10: 跑测试，确认失败**
+
+Expected: 10 新 it FAIL
+
+- [ ] **Step 11: 实现 next/prev/isUnlocked**
+
+向 `builder-step-model.js` 追加：
+
+```javascript
+export function resolveNextStepKey(currentKey) {
+  const idx = BUILDER_STEP_KEYS.indexOf(currentKey)
+  if (idx < 0 || idx >= BUILDER_STEP_KEYS.length - 1) return null
+  return BUILDER_STEP_KEYS[idx + 1]
+}
+
+export function resolvePrevStepKey(currentKey) {
+  const idx = BUILDER_STEP_KEYS.indexOf(currentKey)
+  if (idx <= 0) return null
+  return BUILDER_STEP_KEYS[idx - 1]
+}
+
+/**
+ * Phase 1a 解锁规则：
+ * - seed 永远解锁
+ * - 其余步骤当 seed 已选（system_default 或 graphrag_tuned）时解锁
+ * - history_draft 在 Phase 1a/1e 才会接入，本期视为未选
+ *
+ * Phase 2-7 真实接入后会改成读取 build run 数据来决定解锁。
+ */
+export function isStepUnlocked(stepKey, state = {}) {
+  if (stepKey === 'seed') return true
+  return state?.seed === 'system_default' || state?.seed === 'graphrag_tuned'
+}
+```
+
+- [ ] **Step 12: 跑测试，确认通过**
+
+Expected: 15 个 it PASS
+
+- [ ] **Step 13: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/builder-step-model.js \
+        frontend/apps/admin-app/src/__tests__/unit/prompt-builder-step-model.test.js
+git commit -m "feat(prompt-builder): 新增 5 步向导步骤模型 (Phase 1a)"
+```
+
+---
+
+## Task 3：05 步保存表单纯函数
+
+把 05 步可测逻辑抽到 `.js`。Phase 1a 用最小字段集，Phase 1e 会扩展为完整 payload。
+
+**Files:**
+- Test: `frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js`
+- Create: `frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js`
+
+- [ ] **Step 1: 写失败测试 — 默认草稿名生成**
+
+```javascript
+// frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  buildDefaultDraftName,
+  validateSaveForm,
+  buildSaveDraftPayload,
+} from '../../views/pages/prompt-builder/save-step-model.js'
+
+describe('buildDefaultDraftName', () => {
+  it('formats as "课程名 · 种子简称 · YYYY-MM-DD"', () => {
+    const name = buildDefaultDraftName({
+      courseName: '操作系统',
+      seed: 'system_default',
+      now: new Date('2026-05-14T10:00:00Z'),
+    })
+    assert.match(name, /^操作系统 · 系统默认 · 2026-05-14$/)
+  })
+
+  it('uses 自动调优 alias for graphrag_tuned seed', () => {
+    const name = buildDefaultDraftName({
+      courseName: '数据结构',
+      seed: 'graphrag_tuned',
+      now: new Date('2026-01-02T00:00:00Z'),
+    })
+    assert.match(name, /^数据结构 · 自动调优 · 2026-01-02$/)
+  })
+
+  it('falls back to "未命名课程" when courseName empty', () => {
+    const name = buildDefaultDraftName({
+      courseName: '',
+      seed: 'system_default',
+      now: new Date('2026-05-14T00:00:00Z'),
+    })
+    assert.match(name, /^未命名课程 · 系统默认 · 2026-05-14$/)
+  })
+
+  it('falls back to "种子未知" when seed unknown', () => {
+    const name = buildDefaultDraftName({
+      courseName: '操作系统',
+      seed: 'something_else',
+      now: new Date('2026-05-14T00:00:00Z'),
+    })
+    assert.match(name, /^操作系统 · 种子未知 · 2026-05-14$/)
+  })
+})
+```
+
+- [ ] **Step 2: 跑测试，确认失败**
+
+Expected: 4 个 it FAIL
+
+- [ ] **Step 3: 实现 buildDefaultDraftName**
+
+```javascript
+// frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js
+const SEED_LABELS = {
+  system_default: '系统默认',
+  graphrag_tuned: '自动调优',
+}
+
+// 注意：用 UTC 方法格式化日期。测试用例传入的是 UTC 时间戳（如 '2026-01-02T00:00:00Z'），
+// 期望输出 '2026-01-02'。如果用 getFullYear/getMonth/getDate（本地时区），
+// 在 UTC-X 时区 CI 服务器会得到前一天日期，导致测试 FAIL。
+function formatYmd(date) {
+  const y = date.getUTCFullYear()
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(date.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function buildDefaultDraftName({ courseName, seed, now = new Date() }) {
+  const name = (courseName ?? '').trim() || '未命名课程'
+  const seedLabel = SEED_LABELS[seed] || '种子未知'
+  return `${name} · ${seedLabel} · ${formatYmd(now)}`
+}
+```
+
+- [ ] **Step 4: 跑测试，确认通过**
+
+Expected: 4 个 it PASS
+
+- [ ] **Step 5: 写失败测试 — validateSaveForm**
+
+向同一测试文件追加：
+
+```javascript
+describe('validateSaveForm', () => {
+  it('passes when name is non-empty and seed is set', () => {
+    const r = validateSaveForm({ name: '草稿 A', seed: 'system_default' })
+    assert.equal(r.valid, true)
+    assert.deepEqual(r.errors, {})
+  })
+
+  it('fails when name is empty/whitespace', () => {
+    const r = validateSaveForm({ name: '   ', seed: 'system_default' })
+    assert.equal(r.valid, false)
+    assert.equal(r.errors.name, '请填写草稿名')
+  })
+
+  it('fails when name longer than 80 chars', () => {
+    const r = validateSaveForm({ name: 'x'.repeat(81), seed: 'system_default' })
+    assert.equal(r.valid, false)
+    assert.equal(r.errors.name, '草稿名不超过 80 个字符')
+  })
+
+  it('fails when seed is empty', () => {
+    const r = validateSaveForm({ name: '草稿', seed: null })
+    assert.equal(r.valid, false)
+    assert.equal(r.errors.seed, '请先在 01 步选择起始模板')
+  })
+})
+```
+
+- [ ] **Step 6: 跑测试，确认失败**
+
+Expected: 4 新 it FAIL
+
+- [ ] **Step 7: 实现 validateSaveForm**
+
+向 `save-step-model.js` 追加：
+
+```javascript
+const NAME_MAX_LENGTH = 80
+
+export function validateSaveForm({ name, seed }) {
+  const errors = {}
+  const trimmed = String(name ?? '').trim()
+  if (!trimmed) {
+    errors.name = '请填写草稿名'
+  } else if (trimmed.length > NAME_MAX_LENGTH) {
+    errors.name = `草稿名不超过 ${NAME_MAX_LENGTH} 个字符`
+  }
+  if (!seed) {
+    errors.seed = '请先在 01 步选择起始模板'
+  }
+  return { valid: Object.keys(errors).length === 0, errors }
+}
+```
+
+- [ ] **Step 8: 跑测试，确认通过**
+
+Expected: 8 个 it PASS
+
+- [ ] **Step 9: 写失败测试 — buildSaveDraftPayload**
+
+向同一测试文件追加：
+
+```javascript
+describe('buildSaveDraftPayload', () => {
+  it('builds payload with seed/name/description (Phase 1a 简版)', () => {
+    const payload = buildSaveDraftPayload({
+      seed: 'system_default',
+      name: '操作系统 · 系统默认 · 2026-05-14',
+      description: '初版草稿',
+    })
+    assert.equal(payload.seed, 'system_default')
+    assert.equal(payload.metadata.draftName, '操作系统 · 系统默认 · 2026-05-14')
+    assert.equal(payload.metadata.draftDescription, '初版草稿')
+  })
+
+  it('omits draftDescription when empty', () => {
+    const payload = buildSaveDraftPayload({
+      seed: 'system_default',
+      name: '草稿',
+      description: '',
+    })
+    assert.equal(payload.metadata.draftName, '草稿')
+    assert.equal(payload.metadata.draftDescription, undefined)
+  })
+
+  it('throws on missing seed or name', () => {
+    assert.throws(() => buildSaveDraftPayload({ seed: null, name: 'x' }), /seed/)
+    assert.throws(() => buildSaveDraftPayload({ seed: 'system_default', name: '' }), /name/)
+  })
+})
+```
+
+- [ ] **Step 10: 跑测试，确认失败**
+
+Expected: 3 新 it FAIL
+
+- [ ] **Step 11: 实现 buildSaveDraftPayload**
+
+向 `save-step-model.js` 追加：
+
+```javascript
+/**
+ * Phase 1a 简版 payload。Phase 1e 会扩展加入 selectedCandidate / candidateDisplayName /
+ * compositeScore / saveMode 等字段。
+ */
+export function buildSaveDraftPayload({ seed, name, description }) {
+  if (!seed) throw new Error('seed is required')
+  const trimmedName = String(name ?? '').trim()
+  if (!trimmedName) throw new Error('name is required')
+
+  const metadata = { draftName: trimmedName }
+  const trimmedDesc = String(description ?? '').trim()
+  if (trimmedDesc) metadata.draftDescription = trimmedDesc
+
+  return { seed, metadata }
+}
+```
+
+- [ ] **Step 12: 跑测试，确认通过**
+
+Expected: 11 个 it PASS
+
+- [ ] **Step 13: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/save-step-model.js \
+        frontend/apps/admin-app/src/__tests__/unit/prompt-builder-save-step.test.js
+git commit -m "feat(prompt-builder): 新增 05 步保存模型与单元测试 (Phase 1a)"
+```
+
+---
+
+## Task 4：mocks 目录占位
+
+后续 sub-phase 都会往这个目录加文件，本期先建立目录结构和总入口，避免每个 sub-phase 都要自己建。
+
+**Files:**
+- Create: `frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js`
+
+- [ ] **Step 1: 创建 mocks/index.js**
+
+```javascript
+// frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+//
+// Phase 1 mock 数据总入口。
+// 各 sub-phase 会往本目录添加：
+// - audit-samples.js   (Phase 1b)
+// - candidates.js      (Phase 1c)
+// - scoring-report.js  (Phase 1d)
+// - prompt-texts.js    (Phase 1e)
+
+export const MOCK_HISTORY_DRAFTS = [
+  {
+    id: 'draft-001',
+    name: '操作系统 · 图谱感知 + 蒸馏样例 · 2026-04-12',
+    description: '上学期构建沉淀的版本',
+    sourceCandidateId: 'schema_fewshot_distilled_v2_strict_tuple',
+    compositeScore: 0.69,
+    createdAt: '2026-04-12T15:42:00',
+  },
+  {
+    id: 'draft-002',
+    name: '操作系统 · 默认基线 · 2026-03-28',
+    description: '只跑了基线对照',
+    sourceCandidateId: 'default',
+    compositeScore: 0.41,
+    createdAt: '2026-03-28T10:15:00',
+  },
+]
+
+export const MOCK_COURSE_NAME = '操作系统'
+```
+
+- [ ] **Step 2: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/mocks/index.js
+git commit -m "feat(prompt-builder): 新增 mocks 目录骨架 (Phase 1a)"
+```
+
+---
+
+## Task 5：占位组件 PromptBuilderPlaceholderStep
+
+为 02/03/04 步提供"即将开放"占位形态。
+
+**Files:**
+- Create: `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPlaceholderStep.vue`
+- Modify: `frontend/apps/admin-app/src/styles/components.scss`（末尾追加）
+
+- [ ] **Step 1: 创建占位组件**
+
+```vue
+<!-- frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPlaceholderStep.vue -->
+<script setup>
+defineProps({
+  stepKey: { type: String, required: true },
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  phase: { type: String, default: 'Phase 1b' },
+})
+</script>
+
+<template>
+  <section class="prompt-builder-step prompt-builder-placeholder">
+    <header class="prompt-builder-step__header">
+      <h3>{{ title }}</h3>
+      <p>{{ description }}</p>
+    </header>
+    <div class="prompt-builder-placeholder__body">
+      <div class="prompt-builder-placeholder__chip">即将开放</div>
+      <p class="prompt-builder-placeholder__hint">
+        本步骤将在 {{ phase }} 实施。当前可直接点击"下一步"跳过，到 05 步保存草稿。
+      </p>
+    </div>
+  </section>
+</template>
+```
+
+- [ ] **Step 2: 在 components.scss 末尾追加样式**
+
+```scss
+// 手动调优向导 · Phase 1a 占位步骤
+.prompt-builder-placeholder__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ckqa-space-3);
+  min-height: 240px;
+  padding: var(--ckqa-space-5);
+  background: var(--ckqa-surface-muted);
+  border: 1px dashed var(--ckqa-border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.prompt-builder-placeholder__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
+  color: var(--ckqa-accent);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.prompt-builder-placeholder__hint {
+  margin: 0;
+  max-width: 520px;
+  color: var(--ckqa-text-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPlaceholderStep.vue \
+        frontend/apps/admin-app/src/styles/components.scss
+git commit -m "feat(prompt-builder): 新增步骤占位组件 (Phase 1a)"
+```
+
+---
+
+## Task 6：05 步保存组件简版
+
+只包含草稿名 + 说明 + 来源记录 + 保存按钮。完整版（含 PromptDisplay、保存范围 radio、入库历史草稿）留到 Phase 1e。
+
+**已知局限（Phase 1a 接受，Phase 1e 修正）：**
+1. `draftName` 在组件挂载时按当前 seed 生成；如果用户先进 save → 改了草稿名 → 回 seed 改种子 → 再回 save，组件会被销毁重建，用户改过的名字会被默认值覆盖。
+2. `dirty` 标志只在 01 步切换 seed 时置 true；用户在 save 步骤改 draftName / draftDescription 后离开**不会**触发"未保存修改"确认弹窗。这是 Phase 1a 简版的妥协。
+
+**Files:**
+- Create: `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue`
+- Modify: `frontend/apps/admin-app/src/styles/components.scss`（末尾追加）
+
+- [ ] **Step 1: 创建保存组件**
+
+```vue
+<!-- frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue -->
+<script setup>
+import { computed, ref } from 'vue'
+import {
+  buildDefaultDraftName,
+  validateSaveForm,
+  buildSaveDraftPayload,
+} from './save-step-model.js'
+
+const props = defineProps({
+  buildRunId: { type: [String, Number], default: '' },
+  courseName: { type: String, default: '' },
+  seed: { type: String, default: null },
+  saving: { type: Boolean, default: false },
+  saveError: { type: String, default: '' },
+})
+
+const emit = defineEmits(['save', 'back'])
+
+const draftName = ref(buildDefaultDraftName({ courseName: props.courseName, seed: props.seed }))
+const draftDescription = ref('')
+
+const validation = computed(() =>
+  validateSaveForm({ name: draftName.value, seed: props.seed })
+)
+
+const canSave = computed(() => validation.value.valid && !props.saving)
+
+const seedLabel = computed(() => {
+  if (props.seed === 'system_default') return '系统默认'
+  if (props.seed === 'graphrag_tuned') return 'GraphRAG 自动调优'
+  return '—'
+})
+
+function handleSubmit() {
+  if (!canSave.value) return
+  const payload = buildSaveDraftPayload({
+    seed: props.seed,
+    name: draftName.value,
+    description: draftDescription.value,
+  })
+  emit('save', payload)
+}
+</script>
+
+<template>
+  <section class="prompt-builder-step prompt-builder-save-step">
+    <header class="prompt-builder-step__header">
+      <h3>预览保存</h3>
+      <p>
+        Phase 1a 简版：仅命名 + 保存到本次构建。
+        完整 prompt 预览、保存范围选择、入库历史草稿将在 Phase 1e 接入。
+      </p>
+    </header>
+
+    <div class="prompt-builder-save-step__body">
+      <div class="form-row">
+        <label class="form-row__label">草稿名</label>
+        <el-input v-model="draftName" placeholder="如：操作系统 · 系统默认 · 2026-05-14" />
+        <p v-if="validation.errors.name" class="form-row__error">{{ validation.errors.name }}</p>
+      </div>
+
+      <div class="form-row">
+        <label class="form-row__label">说明 <span class="form-row__optional">（选填）</span></label>
+        <el-input v-model="draftDescription" type="textarea" :rows="3" placeholder="例如：初版草稿，沿用 GraphRAG 默认。" />
+      </div>
+
+      <div class="form-row">
+        <label class="form-row__label">来源记录</label>
+        <div class="prompt-builder-save-step__source">
+          <div><span>课程</span><strong>{{ courseName || '—' }}</strong></div>
+          <div><span>构建运行</span><strong>{{ buildRunId || '—' }}</strong></div>
+          <div><span>选定种子</span><strong>{{ seedLabel }}</strong></div>
+        </div>
+        <p v-if="validation.errors.seed" class="form-row__error">{{ validation.errors.seed }}</p>
+      </div>
+
+      <p v-if="saveError" class="form-row__error">{{ saveError }}</p>
+
+      <div class="prompt-builder-save-step__actions">
+        <el-button @click="$emit('back')" :disabled="saving">← 返回上一步</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!canSave" @click="handleSubmit">
+          ✓ 保存并返回构建向导
+        </el-button>
+      </div>
+    </div>
+  </section>
+</template>
+```
+
+- [ ] **Step 2: 在 components.scss 末尾追加样式**
+
+```scss
+// 手动调优向导 · 05 保存步骤（Phase 1a 简版）
+.prompt-builder-save-step__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ckqa-space-3);
+  max-width: 640px;
+  padding: var(--ckqa-space-4);
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+}
+
+.form-row { display: flex; flex-direction: column; gap: 6px; }
+.form-row__label { font-size: 12.5px; font-weight: 600; color: var(--ckqa-text); }
+.form-row__optional { color: var(--ckqa-text-muted); font-weight: 400; }
+.form-row__error { color: var(--ckqa-danger); font-size: 12px; margin: 4px 0 0; }
+
+.prompt-builder-save-step__source {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px;
+  background: var(--ckqa-surface-muted);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.prompt-builder-save-step__source > div {
+  display: flex; justify-content: space-between;
+}
+.prompt-builder-save-step__source span { color: var(--ckqa-text-muted); }
+.prompt-builder-save-step__source strong { color: var(--ckqa-text); font-weight: 500; }
+
+.prompt-builder-save-step__actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding-top: var(--ckqa-space-2);
+  border-top: 1px dashed var(--ckqa-border);
+}
+```
+
+- [ ] **Step 3: 跑构建验证 SCSS 不报错**
+
+Run: `cd frontend/apps/admin-app && pnpm build`
+
+Expected: build 成功
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSaveStep.vue \
+        frontend/apps/admin-app/src/styles/components.scss
+git commit -m "feat(prompt-builder): 新增 05 步保存组件简版 (Phase 1a)"
+```
+
+---
+
+## Task 7：调整 PromptBuilderSeedStep
+
+把 history_draft 选项接入 mock 数据，让用户能看到 01 步显示有历史草稿（点击会被禁用并 toast 提示"Phase 1e 开放"）。
+
+**Files:**
+- Modify: `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSeedStep.vue`
+
+- [ ] **Step 1: 阅读现状**
+
+Run: `cat frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSeedStep.vue`
+
+Expected: 看到 3 个 SEED_OPTIONS（system_default / graphrag_tuned / history_draft），history_draft 写死 disabled。
+
+- [ ] **Step 2: 替换组件以接受 historyDrafts prop**
+
+完整替换 `PromptBuilderSeedStep.vue` 为：
+
+```vue
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+  seed: { type: String, default: null },
+  graphragTunedSummary: { type: Object, default: null },
+  historyDrafts: { type: Array, default: () => [] },
+})
+
+const emit = defineEmits(['select-seed'])
+
+const SEED_OPTIONS = [
+  { key: 'system_default',  title: '🧱 系统默认',     desc: '使用 GraphRAG 内置默认提示词作为起点', meta: '来源：prompts/extract_graph.txt' },
+  { key: 'graphrag_tuned',  title: '✨ 沿用自动调优版', desc: '克隆当前激活的自动调优结果，在此基础上微调', meta: null },
+  { key: 'history_draft',   title: '📦 我的历史草稿',  desc: '从你之前在该知识库保存过的草稿继续', meta: null },
+]
+
+function metaFor(option) {
+  if (option.meta) return option.meta
+  if (option.key === 'graphrag_tuned' && props.graphragTunedSummary) {
+    const time = props.graphragTunedSummary.activatedAt
+      ? new Date(props.graphragTunedSummary.activatedAt).toLocaleDateString('zh-CN')
+      : ''
+    return `候选：${props.graphragTunedSummary.name ?? 'auto_tuned'} · 激活于 ${time}`
+  }
+  if (option.key === 'graphrag_tuned') return '本课程当前激活的自动调优结果'
+  if (option.key === 'history_draft') {
+    if (props.historyDrafts.length === 0) return 'Phase 1e 开放（暂无可选草稿）'
+    return `Phase 1e 开放（共 ${props.historyDrafts.length} 条草稿）`
+  }
+  return ''
+}
+
+const isOptionDisabled = (option) => option.key === 'history_draft'
+</script>
+
+<template>
+  <section class="prompt-builder-step">
+    <header class="prompt-builder-step__header">
+      <h3>选模板</h3>
+      <p>选一个起始模板，后续在此基础上修改。</p>
+    </header>
+
+    <div class="seed-grid" role="radiogroup" aria-label="种子模板">
+      <button
+        v-for="option in SEED_OPTIONS"
+        :key="option.key"
+        type="button"
+        role="radio"
+        :aria-checked="seed === option.key"
+        :aria-disabled="isOptionDisabled(option)"
+        :tabindex="isOptionDisabled(option) ? -1 : 0"
+        class="seed-card"
+        :data-selected="seed === option.key ? 'true' : 'false'"
+        :data-disabled="isOptionDisabled(option) ? 'true' : 'false'"
+        @click="!isOptionDisabled(option) && emit('select-seed', option.key)"
+      >
+        <strong>{{ option.title }}</strong>
+        <p>{{ option.desc }}</p>
+        <small v-if="metaFor(option)">{{ metaFor(option) }}</small>
+      </button>
+    </div>
+  </section>
+</template>
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderSeedStep.vue
+git commit -m "feat(prompt-builder): 01 步种子组件接入 mock 历史草稿 (Phase 1a)"
+```
+
+---
+
+## Task 8：重写 PromptBuilderPage 主壳为 5 步骨架
+
+整体替换主组件，让 URL `step` 切换 5 个步骤，对接 placeholder / save 组件。
+
+**Files:**
+- Modify: `frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue`
+
+- [ ] **Step 0: 验证依赖接口存在（grep 断言式，全部需返回非空）**
+
+每条命令必须有匹配输出（exit 0），否则停止报告并不要继续。这样 agentic worker 不需要人工判断 cat 内容。
+
+```bash
+# 1. WorkflowStepper 必须有 activeKey 或 active-key prop
+grep -nE "activeKey|active-key" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配（位于 defineProps 或 template 中）
+
+# 2. WorkflowStepper 必须能 emit update:activeKey
+grep -nE "update:activeKey|update:active-key" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配
+
+# 3. WorkflowStepper 必须识别 status: 'blocked'
+grep -nE "'blocked'|\"blocked\"" frontend/apps/admin-app/src/components/common/WorkflowStepper.vue
+# 期望：至少 1 行匹配（在 template 模板中按 step.status === 'blocked' 控制视觉）
+
+# 4. getBuildRun API 已导出
+grep -n "export async function getBuildRun" frontend/apps/admin-app/src/api/knowledge-bases.js
+# 期望：至少 1 行匹配（行 50 左右）
+
+# 5. 路由名 knowledge-base-build 存在
+grep -n "name: 'knowledge-base-build'" frontend/apps/admin-app/src/router/routes.js
+# 期望：至少 1 行匹配
+
+# 6. 路由 params 是 :kbId（不是 id 或 knowledgeBaseId）
+grep -nE "knowledge-bases/:kbId/build" frontend/apps/admin-app/src/router/routes.js
+# 期望：至少 1 行匹配
+```
+
+**任一 grep 命令返回 exit 1（无匹配）就停下来报告，不要执行 Step 1。** 这是防止运行时静默失效的硬验证。
+
+如果某条 grep 失败，说明假设的接口与现状不符，需要先 cat 看实际接口名再决定：
+- WorkflowStepper 接口不符：在 Step 1 模板中调整 prop / emit 名
+- API 不存在：在 import 处先实现
+- 路由不符：先在 routes.js 调整或在 Step 1 用实际路由名替代
+
+- [ ] **Step 1: 完整替换 PromptBuilderPage.vue**
+
+```vue
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ChevronLeft } from 'lucide-vue-next'
+
+import WorkflowStepper from '../../components/common/WorkflowStepper.vue'
+import RetryPanel from '../../components/common/RetryPanel.vue'
+import PromptBuilderSeedStep from './prompt-builder/PromptBuilderSeedStep.vue'
+import PromptBuilderPlaceholderStep from './prompt-builder/PromptBuilderPlaceholderStep.vue'
+import PromptBuilderSaveStep from './prompt-builder/PromptBuilderSaveStep.vue'
+import {
+  BUILDER_STEPS,
+  BUILDER_STEP_KEYS,
+  resolveActiveStepKey,
+  resolveNextStepKey,
+  resolvePrevStepKey,
+  isStepUnlocked,
+} from './prompt-builder/builder-step-model.js'
+import {
+  MOCK_HISTORY_DRAFTS,
+  MOCK_COURSE_NAME,
+} from './prompt-builder/mocks/index.js'
+
+import { getBuildRun } from '../../api/knowledge-bases.js'
+
+const route = useRoute()
+const router = useRouter()
+
+const buildRunId = computed(() => {
+  const raw = Array.isArray(route.query.buildRunId) ? route.query.buildRunId[0] : route.query.buildRunId
+  return raw ?? ''
+})
+const kbId = computed(() => String(route.params.kbId ?? ''))
+
+const loading = ref(true)
+const error = ref(null)
+
+const seed = ref(null)
+const courseName = ref(MOCK_COURSE_NAME)
+
+const dirty = ref(false)
+const saving = ref(false)
+const saveError = ref('')
+
+const activeStepKey = computed(() => resolveActiveStepKey(route.query))
+
+const stepStatuses = computed(() => {
+  const idx = BUILDER_STEP_KEYS.indexOf(activeStepKey.value)
+  return BUILDER_STEPS.map((step, i) => ({
+    ...step,
+    status: i < idx
+      ? 'done'
+      : i === idx
+        ? 'ready'
+        : (isStepUnlocked(step.key, { seed: seed.value }) ? 'ready' : 'blocked'),
+  }))
+})
+
+onMounted(async () => {
+  if (!buildRunId.value) {
+    error.value = { message: '缺少构建运行上下文，请回到构建向导重新进入' }
+    loading.value = false
+    return
+  }
+  try {
+    const buildRun = await getBuildRun(buildRunId.value)
+    let meta = {}
+    try { meta = buildRun?.buildMetadata ? JSON.parse(buildRun.buildMetadata) : {} } catch {}
+    const draft = meta.customPromptDraft
+    if (draft?.seed) seed.value = draft.seed
+    dirty.value = false
+  } catch (e) {
+    error.value = { message: e?.message ?? '加载草稿失败' }
+  } finally {
+    loading.value = false
+  }
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+function handleBeforeUnload(event) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+onBeforeRouteLeave(async (to, from, next) => {
+  if (!dirty.value) return next()
+  try {
+    await ElMessageBox.confirm('有未保存的修改，确定离开吗？', '离开页面',
+      { type: 'warning', confirmButtonText: '离开', cancelButtonText: '继续编辑' })
+    next()
+  } catch {
+    next(false)
+  }
+})
+
+async function gotoStep(stepKey) {
+  if (!BUILDER_STEP_KEYS.includes(stepKey)) return
+  if (!isStepUnlocked(stepKey, { seed: seed.value })) {
+    ElMessage.warning('请先在 01 步选择起始模板')
+    return
+  }
+  if (route.query.step === stepKey) return
+  await router.replace({ query: { ...route.query, step: stepKey } })
+}
+
+function gotoNext() {
+  const next = resolveNextStepKey(activeStepKey.value)
+  if (next) gotoStep(next)
+}
+
+function gotoPrev() {
+  const prev = resolvePrevStepKey(activeStepKey.value)
+  if (prev) gotoStep(prev)
+}
+
+function handleSelectSeed(seedKey) {
+  if (seedKey === 'history_draft') {
+    ElMessage.info('历史草稿入库将在 Phase 1e 开放')
+    return
+  }
+  if (seed.value && seed.value !== seedKey) {
+    ElMessageBox.confirm('切换种子会重置后续步骤已有的进度，确定吗？', '切换种子', { type: 'warning' })
+      .then(() => {
+        seed.value = seedKey
+        dirty.value = true
+      })
+      .catch(() => {})
+    return
+  }
+  seed.value = seedKey
+  dirty.value = true
+}
+
+async function handleSave(payload) {
+  saving.value = true
+  saveError.value = ''
+  try {
+    // Phase 1a 用 mock：500ms 延迟模拟保存请求
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    // 注意：本期不真发请求，控制台打印 payload 供调试
+    // eslint-disable-next-line no-console
+    console.log('[Phase 1a mock] save payload', payload)
+    dirty.value = false
+    ElMessage.success('已保存到本次构建（mock）')
+    await router.push({
+      name: 'knowledge-base-build',
+      params: { kbId: kbId.value },
+      query: {
+        buildRunId: buildRunId.value,
+        step: 'prompt',
+        promptStrategy: 'custom_pipeline',
+      },
+    })
+  } catch (e) {
+    saveError.value = e?.message ?? '保存失败，请重试'
+    ElMessage.error(saveError.value)
+  } finally {
+    saving.value = false
+  }
+}
+
+function returnToWizard() {
+  router.push({
+    name: 'knowledge-base-build',
+    params: { kbId: kbId.value },
+    query: { buildRunId: buildRunId.value, step: 'prompt' },
+  })
+}
+</script>
+
+<template>
+  <section class="prompt-builder-page">
+    <header class="prompt-builder-page__header">
+      <div>
+        <h2>手动调优提示词</h2>
+        <p v-if="buildRunId">为本次构建（构建运行 ID：{{ buildRunId }}）设计提示词。</p>
+      </div>
+      <el-button class="ckqa-el-button ckqa-el-button--ghost" @click="returnToWizard">
+        <ChevronLeft :size="16" aria-hidden="true" />
+        返回构建向导
+      </el-button>
+    </header>
+
+    <RetryPanel v-if="error" :error="error" @retry="returnToWizard" />
+
+    <div v-else-if="loading" class="prompt-builder-page__loading">
+      <el-skeleton :rows="6" animated />
+    </div>
+
+    <template v-else>
+      <WorkflowStepper
+        :active-key="activeStepKey"
+        :steps="stepStatuses"
+        @update:active-key="gotoStep"
+      />
+
+      <div class="prompt-builder-page__body">
+        <PromptBuilderSeedStep
+          v-if="activeStepKey === 'seed'"
+          :seed="seed"
+          :history-drafts="MOCK_HISTORY_DRAFTS"
+          @select-seed="handleSelectSeed"
+        />
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'prepare'"
+          step-key="prepare"
+          title="构建准备材料"
+          description="生成调优样本与校准集，并完成人工标注。"
+          phase="Phase 1b"
+        />
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'candidates'"
+          step-key="candidates"
+          title="生成候选提示词"
+          description="基于校准集生成多版候选提示词，挑选要参与评分的候选。"
+          phase="Phase 1c"
+        />
+        <PromptBuilderPlaceholderStep
+          v-else-if="activeStepKey === 'scoring'"
+          step-key="scoring"
+          title="抽取评分"
+          description="在校准集上跑候选提示词，按综合分排序选出最佳候选。"
+          phase="Phase 1d"
+        />
+        <PromptBuilderSaveStep
+          v-else-if="activeStepKey === 'save'"
+          :build-run-id="buildRunId"
+          :course-name="courseName"
+          :seed="seed"
+          :saving="saving"
+          :save-error="saveError"
+          @save="handleSave"
+          @back="gotoPrev"
+        />
+      </div>
+
+      <footer v-if="activeStepKey !== 'save'" class="prompt-builder-page__actions">
+        <div class="prompt-builder-page__status">
+          <span v-if="dirty" class="dirty">● 已修改未保存</span>
+          <span v-else>已是最新</span>
+        </div>
+        <div class="prompt-builder-page__buttons">
+          <el-button v-if="activeStepKey !== 'seed'" @click="gotoPrev">上一步</el-button>
+          <el-button type="primary" @click="gotoNext">下一步</el-button>
+        </div>
+      </footer>
+    </template>
+  </section>
+</template>
+```
+
+- [ ] **Step 2: 跑构建验证整合无错**
+
+Run: `cd frontend/apps/admin-app && pnpm build`
+
+Expected: build 成功，无编译错误
+
+- [ ] **Step 2.5: 在 components.scss 末尾追加加载占位样式**
+
+```scss
+// 手动调优向导 · 主壳加载占位
+.prompt-builder-page__loading {
+  padding: var(--ckqa-space-4) var(--ckqa-space-2);
+  background: var(--ckqa-surface);
+  border: 1px solid var(--ckqa-border);
+  border-radius: 12px;
+}
+```
+
+- [ ] **Step 3: 跑现有测试套确保无回归**
+
+Run: `cd frontend/apps/admin-app && pnpm test`
+
+Expected: 所有现有测试 + 新增的 prompt-builder 测试都 PASS
+
+- [ ] **Step 4: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/PromptBuilderPage.vue
+git commit -m "feat(prompt-builder): 主壳重写为 5 步骨架 (Phase 1a)"
+```
+
+---
+
+## Task 9：标记旧版 EditStep / PreviewStep 为 deprecated
+
+不删除文件，只在顶部加注释。Phase 1b/1e 接入新组件后再删除。
+
+**Files:**
+- Modify: `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue`
+- Modify: `frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPreviewStep.vue`
+
+- [ ] **Step 0: 先确认两文件首行结构**
+
+Run:
+
+```bash
+head -3 frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue
+head -3 frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPreviewStep.vue
+```
+
+如果首行**不是** `<script setup>`（例如有 `<template>` 在前或已有注释），下面 str_replace 的 `oldStr` 必须改为实际首行内容。先 read 后操作。
+
+- [ ] **Step 1: 在 PromptBuilderEditStep.vue 的 `<script setup>` 之前加注释**
+
+如果首行确实是 `<script setup>`：
+
+```vue
+<!--
+  DEPRECATED in Phase 1a（2026-05-15）
+  本组件原为旧版 3 步向导的"分块编辑"步骤，已被 5 步骨架替代。
+  Phase 1b 会用 AnnotationWorkArea / AnnotationEntityCard 等新组件实现等价能力。
+  在 Phase 1b 接入完成前请勿引用本文件；接入后将被删除。
+-->
+<script setup>
+```
+
+- [ ] **Step 2: 在 PromptBuilderPreviewStep.vue 的 `<script setup>` 之前加同样注释**
+
+```vue
+<!--
+  DEPRECATED in Phase 1a（2026-05-15）
+  本组件原为旧版 3 步向导的"预览"步骤，已被 PromptBuilderSaveStep 替代。
+  Phase 1e 会用 PromptDisplay 实现完整 prompt 预览；届时本文件被删除。
+-->
+<script setup>
+```
+
+- [ ] **Step 3: 提交**
+
+```bash
+git add frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderEditStep.vue \
+        frontend/apps/admin-app/src/views/pages/prompt-builder/PromptBuilderPreviewStep.vue
+git commit -m "chore(prompt-builder): 标记旧版 Edit/Preview 组件为 deprecated (Phase 1a)"
+```
+
+---
+
+## Task 10：手动验证
+
+跑一次端到端，确认骨架可用。
+
+**Files:** 无修改，仅手动操作。
+
+- [ ] **Step 1: 启动 dev**
+
+Run: `cd frontend/apps/admin-app && pnpm dev`
+
+Expected: 5173 端口起服务
+
+- [ ] **Step 2: 准备一个能进入 prompt-builder 的 build run**
+
+打开浏览器，进入 `/app/knowledge-bases/<kbId>/build/prompt-builder?buildRunId=<existingId>`。
+
+Expected：
+- 页面加载完成，看到 5 步 stepper
+- 当前步骤为 `seed`
+- 历史草稿选项显示 "Phase 1e 开放（共 2 条草稿）"
+
+- [ ] **Step 3: 验证 5 步切换**
+
+依次点击 stepper 的 5 个步骤标题。
+
+Expected：
+- 未选 seed 时点 prepare/candidates/scoring/save → toast 提示 "请先在 01 步选择起始模板"
+- 选了 seed 后再点 prepare/candidates/scoring → 切到对应步骤，显示"即将开放"占位面板，附带预期 phase（1b/1c/1d）
+- 点 save → 切到保存步骤，看到表单
+- URL `?step=` 随切换而变
+
+- [ ] **Step 4: 验证保存能跑通**
+
+在 save 步骤填草稿名（默认即可），点"保存并返回构建向导"。
+
+Expected：
+- toast "已保存到本次构建（mock）"
+- 控制台打印 `[Phase 1a mock] save payload {...}`
+- 跳回构建向导第 04 步，URL 带 `promptStrategy=custom_pipeline`
+
+- [ ] **Step 5: 验证浏览器后退恢复 step query**
+
+返回 prompt-builder（带原 buildRunId），URL 带 `step=save`，看到保存步骤的状态恢复。
+
+- [ ] **Step 6: 如发现 bug**
+
+回到对应 Task 修复，重新跑测试，重新手动验证。
+
+---
+
+## 自检（写完计划后做的检查）
+
+### Spec 覆盖
+- [x] § 视觉基调 → 占位/保存组件沿用 ckqa 设计 token
+- [x] § 01 选模板（沿用现状）→ Task 7 接入 mock 历史草稿展示
+- [x] § 路由设计 query 参数 `buildRunId` / `step` → Task 2 (resolveActiveStepKey) + Task 8 (gotoStep) 实现；其他 query 参数（sampleId / selectedCandidates 等）属于 1b-1e 范围
+- [x] § 测试策略 单元测试 → Task 2 / 3
+- [x] § 错误处理 → 占位步骤显示"即将开放"，save 失败 toast + 表单内联显示
+- 未覆盖：02-04 真实业务（属于 Phase 1b/1c/1d）；prompt 文本展示组件（Phase 1e）；历史草稿入库（Phase 1e）。
+
+### 占位扫描
+- 没有 "TBD" / "TODO" / 抽象描述。
+
+### 类型一致性
+- `BUILDER_STEP_KEYS` / `BUILDER_STEPS` / `resolveActiveStepKey` / `resolveNextStepKey` / `resolvePrevStepKey` / `isStepUnlocked` 在 Task 2 定义，Task 8 使用，签名一致。
+- `buildDefaultDraftName` / `validateSaveForm` / `buildSaveDraftPayload` 在 Task 3 定义，Task 6 使用，签名一致。
+- `MOCK_HISTORY_DRAFTS` / `MOCK_COURSE_NAME` 在 Task 4 定义，Task 8 import 使用。
+
+### Phase 1a 已知局限（明确接受，下游 phase 修复）
+1. **draftName 重建覆盖用户改动**：用户 save → 改名 → 回 seed 改种子 → 再回 save 时，组件被销毁重建，用户改过的草稿名会被默认值覆盖。Phase 1e 修。
+2. **dirty 标志只跟踪 seed 切换**：用户在 save 步骤修改 draftName / draftDescription 后离开**不会**触发"未保存修改"确认弹窗。Phase 1e 修。
+3. **history_draft 种子写死禁用**：01 步显示历史草稿数量但点击后 toast 提示"Phase 1e 开放"。Phase 1e 修。
+4. **未真发请求**：`handleSave` 只是 `setTimeout(500)` 后 toast；payload 打到 console。Phase 2-7 接真实 API 时再换。
+5. **解锁规则只看 seed**：02-04 步是占位，所以解锁条件只看 seed。Phase 1b/1c/1d 各自接入真实业务时会扩展解锁条件。

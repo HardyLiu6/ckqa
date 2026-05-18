@@ -86,6 +86,23 @@ public enum ApiResultCode {
     KNOWLEDGE_BASE_BUILD_RUN_NOT_FOUND(4049, "知识库构建流水线不存在"),
 
     /**
+     * 提示词自动调优记录不存在。
+     */
+    PROMPT_TUNE_RUN_NOT_FOUND(4050, "提示词自动调优记录不存在"),
+
+    /**
+     * 标注样本不存在。
+     */
+    AUDIT_SAMPLE_NOT_FOUND(4051, "标注样本不存在"),
+
+    /**
+     * 04 步评分任务不存在（按 id 查询时）。
+     * <p>由 Phase 5 引入，与 4106 EXTRACTION_EVAL_NOT_STARTED 区分：
+     * 4052 是"按 id 找不到记录"，4106 是"该 buildRun 尚未启动评分"。</p>
+     */
+    EXTRACTION_EVAL_RUN_NOT_FOUND(4052, "评分任务不存在"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
@@ -136,6 +153,16 @@ public enum ApiResultCode {
     KNOWLEDGE_BASE_BUILD_RUN_ALREADY_RUNNING(4099, "当前知识库已有构建流水线未完成"),
 
     /**
+     * 当前调优缓存键已有运行中的调优任务。
+     */
+    PROMPT_TUNE_ALREADY_RUNNING(4102, "相同选材的自动调优正在执行，请稍候"),
+
+    /**
+     * 当前 build run 存在已被人工标注的样本，强制重新生成会清空当前进度。
+     */
+    BUILD_RUN_HAS_ANNOTATED_SAMPLES(4103, "当前构建已有人工标注，确认覆盖请重试并设置 force=true"),
+
+    /**
      * 课程资料已存在。
      */
     COURSE_MATERIAL_EXISTS(4100, "课程资料已存在"),
@@ -153,7 +180,98 @@ public enum ApiResultCode {
     /**
      * 索引任务执行失败。
      */
-    INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败");
+    INDEX_RUN_EXECUTION_FAILED(5004, "索引任务执行失败"),
+
+    /**
+     * 标注流水线执行失败（build_prompt_tuning_samples / build_audit_extraction_set）。
+     */
+    AUDIT_PIPELINE_FAILED(5005, "标注流水线执行失败"),
+
+    /**
+     * AI 预填候选生成失败（单样本 GraphRAG 抽取超时或异常）。
+     */
+    AI_SUGGESTION_FAILED(5006, "AI 候选生成失败"),
+
+    /**
+     * 03 步候选 prompt 生成脚本执行失败（generate_candidate_prompts.py 退出非零或超时）。
+     */
+    CANDIDATE_GENERATION_FAILED(5007, "候选 Prompt 生成失败"),
+
+    /**
+     * 03 步进入门控失败：02 步未完成至少 1 条样本审阅。
+     */
+    CANDIDATE_REQUIRES_AUDIT_COMPLETED(4104, "请先完成 02 步至少 1 条样本审阅再进入 03 步"),
+
+    /**
+     * 03 步候选未生成：build run workspace 下 manifest.json 不存在或为空。
+     */
+    CANDIDATES_NOT_GENERATED(4105, "本次构建尚未生成候选 Prompt，请先调用生成接口"),
+
+    /**
+     * 04 步评分尚未触发或已结束，前端依赖 status 接口判断。
+     */
+    EXTRACTION_EVAL_NOT_STARTED(4106, "本次构建尚未启动评分任务"),
+
+    /**
+     * 用户传入的 selectedCandidates 含未生成候选 ID（绕过前端门控直接调 API）。
+     */
+    INVALID_EVAL_CANDIDATE_SELECTION(4108, "选定候选 ID 不在当前构建的候选清单中"),
+
+    /**
+     * 05 步 finalize 时 04 评分尚未成功（pending / running / cancelled / failed）。
+     */
+    EXTRACTION_EVAL_NOT_SUCCESS(4110, "评分尚未成功，无法保存为草稿"),
+
+    /**
+     * 05 步 finalize 时传入的 candidateId 不在评分报告 candidates 中。
+     */
+    INVALID_FINALIZE_CANDIDATE(4111, "选定候选 ID 不在评分报告的候选清单中"),
+
+    /**
+     * 04 步评分执行失败（脚本超时、异常退出或产物缺失）。
+     */
+    EXTRACTION_EVAL_FAILED(5008, "评分任务执行失败"),
+
+    /**
+     * 用户选择 graphrag_tuned 但当前 build run 选材对应的自动调优产物不存在或失效。
+     * 由 Phase 4.5 引入。
+     */
+    SEED_AUTO_TUNED_UNAVAILABLE(4109, "当前选材的自动调优产物不可用，请重新选择种子或先触发自动调优"),
+
+    /**
+     * 接口尚未实现（占位）。
+     */
+    PIPELINE_NOT_IMPLEMENTED(5099, "接口尚未实现"),
+
+    /**
+     * 登录失败次数超限，账号或 IP 已被临时锁定。
+     */
+    LOGIN_RATE_LIMITED(4290, "登录失败次数过多，请稍后重试"),
+
+    /**
+     * 邮箱验证码请求过于频繁（冷却中）或当日额度已用完。
+     */
+    EMAIL_CODE_RATE_LIMITED(4291, "验证码发送过于频繁，请稍后重试"),
+
+    /**
+     * 邮箱验证码不正确或已过期。
+     */
+    EMAIL_CODE_INVALID(4292, "验证码不正确或已过期"),
+
+    /**
+     * 邮箱未绑定到任何用户。
+     */
+    EMAIL_NOT_REGISTERED(4293, "该邮箱尚未绑定到任何账号"),
+
+    /**
+     * 人机验证失败（Turnstile token 校验未通过）。
+     */
+    HUMAN_VERIFICATION_FAILED(4294, "人机验证未通过，请刷新后重试"),
+
+    /**
+     * 邮件发送失败（SMTP 异常或第三方服务不可用）。
+     */
+    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试");
 
     /**
      * 业务响应码。

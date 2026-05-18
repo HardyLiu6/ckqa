@@ -12,16 +12,19 @@ import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.index.IndexWorkflowService;
 import org.ysu.ckqaback.index.KnowledgeBaseBuildRunService;
 import org.ysu.ckqaback.index.dto.BuildRunIndexRequest;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
 
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,15 +32,17 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
 
     private KnowledgeBaseBuildRunService buildRunService;
     private IndexWorkflowService indexWorkflowService;
+    private org.ysu.ckqaback.index.PromptTuneService promptTuneService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         buildRunService = Mockito.mock(KnowledgeBaseBuildRunService.class);
         indexWorkflowService = Mockito.mock(IndexWorkflowService.class);
+        promptTuneService = Mockito.mock(org.ysu.ckqaback.index.PromptTuneService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new KnowledgeBaseBuildRunsController(buildRunService, indexWorkflowService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new KnowledgeBaseBuildRunsController(buildRunService, indexWorkflowService, promptTuneService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -103,7 +108,7 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
     @Test
     void shouldCreateBuildRunIndexRun() throws Exception {
         given(indexWorkflowService.createBuildRunIndexRun(Mockito.eq(27L), any(BuildRunIndexRequest.class)))
-                .willReturn(IndexRunResponse.of(18L, 5L, "graphrag", "graphrag-20260505150000", "success", null, null, "{}"));
+                .willReturn(IndexRunResponse.of(18L, 5L, 27L, "graphrag", "graphrag-20260505150000", "success", null, null, "{}"));
 
         mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/27/index-runs")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -141,5 +146,58 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.id").value(27))
                 .andExpect(jsonPath("$.data.currentStage").value("qa_smoke"))
                 .andExpect(jsonPath("$.data.qaStatus").value("running"));
+    }
+
+    @Test
+    void putCustomPromptDraft_returnsOkAndBuildRunDetail() throws Exception {
+        given(buildRunService.saveCustomPromptDraft(eq(1L), any(BuildRunCustomPromptDraftRequest.class)))
+                .willReturn(BuildRunDetailResponse.builder()
+                        .id(1L)
+                        .status("running")
+                        .currentStage("prompt")
+                        .build());
+
+        String body = """
+                {"seed":"system_default","prompts":{"extract_graph":{"content":"x"}}}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
+    }
+
+    @Test
+    void putCustomPromptDraft_rejectsMissingSeed() throws Exception {
+        String body = """
+                {"prompts":{"extract_graph":{"content":"x"}}}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void putCustomPromptDraft_acceptsSeedOnlyForPartialUpdate() throws Exception {
+        // Phase 4.5：用户切 seed 时前端只发 seed，不再要求附带 prompts
+        given(buildRunService.saveCustomPromptDraft(eq(1L), any(BuildRunCustomPromptDraftRequest.class)))
+                .willReturn(BuildRunDetailResponse.builder()
+                        .id(1L)
+                        .status("running")
+                        .currentStage("prompt")
+                        .build());
+
+        String body = """
+                {"seed":"system_default"}
+                """;
+
+        mockMvc.perform(put(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/1/custom-prompt-draft")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200));
     }
 }

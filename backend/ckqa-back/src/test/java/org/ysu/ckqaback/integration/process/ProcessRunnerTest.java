@@ -96,4 +96,35 @@ class ProcessRunnerTest {
         assertThat(result.getStderr()).contains("err");
         assertThat(Files.readString(logFile)).contains("[stdout] out").contains("[stderr] err");
     }
+
+    @Test
+    void shouldStreamLogLinesWhileProcessRuns() throws Exception {
+        ProcessRunner runner = new ProcessRunner();
+        Path logFile = tempDir.resolve("process.log");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<ProcessExecutionResult> future = executor.submit(() ->
+                    runner.run(
+                            java.util.List.of("bash", "-lc", "echo head; sleep 2; echo tail"),
+                            tempDir,
+                            Map.of(),
+                            Duration.ofSeconds(10),
+                            ProcessContext.builder().operation("index").logFile(logFile).build()
+                    )
+            );
+
+            // 在子进程还在 sleep 时（启动后约 0.8s）就该看到 head 行
+            Thread.sleep(800L);
+            String midRun = Files.exists(logFile) ? Files.readString(logFile) : "";
+            assertThat(midRun).contains("[stdout] head");
+            assertThat(midRun).doesNotContain("[stdout] tail");
+
+            ProcessExecutionResult result = future.get();
+            assertThat(result.getExitCode()).isZero();
+            String full = Files.readString(logFile);
+            assertThat(full).contains("[stdout] head").contains("[stdout] tail");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
 }

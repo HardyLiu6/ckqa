@@ -45,6 +45,27 @@ export function createViteConfig(env = process.env) {
       Components({ resolvers: [ElementPlusResolver()] }),
     ],
     server: {
+      // dev 期 watch 的文件越少越好，避免 ENOSPC（inotify 限额）。
+      // e2e / playwright 报告 / dist / 后端 target 都不该触发热更新，
+      // 这些目录只在脱机命令里跑（pnpm test:e2e / pnpm build），
+      // 跟 dev server 完全独立。
+      watch: {
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/dist/**',
+          '**/e2e/**',
+          '**/test-results/**',
+          '**/playwright-report/**',
+          '**/coverage/**',
+          // 仓库根目录下与前端无关的目录，避免 vite 越级 watch 拖累
+          '**/backend/**/target/**',
+          '**/graphrag_pipeline/**',
+          '**/pdf_ingest/**',
+          '**/infra/**',
+          '**/.superpowers/**',
+        ],
+      },
       proxy: {
         '/api/v1': {
           target: resolveApiProxyTarget(env),

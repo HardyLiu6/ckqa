@@ -19,4 +19,9 @@ public class AuthLoginRequest {
     @NotBlank(message = "密码不能为空")
     @Size(min = 8, max = 72, message = "密码长度必须在8到72位之间")
     private String password;
+
+    /**
+     * Cloudflare Turnstile token，未启用时可省略。
+     */
+    private String turnstileToken;
 }

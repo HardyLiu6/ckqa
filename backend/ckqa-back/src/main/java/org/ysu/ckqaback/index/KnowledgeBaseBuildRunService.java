@@ -16,6 +16,7 @@ import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
+import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.BuildRunGcRequest;
 import org.ysu.ckqaback.index.dto.BuildRunGcResponse;
@@ -41,8 +42,12 @@ import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.ParseResultsService;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -50,6 +55,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -61,6 +67,13 @@ public class KnowledgeBaseBuildRunService {
 
     private static final DateTimeFormatter BUILD_VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
+    // 允许的草稿种子模板白名单。
+    // 注意：history_draft 不在此白名单中，而是在 validateDraftRequest 中
+    // 作为特判先行拦截并返回"暂未开放"错误，与"未知种子"错误区分开。
+    // 这样 history_draft 走的是"暂未开放"分支，其他未知值走"未知种子"分支。
+    private static final Set<String> ALLOWED_DRAFT_SEEDS = Set.of("system_default", "graphrag_tuned");
+    private static final int DRAFT_CONTENT_MAX_BYTES = 32 * 1024;
+
     private final KnowledgeBasesService knowledgeBasesService;
     private final KnowledgeBaseBuildRunsService buildRunsStore;
     private final BuildRunWorkspaceService workspaceService;
@@ -69,6 +82,7 @@ public class KnowledgeBaseBuildRunService {
     private final IndexRunsService indexRunsService;
     private final CourseMaterialsService courseMaterialsService;
     private final ParseResultsService parseResultsService;
+    private final IndexProgressParser indexProgressParser;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
@@ -118,8 +132,14 @@ public class KnowledgeBaseBuildRunService {
         knowledgeBasesService.getRequiredById(knowledgeBaseId);
         long current = page == null || page < 1 ? 1 : page;
         long pageSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        // 列表语义：status 为空时默认排除 archived（用户视角等同于已删除），传 status=archived 才显式查
         List<BuildRunSummaryResponse> allItems = buildRunsStore.listByKnowledgeBaseId(knowledgeBaseId).stream()
-                .filter(run -> !StringUtils.hasText(status) || status.equals(run.getStatus()))
+                .filter(run -> {
+                    if (!StringUtils.hasText(status)) {
+                        return !"archived".equalsIgnoreCase(run.getStatus());
+                    }
+                    return status.equalsIgnoreCase(run.getStatus());
+                })
                 .map(BuildRunSummaryResponse::fromEntity)
                 .toList();
         long total = allItems.size();
@@ -134,7 +154,27 @@ public class KnowledgeBaseBuildRunService {
     public BuildRunDetailResponse getBuildRun(Long id) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         syncQaSmokeTerminalIfAvailable(buildRun);
-        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+        KnowledgeBaseBuildRuns refreshed = buildRunsStore.getRequiredById(id);
+        return BuildRunDetailResponse.fromEntity(refreshed, resolveIndexProgress(refreshed));
+    }
+
+    private org.ysu.ckqaback.index.dto.IndexProgress resolveIndexProgress(KnowledgeBaseBuildRuns buildRun) {
+        if (buildRun == null) {
+            return null;
+        }
+        if (!"running".equalsIgnoreCase(buildRun.getStatus())
+                || !"index".equalsIgnoreCase(buildRun.getCurrentStage())
+                || !StringUtils.hasText(buildRun.getWorkspaceUri())) {
+            return null;
+        }
+        try {
+            Path workspaceRoot = workspaceService.resolve(buildRun.getWorkspaceUri());
+            Path logPath = workspaceRoot.resolve("index").resolve("logs").resolve("process.log");
+            return indexProgressParser.parse(logPath).orElse(null);
+        } catch (Exception ex) {
+            // 解析失败不阻断前端轮询；前端会回退到"准备中"
+            return null;
+        }
     }
 
     @Transactional
@@ -158,11 +198,16 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse archiveBuildRun(Long id, boolean deleteWorkspace) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
-        if ("running".equals(buildRun.getStatus())) {
-            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "运行中的构建流水线不能归档");
+        // 真实运行判定：只有当前阶段是 index/qa_smoke 且对应后台任务确实在运行时才拒绝归档。
+        // material_selection / parse / graph_input_export / prompt 这些纯前端操作阶段
+        // 无论 status 是什么都允许归档，避免用户中途离开后留下的"运行中"草稿无法清理。
+        if (isBuildRunActuallyRunning(buildRun)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "构建流水线正在运行后台任务，无法删除，请等待任务结束或先取消任务");
         }
         if (deleteWorkspace && buildRun.getActiveIndexRunId() != null) {
-            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "激活索引构建工作区不能删除");
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "该构建承载了当前激活索引，请先切换激活索引再删除");
         }
 
         boolean workspaceDeleted = deleteWorkspace && deleteWorkspace(buildRun.getWorkspaceUri());
@@ -174,6 +219,36 @@ public class KnowledgeBaseBuildRunService {
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+    }
+
+    /**
+     * 判定 buildRun 是否真正有后台进程在跑。
+     *
+     * <p>规则：
+     * - status != "running" → 一定不在跑
+     * - currentStage 不在 (index, qa_smoke) → 是用户向导操作的中间态，不在跑
+     * - currentStage = "index" → 检查关联 indexRun 是否仍在 running 且未 stale
+     * - currentStage = "qa_smoke" → 检查 qaStatus 是否仍在 running 且未 stale</p>
+     */
+    private boolean isBuildRunActuallyRunning(KnowledgeBaseBuildRuns buildRun) {
+        if (!"running".equalsIgnoreCase(buildRun.getStatus())) {
+            return false;
+        }
+        String stage = buildRun.getCurrentStage();
+        if (!"index".equalsIgnoreCase(stage) && !"qa_smoke".equalsIgnoreCase(stage)) {
+            // 纯用户向导阶段，把残留的 running 视为已中断（让归档放行）
+            return false;
+        }
+        // 主动恢复一次 stale 索引任务，避免历史卡死的 indexRun 让归档无法进行
+        Duration staleThreshold = Duration.ofSeconds(properties.getTimeout().getIndexStaleSeconds());
+        indexRunsService.recoverStaleRunningRuns(buildRun.getKnowledgeBaseId(), staleThreshold);
+        if ("index".equalsIgnoreCase(stage)) {
+            return indexRunsService.findActiveRunningByKnowledgeBaseId(buildRun.getKnowledgeBaseId())
+                    .filter(run -> buildRun.getId().equals(run.getBuildRunId()))
+                    .isPresent();
+        }
+        // qa_smoke：QA 任务时长一般在分钟级，未做单独 stale 扫描；这里直接看 qaStatus
+        return "running".equalsIgnoreCase(buildRun.getQaStatus());
     }
 
     @Transactional
@@ -224,11 +299,67 @@ public class KnowledgeBaseBuildRunService {
 
     @Transactional
     public BuildRunDetailResponse markIndexSuccessDone(Long buildRunId, String qaStatus) {
+        return markIndexSuccessDone(buildRunId, qaStatus, null, null, null);
+    }
+
+    /**
+     * 标记 buildRun 进入"真实运行"状态（仅供 IndexWorkflowService 在 GraphRAG 索引进程
+     * 启动前调用）。会同时把 currentStage 推进到 index 并写入 stage 元数据，避免 status
+     * 与 stage 不一致。
+     */
+    @Transactional
+    public BuildRunDetailResponse markIndexStarted(Long buildRunId) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
+        buildRun.setStatus("running");
+        buildRun.setCurrentStage("index");
+        buildRun.setBuildMetadata(stageMetadata("index", Map.of("indexStarted", true)));
+        if (buildRun.getStartedAt() == null) {
+            buildRun.setStartedAt(LocalDateTime.now());
+        }
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(buildRunId));
+    }
+
+    /**
+     * 标记 buildRun 因索引执行失败/异常进入失败终态。
+     */
+    @Transactional
+    public BuildRunDetailResponse markIndexFailed(Long buildRunId, String errorSummary) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
+        buildRun.setStatus("failed");
+        buildRun.setBuildMetadata(stageMetadata(buildRun.getCurrentStage() == null ? "index" : buildRun.getCurrentStage(),
+                Map.of("indexFailed", true, "error", errorSummary == null ? "" : errorSummary)));
+        buildRun.setFinishedAt(LocalDateTime.now());
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(buildRunId));
+    }
+
+    @Transactional
+    public BuildRunDetailResponse markIndexSuccessDone(
+            Long buildRunId,
+            String qaStatus,
+            String promptStrategy,
+            String promptContentSha256,
+            String promptFallbackReason
+    ) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(buildRunId);
         buildRun.setStatus("success");
         buildRun.setCurrentStage("done");
         buildRun.setQaStatus(normalizeQaStatus(qaStatus));
-        buildRun.setBuildMetadata(stageMetadata("done", Map.of("indexStatus", "success")));
+        Map<String, Object> stageExtras = new LinkedHashMap<>();
+        stageExtras.put("indexStatus", "success");
+        if (StringUtils.hasText(promptStrategy)) {
+            stageExtras.put("promptStrategyApplied", promptStrategy);
+        }
+        if (StringUtils.hasText(promptContentSha256)) {
+            stageExtras.put("promptContentSha256", promptContentSha256);
+        }
+        if (StringUtils.hasText(promptFallbackReason)) {
+            stageExtras.put("promptFallbackReason", promptFallbackReason);
+        }
+        buildRun.setBuildMetadata(stageMetadata("done", stageExtras));
         buildRun.setFinishedAt(LocalDateTime.now());
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
@@ -280,10 +411,84 @@ public class KnowledgeBaseBuildRunService {
     @Transactional
     public BuildRunDetailResponse confirmPrompt(Long id, BuildRunPromptConfirmationRequest request) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
-        Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("confirmed", request != null && Boolean.TRUE.equals(request.getConfirmed()));
-        metadata.put("promptStrategy", request == null ? "active" : request.getPromptStrategy());
-        updateStage(buildRun, "prompt", stageMetadata("prompt", metadata));
+        boolean confirmed = request != null && Boolean.TRUE.equals(request.getConfirmed());
+        String strategy = normalizeStrategy(request == null ? null : request.getPromptStrategy());
+
+        if (confirmed && "custom_pipeline".equals(strategy)) {
+            assertCustomDraftExists(buildRun);
+        }
+
+        Map<String, Object> extras = new LinkedHashMap<>();
+        extras.put("promptConfirmed", confirmed);
+        extras.put("promptStrategy", strategy);
+
+        String metadata = mergeStageMetadata(buildRun, "prompt", extras,
+                List.of("customPromptDraft"));
+        updateStage(buildRun, "prompt", metadata);
+        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+    }
+
+    @Transactional
+    public BuildRunDetailResponse saveCustomPromptDraft(Long id, BuildRunCustomPromptDraftRequest request) {
+        KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
+        validateDraftRequest(request);
+
+        String seed = request.getSeed().trim();
+        String existingMetadata = buildRun.getBuildMetadata();
+
+        // 部分更新：当请求未携带 prompts 时，复用 build run 中已有的 extract_graph content；
+        // 旧 draft 也无 content 时保持 null（仅写 seed，不落盘 prompts 字段）。
+        boolean hasIncomingPrompts = request.getPrompts() != null
+                && request.getPrompts().get("extract_graph") != null
+                && request.getPrompts().get("extract_graph").getContent() != null;
+        String content = hasIncomingPrompts
+                ? request.getPrompts().get("extract_graph").getContent()
+                : readDraftExtractGraphContent(existingMetadata);
+
+        String previousSeed = readDraftSeed(existingMetadata);
+        String previousSeedSnapshotAt = readDraftSeedSnapshotAt(existingMetadata);
+        String previousModifiedAt = readDraftExtractGraphModifiedAt(existingMetadata);
+        String previousBaseHash = readDraftExtractGraphBaseHash(existingMetadata);
+
+        String nowIso = LocalDateTime.now().toString();
+        boolean seedChanged = !seed.equals(previousSeed);
+
+        Map<String, Object> draft = new LinkedHashMap<>();
+        draft.put("seed", seed);
+        draft.put("seedSnapshotAt", seedChanged || previousSeedSnapshotAt == null ? nowIso : previousSeedSnapshotAt);
+        draft.put("updatedAt", nowIso);
+
+        // prompts 子节点仅在确实有内容时写入，避免 null 字段污染 metadata
+        if (content != null) {
+            Map<String, Object> extractGraph = new LinkedHashMap<>();
+            extractGraph.put("content", content);
+            // 部分更新（未传 prompts）：保留旧 modifiedAt / baseHash，反映 prompts 内容未变化
+            // 全量更新（传了 prompts）：刷新 modifiedAt 与 baseHash
+            if (hasIncomingPrompts) {
+                extractGraph.put("modifiedAt", nowIso);
+                extractGraph.put("baseHash", computeSeedBaseHash(seed));
+            } else {
+                extractGraph.put("modifiedAt", previousModifiedAt == null ? nowIso : previousModifiedAt);
+                extractGraph.put("baseHash", previousBaseHash == null ? computeSeedBaseHash(seed) : previousBaseHash);
+            }
+            draft.put("prompts", Map.of("extract_graph", extractGraph));
+        }
+
+        Map<String, Object> extras = new LinkedHashMap<>();
+        extras.put("customPromptDraft", draft);
+        extras.put("promptStrategy", "custom_pipeline");
+        extras.put("promptConfirmed", false);  // 原子清除
+
+        String stage = buildRun.getCurrentStage() == null ? "prompt" : buildRun.getCurrentStage();
+        String metadata = mergeStageMetadata(buildRun, stage, extras,
+                List.of("exportConfirmed", "graphInputConfirmed"));  // 保留前序阶段键，避免数据丢失
+        buildRun.setBuildMetadata(metadata);
+        buildRun.setUpdatedAt(LocalDateTime.now());
+        buildRunsStore.updateById(buildRun);
+        // 注意：此处故意不使用 updateStage()，因为 updateStage 会设置 status="running" 并更新 currentStage。
+        // saveCustomPromptDraft 仅保存草稿内容到 metadata，不推进工作流阶段，不改变 buildRun 的 status/currentStage。
+        // confirmPrompt 使用 updateStage 是因为它代表阶段确认动作，需要推进工作流。
+
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
     }
 
@@ -299,6 +504,9 @@ public class KnowledgeBaseBuildRunService {
         String mode = defaultText(request == null ? null : request.getMode(), "basic");
         writeQaSmokeRequest(buildRun, question, mode, smokeIndexRunId);
 
+        // qa_smoke 真正会触发 QA 工作流后台任务，显式标记 buildRun.status=running，
+        // 让"是否真在跑"的判定能准确识别出这条记录还在占用后台资源。
+        buildRun.setStatus("running");
         buildRun.setCurrentStage("qa_smoke");
         buildRun.setQaStatus("running");
         buildRun.setBuildMetadata(stageMetadata("qa_smoke", Map.of(
@@ -327,8 +535,137 @@ public class KnowledgeBaseBuildRunService {
         return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
     }
 
+    private void assertCustomDraftExists(KnowledgeBaseBuildRuns buildRun) {
+        String content = readDraftExtractGraphContent(buildRun.getBuildMetadata());
+        if (content == null || content.strip().isEmpty()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "请先完成手动调优提示词构建");
+        }
+    }
+
+    private void validateDraftRequest(BuildRunCustomPromptDraftRequest request) {
+        if (request == null) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "草稿请求不能为空");
+        }
+        String seed = request.getSeed() == null ? "" : request.getSeed().trim();
+        // history_draft 在白名单检查之前先行拦截，返回"暂未开放"而非"未知种子"
+        if ("history_draft".equals(seed)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "我的历史草稿能力暂未开放");
+        }
+        if (!ALLOWED_DRAFT_SEEDS.contains(seed)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "未知的种子模板: " + request.getSeed());
+        }
+        // prompts 为 null 时走部分更新路径（仅刷新 seed），跳过 content 校验
+        if (request.getPrompts() == null) {
+            return;
+        }
+        if (request.getPrompts().get("extract_graph") == null
+                || request.getPrompts().get("extract_graph").getContent() == null) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "extract_graph 提示词内容必填");
+        }
+        String content = request.getPrompts().get("extract_graph").getContent();
+        if (content.strip().isEmpty()) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                    "提示词内容不能为空");
+        }
+        int bytes = content.getBytes(StandardCharsets.UTF_8).length;
+        if (bytes > DRAFT_CONTENT_MAX_BYTES) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.PAYLOAD_TOO_LARGE,
+                    "提示词内容超过 32 KB（当前 " + bytes + " 字节）");
+        }
+    }
+
+    private String readDraftSeed(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft").path("seed");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String readDraftSeedSnapshotAt(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) return null;
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft").path("seedSnapshotAt");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String computeSeedBaseHash(String seed) {
+        // 返回种子内容的 SHA-256 哈希；后续 Task 9 接入真实 seed 内容读取
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(("seed:" + seed).getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder("sha256:");
+            for (byte b : digest) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "sha256:unavailable";
+        }
+    }
+
+    private String readDraftExtractGraphContent(String metadataJson) {
+        if (!StringUtils.hasText(metadataJson)) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(metadataJson);
+            com.fasterxml.jackson.databind.JsonNode node = root
+                    .path("customPromptDraft")
+                    .path("prompts")
+                    .path("extract_graph")
+                    .path("content");
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String readDraftExtractGraphModifiedAt(String metadataJson) {
+        return readDraftExtractGraphField(metadataJson, "modifiedAt");
+    }
+
+    private String readDraftExtractGraphBaseHash(String metadataJson) {
+        return readDraftExtractGraphField(metadataJson, "baseHash");
+    }
+
+    private String readDraftExtractGraphField(String metadataJson, String field) {
+        if (!StringUtils.hasText(metadataJson)) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(metadataJson)
+                    .path("customPromptDraft")
+                    .path("prompts")
+                    .path("extract_graph")
+                    .path(field);
+            return node.isTextual() ? node.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 推进 buildRun 的工作流阶段。
+     *
+     * <p>注意：此方法只更新 currentStage / metadata / 时间戳，
+     * 不会改 status。原因是 material_selection / parse / graph_input_export / prompt
+     * 这些阶段都是用户在向导中点确认按钮，没有任何后台进程在跑，把 status 设成 "running" 会
+     * 误导列表显示，也让"运行中不能归档"的硬约束阻挡用户清理草稿记录。</p>
+     *
+     * <p>真正会启动后台进程的阶段（index / qa_smoke）由各自的 service 显式 setStatus("running")，
+     * 完成后写入 success / failed。</p>
+     */
     private void updateStage(KnowledgeBaseBuildRuns buildRun, String stage, String metadata) {
-        buildRun.setStatus("running");
         buildRun.setCurrentStage(stage);
         buildRun.setBuildMetadata(metadata);
         if (buildRun.getStartedAt() == null) {
@@ -576,6 +913,35 @@ public class KnowledgeBaseBuildRunService {
         return payload;
     }
 
+    /**
+     * 合并阶段元数据，保留跨阶段持久键。
+     * extras 在 persist 之后 put，因此 extras 中的同名键会覆盖 persist 的旧值。
+     */
+    String mergeStageMetadata(KnowledgeBaseBuildRuns buildRun,
+                              String stage,
+                              Map<String, ?> extras,
+                              List<String> persistKeys) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        merged.put("stage", stage);
+
+        if (StringUtils.hasText(buildRun.getBuildMetadata())) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode existing = objectMapper.readTree(buildRun.getBuildMetadata());
+                for (String key : persistKeys) {
+                    if (existing.has(key) && !existing.get(key).isNull()) {
+                        merged.put(key, objectMapper.treeToValue(existing.get(key), Object.class));
+                    }
+                }
+            } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+                // 旧 metadata 无效 JSON 时，按空对象处理；不影响新阶段写入
+            }
+        }
+        if (extras != null) {
+            merged.putAll(extras);
+        }
+        return toJson(merged);
+    }
+
     private String stageMetadata(String stage, Map<String, ?> extra) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("stage", stage);
@@ -586,6 +952,35 @@ public class KnowledgeBaseBuildRunService {
     private String buildVersion(Long knowledgeBaseId, LocalDateTime now) {
         String random = UUID.randomUUID().toString().replace("-", "").substring(0, 4);
         return "kb" + knowledgeBaseId + "-" + BUILD_VERSION_FORMATTER.format(now) + "-" + random;
+    }
+
+    private static final java.util.Set<String> SUPPORTED_PROMPT_STRATEGIES =
+            java.util.Set.of("default", "graphrag_tuned", "custom_pipeline");
+
+    /**
+     * 归一化提示词策略值。
+     * null/空白 → "default"；旧值 "active"（不区分大小写）→ "default"；
+     * 已知策略原样返回；未知策略抛出 BusinessException。
+     */
+    String normalizeStrategy(String raw) {
+        if (raw == null) {
+            return "default";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return "default";
+        }
+        // legacy: "active" 旧值在仓库语义上等价于"使用 .env 当前激活的提示词"，
+        // 既可能是系统默认也可能是自动调优。新设计下统一归一化为 default，
+        // 因为 default 行为最稳健，不依赖 active_prompt.json 是否存在。
+        if ("active".equalsIgnoreCase(trimmed)) {
+            return "default";
+        }
+        if (SUPPORTED_PROMPT_STRATEGIES.contains(trimmed)) {
+            return trimmed;
+        }
+        throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST,
+                "未知的提示词策略: " + raw);
     }
 
     private String defaultText(String value, String defaultValue) {

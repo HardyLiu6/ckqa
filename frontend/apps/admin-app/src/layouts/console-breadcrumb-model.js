@@ -1,5 +1,10 @@
 import { NAV_GROUPS } from '../components/shell/navigation-model.js'
 
+function firstQueryValue(value) {
+  if (Array.isArray(value)) return value[0] ?? ''
+  return value ?? ''
+}
+
 export const LIST_ROUTE_BY_GROUP = {
   courses: { label: '课程列表', name: 'courses', to: '/app/courses' },
   knowledge: { label: '知识库列表', name: 'knowledge-bases', to: '/app/knowledge-bases' },
@@ -111,10 +116,42 @@ export function buildConsoleBreadcrumbItems(route = {}) {
 
   items.push(...resolveCourseParents(route))
 
+  if (route.name === 'knowledge-base-build-runs') {
+    // 顶部已经按 navGroup 推过「知识库列表」，这里只追加「知识库详情」父级，避免重复
+    const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
+    if (detailParent) {
+      items.push(detailParent)
+    }
+  }
+
   if (route.name === 'knowledge-base-build' && route.query?.from === 'detail') {
     const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
     if (detailParent) {
       items.push(detailParent)
+    }
+  }
+
+  if (route.name === 'knowledge-base-prompt-builder') {
+    const kbId = route.params?.kbId
+    const buildRunId = firstQueryValue(route.query?.buildRunId)
+    if (kbId && buildRunId) {
+      items.push({
+        label: '构建向导 · STEP 04',
+        name: 'knowledge-base-build',
+        to: {
+          name: 'knowledge-base-build',
+          params: { kbId: String(kbId) },
+          query: { buildRunId: String(buildRunId), step: 'prompt' },
+        },
+        kind: 'link',
+      })
+    } else if (kbId) {
+      items.push({
+        label: '构建向导',
+        name: 'knowledge-base-detail',
+        to: `/app/knowledge-bases/${encodeURIComponent(String(kbId))}`,
+        kind: 'link',
+      })
     }
   }
 
