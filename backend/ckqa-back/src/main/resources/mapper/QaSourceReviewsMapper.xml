@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.QaSourceReviewsMapper">
+
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.QaSourceReviews">
+        <id column="id" property="id" />
+        <result column="retrieval_hit_id" property="retrievalHitId" />
+        <result column="retrieval_log_id" property="retrievalLogId" />
+        <result column="reviewer_user_id" property="reviewerUserId" />
+        <result column="relevance" property="relevance" />
+        <result column="citation_quality" property="citationQuality" />
+        <result column="note" property="note" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, retrieval_hit_id, retrieval_log_id, reviewer_user_id, relevance, citation_quality,
+        note, created_at, updated_at
+    </sql>
+</mapper>

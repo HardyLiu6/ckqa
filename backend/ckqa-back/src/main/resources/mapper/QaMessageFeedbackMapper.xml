@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.QaMessageFeedbackMapper">
+
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.QaMessageFeedback">
+        <id column="id" property="id" />
+        <result column="message_id" property="messageId" />
+        <result column="retrieval_log_id" property="retrievalLogId" />
+        <result column="session_id" property="sessionId" />
+        <result column="user_id" property="userId" />
+        <result column="course_id" property="courseId" />
+        <result column="knowledge_base_id" property="knowledgeBaseId" />
+        <result column="rating" property="rating" />
+        <result column="tags" property="tags" />
+        <result column="comment" property="comment" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, message_id, retrieval_log_id, session_id, user_id, course_id, knowledge_base_id,
+        rating, tags, comment, created_at, updated_at
+    </sql>
+</mapper>

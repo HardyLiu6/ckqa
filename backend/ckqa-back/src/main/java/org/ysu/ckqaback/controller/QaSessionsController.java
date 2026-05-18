@@ -119,7 +119,7 @@ public class QaSessionsController {
             HttpServletRequest servletRequest
     ) {
         qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
-        return ApiResponseUtils.success(qaWorkflowService.listMessages(id));
+        return ApiResponseUtils.success(qaWorkflowService.listMessages(id, currentUserId(servletRequest)));
     }
 
     @GetMapping("/{sessionId}/tasks/{taskId}")
@@ -129,7 +129,7 @@ public class QaSessionsController {
             HttpServletRequest servletRequest
     ) {
         qaWorkflowService.ensureSessionOwner(sessionId, currentUserId(servletRequest));
-        return ApiResponseUtils.success(qaWorkflowService.getTaskDetail(sessionId, taskId));
+        return ApiResponseUtils.success(qaWorkflowService.getTaskDetail(sessionId, taskId, currentUserId(servletRequest)));
     }
 
     private Long currentUserId(HttpServletRequest servletRequest) {

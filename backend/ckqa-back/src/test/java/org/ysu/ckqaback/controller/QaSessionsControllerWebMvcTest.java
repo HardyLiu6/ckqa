@@ -413,7 +413,7 @@ class QaSessionsControllerWebMvcTest {
                 "recent",
                 ContextSizeEstimateResponse.of(38)
         );
-        given(qaWorkflowService.getTaskDetail(5L, 9001L)).willReturn(response);
+        given(qaWorkflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(response);
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
@@ -430,7 +430,7 @@ class QaSessionsControllerWebMvcTest {
 
     @Test
     void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() throws Exception {
-        given(qaWorkflowService.listMessages(5L)).willReturn(List.of(
+        given(qaWorkflowService.listMessages(5L, 7L)).willReturn(List.of(
                 QaMessageResponse.of(101L, 5L, "user", 1, "请概括这套图谱的主题", LocalDateTime.of(2026, 4, 22, 15, 20), "running", "running"),
                 QaMessageResponse.of(102L, 5L, "assistant", 2, "图谱主题集中在操作系统概念网络", LocalDateTime.of(2026, 4, 22, 15, 22), null, null)
         ));

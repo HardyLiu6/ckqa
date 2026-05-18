@@ -43,6 +43,7 @@ import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
+import org.ysu.ckqaback.service.QaMessageFeedbackService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
@@ -77,6 +78,7 @@ public class QaWorkflowService {
     private final QaQuestionRewriteService qaQuestionRewriteService = new QaQuestionRewriteService();
     private QaSessionSummariesService qaSessionSummariesService;
     private QaRetrievalHitsService qaRetrievalHitsService;
+    private QaMessageFeedbackService qaMessageFeedbackService;
     private CourseAccessService courseAccessService;
     private GraphRagTaskClient graphRagTaskClient;
     private IndexArtifactsService indexArtifactsService;
@@ -94,6 +96,11 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setQaRetrievalHitsService(QaRetrievalHitsService qaRetrievalHitsService) {
         this.qaRetrievalHitsService = qaRetrievalHitsService;
+    }
+
+    @Autowired(required = false)
+    public void setQaMessageFeedbackService(QaMessageFeedbackService qaMessageFeedbackService) {
+        this.qaMessageFeedbackService = qaMessageFeedbackService;
     }
 
     @Autowired(required = false)
@@ -423,6 +430,10 @@ public class QaWorkflowService {
     }
 
     public List<QaMessageResponse> listMessages(Long sessionId) {
+        return listMessages(sessionId, null);
+    }
+
+    public List<QaMessageResponse> listMessages(Long sessionId, Long currentUserId) {
         qaSessionsService.getRequiredById(sessionId);
         List<QaMessages> messages = qaMessagesService.listBySessionId(sessionId);
         List<Long> userMessageIds = messages.stream()
@@ -431,6 +442,7 @@ public class QaWorkflowService {
                 .toList();
         Map<Long, QaRetrievalLogs> taskMap = qaRetrievalLogsService.findLatestByUserMessageIds(userMessageIds);
         Map<Long, List<QaSourceResponse>> sourcesByAssistantMessage = loadSourcesByAssistantMessage(taskMap);
+        Map<Long, org.ysu.ckqaback.qa.dto.QaFeedbackResponse> feedbackByMessage = loadFeedbackByMessage(messages, currentUserId);
 
         return messages.stream()
                 .map(message -> {
@@ -447,10 +459,25 @@ public class QaWorkflowService {
                             message.getCreatedAt(),
                             task == null ? null : task.getTaskStatus(),
                             task == null ? null : task.getProgressStage(),
-                            sources
+                            sources,
+                            feedbackByMessage.get(message.getId())
                     );
                 })
                 .toList();
+    }
+
+    private Map<Long, org.ysu.ckqaback.qa.dto.QaFeedbackResponse> loadFeedbackByMessage(
+            List<QaMessages> messages,
+            Long currentUserId
+    ) {
+        if (qaMessageFeedbackService == null || currentUserId == null || messages == null || messages.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> assistantMessageIds = messages.stream()
+                .filter(message -> "assistant".equals(message.getRole()))
+                .map(QaMessages::getId)
+                .toList();
+        return qaMessageFeedbackService.findFeedbackByMessageIdsForUser(assistantMessageIds, currentUserId);
     }
 
     private Map<Long, List<QaSourceResponse>> loadSourcesByAssistantMessage(Map<Long, QaRetrievalLogs> taskMap) {
@@ -475,6 +502,10 @@ public class QaWorkflowService {
     }
 
     public QaTaskDetailResponse getTaskDetail(Long sessionId, Long taskId) {
+        return getTaskDetail(sessionId, taskId, null);
+    }
+
+    public QaTaskDetailResponse getTaskDetail(Long sessionId, Long taskId, Long currentUserId) {
         qaSessionsService.getRequiredById(sessionId);
         QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
 
@@ -485,7 +516,11 @@ public class QaWorkflowService {
                     ? List.of()
                     : qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(task.getId()))
                     .getOrDefault(task.getId(), List.of());
-            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources);
+            org.ysu.ckqaback.qa.dto.QaFeedbackResponse feedback = qaMessageFeedbackService == null || message == null || currentUserId == null
+                    ? null
+                    : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(message.getId()), currentUserId)
+                    .get(message.getId());
+            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback);
         }
 
         List<String> latestLogs = StringUtils.hasText(task.getLatestLogs())

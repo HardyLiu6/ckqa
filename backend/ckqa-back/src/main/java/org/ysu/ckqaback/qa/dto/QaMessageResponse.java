@@ -21,6 +21,7 @@ public class QaMessageResponse {
     private final String taskStatus;
     private final String progressStage;
     private final List<QaSourceResponse> sources;
+    private final QaFeedbackResponse feedback;
 
     private QaMessageResponse(
             Long id,
@@ -31,7 +32,8 @@ public class QaMessageResponse {
             LocalDateTime createdAt,
             String taskStatus,
             String progressStage,
-            List<QaSourceResponse> sources
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
     ) {
         this.id = id;
         this.sessionId = sessionId;
@@ -42,6 +44,7 @@ public class QaMessageResponse {
         this.taskStatus = taskStatus;
         this.progressStage = progressStage;
         this.sources = sources == null ? List.of() : List.copyOf(sources);
+        this.feedback = feedback;
     }
 
     public static QaMessageResponse of(
@@ -54,7 +57,7 @@ public class QaMessageResponse {
             String taskStatus,
             String progressStage
     ) {
-        return of(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage, List.of());
+        return of(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage, List.of(), null);
     }
 
     public static QaMessageResponse of(
@@ -68,6 +71,21 @@ public class QaMessageResponse {
             String progressStage,
             List<QaSourceResponse> sources
     ) {
+        return of(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage, sources, null);
+    }
+
+    public static QaMessageResponse of(
+            Long id,
+            Long sessionId,
+            String role,
+            Integer sequenceNo,
+            String content,
+            LocalDateTime createdAt,
+            String taskStatus,
+            String progressStage,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
+    ) {
         return new QaMessageResponse(
                 id,
                 sessionId,
@@ -77,7 +95,8 @@ public class QaMessageResponse {
                 createdAt,
                 taskStatus,
                 progressStage,
-                sources
+                sources,
+                feedback
         );
     }
 
@@ -95,6 +114,14 @@ public class QaMessageResponse {
     }
 
     public static QaMessageResponse fromEntity(QaMessages message, List<QaSourceResponse> sources) {
+        return fromEntity(message, sources, null);
+    }
+
+    public static QaMessageResponse fromEntity(
+            QaMessages message,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
+    ) {
         return of(
                 message.getId(),
                 message.getSessionId(),
@@ -104,7 +131,8 @@ public class QaMessageResponse {
                 message.getCreatedAt(),
                 null,
                 null,
-                sources
+                sources,
+                feedback
         );
     }
 }
