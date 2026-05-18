@@ -19,6 +19,7 @@ import {
   getIndexRun,
   getKnowledgeBase,
   listIndexRuns,
+  listIndexRunArtifacts,
   listKnowledgeBaseBuildRuns,
   listKnowledgeBases,
 } from '../../api/knowledge-bases.js'
@@ -26,8 +27,8 @@ import {
   BUILD_STEP_LABELS,
   resolveBuildDefaultStepKey,
   resolveBuildPrimaryAction,
+  resolveBuildRunIndexAvailabilityState,
   resolveExportArtifactRows,
-  resolveIndexAvailabilityState,
   resolveParseTaskRows,
   resolvePromptConfirmState,
 } from './module-content.js'
@@ -134,6 +135,7 @@ const defaultServices = {
   getKnowledgeBase,
   getBuildRun,
   listIndexRuns,
+  listIndexRunArtifacts,
   listKnowledgeBases,
   listKnowledgeBaseBuildRuns,
 }
@@ -892,7 +894,21 @@ async function loadIndexRunDetail(route, services) {
   const indexRunId = route.params?.indexRunId
 
   try {
-    const indexRun = await services.getIndexRun(indexRunId)
+    // 并发加载 indexRun 详情和产物列表；产物失败降级展示
+    const [indexRunResult, artifactsResult] = await Promise.allSettled([
+      services.getIndexRun(indexRunId),
+      typeof services.listIndexRunArtifacts === 'function'
+        ? services.listIndexRunArtifacts(indexRunId)
+        : Promise.resolve([]),
+    ])
+
+    if (indexRunResult.status === 'rejected') {
+      throw indexRunResult.reason
+    }
+    const indexRun = indexRunResult.value
+    const artifacts = artifactsResult.status === 'fulfilled'
+      ? (Array.isArray(artifactsResult.value) ? artifactsResult.value : (artifactsResult.value?.items ?? []))
+      : []
 
     return createOverviewLoaderResult({
       requestState: 'success',
@@ -904,6 +920,14 @@ async function loadIndexRunDetail(route, services) {
           state: 'success',
           item: indexRun,
           facts: buildIndexRunFacts(indexRun),
+        },
+        indexRunArtifacts: {
+          state: artifactsResult.status === 'fulfilled'
+            ? (artifacts.length > 0 ? 'success' : 'empty')
+            : 'error',
+          items: artifacts.map(mapIndexArtifactItem),
+          summary: summarizeIndexArtifacts(artifacts),
+          error: artifactsResult.status === 'rejected' ? createApiError(artifactsResult.reason) : null,
         },
       },
       raw: indexRun,
@@ -973,7 +997,9 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const promptState = resolvePromptConfirmState(query, {
     complete: selection.materials.length > 0 && exportArtifacts.missingCount === 0,
   }, buildRun?.buildMetadata)
-  const indexState = resolveIndexAvailabilityState(knowledgeBase, indexRuns)
+  // 索引可用状态以「本次 build_run 自己的索引运行」为准，不再受 KB 上其他历史 build_run 的成功/失败影响。
+  // 这样新建 build_run 进入 05 步时即便 KB 上有其他索引也能正确显示 idle。
+  const indexState = resolveBuildRunIndexAvailabilityState(knowledgeBase, buildRunIndexRunsBlock.items ?? [])
   const workflowSteps = buildKnowledgeBaseWorkflowSteps({
     query,
     knowledgeBase,
@@ -1185,7 +1211,9 @@ export function buildKnowledgeBaseWorkflowSteps({
   const promptConfirmed = prompt?.confirmed
     || stageReached('index')
     || isBuildQueryConfirmed(query.promptConfirmed)
-  const indexAvailability = indexState ?? resolveIndexAvailabilityState(knowledgeBase, [])
+  // fallback：当调用方未显式传 indexState 时，按 build_run 维度的空列表回退到 ready，
+  // 不再读 KB 上的 latestIndexRunId/Status 字段（那些是跨 build_run 的全 KB 视角）。
+  const indexAvailability = indexState ?? resolveBuildRunIndexAvailabilityState(knowledgeBase, [])
   const materialStatus = hasMaterialSelection && materialConfirmed ? 'done' : 'ready'
   const parseStatus = resolveParseStepStatus({ hasMaterialSelection, parseSummary, allParsed })
   const exportStatus = resolveExportStepStatus({ allParsed, exportComplete, exportConfirmed })
@@ -1193,10 +1221,13 @@ export function buildKnowledgeBaseWorkflowSteps({
   const indexStatus = !exportConfirmed || !promptConfirmed || !exportComplete
     ? 'blocked'
     : indexAvailability.status
-  // qa_check 需要索引步骤非阻塞且有激活索引才可进入；
-  // 当前置步骤（prompt/export）未确认时 index 为 blocked，qa_check 也应阻塞
-  const qaStatus = indexStatus === 'blocked' ? 'blocked'
-    : activeIndexRunId ? 'ready' : 'blocked'
+  // qa_check 必须满足两个条件才能 ready：
+  //   1. index 步骤已经 done（本次 build_run 的索引构建跑完且激活）
+  //   2. KB 上有 activeIndexRunId（基本前提）
+  // 仅"index 非 blocked + 有 activeIndexRunId"是不够的：
+  //   - index 还在 running/ready 时不应允许跳过本次构建直接验证旧索引
+  //   - index failed 时也不该绕过失败结果用旧索引
+  const qaStatus = indexStatus === 'done' && activeIndexRunId ? 'ready' : 'blocked'
   const statusByStep = applyBuildRunStageStatuses({
     material: materialStatus,
     parse: parseStatus,
@@ -2012,16 +2043,126 @@ function buildKnowledgeBaseFacts(knowledgeBase = {}) {
 }
 
 function buildIndexRunFacts(indexRun = {}) {
-  return [
-    { label: '索引运行 ID', value: indexRun.id ?? '-' },
-    { label: '知识库 ID', value: indexRun.knowledgeBaseId ?? '-' },
-    { label: '引擎', value: indexRun.engine ?? indexRun.engineName ?? '-' },
+  // 用户视角下，索引运行最有用的就是「跑得怎么样、跑了多久、用了什么策略、属于哪次构建」。
+  // 把 ID / 引擎 / 知识库 ID 等骨架信息留给页面侧边或折叠详情，不当作主信息位。
+  const metadata = parseIndexRunMetadata(indexRun.runMetadata)
+  const facts = [
     { label: '索引版本', value: indexRun.indexVersion ?? '-' },
-    { label: '状态', value: indexRun.status ?? '-' },
-    { label: '开始时间', value: indexRun.startedAt ?? '-' },
-    { label: '结束时间', value: indexRun.finishedAt ?? '-' },
-    { label: '失败信息', value: indexRun.errorMessage ?? '-' },
+    { label: '所属构建', value: indexRun.buildRunId != null ? `#${indexRun.buildRunId}` : '-' },
+    {
+      label: '实际耗时',
+      value: metadata?.elapsedSeconds != null ? formatElapsedSeconds(metadata.elapsedSeconds) : '-',
+    },
+    { label: '开始时间', value: formatTimestamp(indexRun.startedAt) },
+    { label: '结束时间', value: formatTimestamp(indexRun.finishedAt) },
+    { label: '提示词策略', value: resolvePromptStrategyLabel(metadata?.promptStrategy) },
   ]
+  if (metadata?.errorSummary) {
+    facts.push({ label: '失败/备注', value: metadata.errorSummary })
+  }
+  return facts
+}
+
+function formatElapsedSeconds(seconds) {
+  const s = Number(seconds)
+  if (!Number.isFinite(s) || s < 0) return '-'
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = Math.round(s % 60)
+  if (h > 0) return `${h} 时 ${m} 分 ${r} 秒`
+  if (m > 0) return `${m} 分 ${r} 秒`
+  return `${r} 秒`
+}
+
+function formatTimestamp(value) {
+  if (!value) return '-'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+const PROMPT_STRATEGY_DETAIL_LABELS = {
+  default: '默认 GraphRAG 提示词',
+  graphrag_tuned: '自动调优版本',
+  custom_pipeline: '自定义提示词',
+}
+
+function resolvePromptStrategyLabel(strategy) {
+  if (!strategy) return '-'
+  return PROMPT_STRATEGY_DETAIL_LABELS[strategy] ?? strategy
+}
+
+const ARTIFACT_TYPE_LABELS = {
+  input_json: '输入文档',
+  output_dir: '输出目录',
+  parquet: 'Parquet 数据',
+  lancedb: '向量索引',
+  report: '报告',
+  cache: '缓存',
+  manifest: '清单',
+  log: '运行日志',
+  qa_smoke: '问答验证',
+  graphrag_output: 'GraphRAG 输出',
+  other: '其他',
+}
+
+const ARTIFACT_TYPE_ORDER = [
+  'parquet', 'lancedb', 'report', 'log',
+  'output_dir', 'graphrag_output', 'manifest', 'input_json',
+  'cache', 'qa_smoke', 'other',
+]
+
+function resolveArtifactTypeLabel(type) {
+  return ARTIFACT_TYPE_LABELS[type] ?? type ?? '其他'
+}
+
+function mapIndexArtifactItem(artifact = {}) {
+  const id = artifact.id
+  const type = artifact.artifactType ?? artifact.type ?? 'other'
+  const status = String(artifact.artifactStatus ?? artifact.status ?? 'ready').toLowerCase()
+  const fileSize = artifact.fileSize ?? artifact.byteSize ?? null
+  return {
+    id,
+    type,
+    typeLabel: resolveArtifactTypeLabel(type),
+    displayName: artifact.displayName ?? artifact.fileName ?? '-',
+    storageUri: artifact.storageUri ?? artifact.path ?? '',
+    storageScope: artifact.storageScope ?? 'local',
+    status,
+    fileSize,
+    fileSizeLabel: formatFileSize(fileSize),
+    checksum: artifact.checksum ?? null,
+    createdAt: artifact.createdAt ?? null,
+    to: id ? `/app/index-artifacts/${id}` : '',
+  }
+}
+
+function summarizeIndexArtifacts(artifacts = []) {
+  const groups = {}
+  let totalSize = 0
+  let readyCount = 0
+  artifacts.forEach((a) => {
+    const type = a.artifactType ?? a.type ?? 'other'
+    const size = Number(a.fileSize ?? a.byteSize ?? 0) || 0
+    if (!groups[type]) {
+      groups[type] = { type, label: resolveArtifactTypeLabel(type), count: 0, totalSize: 0 }
+    }
+    groups[type].count += 1
+    groups[type].totalSize += size
+    totalSize += size
+    if ((a.artifactStatus ?? a.status ?? 'ready') === 'ready') readyCount += 1
+  })
+  const groupRows = Object.values(groups)
+    .sort((a, b) => ARTIFACT_TYPE_ORDER.indexOf(a.type) - ARTIFACT_TYPE_ORDER.indexOf(b.type))
+    .map((g) => ({ ...g, totalSizeLabel: formatFileSize(g.totalSize) }))
+  return {
+    total: artifacts.length,
+    readyCount,
+    totalSize,
+    totalSizeLabel: formatFileSize(totalSize),
+    groups: groupRows,
+  }
 }
 
 function mapMaterialItem(material = {}) {
@@ -2176,16 +2317,35 @@ function classifyParseResult(item = {}) {
 
 export function mapIndexRunItem(indexRun = {}) {
   const id = indexRun.id ?? indexRun.indexRunId
+  // runMetadata 是后端 IndexRunMetadata 序列化的 JSON 字符串。
+  // 在 build_run done 视图里要展示 graphSummary（图谱体量 + 阶段耗时），
+  // 这里安全解析一次，失败时降级为 null，不影响其他字段。
+  const metadata = parseIndexRunMetadata(indexRun.runMetadata)
   return {
     id,
     buildRunId: indexRun.buildRunId ?? null,
     status: indexRun.status ?? null,
     startedAt: indexRun.startedAt ?? null,
     finishedAt: indexRun.finishedAt ?? null,
+    indexVersion: indexRun.indexVersion ?? null,
+    elapsedSeconds: metadata?.elapsedSeconds ?? null,
+    promptStrategy: metadata?.promptStrategy ?? null,
+    errorSummary: metadata?.errorSummary ?? null,
+    graphSummary: metadata?.graphSummary ?? null,
     title: id ? `索引运行 #${id}` : '索引运行',
     meta: indexRun.status ?? '-',
     detail: indexRun.createdAt ?? indexRun.startedAt ?? indexRun.updatedAt ?? '',
     to: id ? `/app/index-runs/${id}` : '',
+  }
+}
+
+function parseIndexRunMetadata(raw) {
+  if (!raw) return null
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(String(raw))
+  } catch {
+    return null
   }
 }
 

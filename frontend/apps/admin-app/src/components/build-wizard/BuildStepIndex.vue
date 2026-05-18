@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Database, Hammer, RefreshCw, AlertTriangle } from 'lucide-vue-next'
+import { Database, Hammer, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-vue-next'
 import { ElButton, ElMessageBox, ElProgress } from 'element-plus'
 import StatusBadge from '../common/StatusBadge.vue'
 import { resolveIndexStageLabel } from '../../views/pages/module-content.js'
@@ -35,13 +35,36 @@ const isIdle = computed(() => !hasRuns.value && !props.actionRunning)
 // 真实进度，来自后端 BuildRunDetailResponse.indexProgress（透传到 operationFeedback.indexProgress）
 const progress = computed(() => props.operationFeedback?.indexProgress ?? null)
 
-const percentage = computed(() => progress.value?.percentage ?? 0)
+// 主进度条：按工作流等权计算，每个阶段贡献相同，避免「extract_graph 95% 但全局只有 25%」的撕裂感。
+// 后端 progress.percentage 是按真实耗时加权的（如 create_community_reports 占 50%），更适合
+// 用作"还剩多久"的预估，但用户期望主条线性反映"已完成多少阶段"，所以这里改用等权。
+const overallPercentage = computed(() => {
+  const list = progress.value?.pipelineWorkflows ?? []
+  if (list.length === 0) return 0
+  const idx = Math.max(0, progress.value?.currentWorkflowIndex ?? 0)
+  const sub = progress.value?.subProgress
+  const subRatio = sub && sub.total > 0 ? sub.current / sub.total : 0
+  // 当前已完成 idx 个阶段 + 当前阶段子进度比例
+  const ratio = (idx + subRatio) / list.length
+  // 跑动期间 cap 到 99，避免子进度凑齐时 UI 显示 100% 但 status 还没切到 success
+  return Math.min(99, Math.max(0, Math.round(ratio * 100)))
+})
+
 const currentStageLabel = computed(() => resolveIndexStageLabel(progress.value?.currentWorkflowKey))
 const subProgressText = computed(() => {
   const sub = progress.value?.subProgress
   if (!sub || !sub.total) return ''
   return `${sub.current} / ${sub.total}`
 })
+
+// 当前阶段子进度百分比，仅在 subProgress 存在时显示独立的小进度条
+const subPercentage = computed(() => {
+  const sub = progress.value?.subProgress
+  if (!sub || !sub.total) return 0
+  return Math.min(100, Math.max(0, Math.round((sub.current / sub.total) * 100)))
+})
+
+const hasSubProgress = computed(() => Boolean(progress.value?.subProgress?.total))
 
 const stages = computed(() => {
   const list = progress.value?.pipelineWorkflows ?? []
@@ -64,6 +87,72 @@ function formatElapsed(seconds) {
   if (h > 0) return `${h} 时 ${m} 分 ${s} 秒`
   if (m > 0) return `${m} 分 ${s} 秒`
   return `${s} 秒`
+}
+
+// === done 视图：成功概览 ===
+const PROMPT_STRATEGY_LABELS = {
+  default: '默认 GraphRAG 提示词',
+  graphrag_tuned: '自动调优版本',
+  custom_pipeline: '自定义提示词',
+}
+
+// 最新 success 索引运行（done 视图主体；多次失败重试取最后一次成功）
+const latestSuccessRun = computed(() =>
+  indexRuns.value.find((run) => run.status === 'success' || run.status === 'done') ?? null,
+)
+
+const successOverview = computed(() => {
+  const run = latestSuccessRun.value
+  if (!run) return null
+  return {
+    id: run.id,
+    indexVersion: run.indexVersion ?? null,
+    elapsedLabel: run.elapsedSeconds ? formatElapsed(run.elapsedSeconds) : null,
+    finishedAt: run.finishedAt ?? null,
+    promptStrategyLabel: run.promptStrategy
+      ? (PROMPT_STRATEGY_LABELS[run.promptStrategy] ?? run.promptStrategy)
+      : null,
+    notActivated: run.errorSummary === 'skipped_newer_build_exists',
+  }
+})
+
+const graphSummary = computed(() => latestSuccessRun.value?.graphSummary ?? null)
+
+// 阶段耗时：按耗时降序，仅展示前 5 个，其余归为「其他阶段」
+const workflowDurationRows = computed(() => {
+  const durations = graphSummary.value?.workflowDurations
+  if (!durations || typeof durations !== 'object') return []
+  const total = graphSummary.value?.totalRuntimeSeconds ?? 0
+  const entries = Object.entries(durations)
+    .map(([key, seconds]) => ({
+      key,
+      label: resolveIndexStageLabel(key),
+      seconds: Number(seconds) || 0,
+      percentage: total > 0 ? Math.round((Number(seconds) / total) * 100) : 0,
+    }))
+    .filter((row) => row.seconds > 0)
+    .sort((a, b) => b.seconds - a.seconds)
+  return entries
+})
+
+function formatSeconds(seconds) {
+  if (!seconds && seconds !== 0) return '-'
+  const s = Number(seconds)
+  if (!Number.isFinite(s)) return '-'
+  if (s < 1) return `${Math.round(s * 1000)} ms`
+  if (s < 60) return `${s.toFixed(1)} 秒`
+  const m = Math.floor(s / 60)
+  const rest = Math.round(s - m * 60)
+  return `${m} 分 ${rest} 秒`
+}
+
+function formatFinishedAt(value) {
+  if (!value) return '-'
+  // 后端返回 LocalDateTime 字符串，简单格式化为月/日 时:分
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function handleStart() {
@@ -131,10 +220,10 @@ async function handleRebuild() {
       </div>
 
       <el-progress
-        :percentage="percentage"
+        :percentage="overallPercentage"
         :stroke-width="12"
         :show-text="true"
-        :format="() => `${percentage}%`"
+        :format="() => `${overallPercentage}%`"
         class="build-step-index__progress"
       />
 
@@ -142,6 +231,16 @@ async function handleRebuild() {
         <span class="build-step-index__stage-label">当前阶段：{{ currentStageLabel }}</span>
         <span v-if="subProgressText" class="build-step-index__stage-sub">{{ subProgressText }}</span>
       </div>
+
+      <!-- 当前阶段子进度条：让用户看到 113/118 这种"接近完成本阶段"的视觉反馈 -->
+      <el-progress
+        v-if="hasSubProgress"
+        :percentage="subPercentage"
+        :stroke-width="6"
+        :show-text="false"
+        class="build-step-index__sub-progress"
+        status="warning"
+      />
 
       <ol v-if="stages.length > 0" class="build-step-index__stages">
         <li
@@ -159,17 +258,104 @@ async function handleRebuild() {
       </p>
     </div>
 
-    <!-- 已完成或失败：列表 + 重建/重试 -->
+    <!-- 已完成或失败：成功概览 + 图谱体量 + 阶段耗时 + 重建/重试 -->
     <div v-else class="build-step-index__done">
-      <ol class="build-task-list">
-        <li v-for="item in indexRuns" :key="item.id" class="build-task-row">
-          <div>
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.detail }}</small>
+      <!-- 成功概览卡：仅当存在 success 索引时展示 -->
+      <article v-if="successOverview" class="build-step-index__success-card">
+        <header class="build-step-index__success-head">
+          <div class="build-step-index__success-title">
+            <CheckCircle2 :size="22" class="build-step-index__success-icon" />
+            <div>
+              <strong>索引构建完成</strong>
+              <small>
+                #{{ successOverview.id }}
+                <span v-if="successOverview.indexVersion"> · {{ successOverview.indexVersion }}</span>
+              </small>
+            </div>
           </div>
-          <StatusBadge :status="item.meta" />
-        </li>
-      </ol>
+          <StatusBadge status="success" />
+        </header>
+
+        <dl class="build-step-index__success-meta">
+          <div v-if="successOverview.elapsedLabel">
+            <dt>实际耗时</dt>
+            <dd>{{ successOverview.elapsedLabel }}</dd>
+          </div>
+          <div v-if="successOverview.finishedAt">
+            <dt>完成时间</dt>
+            <dd>{{ formatFinishedAt(successOverview.finishedAt) }}</dd>
+          </div>
+          <div v-if="successOverview.promptStrategyLabel">
+            <dt>提示词策略</dt>
+            <dd>{{ successOverview.promptStrategyLabel }}</dd>
+          </div>
+        </dl>
+
+        <!-- 索引未自动激活时的提示 -->
+        <div v-if="successOverview.notActivated" class="build-step-index__activate-hint">
+          <AlertTriangle :size="14" />
+          <span>本次索引未自动激活（KB 上存在更新的构建）。如需用本次索引验证，请到「知识库详情」手动激活。</span>
+        </div>
+      </article>
+
+      <!-- 图谱体量 -->
+      <article v-if="graphSummary" class="build-step-index__summary-card">
+        <h4 class="build-step-index__summary-title">图谱体量</h4>
+        <ul class="build-step-index__summary-grid">
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.entityCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">实体</span>
+          </li>
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.relationshipCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">关系</span>
+          </li>
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.communityCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">社区</span>
+          </li>
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.communityReportCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">社区报告</span>
+          </li>
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.documentCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">文档</span>
+          </li>
+          <li>
+            <span class="build-step-index__summary-value">{{ graphSummary.textUnitCount ?? '-' }}</span>
+            <span class="build-step-index__summary-label">文本单元</span>
+          </li>
+        </ul>
+      </article>
+
+      <!-- 阶段耗时分布（折叠）：让用户能看到「哪一步最贵」 -->
+      <details v-if="workflowDurationRows.length > 0" class="build-step-index__durations">
+        <summary>阶段耗时分布</summary>
+        <ol class="build-step-index__duration-list">
+          <li v-for="row in workflowDurationRows" :key="row.key">
+            <span class="build-step-index__duration-label">{{ row.label }}</span>
+            <span class="build-step-index__duration-bar">
+              <span :style="{ width: `${Math.max(2, row.percentage)}%` }"></span>
+            </span>
+            <span class="build-step-index__duration-value">{{ formatSeconds(row.seconds) }}</span>
+          </li>
+        </ol>
+      </details>
+
+      <!-- 索引运行历史：失败时主要看这里，成功时折叠到详情供追溯 -->
+      <details class="build-step-index__history" :open="isFailed">
+        <summary>索引运行历史（{{ indexRuns.length }} 次）</summary>
+        <ol class="build-task-list">
+          <li v-for="item in indexRuns" :key="item.id" class="build-task-row">
+            <div>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.detail }}</small>
+            </div>
+            <StatusBadge :status="item.meta" />
+          </li>
+        </ol>
+      </details>
 
       <div v-if="isFailed" class="build-step-index__failed-hint">
         <AlertTriangle :size="16" />
@@ -289,7 +475,7 @@ async function handleRebuild() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   font-size: 12px;
   color: var(--ckqa-text-muted, #64748b);
 }
@@ -299,6 +485,19 @@ async function handleRebuild() {
 }
 .build-step-index__stage-sub {
   font-variant-numeric: tabular-nums;
+}
+/* 当前阶段的子进度条：比主条窄、暖色调，视觉从属关系明确 */
+.build-step-index__sub-progress {
+  margin-bottom: 16px;
+}
+.build-step-index__sub-progress :deep(.el-progress-bar__outer) {
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.08);
+}
+.build-step-index__sub-progress :deep(.el-progress-bar__inner) {
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  transition: width 0.3s ease;
 }
 .build-step-index__stage-hint {
   margin: 0;
@@ -354,6 +553,177 @@ async function handleRebuild() {
 .build-step-index__done {
   display: grid;
   gap: 16px;
+}
+
+/* 成功概览卡 */
+.build-step-index__success-card {
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(56, 189, 248, 0.04));
+  border: 1px solid rgba(16, 185, 129, 0.18);
+}
+.build-step-index__success-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.build-step-index__success-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.build-step-index__success-title strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ckqa-text, #1e293b);
+}
+.build-step-index__success-title small {
+  font-size: 12px;
+  color: var(--ckqa-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+}
+.build-step-index__success-icon {
+  color: #10b981;
+  flex-shrink: 0;
+}
+.build-step-index__success-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 24px;
+  margin: 0;
+  padding: 0;
+  border-top: 1px dashed rgba(16, 185, 129, 0.18);
+  padding-top: 14px;
+}
+.build-step-index__success-meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.build-step-index__success-meta dt {
+  font-size: 11px;
+  color: var(--ckqa-text-muted, #94a3b8);
+}
+.build-step-index__success-meta dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ckqa-text, #1e293b);
+  font-variant-numeric: tabular-nums;
+}
+.build-step-index__activate-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 图谱体量 */
+.build-step-index__summary-card {
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--ckqa-surface-muted, #f8fafc);
+  border: 1px solid var(--ckqa-border-muted, rgba(148, 163, 184, 0.2));
+}
+.build-step-index__summary-title {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ckqa-text, #1e293b);
+}
+.build-step-index__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 720px) {
+  .build-step-index__summary-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.build-step-index__summary-grid li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.build-step-index__summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ckqa-accent, #6366f1);
+  font-variant-numeric: tabular-nums;
+}
+.build-step-index__summary-label {
+  font-size: 11px;
+  color: var(--ckqa-text-muted, #64748b);
+}
+
+/* 阶段耗时分布 */
+.build-step-index__durations,
+.build-step-index__history {
+  border-radius: 10px;
+  border: 1px solid var(--ckqa-border-muted, rgba(148, 163, 184, 0.2));
+  background: #fff;
+  padding: 4px 14px;
+}
+.build-step-index__durations summary,
+.build-step-index__history summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ckqa-text, #1e293b);
+  user-select: none;
+}
+.build-step-index__durations summary:hover,
+.build-step-index__history summary:hover {
+  color: var(--ckqa-accent, #6366f1);
+}
+.build-step-index__duration-list {
+  margin: 8px 0 14px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.build-step-index__duration-list li {
+  display: grid;
+  grid-template-columns: 140px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.build-step-index__duration-label {
+  color: var(--ckqa-text-muted, #64748b);
+}
+.build-step-index__duration-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.15);
+  overflow: hidden;
+  display: block;
+}
+.build-step-index__duration-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--ckqa-accent, #6366f1), #38bdf8);
+  border-radius: 3px;
+}
+.build-step-index__duration-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ckqa-text, #1e293b);
 }
 .build-step-index__failed-hint {
   display: flex;

@@ -790,6 +790,69 @@ export function resolvePromptConfirmState(query = {}, exportState = {}, metadata
   }
 }
 
+/**
+ * 基于本次 build_run 的索引运行列表计算索引可用状态。
+ *
+ * <p>与 {@link resolveIndexAvailabilityState} 不同：本函数完全不看 KB 上的 latestIndexRunId/Status
+ * 字段（这俩是跨 build_run 的全 KB 视角），只看「本次 build_run 自己的索引运行」。这样新建一个
+ * build_run 进入索引步骤时，即便 KB 上其他历史 build_run 留下了 success/failed 索引，本步骤也能
+ * 准确回到 ready 让用户触发首次构建。</p>
+ *
+ * @param knowledgeBase KB 实体；只读 activeIndexRunId 用于判断是否已激活最新索引
+ * @param buildRunIndexRuns 本次 build_run 的索引运行列表（已按 startedAt desc 排序，items[0] 为最新）
+ * @param options 额外选项（兼容 resolveIndexAvailabilityState 的 syncPollTimedOut）
+ */
+export function resolveBuildRunIndexAvailabilityState(knowledgeBase = {}, buildRunIndexRuns = [], options = {}) {
+  const list = Array.isArray(buildRunIndexRuns) ? buildRunIndexRuns : []
+  // 本次 build_run 还没触发过索引：直接 ready，让 BuildStepIndex.vue 进入 idle 大按钮态
+  if (list.length === 0) {
+    return { status: 'ready', availability: 'no-run' }
+  }
+
+  const latestRun = list[0]
+  const latestRunId = latestRun?.id ?? latestRun?.indexRunId ?? null
+  const latestRunStatus = normalizeIndexStatus(latestRun?.status ?? latestRun?.state)
+  const activeIndexRunId = firstPresent(
+    knowledgeBase.activeIndexRunId,
+    knowledgeBase.activeIndexId,
+    knowledgeBase.activeIndex?.id,
+  )
+  const activeMatchesLatest = Boolean(activeIndexRunId && latestRunId)
+    && String(activeIndexRunId) === String(latestRunId)
+
+  if (latestRunStatus === 'success' && activeMatchesLatest) {
+    return { status: 'done', availability: 'available' }
+  }
+
+  if (latestRunStatus === 'running') {
+    return { status: 'running', availability: 'building' }
+  }
+
+  if (latestRunStatus === 'success') {
+    // 索引已成功但 active 还没切过来：等待后端激活策略推进
+    if (options.syncPollTimedOut) {
+      return {
+        status: 'running',
+        availability: 'sync-timeout',
+        warning: '可用状态同步超时',
+        primaryAction: { label: '手动刷新', operationKey: 'index-refresh', disabled: false },
+      }
+    }
+    return {
+      status: 'running',
+      availability: 'syncing',
+      warning: '等待后端激活最新索引',
+      primaryAction: { label: '刷新可用状态', operationKey: 'index-refresh', disabled: false },
+    }
+  }
+
+  if (latestRunStatus === 'failed') {
+    return { status: 'failed', availability: 'failed' }
+  }
+
+  return { status: 'ready', availability: 'no-run' }
+}
+
 export function resolveIndexAvailabilityState(knowledgeBase = {}, indexRuns = [], options = {}) {
   const latestIndexRun = resolveLatestIndexRun(knowledgeBase, indexRuns)
   const activeIndexRunId = firstPresent(

@@ -2641,10 +2641,18 @@ async function runKnowledgeBaseIndex() {
   indexStartedAtMs.value = Date.now()
   startElapsedTick()
   activeLongTaskController = createLongTaskController({
-    trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    // 后端 createBuildRunIndexRun 是同步阻塞调用 graphrag index（INDEX_TIMEOUT_SECONDS 兜底，
+    // 当前 1800s）。axios 全局默认 15s 会在后端返回前抛 ECONNABORTED，这里显式 timeout=0
+    // 让单次请求不在客户端超时，由后端硬上限作单一来源真理；用户取消时仍由 signal 中止。
+    trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, {
+      post: (url, payload) => http.post(url, payload, { signal, timeout: 0 }),
+    }),
     poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
     isSuccess: isBuildRunIndexSuccess,
     isFailed: (snapshot) => normalizeRunState(snapshot?.status) === 'failed',
+    // trigger 是 5-30 分钟的同步阻塞调用，不能 await；fire-and-forget 后立即开始轮询
+    // 才能让 BuildStepIndex.vue 的 indexProgress 跑动起来
+    pollDuringTrigger: true,
     onState: (state, snapshot) => {
       actionState.value = state
       const enriched = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {}
@@ -2703,13 +2711,16 @@ async function runQaSmoke() {
   }
 
   activeLongTaskController = createLongTaskController({
+    // 同 runKnowledgeBaseIndex：后端同步调用 graphrag query，前端单次请求不要客户端超时
     trigger: ({ signal }) => runBuildRunQaSmoke(buildRunId, {
       question,
       mode: DEFAULT_SMOKE_MODE,
-    }, { post: (url, payload) => http.post(url, payload, { signal }) }),
+    }, { post: (url, payload) => http.post(url, payload, { signal, timeout: 0 }) }),
     poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
     isSuccess: isBuildRunQaSmokeSuccess,
     isFailed: isBuildRunQaSmokeFailed,
+    // QA 同步链路也阻塞 1-2 分钟，期间用户应能从轮询拿到 buildRun 状态
+    pollDuringTrigger: true,
     onState: (state, snapshot) => {
       actionState.value = state
       actionSnapshot.value = snapshot ?? null
@@ -4569,7 +4580,7 @@ onBeforeUnmount(() => {
     </article>
   </section>
 
-  <section v-else-if="config.blocks?.indexRun" class="content-grid two-columns">
+  <section v-else-if="config.blocks?.indexRun" class="content-grid index-run-detail-grid">
     <article class="panel">
       <div class="panel-heading">
         <h2>索引运行概览</h2>
@@ -4588,6 +4599,58 @@ onBeforeUnmount(() => {
           <strong v-else>{{ renderFactValue(field) }}</strong>
         </div>
       </div>
+    </article>
+
+    <article class="panel index-run-artifacts-panel">
+      <div class="panel-heading">
+        <h2>索引产物</h2>
+        <span v-if="config.blocks?.indexRunArtifacts?.summary?.total" class="record-count">
+          共 {{ config.blocks.indexRunArtifacts.summary.total }} 个 ·
+          {{ config.blocks.indexRunArtifacts.summary.totalSizeLabel }}
+        </span>
+      </div>
+
+      <p v-if="config.blocks?.indexRunArtifacts?.state === 'empty'" class="index-run-empty">
+        暂无产物记录。索引运行成功后，产物会自动登记。
+      </p>
+      <p v-else-if="config.blocks?.indexRunArtifacts?.state === 'error'" class="index-run-empty">
+        产物列表加载失败：{{ config.blocks.indexRunArtifacts.error?.message ?? '未知错误' }}
+      </p>
+
+      <!-- 按类型分组的统计行 -->
+      <ul
+        v-if="config.blocks?.indexRunArtifacts?.summary?.groups?.length"
+        class="artifact-group-list"
+      >
+        <li v-for="group in config.blocks.indexRunArtifacts.summary.groups" :key="group.type">
+          <strong>{{ group.label }}</strong>
+          <span>{{ group.count }} 个</span>
+          <span class="artifact-group-list__size">{{ group.totalSizeLabel }}</span>
+        </li>
+      </ul>
+
+      <!-- 详细产物列表 -->
+      <ol v-if="config.blocks?.indexRunArtifacts?.items?.length" class="artifact-list">
+        <li
+          v-for="item in config.blocks.indexRunArtifacts.items"
+          :key="item.id"
+          class="artifact-list__item"
+        >
+          <header class="artifact-list__head">
+            <div class="artifact-list__title">
+              <span class="artifact-list__type-tag" :data-type="item.type">{{ item.typeLabel }}</span>
+              <strong>{{ item.displayName }}</strong>
+            </div>
+            <StatusBadge :status="item.status" />
+          </header>
+          <div class="artifact-list__meta">
+            <span v-if="item.fileSizeLabel !== '-'">大小 {{ item.fileSizeLabel }}</span>
+            <span class="artifact-list__path" :title="item.storageUri">
+              {{ item.storageScope === 'minio' ? 'minio://' : '' }}{{ item.storageUri }}
+            </span>
+          </div>
+        </li>
+      </ol>
     </article>
   </section>
 

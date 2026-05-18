@@ -285,7 +285,11 @@ public class IndexWorkflowService {
                     materializedSha256,
                     fallbackReason
             );
-            indexRunsService.markSuccess(run.getId(), metadata);
+            // 索引成功后跑一次 utils/index_summary.py，把图谱体量和阶段耗时塞进 metadata.graphSummary。
+            // 任何失败（python 缺失、parquet 读取异常、JSON 解析失败）都降级为 null，不阻断主流程。
+            IndexRunMetadata.GraphSummary graphSummary = collectGraphSummary(workspaceRoot);
+            String metadataWithSummary = mergeGraphSummary(metadata, graphSummary);
+            indexRunsService.markSuccess(run.getId(), metadataWithSummary);
             IndexRuns refreshedRun = indexRunsService.getRequiredById(run.getId());
             artifactRegistryService.scanAndRegister(refreshedRun, workspaceRoot, buildRun.getWorkspaceUri());
 
@@ -295,7 +299,7 @@ public class IndexWorkflowService {
             } else if (activateOnSuccess) {
                 indexRunsService.markSuccess(
                         run.getId(),
-                        toMetadataJson(
+                        mergeGraphSummary(toMetadataJson(
                                 INDEX_COMMAND,
                                 indexResult.getElapsedSeconds(),
                                 indexResult.getExitCode(),
@@ -304,7 +308,7 @@ public class IndexWorkflowService {
                                 materializedStrategy,
                                 materializedSha256,
                                 fallbackReason
-                        )
+                        ), graphSummary)
                 );
             }
             buildRunService.markIndexSuccessDone(
@@ -482,6 +486,68 @@ public class IndexWorkflowService {
             return "";
         }
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /**
+     * 调用 utils/index_summary.py 读取 parquet/stats.json 摘要。
+     * 任何异常一律降级返回 null —— 摘要只是辅助展示，不能阻塞索引主流程。
+     */
+    private IndexRunMetadata.GraphSummary collectGraphSummary(Path workspaceRoot) {
+        Path outputDir = workspaceRoot.resolve("index/output");
+        if (!Files.isDirectory(outputDir)) {
+            return null;
+        }
+        try {
+            ProcessExecutionResult result = graphRagIndexOrchestrator.summarizeIndex(outputDir);
+            if (result.isTimedOut() || result.getExitCode() != 0) {
+                return null;
+            }
+            String stdout = result.getStdout();
+            if (stdout == null || stdout.isBlank()) {
+                return null;
+            }
+            // 脚本只输出单行 JSON，但兼容多行场景：取第一行非空 JSON。
+            String json = stdout.lines()
+                    .map(String::trim)
+                    .filter(s -> s.startsWith("{"))
+                    .findFirst()
+                    .orElse(null);
+            if (json == null) {
+                return null;
+            }
+            return objectMapper.readValue(json, IndexRunMetadata.GraphSummary.class);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 把 graphSummary 合并到现有 metadata JSON 的 graphSummary 字段。
+     * 现有 metadata 由 toMetadataJson 生成（IndexRunMetadata 序列化），
+     * 这里反序列回 IndexRunMetadata 后追加 graphSummary 再序列化，保持字段顺序与 NON_NULL 语义。
+     */
+    private String mergeGraphSummary(String existingMetadata, IndexRunMetadata.GraphSummary graphSummary) {
+        if (graphSummary == null) {
+            return existingMetadata;
+        }
+        try {
+            IndexRunMetadata original = objectMapper.readValue(existingMetadata, IndexRunMetadata.class);
+            IndexRunMetadata merged = IndexRunMetadata.builder()
+                    .command(original.getCommand())
+                    .elapsedSeconds(original.getElapsedSeconds())
+                    .exitCode(original.getExitCode())
+                    .errorSummary(original.getErrorSummary())
+                    .staleTimeoutRecovered(original.getStaleTimeoutRecovered())
+                    .promptStrategy(original.getPromptStrategy())
+                    .promptContentSha256(original.getPromptContentSha256())
+                    .promptFallbackReason(original.getPromptFallbackReason())
+                    .graphSummary(graphSummary)
+                    .build();
+            return objectMapper.writeValueAsString(merged);
+        } catch (Exception ex) {
+            // 合并失败回退到原 metadata，前端拿不到 graphSummary 但 indexRun 仍是 success
+            return existingMetadata;
+        }
     }
 
     /**

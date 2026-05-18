@@ -162,4 +162,31 @@ public class GraphRagIndexOrchestrator {
     private List<String> resolveGraphRagPython() {
         return PythonCommandResolver.resolve(properties.getGraphrag().getPython(), "graphrag-oneapi");
     }
+
+    /**
+     * 在 build run 索引成功后调用 {@code utils/index_summary.py}，
+     * 读取 parquet 行数与 stats.json 耗时分布，输出单行 JSON。
+     *
+     * <p>失败不抛错——摘要只是补充展示信息，不能拖累索引主流程。</p>
+     *
+     * @param outputDir 索引输出目录（{@code <workspace>/index/output}）
+     * @return 子进程执行结果；调用方拿 {@link ProcessExecutionResult#getStdout()} 解析 JSON
+     */
+    public ProcessExecutionResult summarizeIndex(Path outputDir) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(resolveGraphRagPython());
+        command.addAll(List.of(
+                "utils/index_summary.py",
+                "--output-dir",
+                outputDir.toAbsolutePath().toString()
+        ));
+        return processRunner.run(
+                command,
+                Path.of(properties.getGraphrag().getRoot()),
+                Map.of(),
+                Duration.ofSeconds(60),
+                ProcessContext.builder()
+                        .operation("index-summary")
+                        .build()
+        );
+    }
 }
