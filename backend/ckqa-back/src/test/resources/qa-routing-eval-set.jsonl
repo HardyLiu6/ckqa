@@ -1,0 +1,30 @@
+{"id":"basic-001","question":"什么是死锁？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"basic-002","question":"信号量的定义是什么？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"basic-003","question":"简述进程和线程的概念。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"basic-004","question":"CPU 调度的含义是什么？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"basic-005","question":"介绍一下 SPOOLing 系统。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"local-001","question":"请根据第 3 章解释银行家算法的安全性检查过程。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"local-002","question":"教材中银行家算法的步骤是怎样的？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"local-003","question":"资源分配图里死锁产生的条件和过程是什么？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"local-004","question":"请看课件里的例题说明页面置换算法。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"local-005","question":"这段原文里的互斥条件是什么意思？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"global-001","question":"请综述进程管理这一章的知识体系。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"global-002","question":"总结内存管理章节的整体框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"global-003","question":"操作系统 I/O 系统的主题脉络是什么？","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"global-004","question":"全局概括死锁相关内容。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"global-005","question":"从课程整体看，存储管理包含哪些核心模块？","expectedMode":"global","acceptableModes":["global","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"drift-001","question":"进程同步和数据库事务锁之间有什么关联？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"drift-002","question":"死锁和现实交通拥堵有什么类似之处？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"drift-003","question":"页面置换算法的思想能迁移到缓存淘汰吗？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"drift-004","question":"PV 操作在并发编程中的应用和影响是什么？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"drift-005","question":"虚拟存储器和云计算里的资源抽象有什么联系？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"hybrid-001","question":"它和资源分配图有什么关系？请给出材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":true}
+{"id":"hybrid-002","question":"请综合比较死锁和饥饿的区别，并引用课程来源。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"hybrid-003","question":"根据教材证据对比银行家算法和资源分配图的适用场景。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"hybrid-004","question":"请结合来源说明分页和分段的关系。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"hybrid-005","question":"继续上一个问题，综合材料依据说明它的局限。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":true}
+{"id":"hybrid-gated-001","question":"请综合比较死锁和饥饿的区别，并引用课程来源。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"hybrid-gated-002","question":"它和资源分配图有什么关系？请给出材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":true}
+{"id":"context-001","question":"它和前面那个概念有什么区别？","expectedMode":"drift","acceptableModes":["drift","local"],"betaHybridEnabled":false,"hasConversationContext":true}
+{"id":"context-002","question":"这个算法的步骤能再解释一下吗？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":true}
+{"id":"ambiguous-001","question":"请帮我复习一下。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}

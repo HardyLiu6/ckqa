@@ -41,7 +41,7 @@ public class QaModeRoutingService {
     private static final List<String> MODES = List.of("basic", "local", "global", "drift", "hybrid_v0");
     private static final Pattern MATERIAL_PATTERN = Pattern.compile(".*(第\\s*\\d+\\s*(章|节|讲|页)|章节|教材|课件|课程资料|资料中|原文|公式|例题|图表|算法|步骤|机制|条件|过程|根据).*");
     private static final Pattern SUMMARY_PATTERN = Pattern.compile(".*(综述|概括|总结|整体|全局|主题|脉络|知识体系|框架|overview).*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EXPLORATION_PATTERN = Pattern.compile(".*(关联|联系|扩展|延伸|发散|迁移|类似|对比|比较|影响|应用|探索).*");
+    private static final Pattern EXPLORATION_PATTERN = Pattern.compile(".*(关联|联系|扩展|延伸|发散|迁移|类似|对比|比较|区别|异同|影响|应用|探索).*");
     private static final Pattern DEFINITION_PATTERN = Pattern.compile(".*(什么是|是什么|定义|概念|含义|解释一下|请解释|介绍一下|简述).*");
     private static final Pattern EVIDENCE_PATTERN = Pattern.compile(".*(证据|依据|来源|引用|出处|佐证|材料依据|课程证据|交叉验证|可靠).*");
     private static final Pattern RELATION_PATTERN = Pattern.compile(".*(关系|联系|关联|比较|对比|区别|异同|影响).*");
@@ -155,25 +155,30 @@ public class QaModeRoutingService {
     }
 
     private void applyIntentScores(String question, boolean hasContext, Map<String, Double> scores, Set<String> reasons) {
-        if (matches(DEFINITION_PATTERN, question)) {
-            add(scores, "basic", 0.55D);
-            reasons.add("definition_intent");
-        }
-        if (matches(MATERIAL_PATTERN, question)) {
-            add(scores, "local", 0.62D);
-            reasons.add("material_locator");
-        }
-        if (matches(SUMMARY_PATTERN, question)) {
-            add(scores, "global", 0.72D);
-            reasons.add("summary_intent");
-        }
-        if (matches(EXPLORATION_PATTERN, question)) {
-            add(scores, "drift", 0.64D);
-            reasons.add("exploration_intent");
-        }
+        boolean material = matches(MATERIAL_PATTERN, question);
+        boolean summary = matches(SUMMARY_PATTERN, question);
+        boolean exploration = matches(EXPLORATION_PATTERN, question);
         boolean evidence = matches(EVIDENCE_PATTERN, question);
         boolean relation = matches(RELATION_PATTERN, question);
         boolean followUp = hasContext && matches(FOLLOW_UP_PATTERN, question);
+        boolean definition = matches(DEFINITION_PATTERN, question) && !(followUp && relation);
+
+        if (definition) {
+            add(scores, "basic", (material || summary || exploration) ? 0.30D : 0.55D);
+            reasons.add("definition_intent");
+        }
+        if (material) {
+            add(scores, "local", 0.62D);
+            reasons.add("material_locator");
+        }
+        if (summary) {
+            add(scores, "global", 0.78D);
+            reasons.add("summary_intent");
+        }
+        if (exploration) {
+            add(scores, "drift", 0.64D);
+            reasons.add("exploration_intent");
+        }
         if (evidence) {
             add(scores, "local", 0.20D);
             add(scores, "hybrid_v0", 0.30D);
@@ -185,10 +190,18 @@ public class QaModeRoutingService {
             reasons.add("follow_up_context");
         }
         if (evidence && relation) {
-            add(scores, "hybrid_v0", 0.45D);
+            add(scores, "hybrid_v0", 0.78D);
             reasons.add("evidence_relation_intent");
         }
-        if (question.length() <= 24 && reasons.contains("definition_intent") && reasons.size() == 1) {
+        if (evidence && relation && material) {
+            add(scores, "hybrid_v0", 0.18D);
+            reasons.add("evidence_material_fusion");
+        }
+        if (followUp && relation && !evidence) {
+            add(scores, "drift", 0.36D);
+            reasons.add("contextual_relation_intent");
+        }
+        if (question.length() <= 24 && definition && !material && !summary && !exploration) {
             add(scores, "basic", 0.12D);
         }
         if (question.length() >= 42 && relation && evidence) {
