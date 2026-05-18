@@ -14,6 +14,7 @@ import sys
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
@@ -26,7 +27,7 @@ if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
 from main import QueryTaskCreateRequest, _build_query_cmd, _resolve_query_response, create_app, format_response
-from query_task_manager import QueryTaskRequest, QueryTaskSnapshot
+from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot
 
 
 class _FakeQueryTaskManager:
@@ -185,6 +186,62 @@ class TestQueryTaskApi(unittest.TestCase):
                 )
             ],
         )
+
+    def test_submit_query_task_accepts_hybrid_v0_mode(self):
+        task_manager = _FakeQueryTaskManager()
+        app = create_app(task_manager=task_manager)
+        submit_endpoint = _get_route_endpoint(app, "/v1/query-tasks", "POST")
+
+        response = asyncio.run(
+            submit_endpoint(
+                QueryTaskCreateRequest(
+                    mode="hybrid_v0",
+                    prompt="它和资源分配图有什么关系？",
+                    retrievalQuery="死锁和资源分配图有什么关系？",
+                    generationContext="最近对话：什么是死锁？",
+                )
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            task_manager.created_requests,
+            [("hybrid_v0", "它和资源分配图有什么关系？", None, None, "死锁和资源分配图有什么关系？", "最近对话：什么是死锁？")],
+        )
+
+    def test_query_task_manager_runs_hybrid_without_cli_command(self):
+        command_calls: list[QueryTaskRequest] = []
+
+        async def run_case():
+            async def hybrid_runner(request: QueryTaskRequest):
+                return SimpleNamespace(
+                    answer="hybrid answer",
+                    sources=[
+                        SimpleNamespace(ref="tu-001", source="bm25", text="死锁来源片段", metadata={"rank": 1})
+                    ],
+                )
+
+            manager = QueryTaskManager(
+                command_factory=lambda request: command_calls.append(request) or ["should-not-run"],
+                env_factory=lambda request: {},
+                cwd=_PROJECT_ROOT,
+                hybrid_answer_runner=hybrid_runner,
+            )
+            snapshot = await manager.create_task("hybrid_v0", "原问题", retrieval_query="独立检索问题")
+            for _ in range(20):
+                current = manager.get_snapshot(snapshot.python_task_id)
+                if current and current.task_status == "success":
+                    return current
+                await asyncio.sleep(0.01)
+            raise AssertionError("hybrid task did not finish")
+
+        snapshot = asyncio.run(run_case())
+
+        self.assertEqual(command_calls, [])
+        self.assertEqual(snapshot.result_text, "hybrid answer")
+        self.assertEqual(snapshot.retrieval_query, "独立检索问题")
+        self.assertEqual(snapshot.sources[0]["ref"], "tu-001")
+        self.assertEqual(snapshot.sources[0]["snippet"], "死锁来源片段")
 
     def test_query_command_uses_current_python_module_invocation(self):
         cmd = _build_query_cmd(

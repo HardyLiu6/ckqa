@@ -6,8 +6,11 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+
+import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _MODULE_DIR = _PROJECT_ROOT / "utils"
@@ -142,6 +145,86 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(snapshot.index_run_id, 18)
         self.assertEqual(snapshot.data_dir_uri, "user_2/kb_5/build_27/index/output")
+
+    async def test_hybrid_runner_receives_task_specific_data_dir(self):
+        seen: list[QueryTaskRequest] = []
+
+        async def hybrid_runner(request: QueryTaskRequest):
+            seen.append(request)
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": []})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            build_runs_root=_PROJECT_ROOT / "runtime" / "kb-build-runs",
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task(
+            "hybrid_v0",
+            "原问题",
+            index_run_id=18,
+            data_dir_uri="user_2/kb_5/build_27/index/output",
+            retrieval_query="独立检索问题",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "hybrid ok")
+        self.assertEqual(seen[0].retrieval_query, "独立检索问题")
+        self.assertEqual(seen[0].data_dir, _PROJECT_ROOT / "runtime" / "kb-build-runs" / "user_2/kb_5/build_27/index/output")
+
+    async def test_hybrid_result_text_uses_student_readable_source_marks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_runs_root = Path(temp_dir) / "runtime" / "kb-build-runs"
+            data_dir_uri = "user_2/kb_5/build_27/index/output"
+            output_dir = build_runs_root / data_dir_uri
+            output_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "id": "text-unit-156-full-id",
+                        "human_readable_id": 156,
+                        "text": (
+                            "source_file: 操作系统教材. heading_path_text: 第三章 > 死锁检测. "
+                            "page_start: 123. page_end: 125. 资源分配图可以用于死锁检测。"
+                        ),
+                        "n_tokens": 20,
+                        "document_id": "doc-os",
+                        "entity_ids": [],
+                        "relationship_ids": [],
+                        "covariate_ids": [],
+                    }
+                ]
+            ).to_parquet(output_dir / "text_units.parquet")
+
+            async def hybrid_runner(request):
+                return type(
+                    "HybridAnswer",
+                    (),
+                    {"answer": "资源分配图可用于描述死锁状态 [Data: Sources (156)]。", "sources": []},
+                )()
+
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+                env_factory=lambda request: {},
+                cwd=_PROJECT_ROOT,
+                build_runs_root=build_runs_root,
+                hybrid_answer_runner=hybrid_runner,
+            )
+
+            created = await manager.create_task("hybrid_v0", "问题", data_dir_uri=data_dir_uri)
+            await asyncio.sleep(0.15)
+
+            snapshot = manager.get_snapshot(created.python_task_id)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertNotIn("[Data:", snapshot.result_text)
+            self.assertIn("[来源 1]", snapshot.result_text)
+            self.assertEqual(snapshot.sources[0]["ref"], "156")
 
     async def test_rejects_task_data_dir_path_escape(self):
         manager = QueryTaskManager(

@@ -68,3 +68,4 @@ class HybridDiagnostics:
 class HybridV0Answer:
     answer: str
     diagnostics: HybridDiagnostics
+    sources: tuple[EvidenceCandidate, ...] = ()

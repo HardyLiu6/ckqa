@@ -158,7 +158,7 @@ class HybridV0Orchestrator:
             elapsed_seconds=time.perf_counter() - started_at,
             errors=errors,
         )
-        return HybridV0Answer(answer=answer, diagnostics=diagnostics)
+        return HybridV0Answer(answer=answer, diagnostics=diagnostics, sources=tuple(fused_candidates))
 
     def _complete(
         self,

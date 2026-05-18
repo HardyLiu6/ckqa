@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections import deque
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -69,12 +70,14 @@ class QueryTaskManager:
         env_factory: Callable[[QueryTaskRequest], dict[str, str]],
         cwd: str | Path,
         build_runs_root: str | Path | None = None,
+        hybrid_answer_runner: Callable[[QueryTaskRequest], Any] | None = None,
     ) -> None:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._max_log_lines = max_log_lines
         self._max_log_chars = max_log_chars
         self._command_factory = command_factory
         self._env_factory = env_factory
+        self._hybrid_answer_runner = hybrid_answer_runner
         self._cwd = str(cwd)
         self._build_runs_root = Path(build_runs_root).resolve() if build_runs_root is not None else None
         self._counter = count(1)
@@ -141,6 +144,9 @@ class QueryTaskManager:
         heartbeat: asyncio.Task[None] | None = None
         try:
             request = self._task_requests[python_task_id]
+            if request.mode == "hybrid_v0":
+                await self._run_hybrid_task(python_task_id, request)
+                return
             cmd = self._command_factory(request)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -196,6 +202,38 @@ class QueryTaskManager:
             if heartbeat is not None:
                 heartbeat.cancel()
 
+    async def _run_hybrid_task(self, python_task_id: str, request: QueryTaskRequest) -> None:
+        if self._hybrid_answer_runner is None:
+            raise RuntimeError("hybrid_v0 task runner is not configured")
+        await self._update_task(
+            python_task_id,
+            task_status="running",
+            progress_stage="running",
+            process_alive=True,
+            started_at=utc_now(),
+            last_heartbeat_at=utc_now(),
+            latest_logs=["started hybrid_v0 query task"],
+        )
+        result = self._hybrid_answer_runner(request)
+        if inspect.isawaitable(result):
+            result = await result
+        raw_answer = str(getattr(result, "answer", "") or "")
+        resolved_answer = resolve_answer_citations(raw_answer, request.data_dir)
+        hybrid_sources = _serialize_hybrid_sources(list(getattr(result, "sources", []) or []))
+        response_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else hybrid_sources
+        await self._update_task(
+            python_task_id,
+            task_status="success",
+            progress_stage="done",
+            process_alive=False,
+            latest_logs=["started hybrid_v0 query task", "finished hybrid_v0 query task"],
+            result_text=resolved_answer.display_text,
+            sources=response_sources,
+            error_message=None,
+            return_code=0,
+            finished_at=utc_now(),
+        )
+
     def _resolve_data_dir(self, data_dir_uri: str | None) -> Path | None:
         if not data_dir_uri:
             return None
@@ -247,3 +285,29 @@ class QueryTaskManager:
 
 def _serialize_sources(sources: list[QueryCitationSource]) -> list[dict[str, Any]]:
     return [source.to_dict() for source in sources]
+
+
+def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:
+    serialized: list[dict[str, Any]] = []
+    for index, source in enumerate(sources, start=1):
+        raw_metadata = getattr(source, "metadata", {}) or {}
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        ref = str(getattr(source, "ref", "") or metadata.get("ref") or "").strip()
+        text = str(getattr(source, "text", "") or metadata.get("text") or "").strip()
+        source_name = str(getattr(source, "source", "") or metadata.get("source") or "hybrid_v0").strip()
+        rank = metadata.get("rank")
+        serialized.append(
+            {
+                "rank": int(rank) if isinstance(rank, int) else index,
+                "kind": "hybrid_v0",
+                "ref": ref,
+                "chunk_id": ref,
+                "document_key": ref,
+                "source_file": source_name,
+                "heading_path": metadata.get("heading_path") if isinstance(metadata, dict) else None,
+                "page_start": metadata.get("page_start") if isinstance(metadata, dict) else None,
+                "page_end": metadata.get("page_end") if isinstance(metadata, dict) else None,
+                "snippet": text,
+            }
+        )
+    return serialized
