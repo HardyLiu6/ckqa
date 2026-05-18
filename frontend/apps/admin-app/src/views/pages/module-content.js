@@ -1228,3 +1228,24 @@ function clampPercent(value) {
 
   return Math.min(100, Math.max(0, Math.round(value)))
 }
+
+/**
+ * GraphRAG workflow key 到中文标签的字典。
+ * 用于 BuildStepIndex 渲染当前阶段名；百分比与阶段顺序均来自后端 indexProgress，不在前端做权重计算。
+ */
+export const INDEX_STAGE_LABELS = {
+  load_input_documents: '加载输入文档',
+  create_base_text_units: '创建文本单元',
+  create_final_documents: '生成文档索引',
+  extract_graph: '抽取知识图谱',
+  finalize_graph: '图谱后处理',
+  extract_covariates: '抽取协变量',
+  create_communities: '构建社区',
+  create_final_text_units: '生成最终文本单元',
+  create_community_reports: '生成社区报告',
+  generate_text_embeddings: '生成文本嵌入',
+}
+
+export function resolveIndexStageLabel(key) {
+  return INDEX_STAGE_LABELS[key] ?? key ?? '准备中'
+}
