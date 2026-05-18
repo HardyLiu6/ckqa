@@ -9,9 +9,10 @@ import {
 } from '../src/views/qa/qa-mode-model.js'
 
 test('问答模式只暴露智能推荐和后端真实支持的模式', () => {
-  assert.deepEqual(BACKEND_QA_MODES, ['basic', 'local', 'global', 'drift'])
+  assert.deepEqual(BACKEND_QA_MODES, ['basic', 'local', 'global', 'drift', 'hybrid_v0'])
   assert.equal(SMART_QA_MODE, 'smart')
   assert.ok(QA_MODE_OPTIONS.some((option) => option.value === SMART_QA_MODE))
+  assert.ok(QA_MODE_OPTIONS.some((option) => option.value === 'hybrid_v0'))
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'full'), false)
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'hybrid'), false)
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'auto'), false)
@@ -46,8 +47,14 @@ test('智能推荐将探索关联类问题路由到 drift', () => {
 })
 
 test('手动选择模式时直接使用该后端模式', () => {
-  const result = resolveQaMode('请解释死锁', 'local')
+  const result = resolveQaMode('请解释死锁', 'hybrid_v0')
 
-  assert.equal(result.mode, 'local')
+  assert.equal(result.mode, 'hybrid_v0')
   assert.equal(result.fromSmart, false)
+})
+
+test('智能推荐默认不自动路由到 hybrid_v0', () => {
+  const result = resolveQaMode('什么是死锁？', SMART_QA_MODE)
+
+  assert.notEqual(result.mode, 'hybrid_v0')
 })

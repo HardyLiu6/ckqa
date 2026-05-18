@@ -1,5 +1,5 @@
 export const SMART_QA_MODE = 'smart'
-export const BACKEND_QA_MODES = ['basic', 'local', 'global', 'drift']
+export const BACKEND_QA_MODES = ['basic', 'local', 'global', 'drift', 'hybrid_v0']
 
 export const QA_MODE_OPTIONS = [
   {
@@ -31,6 +31,12 @@ export const QA_MODE_OPTIONS = [
     label: '探索扩展',
     shortLabel: 'Drift',
     description: '适合关联、延伸和开放探索',
+  },
+  {
+    value: 'hybrid_v0',
+    label: '混合检索 Beta',
+    shortLabel: 'Hybrid',
+    description: '融合快速检索与证据校验，适合手动深查',
   },
 ]
 
