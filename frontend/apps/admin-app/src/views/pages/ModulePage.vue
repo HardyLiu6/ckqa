@@ -179,6 +179,23 @@ const actionState = ref('idle')
 const actionSnapshot = ref(null)
 const activeOperationKey = ref('')
 const activeOperationTargetId = ref('')
+// 索引按钮按下的时间戳；仅在客户端使用，刷新页面后丢失，BuildStepIndex 自带 0 秒兜底
+const indexStartedAtMs = ref(0)
+// 每秒触发一次让 elapsed/百分比 computed 重新计算
+const elapsedTickToken = ref(0)
+let elapsedTickTimer = null
+function startElapsedTick() {
+  stopElapsedTick()
+  elapsedTickTimer = setInterval(() => {
+    elapsedTickToken.value += 1
+  }, 1000)
+}
+function stopElapsedTick() {
+  if (elapsedTickTimer) {
+    clearInterval(elapsedTickTimer)
+    elapsedTickTimer = null
+  }
+}
 const parseStreamSnapshots = ref({})
 const smokeQuestion = ref(DEFAULT_SMOKE_QUESTION)
 const smokeQuestionEdited = ref(false)
@@ -500,11 +517,20 @@ const primaryHeroButtonClass = computed(() => [
   route.name === 'course-detail' ? 'ckqa-el-button--secondary' : 'ckqa-el-button--primary',
 ])
 const primaryHeroButtonType = computed(() => route.name === 'course-detail' ? 'default' : 'primary')
-const operationFeedback = computed(() => resolveOperationFeedback(
-  activeOperationKey.value,
-  actionState.value,
-  actionSnapshot.value,
-))
+const operationFeedback = computed(() => {
+  void elapsedTickToken.value
+  const baseSnapshot = actionSnapshot.value && typeof actionSnapshot.value === 'object'
+    ? { ...actionSnapshot.value }
+    : null
+  if (baseSnapshot && indexStartedAtMs.value > 0 && activeOperationKey.value === 'index-build') {
+    baseSnapshot.elapsedSeconds = Math.max(0, Math.round((Date.now() - indexStartedAtMs.value) / 1000))
+  }
+  return resolveOperationFeedback(
+    activeOperationKey.value,
+    actionState.value,
+    baseSnapshot,
+  )
+})
 const materialOperationFeedback = computed(() => (
   operationFeedback.value?.scope === 'material' ? operationFeedback.value : null
 ))
@@ -2590,7 +2616,11 @@ async function navigateAfterBuildRunAction(buildRunId, nextQuery = null) {
 async function runKnowledgeBaseIndex() {
   const indexStep = config.value.workflowSteps?.find((step) => step.key === 'index')
 
-  if (indexStep?.status !== 'ready' || actionRunning.value) {
+  // 允许 ready（首次）和 done/failed（重建）触发；正在跑则直接 return
+  if (actionRunning.value) {
+    return
+  }
+  if (!['ready', 'done', 'failed'].includes(indexStep?.status)) {
     return
   }
 
@@ -2608,6 +2638,8 @@ async function runKnowledgeBaseIndex() {
   cancelLongTask()
   activeOperationKey.value = 'index-build'
   actionSnapshot.value = null
+  indexStartedAtMs.value = Date.now()
+  startElapsedTick()
   activeLongTaskController = createLongTaskController({
     trigger: ({ signal }) => createBuildRunIndexRun(buildRunId, {}, { post: (url, payload) => http.post(url, payload, { signal }) }),
     poll: ({ signal }) => getBuildRun(buildRunId, { get: (url) => http.get(url, { signal }) }),
@@ -2615,7 +2647,14 @@ async function runKnowledgeBaseIndex() {
     isFailed: (snapshot) => normalizeRunState(snapshot?.status) === 'failed',
     onState: (state, snapshot) => {
       actionState.value = state
-      actionSnapshot.value = snapshot ?? null
+      const enriched = snapshot && typeof snapshot === 'object' ? { ...snapshot } : {}
+      if (indexStartedAtMs.value > 0) {
+        enriched.elapsedSeconds = Math.max(0, Math.round((Date.now() - indexStartedAtMs.value) / 1000))
+      }
+      actionSnapshot.value = enriched
+      if (['success', 'failed'].includes(state)) {
+        stopElapsedTick()
+      }
     },
     onSuccess: async () => {
       await navigateAfterBuildRunAction(buildRunId, resolveBuildStepQuery(route.query, 'qa_check'))
@@ -2951,6 +2990,7 @@ onBeforeUnmount(() => {
   cancelLongTask()
   closeAllMaterialParseStreams()
   stopPromptTunePolling()
+  stopElapsedTick()
 })
 </script>
 
@@ -3996,6 +4036,8 @@ onBeforeUnmount(() => {
         @prompt-tune-trigger="handlePromptTuneTrigger"
         @prompt-tune-retry="handlePromptTuneRetry"
         @prompt-tune-regenerate="handlePromptTuneRegenerate"
+        @start-index="runKnowledgeBaseIndex"
+        @rebuild-index="runKnowledgeBaseIndex"
       />
     </div>
 
