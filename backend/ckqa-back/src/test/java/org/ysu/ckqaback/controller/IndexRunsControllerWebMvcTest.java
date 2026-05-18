@@ -43,6 +43,7 @@ class IndexRunsControllerWebMvcTest {
         IndexRunResponse response = IndexRunResponse.of(
                 18L,
                 5L,
+                null,
                 "graphrag",
                 "graphrag-20260421153000",
                 "running",

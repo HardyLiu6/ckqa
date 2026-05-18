@@ -13,6 +13,7 @@ public class IndexRunResponse {
 
     private final Long id;
     private final Long knowledgeBaseId;
+    private final Long buildRunId;
     private final String engine;
     private final String indexVersion;
     private final String status;
@@ -23,6 +24,7 @@ public class IndexRunResponse {
     private IndexRunResponse(
             Long id,
             Long knowledgeBaseId,
+            Long buildRunId,
             String engine,
             String indexVersion,
             String status,
@@ -32,6 +34,7 @@ public class IndexRunResponse {
     ) {
         this.id = id;
         this.knowledgeBaseId = knowledgeBaseId;
+        this.buildRunId = buildRunId;
         this.engine = engine;
         this.indexVersion = indexVersion;
         this.status = status;
@@ -43,6 +46,7 @@ public class IndexRunResponse {
     public static IndexRunResponse of(
             Long id,
             Long knowledgeBaseId,
+            Long buildRunId,
             String engine,
             String indexVersion,
             String status,
@@ -50,13 +54,14 @@ public class IndexRunResponse {
             LocalDateTime finishedAt,
             String runMetadata
     ) {
-        return new IndexRunResponse(id, knowledgeBaseId, engine, indexVersion, status, startedAt, finishedAt, runMetadata);
+        return new IndexRunResponse(id, knowledgeBaseId, buildRunId, engine, indexVersion, status, startedAt, finishedAt, runMetadata);
     }
 
     public static IndexRunResponse fromEntity(IndexRuns indexRun) {
         return of(
                 indexRun.getId(),
                 indexRun.getKnowledgeBaseId(),
+                indexRun.getBuildRunId(),
                 indexRun.getEngine(),
                 indexRun.getIndexVersion(),
                 indexRun.getStatus(),

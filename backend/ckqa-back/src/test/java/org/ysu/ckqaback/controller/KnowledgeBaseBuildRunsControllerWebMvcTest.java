@@ -108,7 +108,7 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
     @Test
     void shouldCreateBuildRunIndexRun() throws Exception {
         given(indexWorkflowService.createBuildRunIndexRun(Mockito.eq(27L), any(BuildRunIndexRequest.class)))
-                .willReturn(IndexRunResponse.of(18L, 5L, "graphrag", "graphrag-20260505150000", "success", null, null, "{}"));
+                .willReturn(IndexRunResponse.of(18L, 5L, 27L, "graphrag", "graphrag-20260505150000", "success", null, null, "{}"));
 
         mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/27/index-runs")
                         .contentType(MediaType.APPLICATION_JSON)
