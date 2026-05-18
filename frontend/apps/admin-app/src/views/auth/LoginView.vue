@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-vue-next'
-import { ElMessage } from 'element-plus'
+import { ElCollapseTransition, ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 
 import HumanCheck from '../../components/auth/HumanCheck.vue'
@@ -22,6 +22,46 @@ const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const submitError = ref('')
+
+// 表单 ref，用于触发 el-form 的 validate / clearValidate
+const loginFormRef = ref(null)
+
+// 邮箱基础校验：和 backend 保持一致使用宽松规则，仅限制基本格式
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// 验证码：4-8 位纯数字（后端目前是 6 位，这里给一个宽松上限）
+const EMAIL_CODE_PATTERN = /^\d{4,8}$/
+
+const loginRules = {
+  username: [
+    { required: true, message: '请输入账号或用户名', trigger: ['blur', 'change'] },
+    { min: 2, max: 64, message: '账号长度需在 2 - 64 位之间', trigger: ['blur', 'change'] },
+  ],
+  password: [
+    { required: true, message: '请输入登录密码', trigger: ['blur', 'change'] },
+    { min: 6, max: 128, message: '密码长度需在 6 - 128 位之间', trigger: ['blur', 'change'] },
+  ],
+  email: [
+    { required: true, message: '请输入注册邮箱', trigger: ['blur', 'change'] },
+    {
+      validator: (_rule, value, callback) => {
+        if (!value) return callback()
+        if (!EMAIL_PATTERN.test(String(value).trim())) {
+          return callback(new Error('请输入正确的邮箱地址'))
+        }
+        callback()
+      },
+      trigger: ['blur', 'change'],
+    },
+  ],
+  code: [
+    { required: true, message: '请输入邮箱收到的验证码', trigger: ['blur', 'change'] },
+    {
+      pattern: EMAIL_CODE_PATTERN,
+      message: '验证码应为 4 - 8 位数字',
+      trigger: ['blur', 'change'],
+    },
+  ],
+}
 
 // Turnstile site key（前端环境变量；为空时 HumanCheck 走开发态占位）
 const turnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY || '').trim()
@@ -89,20 +129,18 @@ function clearRememberedCredentials() {
 // 默认账号优先级：localStorage 持久化 > LOGIN_PRESETS[0]
 const remembered = readRememberedCredentials()
 const activePreset = ref(LOGIN_PRESETS[0].role)
-const form = reactive({
+// 统一表单模型：账号密码 + 邮箱验证码字段共享同一个 model，便于 el-form 校验
+const loginForm = reactive({
   username: remembered?.username ?? LOGIN_PRESETS[0].username,
   password: remembered?.password ?? LOGIN_PRESETS[0].password,
+  email: '',
+  code: '',
 })
 const rememberMe = ref(Boolean(remembered))
 
 // 登录方式 tab：password / email
 const loginMethod = ref('password')
 
-// 邮箱登录表单
-const emailForm = reactive({
-  email: '',
-  code: '',
-})
 const emailCodeSending = ref(false)
 const emailCooldown = ref(0)
 let emailCooldownTimer = null
@@ -133,26 +171,32 @@ const activePresetDetail = computed(() =>
 function applyPreset(preset) {
   activePreset.value = preset.role
   const matchingExisting = LOGIN_PRESETS.find(
-    (p) => p.username === form.username && p.password === form.password,
+    (p) => p.username === loginForm.username && p.password === loginForm.password,
   )
   if (matchingExisting) {
-    form.username = preset.username
-    form.password = preset.password
+    loginForm.username = preset.username
+    loginForm.password = preset.password
   }
   submitError.value = ''
 }
 
 async function submitPasswordLogin() {
   submitError.value = ''
+  // 提交前仅校验当前 tab 的字段
+  try {
+    await loginFormRef.value?.validateField?.(['username', 'password'])
+  } catch {
+    return
+  }
   loading.value = true
   try {
     await authStore.login({
-      username: form.username,
-      password: form.password,
+      username: loginForm.username,
+      password: loginForm.password,
       turnstileToken: turnstileToken.value,
     })
     if (rememberMe.value) {
-      writeRememberedCredentials(form.username, form.password)
+      writeRememberedCredentials(loginForm.username, loginForm.password)
     } else {
       clearRememberedCredentials()
     }
@@ -167,14 +211,16 @@ async function submitPasswordLogin() {
 
 async function handleSendCode() {
   if (emailCooldown.value > 0 || emailCodeSending.value) return
-  if (!emailForm.email?.trim()) {
-    ElMessage.warning('请先输入邮箱')
+  // 仅校验"邮箱"字段
+  try {
+    await loginFormRef.value?.validateField?.(['email'])
+  } catch {
     return
   }
   emailCodeSending.value = true
   try {
     await sendEmailLoginCode({
-      email: emailForm.email.trim().toLowerCase(),
+      email: loginForm.email.trim().toLowerCase(),
       turnstileToken: turnstileToken.value,
     })
     ElMessage.success('验证码已发送，请检查邮箱')
@@ -190,11 +236,16 @@ async function handleSendCode() {
 
 async function submitEmailLogin() {
   submitError.value = ''
+  try {
+    await loginFormRef.value?.validateField?.(['email', 'code'])
+  } catch {
+    return
+  }
   loading.value = true
   try {
     await authStore.loginByEmail({
-      email: emailForm.email,
-      code: emailForm.code,
+      email: loginForm.email,
+      code: loginForm.code,
       turnstileToken: turnstileToken.value,
     })
     router.replace(resolveRedirect())
@@ -219,9 +270,15 @@ function resolveRedirect() {
   return typeof redirect === 'string' && redirect.startsWith('/app') ? redirect : '/app/dashboard'
 }
 
-watch(loginMethod, () => {
+watch(loginMethod, (next) => {
   // 切换登录方式时清空错误，避免上一种方式的报错残留
   submitError.value = ''
+  // 收起的字段保留模型值即可，但清掉它的校验态，避免动画过程中残留红色错误
+  if (next === 'password') {
+    loginFormRef.value?.clearValidate?.(['email', 'code'])
+  } else {
+    loginFormRef.value?.clearValidate?.(['username', 'password'])
+  }
 })
 
 onMounted(() => {
@@ -335,99 +392,124 @@ onMounted(() => {
           </button>
         </div>
 
-        <!-- 角色 preset（仅密码模式） -->
-        <div v-if="loginMethod === 'password'" class="login-preset" role="tablist" aria-label="测试身份切换">
-          <button
-            v-for="preset in LOGIN_PRESETS"
-            :key="preset.role"
-            type="button"
-            role="tab"
-            class="login-preset__tab"
-            :class="{ 'is-active': activePreset === preset.role }"
-            :aria-selected="activePreset === preset.role"
-            @click="applyPreset(preset)"
+        <!-- 角色 preset（仅密码模式，带收缩动画） -->
+        <el-collapse-transition>
+          <div
+            v-show="loginMethod === 'password'"
+            class="login-preset"
+            role="tablist"
+            aria-label="测试身份切换"
+            :inert="loginMethod !== 'password' ? '' : null"
           >
-            <strong>{{ preset.label }}</strong>
-            <small>{{ preset.description }}</small>
-          </button>
-        </div>
+            <button
+              v-for="preset in LOGIN_PRESETS"
+              :key="preset.role"
+              type="button"
+              role="tab"
+              class="login-preset__tab"
+              :class="{ 'is-active': activePreset === preset.role }"
+              :aria-selected="activePreset === preset.role"
+              :tabindex="loginMethod === 'password' ? 0 : -1"
+              @click="applyPreset(preset)"
+            >
+              <strong>{{ preset.label }}</strong>
+              <small>{{ preset.description }}</small>
+            </button>
+          </div>
+        </el-collapse-transition>
 
-        <form class="login-form" @submit.prevent="handleSubmit">
-          <!-- 密码登录 -->
-          <template v-if="loginMethod === 'password'">
-            <label class="login-field">
-              <span class="login-field__label">账号 / 用户名</span>
-              <el-input
-                v-model.trim="form.username"
-                size="large"
-                autocomplete="username"
-                placeholder="例如：admin.heqh"
-              >
-                <template #prefix>
-                  <UserRound :size="16" aria-hidden="true" />
-                </template>
-              </el-input>
-            </label>
-            <label class="login-field">
-              <span class="login-field__label">密码</span>
-              <el-input
-                v-model="form.password"
-                size="large"
-                autocomplete="current-password"
-                show-password
-                type="password"
-                placeholder="请输入登录密码"
-              >
-                <template #prefix>
-                  <KeyRound :size="16" aria-hidden="true" />
-                </template>
-              </el-input>
-            </label>
-          </template>
-
-          <!-- 邮箱验证码登录 -->
-          <template v-else>
-            <label class="login-field">
-              <span class="login-field__label">注册邮箱</span>
-              <el-input
-                v-model.trim="emailForm.email"
-                size="large"
-                type="email"
-                autocomplete="email"
-                placeholder="example@your-domain.com"
-              >
-                <template #prefix>
-                  <Mail :size="16" aria-hidden="true" />
-                </template>
-              </el-input>
-            </label>
-            <label class="login-field">
-              <span class="login-field__label">验证码</span>
-              <div class="login-field__email-row">
+        <el-form
+          ref="loginFormRef"
+          :model="loginForm"
+          :rules="loginRules"
+          class="login-form"
+          hide-required-asterisk
+          label-position="top"
+          @submit.prevent="handleSubmit"
+        >
+          <!-- 密码登录字段（带收缩动画） -->
+          <el-collapse-transition>
+            <div
+              v-show="loginMethod === 'password'"
+              class="login-form__pane"
+              :inert="loginMethod !== 'password' ? '' : null"
+            >
+              <el-form-item prop="username" label="账号 / 用户名" class="login-field">
                 <el-input
-                  v-model.trim="emailForm.code"
+                  v-model.trim="loginForm.username"
                   size="large"
-                  inputmode="numeric"
-                  maxlength="8"
-                  placeholder="6 位数字验证码"
+                  autocomplete="username"
+                  placeholder="例如：admin.heqh"
                 >
                   <template #prefix>
-                    <ShieldCheck :size="16" aria-hidden="true" />
+                    <UserRound :size="16" aria-hidden="true" />
                   </template>
                 </el-input>
-                <el-button
-                  type="primary"
-                  plain
-                  class="login-send-code"
-                  :loading="emailCodeSending"
-                  :disabled="emailCooldown > 0 || emailCodeSending"
-                  @click="handleSendCode"
+              </el-form-item>
+              <el-form-item prop="password" label="密码" class="login-field">
+                <el-input
+                  v-model="loginForm.password"
+                  size="large"
+                  autocomplete="current-password"
+                  show-password
+                  type="password"
+                  placeholder="请输入登录密码"
                 >
-                  {{ emailCooldown > 0 ? `${emailCooldown}s` : '发送验证码' }}
-                </el-button>
-              </div>
-            </label>
-          </template>
+                  <template #prefix>
+                    <KeyRound :size="16" aria-hidden="true" />
+                  </template>
+                </el-input>
+              </el-form-item>
+            </div>
+          </el-collapse-transition>
+
+          <!-- 邮箱验证码登录字段（带收缩动画） -->
+          <el-collapse-transition>
+            <div
+              v-show="loginMethod === 'email'"
+              class="login-form__pane"
+              :inert="loginMethod !== 'email' ? '' : null"
+            >
+              <el-form-item prop="email" label="注册邮箱" class="login-field">
+                <el-input
+                  v-model.trim="loginForm.email"
+                  size="large"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="example@your-domain.com"
+                >
+                  <template #prefix>
+                    <Mail :size="16" aria-hidden="true" />
+                  </template>
+                </el-input>
+              </el-form-item>
+              <el-form-item prop="code" label="验证码" class="login-field">
+                <div class="login-field__email-row">
+                  <el-input
+                    v-model.trim="loginForm.code"
+                    size="large"
+                    inputmode="numeric"
+                    maxlength="8"
+                    placeholder="6 位数字验证码"
+                  >
+                    <template #prefix>
+                      <ShieldCheck :size="16" aria-hidden="true" />
+                    </template>
+                  </el-input>
+                  <el-button
+                    type="primary"
+                    plain
+                    class="login-send-code"
+                    :loading="emailCodeSending"
+                    :disabled="emailCooldown > 0 || emailCodeSending"
+                    @click="handleSendCode"
+                  >
+                    {{ emailCooldown > 0 ? `${emailCooldown}s` : '发送验证码' }}
+                  </el-button>
+                </div>
+              </el-form-item>
+            </div>
+          </el-collapse-transition>
 
           <!-- 人机验证 -->
           <HumanCheck
@@ -436,20 +518,26 @@ onMounted(() => {
             @verified="onHumanVerified"
           />
 
-          <!-- 密码模式特有：记住密码 + 忘记密码 -->
-          <div v-if="loginMethod === 'password'" class="login-form__row">
-            <label class="login-remember">
-              <el-checkbox v-model="rememberMe">记住密码 7 天</el-checkbox>
-            </label>
-            <button
-              type="button"
-              class="login-help-link"
-              title="本期忘记密码暂未上线，请联系管理员重置或使用邮箱验证码登录"
-              @click.prevent="loginMethod = 'email'"
+          <!-- 密码模式特有：记住密码 + 忘记密码（带收缩动画） -->
+          <el-collapse-transition>
+            <div
+              v-show="loginMethod === 'password'"
+              class="login-form__row"
+              :inert="loginMethod !== 'password' ? '' : null"
             >
-              忘记密码？
-            </button>
-          </div>
+              <label class="login-remember">
+                <el-checkbox v-model="rememberMe">记住密码 7 天</el-checkbox>
+              </label>
+              <button
+                type="button"
+                class="login-help-link"
+                title="本期忘记密码暂未上线，请联系管理员重置或使用邮箱验证码登录"
+                @click.prevent="loginMethod = 'email'"
+              >
+                忘记密码？
+              </button>
+            </div>
+          </el-collapse-transition>
 
           <p v-if="submitError" class="login-form__error" role="alert">
             {{ submitError }}
@@ -465,7 +553,7 @@ onMounted(() => {
             <ArrowRight class="button-icon" :size="16" aria-hidden="true" />
             {{ loginMethod === 'email' ? '验证并登录' : '进入控制台' }}
           </el-button>
-        </form>
+        </el-form>
 
         <footer class="login-card__footer">
           <span>当前身份：</span>
@@ -965,9 +1053,33 @@ onMounted(() => {
   display: grid;
   gap: 14px;
 }
+.login-form__pane {
+  display: grid;
+  gap: 14px;
+}
 .login-field {
   display: grid;
   gap: 6px;
+}
+/* 把 el-form-item 改造成与原 label-on-top 风格一致 */
+.login-field :deep(.el-form-item__label) {
+  padding: 0 0 4px;
+  line-height: 1.4;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(30, 27, 75, 0.66);
+}
+.login-field.el-form-item {
+  margin-bottom: 0;
+}
+.login-field :deep(.el-form-item__content) {
+  line-height: 1.4;
+}
+.login-field :deep(.el-form-item__error) {
+  position: static;
+  padding-top: 4px;
+  font-size: 11px;
+  color: var(--ckqa-danger, #dc2626);
 }
 .login-field__label {
   font-size: 12px;
