@@ -103,4 +103,15 @@ class QaQuestionRewriteServiceTest {
         assertThat(rewriteService.rewrite("global", "它是什么意思？", context).rewriteApplied()).isFalse();
         assertThat(rewriteService.rewrite("drift", "它是什么意思？", context).rewriteApplied()).isFalse();
     }
+
+    @Test
+    void shouldRewriteHybridFollowUpWithRecentTopic() {
+        QaContextAssembly context = new QaContextAssembly("recent", "最近对话", "1-2", 20, "死锁", "1-2");
+
+        QaQuestionRewriteResult result = rewriteService.rewrite("hybrid_v0", "它和资源分配图有什么关系？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它和资源分配图有什么关系？");
+        assertThat(result.rewriteApplied()).isTrue();
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+    }
 }

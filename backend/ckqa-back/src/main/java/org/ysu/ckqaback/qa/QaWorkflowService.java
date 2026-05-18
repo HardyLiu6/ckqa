@@ -8,6 +8,8 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
@@ -46,6 +48,7 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 问答业务工作流服务。
@@ -67,6 +70,7 @@ public class QaWorkflowService {
     private final QaQuestionRewriteService qaQuestionRewriteService = new QaQuestionRewriteService();
     private QaSessionSummariesService qaSessionSummariesService;
     private QaRetrievalHitsService qaRetrievalHitsService;
+    private CourseAccessService courseAccessService;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -83,21 +87,69 @@ public class QaWorkflowService {
         this.qaRetrievalHitsService = qaRetrievalHitsService;
     }
 
+    @Autowired(required = false)
+    public void setCourseAccessService(CourseAccessService courseAccessService) {
+        this.courseAccessService = courseAccessService;
+    }
+
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
+        return createSessionInternal(request, null, false);
+    }
+
+    public QaSessionResponse createSession(CreateQaSessionRequest request, AuthenticatedUser currentUser) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        if (request.getUserId() != null && !currentUser.id().equals(request.getUserId())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能为当前登录用户创建问答会话");
+        }
+        if ("smoke".equals(request.getSessionType())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "学生端不能创建 smoke 会话");
+        }
+        request.setUserId(currentUser.id());
+        request.setSessionType("formal");
+        return createSessionInternal(request, currentUser.userCode(), true);
+    }
+
+    private QaSessionResponse createSessionInternal(CreateQaSessionRequest request, String actorUserCode, boolean requireFormalKnowledgeBase) {
         usersService.getRequiredById(request.getUserId());
         Long lockedIndexRunId = null;
         LocalDateTime indexLockedAt = null;
-        if (request.getKnowledgeBaseId() != null) {
-            KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(request.getKnowledgeBaseId());
-            if (!"smoke".equals(request.getSessionType())) {
-                lockedIndexRunId = knowledgeBase.getActiveIndexRunId();
-                if (lockedIndexRunId == null) {
-                    throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
-                }
-                indexLockedAt = LocalDateTime.now(SHANGHAI_ZONE);
+        boolean formal = !"smoke".equals(request.getSessionType());
+        if (formal && request.getKnowledgeBaseId() == null) {
+            throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT, "正式问答会话必须绑定知识库");
+        }
+        if (request.getKnowledgeBaseId() == null) {
+            if (requireFormalKnowledgeBase) {
+                throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT, "正式问答会话必须绑定知识库");
             }
+            return QaSessionResponse.fromEntity(qaSessionsService.createSession(request, lockedIndexRunId, indexLockedAt));
+        }
+
+        KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(request.getKnowledgeBaseId());
+        if (formal) {
+            validateFormalSessionScope(request, knowledgeBase, actorUserCode);
+            lockedIndexRunId = knowledgeBase.getActiveIndexRunId();
+            if (lockedIndexRunId == null) {
+                throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
+            }
+            indexLockedAt = LocalDateTime.now(SHANGHAI_ZONE);
         }
         return QaSessionResponse.fromEntity(qaSessionsService.createSession(request, lockedIndexRunId, indexLockedAt));
+    }
+
+    private void validateFormalSessionScope(CreateQaSessionRequest request, KnowledgeBases knowledgeBase, String actorUserCode) {
+        String requestCourseId = request.getCourseId();
+        String knowledgeBaseCourseId = knowledgeBase.getCourseId();
+        if (!StringUtils.hasText(requestCourseId)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "正式问答会话必须指定课程");
+        }
+        if (!Objects.equals(requestCourseId, knowledgeBaseCourseId)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "知识库不属于当前课程");
+        }
+        if (courseAccessService != null) {
+            courseAccessService.assertCourseReadable(requestCourseId, actorUserCode);
+        }
     }
 
     public ApiPageData<QaSessionResponse> listSessions(Long currentUserId, QaSessionQueryRequest request) {
@@ -119,10 +171,21 @@ public class QaWorkflowService {
     }
 
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request) {
-        return sendMessage(sessionId, request, null);
+        return sendMessage(sessionId, request, null, null);
+    }
+
+    public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request, AuthenticatedUser currentUser) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        return sendMessage(sessionId, request, null, currentUser.userCode());
     }
 
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request, Long indexRunIdOverride) {
+        return sendMessage(sessionId, request, indexRunIdOverride, null);
+    }
+
+    private QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request, Long indexRunIdOverride, String actorUserCode) {
         QaSessions session = qaSessionsService.getRequiredById(sessionId);
         if (!"active".equals(session.getStatus())) {
             throw new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT);
@@ -132,6 +195,7 @@ public class QaWorkflowService {
         }
 
         KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(session.getKnowledgeBaseId());
+        validateSessionScopeStillReadable(session, knowledgeBase, actorUserCode);
         Long indexRunId = resolveSessionIndexRunId(session, knowledgeBase, indexRunIdOverride);
 
         List<QaMessages> history = qaMessagesService.listBySessionId(sessionId);
@@ -189,6 +253,16 @@ public class QaWorkflowService {
                 context.strategy(),
                 ContextSizeEstimateResponse.of(context.charCount())
         );
+    }
+
+    private void validateSessionScopeStillReadable(QaSessions session, KnowledgeBases knowledgeBase, String actorUserCode) {
+        if (StringUtils.hasText(session.getCourseId()) && StringUtils.hasText(knowledgeBase.getCourseId())
+                && !Objects.equals(session.getCourseId(), knowledgeBase.getCourseId())) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "会话绑定课程与知识库不一致");
+        }
+        if (courseAccessService != null && StringUtils.hasText(actorUserCode) && StringUtils.hasText(session.getCourseId())) {
+            courseAccessService.assertCourseReadable(session.getCourseId(), actorUserCode);
+        }
     }
 
     private Long resolveSessionIndexRunId(QaSessions session, KnowledgeBases knowledgeBase, Long indexRunIdOverride) {

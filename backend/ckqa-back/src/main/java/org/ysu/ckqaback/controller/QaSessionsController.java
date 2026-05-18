@@ -54,10 +54,13 @@ public class QaSessionsController {
             HttpServletRequest servletRequest
     ) {
         AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
-        if (currentUser != null && currentUser.id() != null && !currentUser.id().equals(request.getUserId())) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        if (request.getUserId() != null && !currentUser.id().equals(request.getUserId())) {
             throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能为当前登录用户创建问答会话");
         }
-        return ApiResponseUtils.success(qaWorkflowService.createSession(request));
+        return ApiResponseUtils.success(qaWorkflowService.createSession(request, currentUser));
     }
 
     @GetMapping
@@ -75,8 +78,9 @@ public class QaSessionsController {
             @Valid @RequestBody CreateQaMessageRequest request,
             HttpServletRequest servletRequest
     ) {
-        qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
-        return ApiResponseUtils.success(qaWorkflowService.sendMessage(id, request));
+        AuthenticatedUser currentUser = currentUser(servletRequest);
+        qaWorkflowService.ensureSessionOwner(id, currentUser.id());
+        return ApiResponseUtils.success(qaWorkflowService.sendMessage(id, request, currentUser));
     }
 
     @GetMapping("/{id}")
@@ -108,10 +112,14 @@ public class QaSessionsController {
     }
 
     private Long currentUserId(HttpServletRequest servletRequest) {
+        return currentUser(servletRequest).id();
+    }
+
+    private AuthenticatedUser currentUser(HttpServletRequest servletRequest) {
         AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
         if (currentUser == null || currentUser.id() == null) {
             throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
         }
-        return currentUser.id();
+        return currentUser;
     }
 }

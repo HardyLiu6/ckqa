@@ -26,7 +26,7 @@ public class QaContextAssembler {
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history, QaContextSummary summary) {
         QaContextSummary safeSummary = summary == null ? null : summary;
-        if (!"basic".equals(mode) && !"local".equals(mode)) {
+        if (!supportsRecentContext(mode)) {
             return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary) : none();
         }
 
@@ -65,6 +65,10 @@ public class QaContextAssembler {
         }
 
         return buildRecentAssembly(selectRecentMessages(usableHistory), usableHistory, "recent");
+    }
+
+    private boolean supportsRecentContext(String mode) {
+        return "basic".equals(mode) || "local".equals(mode) || "hybrid_v0".equals(mode);
     }
 
     private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, List<QaMessages> topicHistory, String strategy) {

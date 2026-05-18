@@ -83,22 +83,112 @@ class QaSessionsControllerWebMvcTest {
     }
 
     @Test
-    void shouldCreateSession() throws Exception {
+    void shouldCreateFormalSessionForAuthenticatedStudent() throws Exception {
         QaSessionResponse response = QaSessionResponse.of(
                 5L,
                 "qa-0001",
                 7L,
                 "os",
                 3L,
-                "smoke",
+                "formal",
                 "操作系统问答",
                 "active",
                 null,
                 LocalDateTime.of(2026, 4, 21, 12, 0)
         );
-        given(qaWorkflowService.createSession(any())).willReturn(response);
+        given(qaWorkflowService.createSession(any(), eq(authenticatedStudent()))).willReturn(response);
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": 7,
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3,
+                                  "title": "操作系统问答"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(5))
+                .andExpect(jsonPath("$.data.sessionType").value("formal"))
+                .andExpect(jsonPath("$.data.status").value("active"));
+
+        then(qaWorkflowService).should().createSession(argThat(request -> "formal".equals(request.getSessionType())), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldCreateFormalSessionWhenBodyUserIdIsOmitted() throws Exception {
+        QaSessionResponse response = QaSessionResponse.of(
+                5L,
+                "qa-0001",
+                7L,
+                "os",
+                3L,
+                "formal",
+                "操作系统问答",
+                "active",
+                null,
+                LocalDateTime.of(2026, 4, 21, 12, 0)
+        );
+        given(qaWorkflowService.createSession(any(), eq(authenticatedStudent()))).willReturn(response);
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3,
+                                  "title": "操作系统问答"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(5));
+
+        then(qaWorkflowService).should().createSession(argThat(request -> request.getUserId() == null), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldRequireAuthWhenCreatingSession() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": 7,
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3,
+                                  "title": "操作系统问答"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("请先登录"));
+    }
+
+    @Test
+    void shouldRejectCreateSessionWhenBodyUserDoesNotMatchCurrentUser() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": 99,
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3,
+                                  "title": "操作系统问答"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("只能为当前登录用户创建问答会话"));
+    }
+
+    @Test
+    void shouldRejectSmokeSessionFromStudentEndpoint() throws Exception {
+        given(qaWorkflowService.createSession(any(), eq(authenticatedStudent())))
+                .willThrow(new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "学生端不能创建 smoke 会话"));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -109,12 +199,8 @@ class QaSessionsControllerWebMvcTest {
                                   "title": "操作系统问答"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.id").value(5))
-                .andExpect(jsonPath("$.data.sessionType").value("smoke"))
-                .andExpect(jsonPath("$.data.status").value("active"));
-
-        then(qaWorkflowService).should().createSession(argThat(request -> "smoke".equals(request.getSessionType())));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("学生端不能创建 smoke 会话"));
     }
 
     @Test
@@ -131,7 +217,7 @@ class QaSessionsControllerWebMvcTest {
                 1800L,
                 "drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"
         );
-        given(qaWorkflowService.sendMessage(eq(5L), any())).willReturn(response);
+        given(qaWorkflowService.sendMessage(eq(5L), any(), eq(authenticatedStudent()))).willReturn(response);
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
@@ -154,7 +240,7 @@ class QaSessionsControllerWebMvcTest {
 
     @Test
     void shouldReturnQaSessionNotActiveWhenSendingMessageToClosedSession() throws Exception {
-        given(qaWorkflowService.sendMessage(eq(5L), any()))
+        given(qaWorkflowService.sendMessage(eq(5L), any(), eq(authenticatedStudent())))
                 .willThrow(new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT));
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
@@ -174,7 +260,7 @@ class QaSessionsControllerWebMvcTest {
 
     @Test
     void shouldReturnKnowledgeBaseNotReadyWhenSessionKnowledgeBaseHasNoActiveIndex() throws Exception {
-        given(qaWorkflowService.sendMessage(eq(5L), any()))
+        given(qaWorkflowService.sendMessage(eq(5L), any(), eq(authenticatedStudent())))
                 .willThrow(new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT));
 
         mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")

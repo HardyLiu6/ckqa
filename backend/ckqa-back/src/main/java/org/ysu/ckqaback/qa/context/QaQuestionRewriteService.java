@@ -6,7 +6,7 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import java.util.regex.Pattern;
 
 /**
- * Phase 1 规则式追问改写，只处理明显指代。
+ * 追问改写服务：优先使用 LLM 生成独立检索问题，失败时回退规则式明显指代补全。
  */
 public class QaQuestionRewriteService {
 
@@ -27,8 +27,8 @@ public class QaQuestionRewriteService {
 
     public QaQuestionRewriteResult rewrite(String mode, String originalQuestion, QaContextAssembly context) {
         String question = originalQuestion == null ? "" : originalQuestion.trim();
-        if (!"basic".equals(mode) && !"local".equals(mode)) {
-            return noRewrite(question, "当前模式不启用 Phase 1 追问改写");
+        if (!supportsRewrite(mode)) {
+            return noRewrite(question, "当前模式不启用追问改写");
         }
         if (shouldTryLlmRewrite(question, context)) {
             QaQuestionRewriteResult llmResult = tryLlmRewrite(question, context);
@@ -112,6 +112,10 @@ public class QaQuestionRewriteService {
     private int maxChars() {
         int configured = rewriteProperties == null ? 0 : rewriteProperties.getMaxChars();
         return configured > 0 ? configured : MAX_RETRIEVAL_QUERY_CHARS;
+    }
+
+    private boolean supportsRewrite(String mode) {
+        return "basic".equals(mode) || "local".equals(mode) || "hybrid_v0".equals(mode);
     }
 
     private double minConfidence() {

@@ -70,6 +70,20 @@ class QaContextAssemblerTest {
     }
 
     @Test
+    void shouldUseRecentForHybridFollowUp() {
+        QaContextAssembler assembler = new QaContextAssembler();
+
+        QaContextAssembly assembly = assembler.assemble("hybrid_v0", "它和资源分配图有什么关系？", List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。")
+        ));
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.contextApplied()).isTrue();
+        assertThat(assembly.latestTopic()).isEqualTo("死锁");
+    }
+
+    @Test
     void shouldUseSummaryRecentWhenActiveSummaryExistsForBasicFollowUp() {
         QaContextAssembler assembler = new QaContextAssembler();
 
