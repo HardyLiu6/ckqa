@@ -933,6 +933,26 @@ async function loadKnowledgeBaseBuild(route, query, services) {
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
   const buildRunBlock = createBuildRunBlock(buildRunResult, buildRunId)
   const buildRun = buildRunBlock.item ?? null
+  // 按 buildRunId 过滤出本次构建的索引运行（成功 + 失败重试都在内），按 startedAt 倒排
+  // 继承 indexRunsBlock 的错误态——接口失败不会被吞成 empty
+  const buildRunIndexRunsBlock = (() => {
+    if (indexRunsBlock.state !== 'success') {
+      return { ...indexRunsBlock, items: [] }
+    }
+    const filtered = (indexRunsBlock.items ?? [])
+      .filter((item) => item.buildRunId != null && String(item.buildRunId) === String(buildRunId))
+      .sort((a, b) => {
+        const ta = a.startedAt ? new Date(a.startedAt).getTime() : 0
+        const tb = b.startedAt ? new Date(b.startedAt).getTime() : 0
+        const taSafe = Number.isNaN(ta) ? 0 : ta
+        const tbSafe = Number.isNaN(tb) ? 0 : tb
+        return tbSafe - taSafe
+      })
+    return {
+      state: filtered.length > 0 ? 'success' : 'empty',
+      items: filtered,
+    }
+  })()
   // 选择来源仲裁：
   //   1. 如果 URL 显式带了 materialIds / selectionKey / 旧版 materialId，使用 URL（用户编辑态优先）
   //   2. URL 没有显式选择时，回退到 buildRun.selectedMaterialIds（页面初次加载或刷新时使用）
@@ -986,6 +1006,7 @@ async function loadKnowledgeBaseBuild(route, query, services) {
       },
       materials: materialsBlock,
       indexRuns: indexRunsBlock,
+      buildRunIndexRuns: buildRunIndexRunsBlock,
       buildRun: buildRunBlock,
       selection,
       parseTasks: {
@@ -2157,6 +2178,10 @@ function mapIndexRunItem(indexRun = {}) {
   const id = indexRun.id ?? indexRun.indexRunId
   return {
     id,
+    buildRunId: indexRun.buildRunId ?? null,
+    status: indexRun.status ?? null,
+    startedAt: indexRun.startedAt ?? null,
+    finishedAt: indexRun.finishedAt ?? null,
     title: id ? `索引运行 #${id}` : '索引运行',
     meta: indexRun.status ?? '-',
     detail: indexRun.createdAt ?? indexRun.startedAt ?? indexRun.updatedAt ?? '',
