@@ -102,6 +102,30 @@ export function resolveQaMode(question, selectedMode = SMART_QA_MODE, options = 
   }
 }
 
+export function resolveQaModeRecommendation(localResolution, recommendation) {
+  const fallback = localResolution ?? {
+    mode: 'basic',
+    fromSmart: true,
+    reason: '问题更像事实或定义查询，使用 basic 快速回答。',
+  }
+  const recommendedMode = recommendation?.recommendedMode
+  if (!isBackendQaMode(recommendedMode)) {
+    return {
+      ...fallback,
+      fromServer: false,
+    }
+  }
+  return {
+    mode: recommendedMode,
+    fromSmart: true,
+    fromServer: true,
+    reason: recommendation.reasonText || `服务端智能推荐为 ${recommendedMode} 模式。`,
+    confidence: recommendation.confidence,
+    routeReasons: Array.isArray(recommendation.reasons) ? recommendation.reasons : [],
+    fallbackMode: recommendation.fallbackMode,
+  }
+}
+
 export function shouldUseHybridBeta(question, options = {}) {
   if (!options.allowHybridBeta) {
     return false

@@ -24,6 +24,10 @@ export function createQaApi(client = { del, get, patch, post }) {
     listQaMessages(sessionId) {
       return client.get(`/qa-sessions/${encodeURIComponent(sessionId)}/messages`)
     },
+    recommendQaMode(payload) {
+      const { userId, ...safePayload } = payload ?? {}
+      return client.post('/qa-routing/recommend', safePayload)
+    },
     warmupHybrid(payload) {
       return client.post('/qa-sessions/hybrid-warmup', payload)
     },
@@ -46,6 +50,7 @@ export const updateQaSession = qaApi.updateQaSession
 export const sendQaMessage = qaApi.sendQaMessage
 export const getQaTask = qaApi.getQaTask
 export const listQaMessages = qaApi.listQaMessages
+export const recommendQaMode = qaApi.recommendQaMode
 export const warmupHybrid = qaApi.warmupHybrid
 export const submitQaFeedback = qaApi.submitQaFeedback
 export const deleteQaFeedback = qaApi.deleteQaFeedback

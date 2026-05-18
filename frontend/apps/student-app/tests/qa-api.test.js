@@ -61,6 +61,14 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.sendQaMessage(8, { mode: 'basic', content: '什么是进程？' })
   await api.getQaTask(8, 99)
   await api.listQaMessages(8)
+  await api.recommendQaMode({
+    courseId: 'os',
+    knowledgeBaseId: 2,
+    sessionId: 8,
+    question: '它和资源分配图有什么关系？',
+    betaHybridEnabled: true,
+    userId: 999,
+  })
   await api.warmupHybrid({ courseId: 'os', knowledgeBaseId: 2 })
   await api.submitQaFeedback({
     messageId: 33,
@@ -107,6 +115,18 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     {
       method: 'get',
       url: '/qa-sessions/8/messages',
+      config: {},
+    },
+    {
+      method: 'post',
+      url: '/qa-routing/recommend',
+      data: {
+        courseId: 'os',
+        knowledgeBaseId: 2,
+        sessionId: 8,
+        question: '它和资源分配图有什么关系？',
+        betaHybridEnabled: true,
+      },
       config: {},
     },
     {

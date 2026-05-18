@@ -6,6 +6,7 @@ import {
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
   resolveQaMode,
+  resolveQaModeRecommendation,
 } from '../src/views/qa/qa-mode-model.js'
 
 test('问答模式只暴露智能推荐和后端真实支持的模式', () => {
@@ -69,4 +70,30 @@ test('Beta 开启后智能推荐可受控路由到 hybrid_v0', () => {
   assert.equal(result.mode, 'hybrid_v0')
   assert.equal(result.fromSmart, true)
   assert.match(result.reason, /Beta|混合检索/)
+})
+
+test('服务端智能推荐结果优先于本地智能推荐兜底', () => {
+  const local = resolveQaMode('进程同步和数据库事务之间有什么关联？', SMART_QA_MODE)
+  const result = resolveQaModeRecommendation(local, {
+    recommendedMode: 'hybrid_v0',
+    reasonText: '服务端检测到证据融合需求',
+    confidence: 0.82,
+    reasons: ['evidence_relation_intent'],
+  })
+
+  assert.equal(result.mode, 'hybrid_v0')
+  assert.equal(result.fromSmart, true)
+  assert.equal(result.fromServer, true)
+  assert.match(result.reason, /服务端/)
+})
+
+test('服务端返回未知模式时使用本地智能推荐兜底', () => {
+  const local = resolveQaMode('什么是死锁？', SMART_QA_MODE)
+  const result = resolveQaModeRecommendation(local, {
+    recommendedMode: 'auto',
+    reasonText: '非法模式',
+  })
+
+  assert.equal(result.mode, 'basic')
+  assert.equal(result.fromServer, false)
 })

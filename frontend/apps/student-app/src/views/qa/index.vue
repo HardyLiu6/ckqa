@@ -23,6 +23,7 @@ import {
   getQaSession,
   getQaTask,
   listQaMessages,
+  recommendQaMode,
   sendQaMessage,
   submitQaFeedback,
   updateQaSession,
@@ -37,6 +38,7 @@ import {
   SMART_QA_MODE,
   getModeOption,
   resolveQaMode,
+  resolveQaModeRecommendation,
 } from './qa-mode-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
 import {
@@ -250,7 +252,7 @@ async function send() {
     selectedCourseId.value = course.courseId
     selectedKnowledgeBaseId.value = String(knowledgeBase.id)
 
-    const modeResolution = resolveQaMode(text, selectedMode.value, qaModeResolveOptions())
+    const modeResolution = await resolveModeForSend(text, course, knowledgeBase)
     if (modeResolution.mode === 'hybrid_v0') {
       await ensureHybridWarmup(course, knowledgeBase)
     }
@@ -286,6 +288,30 @@ function qaModeResolveOptions() {
   return {
     allowHybridBeta: allowHybridSmartBeta.value,
     hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
+  }
+}
+
+async function resolveModeForSend(text, course, knowledgeBase) {
+  const localResolution = resolveQaMode(text, selectedMode.value, qaModeResolveOptions())
+  if (selectedMode.value !== SMART_QA_MODE) {
+    return localResolution
+  }
+  try {
+    const recommendation = await recommendQaMode({
+      courseId: course.courseId,
+      knowledgeBaseId: knowledgeBase.id,
+      sessionId: activeSession.value?.id,
+      question: text,
+      betaHybridEnabled: allowHybridSmartBeta.value,
+      hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
+    })
+    return resolveQaModeRecommendation(localResolution, recommendation)
+  } catch (error) {
+    return {
+      ...localResolution,
+      fromServer: false,
+      reason: `服务端智能推荐暂不可用，已使用本地规则：${localResolution.reason}`,
+    }
   }
 }
 
