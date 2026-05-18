@@ -66,6 +66,8 @@ public class QaSummaryClient implements QaSummaryClientPort {
 
     @Override
     public QaSummaryResult summarize(String previousSummary, String conversationText) {
+        long startedNanos = System.nanoTime();
+        int inputCharCount = lengthOf(previousSummary) + lengthOf(conversationText);
         try {
             ChatCompletionResponse response = request()
                     .contentType(MediaType.APPLICATION_JSON)
@@ -74,11 +76,17 @@ public class QaSummaryClient implements QaSummaryClientPort {
                     .body(ChatCompletionResponse.class);
             String content = extractContent(response);
             if (!StringUtils.hasText(content)) {
-                return QaSummaryResult.failure("模型返回空摘要");
+                return QaSummaryResult.failure("模型返回空摘要", model, elapsedMs(startedNanos), inputCharCount);
             }
-            return QaSummaryResult.success(truncate(content.trim(), maxChars));
+            String summary = truncate(content.trim(), maxChars);
+            return QaSummaryResult.success(summary, model, elapsedMs(startedNanos), inputCharCount, summary.length());
         } catch (RestClientException | IllegalArgumentException exception) {
-            return QaSummaryResult.failure(exception.getMessage() == null ? "摘要模型调用失败" : exception.getMessage());
+            return QaSummaryResult.failure(
+                    exception.getMessage() == null ? "摘要模型调用失败" : exception.getMessage(),
+                    model,
+                    elapsedMs(startedNanos),
+                    inputCharCount
+            );
         }
     }
 
@@ -139,6 +147,14 @@ public class QaSummaryClient implements QaSummaryClientPort {
             return "http://127.0.0.1:3000/v1";
         }
         return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+    }
+
+    private int lengthOf(String value) {
+        return value == null ? 0 : value.length();
+    }
+
+    private long elapsedMs(long startedNanos) {
+        return Math.max(0L, (System.nanoTime() - startedNanos) / 1_000_000L);
     }
 
     private static RestClient.Builder withTimeout(RestClient.Builder builder, Duration timeout) {

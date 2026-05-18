@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -246,6 +247,56 @@ class QaSessionsControllerWebMvcTest {
                                 """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("请先登录"));
+    }
+
+    @Test
+    void shouldPatchSessionTitleAndArchiveStatusForOwner() throws Exception {
+        QaSessionResponse response = QaSessionResponse.of(
+                5L,
+                "qa-0001",
+                7L,
+                "os",
+                3L,
+                17L,
+                LocalDateTime.of(2026, 5, 17, 10, 0),
+                "formal",
+                "死锁复习",
+                "archived",
+                LocalDateTime.of(2026, 5, 17, 10, 5),
+                LocalDateTime.of(2026, 5, 17, 10, 0)
+        );
+        given(qaWorkflowService.updateSession(eq(5L), any(), eq(authenticatedStudent()))).willReturn(response);
+
+        mockMvc.perform(patch(ApiPaths.QA_SESSIONS + "/5")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "死锁复习",
+                                  "status": "archived"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("死锁复习"))
+                .andExpect(jsonPath("$.data.status").value("archived"));
+
+        then(qaWorkflowService).should().updateSession(eq(5L), argThat(request ->
+                "死锁复习".equals(request.getTitle()) && "archived".equals(request.getStatus())
+        ), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldRejectInvalidSessionPatchStatus() throws Exception {
+        mockMvc.perform(patch(ApiPaths.QA_SESSIONS + "/5")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "deleted"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("参数校验失败"));
     }
 
     @Test

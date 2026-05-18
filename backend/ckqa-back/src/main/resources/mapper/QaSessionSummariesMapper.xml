@@ -10,13 +10,18 @@
         <result column="source_message_count" property="sourceMessageCount" />
         <result column="status" property="status" />
         <result column="error_message" property="errorMessage" />
+        <result column="model" property="model" />
+        <result column="duration_ms" property="durationMs" />
+        <result column="input_char_count" property="inputCharCount" />
+        <result column="output_char_count" property="outputCharCount" />
         <result column="created_at" property="createdAt" />
         <result column="updated_at" property="updatedAt" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id, session_id, summary_text, summary_until_sequence_no, source_message_count,
-        status, error_message, created_at, updated_at
+        status, error_message, model, duration_ms, input_char_count, output_char_count,
+        created_at, updated_at
     </sql>
 
 </mapper>

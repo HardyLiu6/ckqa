@@ -184,6 +184,10 @@ public class QaSessionSummaryService {
         summary.setSessionId(sessionId);
         summary.setSummaryUntilSequenceNo(window.lastSequenceNo());
         summary.setSourceMessageCount(window.messages().size());
+        summary.setModel(result.model());
+        summary.setDurationMs(result.durationMs());
+        summary.setInputCharCount(result.inputCharCount());
+        summary.setOutputCharCount(result.outputCharCount());
         summary.setCreatedAt(now);
         summary.setUpdatedAt(now);
         if (result.success()) {

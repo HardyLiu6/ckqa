@@ -9,6 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.ysu.ckqaback.api.ApiPageData;
@@ -29,6 +30,7 @@ import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -100,6 +102,15 @@ public class QaSessionsController {
     ) {
         qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.getSession(id));
+    }
+
+    @PatchMapping("/{id}")
+    public ApiResponse<QaSessionResponse> updateSession(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody UpdateQaSessionRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaWorkflowService.updateSession(id, request, currentUser(servletRequest)));
     }
 
     @GetMapping("/{id}/messages")

@@ -43,6 +43,18 @@ public class QaSessionSummaries implements Serializable {
     @TableField("error_message")
     private String errorMessage;
 
+    @TableField("model")
+    private String model;
+
+    @TableField("duration_ms")
+    private Long durationMs;
+
+    @TableField("input_char_count")
+    private Integer inputCharCount;
+
+    @TableField("output_char_count")
+    private Integer outputCharCount;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
 

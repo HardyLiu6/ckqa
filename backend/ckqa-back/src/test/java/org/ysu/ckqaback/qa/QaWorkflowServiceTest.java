@@ -22,6 +22,7 @@ import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
+import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
@@ -97,6 +98,78 @@ class QaWorkflowServiceTest {
                     assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
                 })
                 .hasMessageContaining("只能访问自己的问答会话");
+    }
+
+    @Test
+    void shouldRenameAndArchiveOwnedFormalSession() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        session.setSessionType("formal");
+        session.setStatus("active");
+        session.setTitle("旧标题");
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(qaSessionsService.updateSession(5L, "死锁复习", "archived")).willAnswer(invocation -> {
+            session.setTitle(invocation.getArgument(1));
+            session.setStatus(invocation.getArgument(2));
+            return session;
+        });
+
+        UpdateQaSessionRequest request = new UpdateQaSessionRequest();
+        request.setTitle("死锁复习");
+        request.setStatus("archived");
+
+        var response = workflowService.updateSession(5L, request, authenticatedStudent());
+
+        assertThat(response.getTitle()).isEqualTo("死锁复习");
+        assertThat(response.getStatus()).isEqualTo("archived");
+        then(qaSessionsService).should().updateSession(5L, "死锁复习", "archived");
+    }
+
+    @Test
+    void shouldRejectRestoreWhenCoursePermissionIsLost() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setStatus("archived");
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        doThrow(new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "无课程访问权限"))
+                .when(courseAccessService).assertCourseReadable("os", "student.zhouzh");
+
+        UpdateQaSessionRequest request = new UpdateQaSessionRequest();
+        request.setStatus("active");
+
+        assertThatThrownBy(() -> workflowService.updateSession(5L, request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(exception.getMessage()).contains("无课程访问权限");
+                });
+
+        then(qaSessionsService).should(never()).updateSession(anyLong(), any(), any());
     }
 
     @Test

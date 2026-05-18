@@ -39,6 +39,7 @@ import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
@@ -221,6 +222,24 @@ public class QaWorkflowService {
         if (!currentUserId.equals(session.getUserId())) {
             throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能访问自己的问答会话");
         }
+    }
+
+    public QaSessionResponse updateSession(Long sessionId, UpdateQaSessionRequest request, AuthenticatedUser currentUser) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        QaSessions session = qaSessionsService.getRequiredById(sessionId);
+        if (!currentUser.id().equals(session.getUserId())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能修改自己的问答会话");
+        }
+        if (!"formal".equals(session.getSessionType())) {
+            throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "学生端只能修改正式问答会话");
+        }
+        if ("active".equals(request.getStatus()) && courseAccessService != null && StringUtils.hasText(session.getCourseId())) {
+            courseAccessService.assertCourseReadable(session.getCourseId(), currentUser.userCode());
+        }
+        QaSessions updated = qaSessionsService.updateSession(sessionId, request.getTitle(), request.getStatus());
+        return QaSessionResponse.fromEntity(updated);
     }
 
     public QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request) {

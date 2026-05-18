@@ -108,6 +108,23 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
         baseMapper.update(null, wrapper);
     }
 
+    @Override
+    public QaSessions updateSession(Long id, String title, String status) {
+        QaSessions current = getRequiredById(id);
+        String nextTitle = StringUtils.hasText(title) ? title.trim() : current.getTitle();
+        String nextStatus = StringUtils.hasText(status) ? status.trim() : current.getStatus();
+        LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(QaSessions::getId, id)
+                .set(QaSessions::getTitle, nextTitle)
+                .set(QaSessions::getStatus, nextStatus)
+                .set(QaSessions::getUpdatedAt, LocalDateTime.now(SHANGHAI_ZONE));
+        baseMapper.update(null, wrapper);
+        current.setTitle(nextTitle);
+        current.setStatus(nextStatus);
+        current.setUpdatedAt(LocalDateTime.now(SHANGHAI_ZONE));
+        return current;
+    }
+
     private String generateSessionCode() {
         String code;
         do {

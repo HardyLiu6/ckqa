@@ -55,6 +55,10 @@ class QaSessionSummaryServiceTest {
                         && summary.getSummaryUntilSequenceNo() == 12
                         && summary.getSourceMessageCount() == 12
                         && summary.getSummaryText().equals("本会话已讨论死锁定义和资源分配图。")
+                        && "deepseek-v4-flash".equals(summary.getModel())
+                        && summary.getDurationMs() == 120L
+                        && summary.getInputCharCount() > 0
+                        && summary.getOutputCharCount() == 17
         ));
     }
 
@@ -210,7 +214,7 @@ class QaSessionSummaryServiceTest {
             if (responseText == null) {
                 return QaSummaryResult.failure("summary client failed");
             }
-            return QaSummaryResult.success(responseText);
+            return QaSummaryResult.success(responseText, "deepseek-v4-flash", 120L, conversationText.length(), responseText.length());
         }
 
         int callCount() {
