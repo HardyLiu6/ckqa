@@ -3,7 +3,8 @@ import { createApiError } from '../../api/client.js'
 export const LONG_TASK_LIMITS = {
   parse: { intervalMs: 10000, timeoutMs: 900000 },
   export: { intervalMs: 5000, timeoutMs: 300000 },
-  index: { intervalMs: 30000, timeoutMs: 1800000 },
+  // GraphRAG 索引真实耗时 1-2 小时；轮询 5s 一次让进度条平滑推进，deadline 给 130min 冗余
+  index: { intervalMs: 5000, timeoutMs: 7800000 },
 }
 
 export function shouldStartFallback(error) {
