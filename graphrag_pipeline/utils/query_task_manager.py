@@ -95,7 +95,7 @@ class QueryTaskManager:
         retrieval_query: str | None = None,
         generation_context: str | None = None,
     ) -> QueryTaskSnapshot:
-        data_dir = self._resolve_data_dir(data_dir_uri)
+        data_dir = self.resolve_data_dir_uri(data_dir_uri)
         effective_retrieval_query = (retrieval_query or prompt).strip()
         python_task_id = f"qt_{utc_now():%Y%m%d_%H%M%S}_{next(self._counter):03d}"
         snapshot = QueryTaskSnapshot(
@@ -235,20 +235,15 @@ class QueryTaskManager:
         )
 
     def _resolve_data_dir(self, data_dir_uri: str | None) -> Path | None:
+        return self.resolve_data_dir_uri(data_dir_uri)
+
+    def resolve_data_dir_uri(self, data_dir_uri: str | None) -> Path | None:
         if not data_dir_uri:
             return None
         if self._build_runs_root is None:
             raise ValueError("GRAPHRAG_BUILD_RUNS_ROOT 未配置")
 
-        data_dir_path = Path(data_dir_uri)
-        if data_dir_path.is_absolute():
-            raise ValueError("dataDirUri 超出允许的构建根目录")
-
-        root = self._build_runs_root.resolve()
-        resolved = (root / data_dir_path).resolve()
-        if root not in (resolved, *resolved.parents):
-            raise ValueError("dataDirUri 超出允许的构建根目录")
-        return resolved
+        return resolve_build_run_data_dir_uri(data_dir_uri, self._build_runs_root)
 
     async def _heartbeat_loop(self, python_task_id: str, process) -> None:
         while process.returncode is None:
@@ -295,11 +290,13 @@ def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:
         ref = str(getattr(source, "ref", "") or metadata.get("ref") or "").strip()
         text = str(getattr(source, "text", "") or metadata.get("text") or "").strip()
         source_name = str(getattr(source, "source", "") or metadata.get("source") or "hybrid_v0").strip()
+        source_type = _normalize_hybrid_source_type(source_name)
         rank = metadata.get("rank")
         serialized.append(
             {
                 "rank": int(rank) if isinstance(rank, int) else index,
-                "kind": "hybrid_v0",
+                "kind": source_type,
+                "source_type": source_type,
                 "ref": ref,
                 "chunk_id": ref,
                 "document_key": ref,
@@ -311,3 +308,26 @@ def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:
             }
         )
     return serialized
+
+
+def resolve_build_run_data_dir_uri(data_dir_uri: str, build_runs_root: str | Path) -> Path:
+    data_dir_path = Path(data_dir_uri)
+    if data_dir_path.is_absolute():
+        raise ValueError("dataDirUri 超出允许的构建根目录")
+
+    root = Path(build_runs_root).resolve()
+    resolved = (root / data_dir_path).resolve()
+    if root not in (resolved, *resolved.parents):
+        raise ValueError("dataDirUri 超出允许的构建根目录")
+    return resolved
+
+
+def _normalize_hybrid_source_type(source_name: str) -> str:
+    normalized = source_name.strip().casefold().replace("-", "_")
+    if "bm25" in normalized:
+        return "bm25"
+    if "basic" in normalized:
+        return "basic_citation"
+    if "fusion" in normalized or "fused" in normalized or "hybrid" in normalized:
+        return "fusion"
+    return "fusion"

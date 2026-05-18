@@ -330,10 +330,16 @@ async def _run_hybrid_v0_answer(prompt_or_request: str | QueryTaskRequest):
     if isinstance(prompt_or_request, QueryTaskRequest):
         prompt = prompt_or_request.retrieval_query or prompt_or_request.prompt
         output_dir = prompt_or_request.data_dir
+        generation_context = prompt_or_request.generation_context
     else:
         prompt = prompt_or_request
         output_dir = None
-    return await asyncio.to_thread(_get_hybrid_v0_orchestrator(output_dir).answer, prompt)
+        generation_context = None
+    return await asyncio.to_thread(
+        _get_hybrid_v0_orchestrator(output_dir).answer,
+        prompt,
+        generation_context,
+    )
 
 
 async def _run_hybrid_v0_query(prompt: str) -> str:
@@ -381,6 +387,10 @@ class QueryTaskCreateRequest(BaseModel):
 
     def effective_prompt(self) -> str:
         return (self.retrievalQuery or self.prompt or "").strip()
+
+
+class HybridWarmupRequest(BaseModel):
+    dataDirUri: str | None = None
 
 
 class ChatCompletionResponseChoice(BaseModel):
@@ -455,6 +465,24 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
     }
 
 
+def _hybrid_readiness_payload(data_dir, data_dir_uri: str | None) -> dict[str, object]:
+    resolved_output_dir = (data_dir or OUTPUT_DIR).resolve()
+    text_units_ready = (resolved_output_dir / "text_units.parquet").exists()
+    cached = str(resolved_output_dir) in _HYBRID_V0_ORCHESTRATORS
+    missing: list[str] = []
+    if not text_units_ready:
+        missing.append("text_units.parquet")
+    ready = text_units_ready and cached
+    return {
+        "ready": ready,
+        "status": "ready" if ready else "not_ready",
+        "dataDirUri": data_dir_uri,
+        "cached": cached,
+        "textUnitsReady": text_units_ready,
+        "missing": missing,
+    }
+
+
 def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
     """创建 FastAPI 应用，允许测试注入任务管理器。"""
     active_task_manager = task_manager or QUERY_TASK_MANAGER
@@ -508,6 +536,34 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
         if snapshot is None:
             raise HTTPException(status_code=404, detail="Query task not found")
         return JSONResponse(content=_serialize_task_snapshot(snapshot))
+
+    @app.post("/v1/hybrid-v0/warmup")
+    async def warmup_hybrid_v0(request: HybridWarmupRequest):
+        """预热 Hybrid v0 的本地索引与 BM25/orchestrator cache，不调用 One API。"""
+        try:
+            data_dir = active_task_manager.resolve_data_dir_uri(request.dataDirUri)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = _hybrid_readiness_payload(data_dir, request.dataDirUri)
+        if payload["textUnitsReady"]:
+            try:
+                _get_hybrid_v0_orchestrator(data_dir)
+            except FileNotFoundError:
+                return JSONResponse(content=payload)
+            payload = _hybrid_readiness_payload(data_dir, request.dataDirUri)
+            payload["cached"] = True
+            payload["ready"] = True
+            payload["status"] = "ready"
+        return JSONResponse(content=payload)
+
+    @app.get("/v1/hybrid-v0/readiness")
+    async def get_hybrid_v0_readiness(dataDirUri: str | None = None):
+        """查询 Hybrid v0 对指定 build-run 输出目录的本地可用性。"""
+        try:
+            data_dir = active_task_manager.resolve_data_dir_uri(dataDirUri)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content=_hybrid_readiness_payload(data_dir, dataDirUri))
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest):

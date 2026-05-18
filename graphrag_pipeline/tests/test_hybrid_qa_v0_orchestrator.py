@@ -163,6 +163,45 @@ def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_b
     graph_client.query_local.assert_not_called()
 
 
+def test_orchestrator_uses_generation_context_only_in_synthesis_prompt():
+    low_candidate = EvidenceCandidate(
+        source="bm25",
+        ref="tu1111111111",
+        text="资源分配图可以表示进程和资源之间的请求、分配关系。",
+        score=0.7,
+        layer=HybridLayer.LOW,
+    )
+    bm25 = MagicMock()
+    bm25.search.return_value = [low_candidate]
+    graph_client = MagicMock()
+    graph_client.query_basic.return_value = GraphRagDraft("basic", BASIC_LONG_ANSWER, 1.0)
+    guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
+    llm_complete = MagicMock(return_value="死锁和资源分配图有关。[Data: Hybrid(tu1111111111)]")
+    fusion = MagicMock(
+        return_value=FusedEvidencePack(
+            candidates=[low_candidate],
+            refs=["tu1111111111"],
+            source_counts={"bm25": 1},
+            fusion_debug=[],
+        )
+    )
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=guardrail,
+        llm_complete=llm_complete,
+        evidence_fusion=fusion,
+    )
+
+    orchestrator.answer("死锁和资源分配图有什么关系？", generation_context="最近对话：上一轮主题是死锁。")
+
+    bm25.search.assert_called_once_with("死锁和资源分配图有什么关系？", top_k=8)
+    graph_client.query_basic.assert_called_once_with("死锁和资源分配图有什么关系？")
+    synthesis_prompt = llm_complete.call_args.args[0]
+    assert "最近对话：上一轮主题是死锁。" in synthesis_prompt
+    assert "---CONVERSATION_CONTEXT---" in synthesis_prompt
+
+
 def test_orchestrator_does_not_use_local_when_synthesis_still_lacks_data_citation_by_default():
     low_candidate = EvidenceCandidate(
         source="bm25",

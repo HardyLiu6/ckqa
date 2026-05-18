@@ -81,6 +81,26 @@ def test_default_prompt_does_not_force_text_unit_citation_rewrites():
     assert "Text Unit Ref: d244f9016ac8abcdef" in prompt
 
 
+def test_generation_context_is_appended_and_truncated_for_synthesis_prompt(tmp_path):
+    template_path = tmp_path / "hybrid-template.txt"
+    template_path.write_text("LOW={low_layer_text}\nHIGH={high_layer_text}\nQ={question}", encoding="utf-8")
+    long_context = "上一轮讨论死锁和资源分配图。" + ("上下文" * 800)
+
+    prompt = build_hybrid_v0_prompt(
+        "它和资源分配图有什么关系？",
+        [],
+        [],
+        template_path=template_path,
+        generation_context=long_context,
+        max_generation_context_chars=40,
+    )
+
+    assert "---CONVERSATION_CONTEXT---" in prompt
+    assert "上一轮讨论死锁和资源分配图" in prompt
+    assert "Q=它和资源分配图有什么关系？" in prompt
+    assert "上下文" * 30 not in prompt
+
+
 def test_basic_injection_prompt_constrains_hybrid_refs_to_text_unit_refs():
     low_layer = [
         EvidenceCandidate(

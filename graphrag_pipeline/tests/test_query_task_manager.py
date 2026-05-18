@@ -17,7 +17,7 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from query_task_manager import QueryTaskManager
+from query_task_manager import QueryTaskManager, QueryTaskRequest
 
 
 def _python_cmd(code: str) -> list[str]:
@@ -43,7 +43,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(running.progress_stage, "running")
         self.assertIsNotNone(running.last_heartbeat_at)
 
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.15)
         finished = manager.get_snapshot(created.python_task_id)
         self.assertEqual(finished.task_status, "success")
         self.assertEqual(finished.progress_stage, "done")
@@ -118,7 +118,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         )
 
         created = await manager.create_task("global", "图谱主题")
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.25)
 
         snapshot = manager.get_snapshot(created.python_task_id)
         self.assertEqual(snapshot.task_status, "success")
@@ -139,7 +139,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             index_run_id=18,
             data_dir_uri="user_2/kb_5/build_27/index/output",
         )
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.25)
 
         snapshot = manager.get_snapshot(created.python_task_id)
         self.assertEqual(snapshot.task_status, "success")
@@ -176,6 +176,34 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.result_text, "hybrid ok")
         self.assertEqual(seen[0].retrieval_query, "独立检索问题")
         self.assertEqual(seen[0].data_dir, _PROJECT_ROOT / "runtime" / "kb-build-runs" / "user_2/kb_5/build_27/index/output")
+
+    async def test_hybrid_runner_receives_generation_context_without_cli(self):
+        seen: list[QueryTaskRequest] = []
+
+        async def hybrid_runner(request: QueryTaskRequest):
+            seen.append(request)
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": []})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task(
+            "hybrid_v0",
+            "它和资源分配图有什么关系？",
+            retrieval_query="死锁和资源分配图有什么关系？",
+            generation_context="最近对话：上一轮解释了死锁。",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(seen[0].retrieval_query, "死锁和资源分配图有什么关系？")
+        self.assertEqual(seen[0].generation_context, "最近对话：上一轮解释了死锁。")
 
     async def test_hybrid_result_text_uses_student_readable_source_marks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -225,6 +253,37 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("[Data:", snapshot.result_text)
             self.assertIn("[来源 1]", snapshot.result_text)
             self.assertEqual(snapshot.sources[0]["ref"], "156")
+            self.assertEqual(snapshot.sources[0]["source_type"], "graphrag_citation")
+
+    async def test_serializes_hybrid_source_type_for_bm25_evidence(self):
+        async def hybrid_runner(request):
+            source = type(
+                "EvidenceSource",
+                (),
+                {
+                    "ref": "tu-bm25-001",
+                    "source": "bm25-v6",
+                    "text": "资源分配图片段",
+                    "metadata": {"rank": 1},
+                },
+            )()
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": [source]})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task("hybrid_v0", "问题")
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.sources[0]["kind"], "bm25")
+        self.assertEqual(snapshot.sources[0]["source_type"], "bm25")
 
     async def test_rejects_task_data_dir_path_escape(self):
         manager = QueryTaskManager(

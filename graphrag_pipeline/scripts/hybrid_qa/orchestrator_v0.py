@@ -80,7 +80,7 @@ class HybridV0Orchestrator:
         self.citation_ref_resolver = citation_ref_resolver
         self.evidence_fusion = evidence_fusion or _fallback_fuse_bm25_only
 
-    def answer(self, question: str) -> HybridV0Answer:
+    def answer(self, question: str, generation_context: str | None = None) -> HybridV0Answer:
         started_at = time.perf_counter()
         classification = classify_question(question)
         low_candidates = self.bm25.search(question, top_k=self.bm25_top_k)
@@ -119,7 +119,7 @@ class HybridV0Orchestrator:
         synthesis_reason = fallback_reasons[0] if fallback_reasons else ""
         if fallback_reasons and not self.fallback_policy.disable_synthesis:
             synthesis_attempted = True
-            answer = self._complete(question, fused_candidates, high_candidates)
+            answer = self._complete(question, fused_candidates, high_candidates, generation_context)
             guardrail_result = self.guardrail(answer, [*fused_candidates, *high_candidates])
             synthesis_reasons = self._answer_policy_failure_reasons("synthesis", answer, fused_pack)
             fallback_reasons.extend(reason for reason in synthesis_reasons if reason not in fallback_reasons)
@@ -138,7 +138,7 @@ class HybridV0Orchestrator:
                     errors.append(local_draft.error)
                 if local_draft.answer.strip():
                     high_candidates.append(local_draft.as_candidate())
-                    answer = self._complete(question, fused_candidates, high_candidates)
+                    answer = self._complete(question, fused_candidates, high_candidates, generation_context)
                     guardrail_result = self.guardrail(answer, [*fused_candidates, *high_candidates])
 
         diagnostics = HybridDiagnostics(
@@ -165,8 +165,14 @@ class HybridV0Orchestrator:
         question: str,
         low_candidates: Sequence[EvidenceCandidate],
         high_candidates: Sequence[EvidenceCandidate],
+        generation_context: str | None = None,
     ) -> str:
-        prompt = build_hybrid_v0_prompt(question, low_candidates, high_candidates)
+        prompt = build_hybrid_v0_prompt(
+            question,
+            low_candidates,
+            high_candidates,
+            generation_context=generation_context,
+        )
         return self.llm_complete(prompt)
 
     @staticmethod

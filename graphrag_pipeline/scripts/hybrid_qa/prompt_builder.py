@@ -16,12 +16,23 @@ def build_hybrid_v0_prompt(
     low_layer: Sequence[EvidenceCandidate],
     high_layer: Sequence[EvidenceCandidate],
     template_path: Path = DEFAULT_TEMPLATE,
+    generation_context: str | None = None,
+    max_generation_context_chars: int = 1200,
 ) -> str:
     template = template_path.read_text(encoding="utf-8")
-    return template.format(
+    prompt = template.format(
         low_layer_text=_render_low_layer_evidence(low_layer),
         high_layer_text=_render_evidence(high_layer),
         question=question,
+    )
+    rendered_context = _render_generation_context(generation_context, max_generation_context_chars)
+    if not rendered_context:
+        return prompt
+    return (
+        f"{prompt.rstrip()}\n\n"
+        "---CONVERSATION_CONTEXT---\n"
+        f"{rendered_context}\n\n"
+        "上下文使用规则：仅用于理解追问指代，不得补充证据中没有的课程知识。"
     )
 
 
@@ -92,3 +103,15 @@ def _extract_heading_level(text: str) -> int | None:
     if not match:
         return None
     return int(match.group(1))
+
+
+def _render_generation_context(context: str | None, max_chars: int) -> str:
+    normalized = re.sub(r"\s+", " ", str(context or "")).strip()
+    if not normalized:
+        return ""
+    limit = max(max_chars, 0)
+    if not limit:
+        return ""
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: max(limit - 1, 0)].rstrip() + "…"

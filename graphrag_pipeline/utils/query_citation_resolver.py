@@ -32,7 +32,9 @@ class QueryCitationSource:
     snippet: str
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["source_type"] = self.kind
+        return payload
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +64,7 @@ def resolve_answer_citations(answer: str | None, output_dir: Path | str | None) 
         sources.append(
             QueryCitationSource(
                 rank=len(sources) + 1,
-                kind="source",
+                kind="graphrag_citation",
                 ref=ref,
                 chunk_id=str(row.get("id") or ""),
                 document_key=source_file or str(row.get("document_id") or ref),

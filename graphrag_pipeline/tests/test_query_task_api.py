@@ -11,12 +11,14 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import pandas as pd
 from fastapi import HTTPException
 from pydantic import ValidationError
 
@@ -26,7 +28,7 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from main import QueryTaskCreateRequest, _build_query_cmd, _resolve_query_response, create_app, format_response
+from main import HybridWarmupRequest, QueryTaskCreateRequest, _build_query_cmd, _resolve_query_response, create_app, format_response
 from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot
 
 
@@ -242,6 +244,63 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(snapshot.retrieval_query, "独立检索问题")
         self.assertEqual(snapshot.sources[0]["ref"], "tu-001")
         self.assertEqual(snapshot.sources[0]["snippet"], "死锁来源片段")
+
+    def test_hybrid_warmup_and_readiness_use_safe_build_run_data_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_runs_root = Path(temp_dir) / "runtime" / "kb-build-runs"
+            data_dir_uri = "user_2/kb_5/build_27/index/output"
+            output_dir = build_runs_root / data_dir_uri
+            output_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "id": "tu-1",
+                        "human_readable_id": 156,
+                        "text": "source_file: 操作系统教材. 死锁片段",
+                        "n_tokens": 10,
+                        "document_id": "doc-os",
+                    }
+                ]
+            ).to_parquet(output_dir / "text_units.parquet")
+
+            manager = QueryTaskManager(
+                command_factory=lambda request: ["should-not-run"],
+                env_factory=lambda request: {},
+                cwd=_PROJECT_ROOT,
+                build_runs_root=build_runs_root,
+            )
+            app = create_app(task_manager=manager)
+            warmup_endpoint = _get_route_endpoint(app, "/v1/hybrid-v0/warmup", "POST")
+            readiness_endpoint = _get_route_endpoint(app, "/v1/hybrid-v0/readiness", "GET")
+
+            with patch("main._get_hybrid_v0_orchestrator", return_value=object()) as warmup:
+                warmup_response = asyncio.run(warmup_endpoint(HybridWarmupRequest(dataDirUri=data_dir_uri)))
+
+            warmup_payload = json.loads(warmup_response.body)
+            self.assertTrue(warmup_payload["ready"])
+            self.assertEqual(warmup_payload["status"], "ready")
+            self.assertEqual(warmup_payload["dataDirUri"], data_dir_uri)
+            warmup.assert_called_once_with(output_dir.resolve())
+
+            readiness_response = asyncio.run(readiness_endpoint(dataDirUri=data_dir_uri))
+            readiness_payload = json.loads(readiness_response.body)
+            self.assertTrue(readiness_payload["textUnitsReady"])
+            self.assertIn(readiness_payload["status"], {"ready", "not_ready"})
+
+    def test_hybrid_readiness_rejects_path_escape(self):
+        manager = QueryTaskManager(
+            command_factory=lambda request: ["should-not-run"],
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            build_runs_root=_PROJECT_ROOT / "runtime" / "kb-build-runs",
+        )
+        app = create_app(task_manager=manager)
+        readiness_endpoint = _get_route_endpoint(app, "/v1/hybrid-v0/readiness", "GET")
+
+        with self.assertRaises(HTTPException) as context:
+            asyncio.run(readiness_endpoint(dataDirUri="../outside"))
+
+        self.assertEqual(context.exception.status_code, 400)
 
     def test_query_command_uses_current_python_module_invocation(self):
         cmd = _build_query_cmd(
