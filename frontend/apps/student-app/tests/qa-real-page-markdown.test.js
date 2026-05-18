@@ -11,6 +11,8 @@ test('真实问答页只对 assistant 消息使用受控 Markdown 组件', () =>
   assert.match(qaPageSource, /import QaMarkdownContent from '\.\/QaMarkdownContent\.vue'/)
   assert.match(qaPageSource, /<QaMarkdownContent :content="msg\.content" \/>/)
   assert.match(qaPageSource, /class="source-cards"/)
+  assert.match(qaPageSource, /class="source-type"/)
+  assert.match(qaPageSource, /sourceTypeLabel\(source\)/)
   assert.match(qaPageSource, /source\.snippet/)
   assert.match(qaPageSource, /<div class="msg-text">\{\{ msg\.content \}\}<\/div>/)
 })

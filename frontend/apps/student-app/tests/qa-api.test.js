@@ -52,6 +52,7 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.sendQaMessage(8, { mode: 'basic', content: '什么是进程？' })
   await api.getQaTask(8, 99)
   await api.listQaMessages(8)
+  await api.warmupHybrid({ courseId: 'os', knowledgeBaseId: 2 })
 
   assert.deepEqual(calls, [
     {
@@ -84,6 +85,12 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     {
       method: 'get',
       url: '/qa-sessions/8/messages',
+      config: {},
+    },
+    {
+      method: 'post',
+      url: '/qa-sessions/hybrid-warmup',
+      data: { courseId: 'os', knowledgeBaseId: 2 },
       config: {},
     },
   ])

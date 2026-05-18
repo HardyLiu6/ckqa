@@ -140,6 +140,7 @@ export function normalizeQaSources(sources) {
       rankPosition: Number(source.rankPosition ?? source.rank ?? index + 1),
       documentKey: source.documentKey ?? '',
       chunkId: source.chunkId ?? '',
+      sourceType: normalizeSourceType(source.sourceType ?? source.source_type ?? source.kind),
       sourceRef: source.sourceRef ?? source.ref ?? '',
       sourceFile: source.sourceFile ?? '',
       headingPath: source.headingPath ?? '',
@@ -148,6 +149,23 @@ export function normalizeQaSources(sources) {
       snippet: source.snippet ?? '',
     }))
     .filter((source) => source.sourceFile || source.headingPath || source.snippet || source.documentKey || source.chunkId)
+}
+
+export function normalizeSourceType(value) {
+  const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_')
+  if (normalized.includes('bm25')) {
+    return 'bm25'
+  }
+  if (normalized.includes('basic')) {
+    return 'basic_citation'
+  }
+  if (normalized.includes('graphrag') || normalized === 'source') {
+    return 'graphrag_citation'
+  }
+  if (normalized.includes('fusion') || normalized.includes('hybrid')) {
+    return 'fusion'
+  }
+  return normalized || 'unknown'
 }
 
 export function normalizeQaSession(session = {}) {

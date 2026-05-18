@@ -17,7 +17,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import { listCourses, listCourseKnowledgeBases } from '@/api/courses'
-import { createQaSession, getQaSession, getQaTask, listQaMessages, sendQaMessage } from '@/api/qa'
+import { createQaSession, getQaSession, getQaTask, listQaMessages, sendQaMessage, warmupHybrid } from '@/api/qa'
 import GlassCard from '@/components/common/GlassCard.vue'
 import ModuleTag from '@/components/common/ModuleTag.vue'
 import { useUserStore } from '@/stores/user'
@@ -55,9 +55,12 @@ const messages = ref([])
 const selectedCourseId = ref('')
 const selectedKnowledgeBaseId = ref('')
 const selectedMode = ref(SMART_QA_MODE)
+const allowHybridSmartBeta = ref(false)
 const input = ref(typeof route.query.topic === 'string' ? route.query.topic : '')
 const activeSession = ref(null)
 const pendingTask = ref(null)
+const hybridWarmupStatus = ref('idle')
+const hybridWarmupMessage = ref('')
 const loadingCourses = ref(false)
 const loadingKnowledgeBases = ref(false)
 const restoringSession = ref(false)
@@ -75,8 +78,23 @@ const selectedKnowledgeBase = computed(() => (
 const readyKnowledgeBases = computed(() => (
   knowledgeBases.value.filter((knowledgeBase) => knowledgeBase.activeIndexRunId != null)
 ))
-const modePreview = computed(() => resolveQaMode(input.value, selectedMode.value))
+const modePreview = computed(() => resolveQaMode(input.value, selectedMode.value, qaModeResolveOptions()))
 const activeModeOption = computed(() => getModeOption(modePreview.value.mode))
+const hybridWarmupText = computed(() => {
+  if (hybridWarmupStatus.value === 'warming') {
+    return '混合检索准备中'
+  }
+  if (hybridWarmupStatus.value === 'ready') {
+    return '混合检索已就绪'
+  }
+  if (hybridWarmupStatus.value === 'fallback') {
+    return '混合检索降级可用'
+  }
+  if (hybridWarmupStatus.value === 'not_ready') {
+    return '混合检索未就绪'
+  }
+  return ''
+})
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   isLegacyReadOnlySession(activeSession.value)
@@ -170,6 +188,8 @@ function resetConversation() {
   activeSession.value = null
   pendingTask.value = null
   messages.value = []
+  hybridWarmupStatus.value = 'idle'
+  hybridWarmupMessage.value = ''
 }
 
 async function send() {
@@ -207,7 +227,10 @@ async function send() {
     selectedCourseId.value = course.courseId
     selectedKnowledgeBaseId.value = String(knowledgeBase.id)
 
-    const modeResolution = resolveQaMode(text, selectedMode.value)
+    const modeResolution = resolveQaMode(text, selectedMode.value, qaModeResolveOptions())
+    if (modeResolution.mode === 'hybrid_v0') {
+      await ensureHybridWarmup(course, knowledgeBase)
+    }
     const session = await ensureSession(course, knowledgeBase, text)
     const submission = await sendQaMessage(session.id, {
       mode: modeResolution.mode,
@@ -233,6 +256,53 @@ async function send() {
     ElMessage.error(errorMessage.value)
   } finally {
     sending.value = false
+  }
+}
+
+function qaModeResolveOptions() {
+  return {
+    allowHybridBeta: allowHybridSmartBeta.value,
+    hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
+  }
+}
+
+async function handleModeSelect(mode) {
+  selectedMode.value = mode
+  if (mode === 'hybrid_v0' && selectedCourse.value && selectedKnowledgeBase.value) {
+    await ensureHybridWarmup(selectedCourse.value, selectedKnowledgeBase.value)
+  }
+}
+
+async function handleHybridBetaToggle() {
+  if (
+    allowHybridSmartBeta.value
+    && modePreview.value.mode === 'hybrid_v0'
+    && selectedCourse.value
+    && selectedKnowledgeBase.value
+  ) {
+    await ensureHybridWarmup(selectedCourse.value, selectedKnowledgeBase.value)
+  }
+}
+
+async function ensureHybridWarmup(course, knowledgeBase) {
+  if (!course?.courseId || !knowledgeBase?.id) {
+    return
+  }
+  if (hybridWarmupStatus.value === 'ready' || hybridWarmupStatus.value === 'warming') {
+    return
+  }
+  hybridWarmupStatus.value = 'warming'
+  hybridWarmupMessage.value = '正在预热本地混合检索索引'
+  try {
+    const result = await warmupHybrid({
+      courseId: course.courseId,
+      knowledgeBaseId: knowledgeBase.id,
+    })
+    hybridWarmupStatus.value = result?.ready ? 'ready' : 'not_ready'
+    hybridWarmupMessage.value = result?.message || (result?.ready ? '混合检索已就绪' : '混合检索准备未完成，可继续降级尝试')
+  } catch (error) {
+    hybridWarmupStatus.value = 'fallback'
+    hybridWarmupMessage.value = error?.message || '混合检索预热失败，将按懒加载降级尝试'
   }
 }
 
@@ -353,8 +423,7 @@ async function pollTask(sessionId, taskId) {
       if (detail.assistantMessage) {
         messages.value = upsertQaMessage(messages.value, detail.assistantMessage)
       } else {
-        const list = await listQaMessages(sessionId)
-        messages.value = list.map(normalizeQaMessage)
+        await refreshAssistantAfterEmptySuccess(sessionId, taskId)
       }
       statusMessage.value = '回答已生成'
       if (detail.contextStrategy) {
@@ -374,6 +443,28 @@ async function pollTask(sessionId, taskId) {
     errorMessage.value = error?.message || '问答任务轮询失败'
     pendingTask.value = null
   }
+}
+
+async function refreshAssistantAfterEmptySuccess(sessionId, taskId) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await sleep(700)
+    const detail = await getQaTask(sessionId, taskId)
+    pendingTask.value = {
+      ...(pendingTask.value ?? {}),
+      ...detail,
+      sessionId,
+    }
+    if (detail.assistantMessage) {
+      messages.value = upsertQaMessage(messages.value, detail.assistantMessage)
+      return
+    }
+  }
+  const list = await listQaMessages(sessionId)
+  messages.value = list.map(normalizeQaMessage)
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function updateUserMessageTask(detail) {
@@ -465,6 +556,23 @@ function sourcePageLabel(source) {
   }
   return ''
 }
+
+function sourceTypeLabel(source) {
+  const type = source?.sourceType || 'unknown'
+  if (type === 'bm25') {
+    return 'BM25'
+  }
+  if (type === 'graphrag_citation') {
+    return 'GraphRAG'
+  }
+  if (type === 'basic_citation') {
+    return 'Basic'
+  }
+  if (type === 'fusion') {
+    return 'Fusion'
+  }
+  return '来源'
+}
 </script>
 
 <template>
@@ -535,12 +643,21 @@ function sourcePageLabel(source) {
           type="button"
           role="radio"
           :aria-checked="selectedMode === mode.value"
-          @click="selectedMode = mode.value"
+          @click="handleModeSelect(mode.value)"
         >
           <span class="mode-label">{{ mode.label }}</span>
           <span class="mode-desc">{{ mode.description }}</span>
         </button>
       </div>
+
+      <label class="beta-toggle">
+        <input
+          v-model="allowHybridSmartBeta"
+          type="checkbox"
+          @change="handleHybridBetaToggle"
+        />
+        <span>允许智能推荐使用混合检索 Beta</span>
+      </label>
 
       <div class="scope-status">
         <span class="scope-pill">
@@ -557,6 +674,9 @@ function sourcePageLabel(source) {
         </span>
         <span v-if="activeSession?.indexRunId" class="scope-pill">
           会话索引 #{{ activeSession.indexRunId }}
+        </span>
+        <span v-if="hybridWarmupText" class="scope-pill hybrid-warmup-pill" :title="hybridWarmupMessage">
+          {{ hybridWarmupText }}
         </span>
       </div>
 
@@ -611,6 +731,7 @@ function sourcePageLabel(source) {
                 >
                   <div class="source-card-head">
                     <span class="source-rank">来源 {{ source.rankPosition }}</span>
+                    <span class="source-type">{{ sourceTypeLabel(source) }}</span>
                     <strong>{{ sourceTitle(source) }}</strong>
                   </div>
                   <div v-if="sourceMeta(source)" class="source-card-meta">
@@ -809,6 +930,22 @@ function sourcePageLabel(source) {
   line-height: 1.45;
 }
 
+.beta-toggle {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.beta-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--qa-primary);
+}
+
 .scope-status {
   display: flex;
   flex-wrap: wrap;
@@ -835,6 +972,10 @@ function sourcePageLabel(source) {
 
 .ready-pill {
   color: var(--qa-teal);
+}
+
+.hybrid-warmup-pill {
+  color: #7c3aed;
 }
 
 .qa-main {
@@ -969,6 +1110,16 @@ function sourcePageLabel(source) {
   background: rgba(20, 184, 166, 0.13);
   padding: 2px 7px;
   color: #0f766e;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.source-type {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(147, 51, 234, 0.1);
+  padding: 2px 7px;
+  color: #7e22ce;
   font-size: 11px;
   font-weight: 900;
 }

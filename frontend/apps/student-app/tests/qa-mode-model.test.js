@@ -54,7 +54,19 @@ test('手动选择模式时直接使用该后端模式', () => {
 })
 
 test('智能推荐默认不自动路由到 hybrid_v0', () => {
-  const result = resolveQaMode('什么是死锁？', SMART_QA_MODE)
+  const result = resolveQaMode('请综合比较死锁和资源分配图的关系，并给出课程证据', SMART_QA_MODE)
 
   assert.notEqual(result.mode, 'hybrid_v0')
+})
+
+test('Beta 开启后智能推荐可受控路由到 hybrid_v0', () => {
+  const result = resolveQaMode(
+    '请综合比较死锁和资源分配图的关系，并给出课程证据',
+    SMART_QA_MODE,
+    { allowHybridBeta: true, hasConversationContext: true },
+  )
+
+  assert.equal(result.mode, 'hybrid_v0')
+  assert.equal(result.fromSmart, true)
+  assert.match(result.reason, /Beta|混合检索/)
 })

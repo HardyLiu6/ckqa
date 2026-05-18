@@ -58,11 +58,16 @@ const ROUTING_RULES = [
   },
 ]
 
+const HYBRID_BETA_PATTERNS = [
+  /综合|融合|证据|依据|来源|佐证|交叉验证|更可靠|深查/i,
+  /比较|对比|关联|关系|联系/i,
+]
+
 export function isBackendQaMode(mode) {
   return BACKEND_QA_MODES.includes(mode)
 }
 
-export function resolveQaMode(question, selectedMode = SMART_QA_MODE) {
+export function resolveQaMode(question, selectedMode = SMART_QA_MODE, options = {}) {
   if (isBackendQaMode(selectedMode)) {
     return {
       mode: selectedMode,
@@ -72,6 +77,14 @@ export function resolveQaMode(question, selectedMode = SMART_QA_MODE) {
   }
 
   const normalizedQuestion = String(question ?? '').trim()
+  if (shouldUseHybridBeta(normalizedQuestion, options)) {
+    return {
+      mode: 'hybrid_v0',
+      fromSmart: true,
+      reason: '已开启 Beta，问题需要更强证据融合，使用混合检索 Beta。',
+    }
+  }
+
   for (const rule of ROUTING_RULES) {
     if (rule.patterns.some((pattern) => pattern.test(normalizedQuestion))) {
       return {
@@ -87,6 +100,20 @@ export function resolveQaMode(question, selectedMode = SMART_QA_MODE) {
     fromSmart: true,
     reason: '问题更像事实或定义查询，使用 basic 快速回答。',
   }
+}
+
+export function shouldUseHybridBeta(question, options = {}) {
+  if (!options.allowHybridBeta) {
+    return false
+  }
+  const normalizedQuestion = String(question ?? '').trim()
+  if (!normalizedQuestion) {
+    return false
+  }
+  const highEvidence = HYBRID_BETA_PATTERNS.some((pattern) => pattern.test(normalizedQuestion))
+  const contextualFollowUp = Boolean(options.hasConversationContext)
+    && /它|这个|上面|前者|后者|刚才|继续|关系|联系/.test(normalizedQuestion)
+  return highEvidence || contextualFollowUp
 }
 
 export function getModeOption(mode) {
