@@ -82,6 +82,12 @@ class CandidateGenerationOrchestratorTest {
                 "--output_dir", outputDir.toAbsolutePath().toString(),
                 "--overwrite"
         );
+        // build_run 隔离：脚本默认会写到仓库根级 results/reports/prompt_generation_report.json，
+        // 必须显式 --report_file 重定向到 build_run workspace 内
+        assertThat(argv).contains(
+                "--report_file",
+                outputDir.resolve("prompt_generation_report.json").toAbsolutePath().toString()
+        );
     }
 
     @Test

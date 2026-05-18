@@ -59,6 +59,11 @@ public class CandidateGenerationOrchestrator {
         argv.add(auditWithGoldFile.toAbsolutePath().toString());
         argv.add("--output_dir");
         argv.add(outputDir.toAbsolutePath().toString());
+        // 把脚本默认会写到仓库根级 results/reports/prompt_generation_report.json 的报告
+        // 强制重定向到 build_run workspace 内，实现 build_run 级别隔离。
+        Path generationReport = outputDir.resolve("prompt_generation_report.json");
+        argv.add("--report_file");
+        argv.add(generationReport.toAbsolutePath().toString());
         argv.add("--overwrite");
         if (baseOverride != null) {
             argv.add("--auto_tuned_prompt_dir");

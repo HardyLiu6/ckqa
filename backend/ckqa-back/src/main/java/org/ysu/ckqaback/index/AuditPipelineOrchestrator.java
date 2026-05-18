@@ -88,6 +88,12 @@ public class AuditPipelineOrchestrator {
                 properties.getGraphrag().getManagedApi().getCondaEnv()
         );
 
+        // build_audit_extraction_set.py 的两个伴生产物路径——必须显式传给脚本，
+        // 否则会落到仓库根级共享路径（data/eval/audit_annotation_guidelines.md、
+        // results/reports/audit_sampling_report.json），跨 build_run 互相覆盖。
+        Path auditGuidelinesFile = workspaceDir.resolve("audit_annotation_guidelines.md");
+        Path auditSamplingReport = workspaceDir.resolve("audit_sampling_report.json");
+
         // 2. 执行 build_prompt_tuning_samples.py
         long samplesElapsedSeconds;
         try {
@@ -147,6 +153,12 @@ public class AuditPipelineOrchestrator {
             auditCommand.add(samplesFile.toAbsolutePath().toString());
             auditCommand.add("--output_file");
             auditCommand.add(auditSetFile.toAbsolutePath().toString());
+            // 把脚本默认会写到仓库根级的报告/标注说明强制重定向到 build_run workspace，
+            // 实现 build_run 级别隔离，不再让多次运行互相覆盖。
+            auditCommand.add("--guideline_file");
+            auditCommand.add(auditGuidelinesFile.toAbsolutePath().toString());
+            auditCommand.add("--report_file");
+            auditCommand.add(auditSamplingReport.toAbsolutePath().toString());
             auditCommand.add("--preserve_existing_gold");
 
             Path auditLogFile = workspaceDir.resolve("build_audit_extraction_set.py.log");
