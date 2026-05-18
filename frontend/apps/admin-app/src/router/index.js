@@ -7,6 +7,8 @@ import DetailLayout from '../layouts/DetailLayout.vue'
 import WorkflowLayout from '../layouts/WorkflowLayout.vue'
 import LoginView from '../views/auth/LoginView.vue'
 import DashboardView from '../views/dashboard/DashboardView.vue'
+import QaOperationsListView from '../views/qa/QaOperationsListView.vue'
+import QaRetrievalLogDetailView from '../views/qa/QaRetrievalLogDetailView.vue'
 import HealthView from '../views/system/HealthView.vue'
 import ModulePage from '../views/pages/ModulePage.vue'
 import RouteState from '../views/status/RouteState.vue'
@@ -18,6 +20,8 @@ import { routeRecords } from './routes.js'
 const componentMap = {
   LoginView,
   DashboardView,
+  QaOperationsListView,
+  QaRetrievalLogDetailView,
   HealthView,
   ModulePage,
   RouteState,

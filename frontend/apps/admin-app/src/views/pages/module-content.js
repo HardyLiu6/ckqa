@@ -338,21 +338,17 @@ const configs = {
   },
   'qa-sessions': {
     variant: 'table',
-    dataSource: 'mock',
+    dataSource: 'live',
     eyebrow: 'QA Operations',
-    summary: '问答运维列表必须区分正式问答与构建向导产生的冒烟验证会话。',
-    primaryAction: { label: '查看正式问答', permission: 'qa:read' },
-    secondaryAction: { label: '包含冒烟验证', permission: 'qa:read' },
+    summary: '问答运维列表展示真实检索任务、来源数量、耗时与学生反馈。',
+    primaryAction: { label: '筛选正式问答', permission: 'qa:read' },
+    secondaryAction: { label: '导出样本', permission: 'qa:log:read' },
     filters: [
       { key: 'sessionType', label: '会话类型', columnIndex: 5, options: ['全部', '正式问答', '冒烟验证'] },
       { key: 'status', label: '任务状态', columnIndex: 4, options: ['全部', 'success', 'running', 'failed'] },
     ],
     columns: ['会话', '用户', '课程', '知识库', '状态', '类型'],
-    rows: [
-      ['期末复习问题', 'student-a', '操作系统', 'OS 知识库', 'success', '正式问答'],
-      ['构建后冒烟验证', 'teacher-a', '操作系统', 'OS 知识库', 'success', '冒烟验证'],
-      ['索引切换验证', 'teacher-b', '计算机网络', 'CN 课程库', 'running', '冒烟验证'],
-    ],
+    rows: [],
   },
   'qa-session-detail': {
     variant: 'overview',

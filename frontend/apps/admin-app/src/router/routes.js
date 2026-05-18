@@ -249,7 +249,7 @@ export const APP_ROUTES = [
   {
     path: '/app/qa-sessions',
     name: 'qa-sessions',
-    componentKey: 'ModulePage',
+    componentKey: 'QaOperationsListView',
     meta: {
       title: '问答会话列表',
       layout: 'console',
@@ -276,13 +276,12 @@ export const APP_ROUTES = [
   {
     path: '/app/retrieval-logs/:logId',
     name: 'retrieval-log-detail',
-    componentKey: 'RouteState',
-    props: { state: 'coming-soon' },
+    componentKey: 'QaRetrievalLogDetailView',
     meta: {
       title: '检索日志详情',
       layout: 'detail',
       permissions: ['qa:log:read'],
-      status: 'upcoming',
+      status: 'mvp',
       routeState: 'coming-soon',
       navGroup: 'qa',
     },

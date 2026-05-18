@@ -18,6 +18,12 @@ import {
   sendQaMessage,
 } from './api/qa.js'
 import {
+  exportQaOperationLogs,
+  getQaOperationLog,
+  listQaOperationLogs,
+  upsertQaSourceReview,
+} from './api/qa-operations.js'
+import {
   buildNavigationGroups,
   findActiveNavigationPath,
 } from './components/shell/navigation-model.js'
@@ -1683,6 +1689,38 @@ test('QA API 通过 Java /api/v1 边界创建会话、发送消息并查询任�
   ])
 })
 
+test('QA 运维 API 使用管理端 qa-operations 契约', async () => {
+  const calls = []
+  const client = {
+    get: async (url, config) => {
+      calls.push(['get', url, config?.params ?? null])
+      const data = url.endsWith('/export')
+        ? [{ retrievalLogId: 9 }]
+        : (url === '/qa-operations/logs'
+          ? { items: [{ retrievalLogId: 9 }], current: 1, size: 20, total: 1, pages: 1 }
+          : { retrievalLogId: 9 })
+      return { data: { code: 200, message: 'ok', data } }
+    },
+    put: async (url, payload) => {
+      calls.push(['put', url, payload])
+      return { data: { code: 200, message: 'ok', data: { id: 3, ...payload } } }
+    },
+  }
+
+  const page = await listQaOperationLogs({ mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }, client)
+  await getQaOperationLog(9, client)
+  await exportQaOperationLogs({ taskStatus: 'success' }, client)
+  await upsertQaSourceReview(7, { relevance: 'partially_relevant', citationQuality: 'weak_support' }, client)
+
+  assert.equal(page.items[0].retrievalLogId, 9)
+  assert.deepEqual(calls, [
+    ['get', '/qa-operations/logs', { mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }],
+    ['get', '/qa-operations/logs/9', null],
+    ['get', '/qa-operations/logs/export', { taskStatus: 'success' }],
+    ['put', '/qa-operations/source-reviews/7', { relevance: 'partially_relevant', citationQuality: 'weak_support' }],
+  ])
+})
+
 test('QA 轮询模型优先使用后端提示并按模式提供默认值', () => {
   assert.equal(resolveQaPollingInterval({ recommendedPollingIntervalSeconds: 4 }, 'global').intervalMs, 4000)
   assert.equal(resolveQaStaleTimeout({ staleTimeoutSeconds: 45 }, 'drift').timeoutMs, 45000)
@@ -2805,9 +2843,15 @@ test('业务页列表筛选只按显式列匹配', () => {
   )
   assert.equal(getCellText(getRowCells(liveCourseRows[0])[3]), '已解析 1/2')
   assert.deepEqual(
-    filterRowsByFilters(qaSessions.rows, qaSessions.filters, { sessionType: '冒烟验证' }).map((row) => row[0]),
+    filterRowsByFilters([
+      ['期末复习问题', 'student-a', '操作系统', 'OS 知识库', 'success', '正式问答'],
+      ['构建后冒烟验证', 'teacher-a', '操作系统', 'OS 知识库', 'success', '冒烟验证'],
+      ['索引切换验证', 'teacher-b', '计算机网络', 'CN 课程库', 'running', '冒烟验证'],
+    ], qaSessions.filters, { sessionType: '冒烟验证' }).map((row) => row[0]),
     ['构建后冒烟验证', '索引切换验证'],
   )
+  assert.equal(qaSessions.dataSource, 'live')
+  assert.deepEqual(qaSessions.rows, [])
   assert.deepEqual(
     filterRowsByFilters(qaSessions.rows, qaSessions.filters, { status: 'failed' }),
     [],
