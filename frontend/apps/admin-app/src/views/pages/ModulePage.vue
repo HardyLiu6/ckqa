@@ -24,6 +24,7 @@ import {
   UploadCloud,
   WandSparkles,
   X,
+  Zap,
 } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -43,6 +44,7 @@ import {
 import { http } from '../../axios/index.js'
 import { listUsers } from '../../api/users.js'
 import {
+  activateIndexRun,
   checkBuildRunParse,
   confirmBuildRunPrompt,
   createBuildRun,
@@ -574,11 +576,27 @@ const parseResultGroups = computed(() => {
 })
 const knowledgeBaseBlock = computed(() => config.value.blocks?.knowledgeBase)
 const indexRunsBlock = computed(() => config.value.blocks?.indexRuns)
+const indexRunGroupsBlock = computed(() => config.value.blocks?.indexRunGroups)
 // 索引运行卡片折叠：超过阈值时默认收起，本地状态由本组件维护，列表切换刷新会自然 reset
 const INDEX_RUN_COLLAPSE_THRESHOLD = 12
 const indexRunsExpanded = ref(false)
 const indexRunsTotal = computed(() => indexRunsBlock.value?.items?.length ?? 0)
 const indexRunsCanCollapse = computed(() => indexRunsTotal.value > INDEX_RUN_COLLAPSE_THRESHOLD)
+// 按 build_run 分组后的折叠门槛：超过 6 个构建批次才折叠
+const INDEX_RUN_GROUP_COLLAPSE_THRESHOLD = 6
+const indexRunGroupsTotal = computed(() => indexRunGroupsBlock.value?.items?.length ?? 0)
+const indexRunGroupsCanCollapse = computed(() =>
+  indexRunGroupsTotal.value > INDEX_RUN_GROUP_COLLAPSE_THRESHOLD,
+)
+const visibleIndexRunGroups = computed(() => {
+  const groups = indexRunGroupsBlock.value?.items ?? []
+  if (!indexRunGroupsCanCollapse.value || indexRunsExpanded.value) {
+    return groups
+  }
+  return groups.slice(0, INDEX_RUN_GROUP_COLLAPSE_THRESHOLD)
+})
+// 知识库详情页「设为激活」的单条 loading 态
+const activatingIndexRunId = ref(null)
 const visibleIndexRuns = computed(() => {
   const items = indexRunsBlock.value?.items ?? []
   if (!indexRunsCanCollapse.value || indexRunsExpanded.value) {
@@ -2672,6 +2690,53 @@ async function runKnowledgeBaseIndex() {
   startActiveLongTask(activeLongTaskController)
 }
 
+async function handleActivateIndexRun(indexRunItem) {
+  // indexRunItem 来自 BuildStepIndex.vue 的 latestSuccessRun（mapIndexRunItem 产物）
+  const kbId = knowledgeBaseBlock.value?.item?.id
+  const indexRunId = indexRunItem?.id
+  if (!kbId || !indexRunId) {
+    return
+  }
+  if (actionRunning.value) {
+    return
+  }
+
+  cancelLongTask()
+  activeOperationKey.value = 'index-activate'
+  actionState.value = 'running'
+  actionSnapshot.value = null
+
+  try {
+    await activateIndexRun(kbId, indexRunId)
+    actionState.value = 'success'
+    actionSnapshot.value = { status: 'success' }
+    // 刷新页面数据让 KB.activeIndexRunId 更新、step 05 的 notActivated 消失
+    await loadPage()
+  } catch (error) {
+    actionState.value = 'failed'
+    actionSnapshot.value = createApiError(error)
+  }
+}
+
+async function handleActivateIndexRunFromDetail(indexRunItem) {
+  // 从知识库详情页 indexRuns 卡片激活——kbId 来自 route.params
+  const kbId = route.params?.kbId ?? knowledgeBaseBlock.value?.item?.id
+  const indexRunId = indexRunItem?.id
+  if (!kbId || !indexRunId || activatingIndexRunId.value) {
+    return
+  }
+  activatingIndexRunId.value = indexRunId
+  try {
+    await activateIndexRun(kbId, indexRunId)
+    // 刷新数据，让激活标记更新
+    await loadPage()
+  } catch (error) {
+    ElMessage.error(`激活失败：${createApiError(error).message ?? '未知错误'}`)
+  } finally {
+    activatingIndexRunId.value = null
+  }
+}
+
 function updateSmokeQuestion(value) {
   smokeQuestionEdited.value = true
   smokeQuestion.value = value
@@ -4049,6 +4114,7 @@ onBeforeUnmount(() => {
         @prompt-tune-regenerate="handlePromptTuneRegenerate"
         @start-index="runKnowledgeBaseIndex"
         @rebuild-index="runKnowledgeBaseIndex"
+        @activate-index="handleActivateIndexRun"
       />
     </div>
 
@@ -4513,12 +4579,12 @@ onBeforeUnmount(() => {
       </div>
     </article>
 
-    <article v-if="indexRunsBlock" class="panel index-run-panel">
+    <article v-if="indexRunGroupsBlock" class="panel index-run-panel">
       <header class="panel-heading index-run-heading">
         <div class="index-run-heading__title">
-          <h2>索引运行</h2>
-          <span v-if="indexRunsBlock.items?.length" class="index-run-heading__count">
-            共 {{ indexRunsBlock.items.length }} 条
+          <h2>图谱索引</h2>
+          <span v-if="indexRunGroupsBlock.items?.length" class="index-run-heading__count">
+            {{ indexRunGroupsBlock.items.length }} 次索引构建
           </span>
         </div>
         <RouterLink
@@ -4526,38 +4592,77 @@ onBeforeUnmount(() => {
           :to="`/app/knowledge-bases/${knowledgeBaseBlock.item.id}/build-runs`"
           class="panel-heading__link"
         >
-          查看完整构建历史 →
+          查看构建历史 →
         </RouterLink>
       </header>
-      <!-- list-stagger：索引运行卡片逐条渐入，Requirements 4.2 -->
+      <p class="index-run-panel__intro">
+        本面板列出已触发过索引构建的批次（成功 / 进行中 / 失败均会列出）；
+        未触发索引的构建草稿请到「构建历史」查看。每条索引可设为知识库当前激活索引。
+      </p>
+
+      <!-- 按 build_run 分组：每组对应一个构建批次，子区域展示该批次内的 indexRun 重试链 -->
       <TransitionGroup
-        v-if="indexRunsBlock.items?.length"
+        v-if="indexRunGroupsBlock.items?.length"
         name="list-stagger"
         tag="div"
-        class="index-run-grid"
+        class="index-run-group-list"
         appear
       >
-        <RouterLink
-          v-for="(item, index) in visibleIndexRuns"
-          :key="item.id"
-          :to="item.to"
-          class="index-run-card"
-          :data-status="item.meta"
-          :style="{ '--stagger-index': index }"
+        <article
+          v-for="(group, groupIndex) in visibleIndexRunGroups"
+          :key="group.buildRunId ?? '__orphan__'"
+          class="index-run-group"
+          :data-status="group.buildStatus"
+          :style="{ '--stagger-index': groupIndex }"
         >
-          <div class="index-run-card__head">
-            <StatusBadge :status="item.meta" />
-            <span class="index-run-card__id">#{{ item.id }}</span>
-          </div>
-          <div class="index-run-card__body">
-            <strong>{{ item.title }}</strong>
-            <small>{{ formatIndexRunDetail(item.detail) }}</small>
-          </div>
-          <span class="index-run-card__foot">查看详情 →</span>
-        </RouterLink>
+          <header class="index-run-group__head">
+            <strong class="index-run-group__version">{{ group.buildVersion }}</strong>
+            <span v-if="group.runs.length > 1" class="index-run-group__count">
+              {{ group.runs.length }} 次重试
+            </span>
+            <StatusBadge
+              v-if="group.buildStatus"
+              :status="group.buildStatus"
+              class="index-run-group__status"
+            />
+          </header>
+
+          <ol class="index-run-group__runs">
+            <li v-for="run in group.runs" :key="run.id" class="index-run-mini-card">
+              <div class="index-run-mini-card__head">
+                <StatusBadge :status="run.meta" />
+                <span class="index-run-mini-card__id">#{{ run.id }}</span>
+                <span
+                  v-if="knowledgeBaseBlock.item?.activeIndexRunId
+                    && String(run.id) === String(knowledgeBaseBlock.item.activeIndexRunId)"
+                  class="index-run-card__active-badge"
+                >
+                  <Zap :size="11" />已激活
+                </span>
+              </div>
+              <div class="index-run-mini-card__body">
+                <small>{{ formatIndexRunDetail(run.detail) }}</small>
+              </div>
+              <div class="index-run-mini-card__foot">
+                <RouterLink :to="run.to" class="index-run-card__detail-link">查看详情 →</RouterLink>
+                <button
+                  v-if="run.meta === 'success' && knowledgeBaseBlock.item?.id
+                    && String(run.id) !== String(knowledgeBaseBlock.item?.activeIndexRunId)"
+                  class="index-run-card__activate-pill"
+                  :disabled="!!activatingIndexRunId"
+                  @click="handleActivateIndexRunFromDetail(run)"
+                >
+                  <Zap :size="12" />
+                  {{ activatingIndexRunId === run.id ? '激活中…' : '设为激活' }}
+                </button>
+              </div>
+            </li>
+          </ol>
+        </article>
       </TransitionGroup>
-      <!-- 超过阈值时显示「展开剩余 N 条 / 收起」按钮，避免页面被拉得过长 -->
-      <div v-if="indexRunsCanCollapse" class="index-run-toggle">
+
+      <!-- 超过阈值时显示「展开剩余 N 次构建 / 收起」按钮 -->
+      <div v-if="indexRunGroupsCanCollapse" class="index-run-toggle">
         <el-button
           class="ckqa-el-button ckqa-el-button--secondary"
           native-type="button"
@@ -4572,11 +4677,13 @@ onBeforeUnmount(() => {
           {{
             indexRunsExpanded
               ? '收起'
-              : `展开剩余 ${indexRunsTotal - INDEX_RUN_COLLAPSE_THRESHOLD} 条`
+              : `展开剩余 ${indexRunGroupsTotal - INDEX_RUN_COLLAPSE_THRESHOLD} 次构建`
           }}
         </el-button>
       </div>
-      <p v-if="!indexRunsBlock.items?.length" class="index-run-empty">暂无索引运行。触发首次构建后，这里会显示运行卡片。</p>
+      <p v-if="!indexRunGroupsBlock.items?.length" class="index-run-empty">
+        本知识库还没有任何已触发的索引构建。请到「构建历史」打开一条草稿继续，或新建构建走完资料、解析、提示词等前置步骤后触发索引。
+      </p>
     </article>
   </section>
 

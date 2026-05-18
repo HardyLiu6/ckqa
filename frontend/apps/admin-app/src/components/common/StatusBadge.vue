@@ -69,11 +69,12 @@ const isAnimated = computed(() => tone.value === 'running')
 </template>
 
 <style scoped>
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
+/*
+ * 注意：display 和 align-items 等"基础布局"放到全局 .status-badge 规则里
+ * （src/styles/components.scss），因为 scoped 选择器权重比父级 .workflow-progress-rail__step .status-badge
+ * 高，scoped 写 display: inline-flex 会盖掉「在 stepper 里隐藏徽章」的全局规则。
+ * 这里只保留组件内独有的图标动画相关样式。
+ */
 .status-badge__icon {
   flex-shrink: 0;
   display: inline-block;

@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { Database, Hammer, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-vue-next'
+import { Database, Hammer, RefreshCw, AlertTriangle, CheckCircle2, Zap } from 'lucide-vue-next'
 import { ElButton, ElMessageBox, ElProgress } from 'element-plus'
 import StatusBadge from '../common/StatusBadge.vue'
 import { resolveIndexStageLabel } from '../../views/pages/module-content.js'
@@ -12,7 +12,7 @@ const props = defineProps({
   step: { type: Object, default: null },
 })
 
-const emit = defineEmits(['start-index', 'rebuild-index'])
+const emit = defineEmits(['start-index', 'rebuild-index', 'activate-index'])
 
 // 本次 build_run 的索引运行列表（已按 startedAt desc 排序）
 const indexRuns = computed(() => props.blocks.buildRunIndexRuns?.items ?? [])
@@ -291,10 +291,23 @@ async function handleRebuild() {
           </div>
         </dl>
 
-        <!-- 索引未自动激活时的提示 -->
+        <!-- 索引未自动激活时的提示 + 一键激活按钮 -->
         <div v-if="successOverview.notActivated" class="build-step-index__activate-hint">
-          <AlertTriangle :size="14" />
-          <span>本次索引未自动激活（KB 上存在更新的构建）。如需用本次索引验证，请到「知识库详情」手动激活。</span>
+          <div class="build-step-index__activate-hint-text">
+            <AlertTriangle :size="14" />
+            <span>本次索引未自动激活（KB 上存在更新的构建），当前问答仍指向旧索引。</span>
+          </div>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary build-step-index__activate-btn"
+            type="primary"
+            size="small"
+            :disabled="actionRunning"
+            :loading="actionRunning"
+            @click="emit('activate-index', latestSuccessRun)"
+          >
+            <Zap class="button-icon" :size="13" />
+            激活本次索引
+          </el-button>
         </div>
       </article>
 
@@ -615,8 +628,9 @@ async function handleRebuild() {
 }
 .build-step-index__activate-hint {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 14px;
   padding: 10px 12px;
   border-radius: 8px;
@@ -625,6 +639,16 @@ async function handleRebuild() {
   color: #b45309;
   font-size: 12px;
   line-height: 1.5;
+}
+.build-step-index__activate-hint-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.build-step-index__activate-btn {
+  flex-shrink: 0;
 }
 
 /* 图谱体量 */

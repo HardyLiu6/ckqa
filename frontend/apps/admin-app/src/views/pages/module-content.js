@@ -241,7 +241,7 @@ const configs = {
     dataSource: 'live',
     eyebrow: 'Build History',
     tableTitle: '构建历史',
-    summary: '本知识库的所有构建流水线运行记录，可重新打开向导继续编辑或归档不再需要的运行。',
+    summary: '本知识库的所有构建流水线运行记录（含未触发索引的草稿）。可重新打开向导继续编辑、查看具体批次或归档不再需要的运行。',
     search: {
       placeholder: '搜索构建版本号',
       ariaLabel: '搜索构建历史',
@@ -255,7 +255,7 @@ const configs = {
         columnIndex: 1,
         options: [
           { label: '全部状态', value: '' },
-          { label: '待开始', value: 'pending' },
+          { label: '草稿中', value: 'pending' },
           { label: '运行中', value: 'running' },
           { label: '已完成', value: 'success' },
           { label: '失败', value: 'failed' },

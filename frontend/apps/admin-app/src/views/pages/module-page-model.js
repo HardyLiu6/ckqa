@@ -144,6 +144,17 @@ const OPERATION_FEEDBACK = {
     successMessage: '索引构建已完成，知识库可进入问答冒烟验证。',
     detail: '请确认 GraphRAG API、Python 根目录和导出产物可用后重试。',
   },
+  'index-activate': {
+    scope: 'index',
+    titles: {
+      running: '正在激活索引',
+      success: '索引已激活',
+      failed: '索引激活失败',
+    },
+    runningMessage: '正在将本次构建的索引设为知识库的激活索引。',
+    successMessage: '本次构建的索引已成功激活，问答将使用此索引。',
+    detail: '请确认索引产物完整（output_dir / lancedb 均为 ready 状态）后重试。',
+  },
   'qa-smoke': {
     scope: 'qa',
     titles: {

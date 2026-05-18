@@ -11,6 +11,7 @@ import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.BuildRunIndexRequest;
+import org.ysu.ckqaback.index.dto.BuildRunSummaryResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.graphrag.GraphRagIndexOrchestrator;
@@ -348,7 +349,17 @@ public class IndexWorkflowService {
 
     public List<IndexRunResponse> listIndexRuns(Long knowledgeBaseId) {
         knowledgeBasesService.getRequiredById(knowledgeBaseId);
+        // 与「构建历史」列表语义对齐：归属 archived build_run 的索引视作"已不存在"，不再返回。
+        // 否则用户在「索引运行」卡片看到 8 条、在「构建历史」看到 6 条，数据视角不一致。
+        // null buildRunId 的索引（旧版直接走 createIndexRun 的路径）仍保留。
+        java.util.Set<Long> archivedBuildRunIds = buildRunService
+                .listBuildRuns(knowledgeBaseId, "archived", 1L, 1000L)
+                .getItems()
+                .stream()
+                .map(BuildRunSummaryResponse::getId)
+                .collect(java.util.stream.Collectors.toSet());
         return indexRunsService.listByKnowledgeBaseId(knowledgeBaseId).stream()
+                .filter(run -> run.getBuildRunId() == null || !archivedBuildRunIds.contains(run.getBuildRunId()))
                 .map(IndexRunResponse::fromEntity)
                 .toList();
     }

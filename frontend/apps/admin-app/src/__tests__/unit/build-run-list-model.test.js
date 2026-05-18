@@ -27,7 +27,7 @@ test('buildBuildRunListParams status 透传', () => {
 })
 
 test('STATUS_LABELS 覆盖五个有效枚举（interrupted 因后端未使用已从前端移除）', () => {
-  assert.equal(STATUS_LABELS.pending, '待开始')
+  assert.equal(STATUS_LABELS.pending, '草稿中')
   assert.equal(STATUS_LABELS.running, '运行中')
   assert.equal(STATUS_LABELS.success, '已完成')
   assert.equal(STATUS_LABELS.failed, '失败')
@@ -85,15 +85,19 @@ test('mapBuildRunRow 输出 7 列', () => {
 
 test('mapBuildRunRow 行动作包含打开向导和删除', () => {
   const successRow = mapBuildRunRow(5, { id: 27, status: 'success', activeIndexRunId: 99 })
-  const actionKeys = successRow.actions.map((a) => a.key ?? a.label)
-  assert.ok(actionKeys.includes('打开向导'))
-  assert.ok(actionKeys.includes('delete-build-run'))
+  const successAction = successRow.actions.find((a) => a.key === 'open-build-run')
+  assert.ok(successAction, '行动作应包含打开向导（key=open-build-run）')
+  assert.equal(successAction.label, '打开向导')
+  assert.equal(successAction.variant, 'primary', '打开向导应作为 primary 操作按钮')
+  assert.equal(successAction.icon, 'wizard')
+  assert.match(successAction.to, /from=build-runs/, '打开向导 URL 应携带 from=build-runs 让面包屑能恢复父链')
+  assert.ok(successRow.actions.find((a) => a.key === 'delete-build-run'))
 })
 
 test('mapBuildRunRow running 状态也有删除按钮', () => {
   const runningRow = mapBuildRunRow(5, { id: 28, status: 'running' })
   const runningKeys = runningRow.actions.map((a) => a.key ?? a.label)
-  assert.ok(runningKeys.includes('打开向导'))
+  assert.ok(runningKeys.includes('open-build-run'))
   assert.ok(runningKeys.includes('delete-build-run'))
 })
 

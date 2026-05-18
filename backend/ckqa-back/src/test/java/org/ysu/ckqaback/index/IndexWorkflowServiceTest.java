@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -289,6 +290,77 @@ class IndexWorkflowServiceTest {
         assertThatThrownBy(() -> workflowService.createBuildRunIndexRun(3L, new BuildRunIndexRequest()))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("构建元数据格式无效");
+    }
+
+    @Test
+    void listIndexRuns_filtersOutIndexRunsBelongingToArchivedBuildRuns() {
+        // 列表语义：归属 archived build_run 的索引视作"已删除"，不再返回，与构建历史列表对齐。
+        // null buildRunId 的旧版索引仍保留。
+        IndexRunsService indexRunsService = mock(IndexRunsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        GraphRagIndexOrchestrator orchestrator = mock(GraphRagIndexOrchestrator.class);
+        KnowledgeBaseBuildRunService buildRunService = mock(KnowledgeBaseBuildRunService.class);
+        BuildRunWorkspaceService workspaceService = new BuildRunWorkspaceService(tempDir.toString());
+        IndexArtifactRegistryService artifactRegistryService = mock(IndexArtifactRegistryService.class);
+        ActiveIndexRunService activeIndexRunService = mock(ActiveIndexRunService.class);
+
+        IndexWorkflowService workflowService = new IndexWorkflowService(
+                indexRunsService,
+                knowledgeBasesService,
+                orchestrator,
+                new ObjectMapper(),
+                Duration.ofSeconds(2400),
+                buildRunService,
+                workspaceService,
+                artifactRegistryService,
+                activeIndexRunService
+        );
+
+        KnowledgeBases kb = new KnowledgeBases();
+        kb.setId(4L);
+        given(knowledgeBasesService.getRequiredById(4L)).willReturn(kb);
+
+        // 4 条索引：归属 archived build_run 1 的两条、归属 success build_run 13 的一条、null buildRunId 的一条
+        IndexRuns belongsToArchived1 = new IndexRuns();
+        belongsToArchived1.setId(3L);
+        belongsToArchived1.setKnowledgeBaseId(4L);
+        belongsToArchived1.setBuildRunId(1L);
+        belongsToArchived1.setStatus("failed");
+
+        IndexRuns belongsToArchived2 = new IndexRuns();
+        belongsToArchived2.setId(4L);
+        belongsToArchived2.setKnowledgeBaseId(4L);
+        belongsToArchived2.setBuildRunId(1L);
+        belongsToArchived2.setStatus("failed");
+
+        IndexRuns belongsToActive = new IndexRuns();
+        belongsToActive.setId(13L);
+        belongsToActive.setKnowledgeBaseId(4L);
+        belongsToActive.setBuildRunId(13L);
+        belongsToActive.setStatus("success");
+
+        IndexRuns legacyNoBuildRun = new IndexRuns();
+        legacyNoBuildRun.setId(9L);
+        legacyNoBuildRun.setKnowledgeBaseId(4L);
+        legacyNoBuildRun.setBuildRunId(null);
+        legacyNoBuildRun.setStatus("success");
+
+        given(indexRunsService.listByKnowledgeBaseId(4L)).willReturn(List.of(
+                belongsToArchived1, belongsToArchived2, belongsToActive, legacyNoBuildRun
+        ));
+
+        given(buildRunService.listBuildRuns(4L, "archived", 1L, 1000L))
+                .willReturn(new org.ysu.ckqaback.api.ApiPageData<>(
+                        List.of(
+                                org.ysu.ckqaback.index.dto.BuildRunSummaryResponse.builder().id(1L).status("archived").build()
+                        ),
+                        1L, 1000L, 1L, 1L
+                ));
+
+        var results = workflowService.listIndexRuns(4L);
+
+        // 应只剩下 #13 和 #9，归属 archived build_run 的 #3 #4 被过滤
+        assertThat(results).extracting("id").containsExactlyInAnyOrder(13L, 9L);
     }
 
     private ProcessExecutionResult successResult(List<String> command) {

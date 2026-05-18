@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BookOpen,
   Eye,
+  Hammer,
   Pencil,
   Play,
   Search,
@@ -196,6 +197,7 @@ function resolveActionIcon(action) {
   if (action.icon === 'users') return Users
   if (action.icon === 'knowledge') return BookOpen
   if (action.icon === 'parse') return Play
+  if (action.icon === 'wizard') return Hammer
   return action.variant === 'primary' ? ArrowRight : Eye
 }
 

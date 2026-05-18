@@ -5,7 +5,9 @@
  */
 
 export const STATUS_LABELS = {
-  pending: '待开始',
+  // build_run.status='pending' 表示用户在做前置 5 步（资料/解析/导出/提示词），
+  // 还没点过「开始构建索引」让后台任务跑起来。"草稿中"比"待开始"更准确，避免被误读为"失败前态"。
+  pending: '草稿中',
   running: '运行中',
   success: '已完成',
   failed: '失败',
@@ -75,7 +77,10 @@ export function mapBuildRunRow(knowledgeBaseId, buildRun = {}) {
   if (id) {
     actions.push({
       label: '打开向导',
-      to: `/app/knowledge-bases/${knowledgeBaseId}/build?buildRunId=${id}`,
+      key: 'open-build-run',
+      icon: 'wizard',
+      variant: 'primary',
+      to: `/app/knowledge-bases/${knowledgeBaseId}/build?buildRunId=${id}&from=build-runs`,
     })
     actions.push({
       label: '删除',

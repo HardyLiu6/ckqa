@@ -124,10 +124,39 @@ export function buildConsoleBreadcrumbItems(route = {}) {
     }
   }
 
+  if (route.name === 'index-run-detail') {
+    // 索引详情页通过 ?kbId=... 携带的 query 找到所属知识库；缺失时降级为只有「知识库列表」父链
+    const kbId = firstQueryValue(route.query?.kbId)
+    if (kbId) {
+      const detailParent = createKnowledgeBaseDetailParent(kbId)
+      if (detailParent) {
+        items.push(detailParent)
+      }
+    }
+  }
+
   if (route.name === 'knowledge-base-build' && route.query?.from === 'detail') {
     const detailParent = createKnowledgeBaseDetailParent(route.params?.kbId)
     if (detailParent) {
       items.push(detailParent)
+    }
+  }
+
+  if (route.name === 'knowledge-base-build' && route.query?.from === 'build-runs') {
+    // 从构建历史表格的「打开向导」按钮进入：父链应当包含「知识库详情 > 构建历史」，
+    // 让用户能够逐层返回，而不是跳到向导后只能 navGroup 兜底回到知识库列表。
+    const kbId = route.params?.kbId
+    const detailParent = createKnowledgeBaseDetailParent(kbId)
+    if (detailParent) {
+      items.push(detailParent)
+    }
+    if (kbId) {
+      items.push({
+        label: '构建历史',
+        name: 'knowledge-base-build-runs',
+        to: `/app/knowledge-bases/${encodeURIComponent(String(kbId))}/build-runs`,
+        kind: 'link',
+      })
     }
   }
 

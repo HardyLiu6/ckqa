@@ -145,7 +145,7 @@ function emitSelection(ids) {
           />
         </template>
       </el-table-column>
-      <el-table-column label="资料名" min-width="220">
+      <el-table-column label="资料名" min-width="360">
         <template #default="{ row }">
           <div class="build-material-name" :data-status="row.meta" :data-testid="`build-material-row-${row.id}`">
             <span class="build-material-name__marker" aria-hidden="true"></span>
@@ -156,17 +156,17 @@ function emitSelection(ids) {
           </div>
         </template>
       </el-table-column>
-      <el-table-column label="解析状态" width="130">
+      <el-table-column label="解析状态" width="130" align="center" header-align="center">
         <template #default="{ row }">
           <StatusBadge :status="row.meta" :label="resolveParseStatusLabel(row.meta)" />
         </template>
       </el-table-column>
-      <el-table-column label="导出状态" width="130">
+      <el-table-column label="导出状态" width="130" align="center" header-align="center">
         <template #default="{ row }">
           <StatusBadge :status="resolveExportStatus(row.id)" :label="resolveExportStatusLabel(row.id)" />
         </template>
       </el-table-column>
-      <el-table-column label="更新时间" width="180">
+      <el-table-column label="更新时间" width="188" class-name="col-nowrap">
         <template #default="{ row }">
           <span>{{ row.updatedAt || '-' }}</span>
         </template>

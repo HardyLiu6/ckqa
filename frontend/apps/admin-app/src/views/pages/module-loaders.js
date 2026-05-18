@@ -851,9 +851,12 @@ function createKnowledgeBaseLatestIndexCell(latestIndexRunId, status) {
 
 async function loadKnowledgeBaseDetail(route, services) {
   const kbId = route.params?.kbId
-  const [knowledgeBaseResult, indexRunsResult] = await Promise.allSettled([
+  const [knowledgeBaseResult, indexRunsResult, buildRunsResult] = await Promise.allSettled([
     services.getKnowledgeBase(kbId),
     services.listIndexRuns(kbId),
+    typeof services.listKnowledgeBaseBuildRuns === 'function'
+      ? services.listKnowledgeBaseBuildRuns(kbId, { page: 1, size: 200 })
+      : Promise.resolve({ items: [] }),
   ])
 
   if (knowledgeBaseResult.status === 'rejected') {
@@ -866,6 +869,11 @@ async function loadKnowledgeBaseDetail(route, services) {
 
   const knowledgeBase = knowledgeBaseResult.value
   const indexRunsBlock = createSettledListBlock(indexRunsResult, mapIndexRunItem)
+  // 把 indexRuns 按 buildRunId 分组，每组对应一个构建 — 重试链上的失败 indexRun 都收纳到所属 build_run 卡片里
+  const buildRuns = buildRunsResult.status === 'fulfilled'
+    ? (buildRunsResult.value?.items ?? [])
+    : []
+  const indexRunGroupsBlock = buildIndexRunGroupsBlock(indexRunsBlock, buildRuns)
 
   return createOverviewLoaderResult({
     requestState: 'success',
@@ -882,12 +890,96 @@ async function loadKnowledgeBaseDetail(route, services) {
         facts: buildKnowledgeBaseFacts(knowledgeBase),
       },
       indexRuns: indexRunsBlock,
+      indexRunGroups: indexRunGroupsBlock,
     },
     raw: {
       knowledgeBase,
       indexRuns: indexRunsBlock.raw,
     },
   })
+}
+
+/**
+ * 按 build_run 分组 indexRuns。
+ *
+ * 每个 build_run 对应一张 group，子项为该 build 下的所有 indexRun（按 startedAt 倒序，
+ * 最新在前——通常重试链是 failed → failed → success，最后一条排在最上）。
+ *
+ * 没有 buildRunId 的旧版 indexRun（直接走 createIndexRun，未走 build_run 流水线）
+ * 单独归为「未关联构建」一组放在最末尾，保持向后兼容。
+ *
+ * 输出契合卡片渲染：每组带 build_run 元信息（buildVersion、status、createdAt），
+ * 卡片头展示 build_run 状态徽章，子区域展示 indexRun 列表。
+ */
+function buildIndexRunGroupsBlock(indexRunsBlock, buildRuns = []) {
+  if (indexRunsBlock.state === 'error') {
+    return { state: 'error', items: [], error: indexRunsBlock.error ?? null }
+  }
+  const items = Array.isArray(indexRunsBlock.items) ? indexRunsBlock.items : []
+  if (items.length === 0) {
+    return { state: 'empty', items: [] }
+  }
+
+  const buildRunMap = new Map(buildRuns.map((br) => [String(br.id), br]))
+  const groups = new Map()
+  const orphans = []
+
+  items.forEach((run) => {
+    const key = run.buildRunId == null ? '__orphan__' : String(run.buildRunId)
+    if (key === '__orphan__') {
+      orphans.push(run)
+      return
+    }
+    if (!groups.has(key)) {
+      const buildRun = buildRunMap.get(key) ?? null
+      groups.set(key, {
+        buildRunId: run.buildRunId,
+        buildVersion: buildRun?.buildVersion ?? `构建 #${run.buildRunId}`,
+        buildStatus: buildRun?.status ?? null,
+        currentStage: buildRun?.currentStage ?? null,
+        createdAt: buildRun?.createdAt ?? null,
+        activeIndexRunId: buildRun?.activeIndexRunId ?? null,
+        runs: [],
+      })
+    }
+    groups.get(key).runs.push(run)
+  })
+
+  // 每组内部按 startedAt 倒序（latest first）
+  const groupList = Array.from(groups.values())
+  groupList.forEach((group) => {
+    group.runs.sort((a, b) => {
+      const ta = a.startedAt ? new Date(a.startedAt).getTime() : 0
+      const tb = b.startedAt ? new Date(b.startedAt).getTime() : 0
+      return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
+    })
+  })
+
+  // 组之间按 build_run.createdAt（缺省时退到首条 indexRun.startedAt）倒序
+  groupList.sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime()
+      : (a.runs[0]?.startedAt ? new Date(a.runs[0].startedAt).getTime() : 0)
+    const tb = b.createdAt ? new Date(b.createdAt).getTime()
+      : (b.runs[0]?.startedAt ? new Date(b.runs[0].startedAt).getTime() : 0)
+    return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta)
+  })
+
+  if (orphans.length > 0) {
+    groupList.push({
+      buildRunId: null,
+      buildVersion: '未关联构建（旧版索引）',
+      buildStatus: null,
+      currentStage: null,
+      createdAt: null,
+      activeIndexRunId: null,
+      runs: orphans,
+    })
+  }
+
+  return {
+    state: 'success',
+    items: groupList,
+  }
 }
 
 async function loadIndexRunDetail(route, services) {
@@ -2335,7 +2427,12 @@ export function mapIndexRunItem(indexRun = {}) {
     title: id ? `索引运行 #${id}` : '索引运行',
     meta: indexRun.status ?? '-',
     detail: indexRun.createdAt ?? indexRun.startedAt ?? indexRun.updatedAt ?? '',
-    to: id ? `/app/index-runs/${id}` : '',
+    // 详情页通过 ?kbId=... query 回知识库详情，让面包屑能正确恢复父链
+    to: id
+      ? (indexRun.knowledgeBaseId != null
+          ? `/app/index-runs/${id}?kbId=${encodeURIComponent(String(indexRun.knowledgeBaseId))}`
+          : `/app/index-runs/${id}`)
+      : '',
   }
 }
 
