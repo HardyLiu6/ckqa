@@ -12,7 +12,9 @@ import {
   resolvePollingDelaySeconds,
   resolveContextStatusText,
   hasActiveIndexChanged,
+  isArchivedReadOnlySession,
   isLegacyReadOnlySession,
+  resolveSessionLifecycleStatusText,
   selectReadyKnowledgeBase,
 } from '../src/views/qa/qa-session-model.js'
 
@@ -180,6 +182,14 @@ test('旧会话与 active index 差异状态可被前端识别', () => {
   assert.equal(isLegacyReadOnlySession(legacy), true)
   assert.equal(hasActiveIndexChanged(oldIndexSession, knowledgeBase), true)
   assert.equal(hasActiveIndexChanged(oldIndexSession, { id: 3, activeIndexRunId: 17 }), false)
+})
+
+test('归档会话在前端识别为只读并给出恢复文案', () => {
+  const archived = normalizeQaSession({ id: 23, courseId: 'os', knowledgeBaseId: 3, indexRunId: 17, status: 'archived' })
+
+  assert.equal(isArchivedReadOnlySession(archived), true)
+  assert.equal(resolveSessionLifecycleStatusText(archived), '该会话已归档，恢复后才能继续提问')
+  assert.equal(resolveSessionLifecycleStatusText({ ...archived, status: 'active' }), '')
 })
 
 test('上下文状态文案只展示策略和字符数', () => {

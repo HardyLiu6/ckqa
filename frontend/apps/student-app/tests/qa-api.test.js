@@ -17,6 +17,10 @@ function createClientRecorder() {
         calls.push({ method: 'post', url, data, config })
         return Promise.resolve({ ok: true })
       },
+      patch(url, data, config = {}) {
+        calls.push({ method: 'patch', url, data, config })
+        return Promise.resolve({ ok: true })
+      },
     },
   }
 }
@@ -49,6 +53,7 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.createQaSession({ userId: 3, courseId: 'os', knowledgeBaseId: 2, title: '操作系统问答' })
   await api.listQaSessions({ status: 'active', page: 1, size: 50, userId: 999 })
   await api.getQaSession(8)
+  await api.updateQaSession(8, { title: '死锁复习', status: 'archived' })
   await api.sendQaMessage(8, { mode: 'basic', content: '什么是进程？' })
   await api.getQaTask(8, 99)
   await api.listQaMessages(8)
@@ -69,6 +74,12 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     {
       method: 'get',
       url: '/qa-sessions/8',
+      config: {},
+    },
+    {
+      method: 'patch',
+      url: '/qa-sessions/8',
+      data: { title: '死锁复习', status: 'archived' },
       config: {},
     },
     {

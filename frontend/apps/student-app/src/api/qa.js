@@ -1,4 +1,4 @@
-import { get, post } from '../axios/index.js'
+import { get, patch, post } from '../axios/index.js'
 
 export function createQaApi(client = { get, post }) {
   return {
@@ -11,6 +11,9 @@ export function createQaApi(client = { get, post }) {
     },
     getQaSession(sessionId) {
       return client.get(`/qa-sessions/${encodeURIComponent(sessionId)}`)
+    },
+    updateQaSession(sessionId, payload) {
+      return client.patch(`/qa-sessions/${encodeURIComponent(sessionId)}`, payload)
     },
     sendQaMessage(sessionId, payload) {
       return client.post(`/qa-sessions/${encodeURIComponent(sessionId)}/messages`, payload)
@@ -32,6 +35,7 @@ const qaApi = createQaApi()
 export const listQaSessions = qaApi.listQaSessions
 export const createQaSession = qaApi.createQaSession
 export const getQaSession = qaApi.getQaSession
+export const updateQaSession = qaApi.updateQaSession
 export const sendQaMessage = qaApi.sendQaMessage
 export const getQaTask = qaApi.getQaTask
 export const listQaMessages = qaApi.listQaMessages

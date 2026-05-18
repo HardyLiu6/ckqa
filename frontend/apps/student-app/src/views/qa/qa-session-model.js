@@ -189,6 +189,17 @@ export function isLegacyReadOnlySession(session) {
   return Boolean(session && session.id != null && session.indexRunId == null)
 }
 
+export function isArchivedReadOnlySession(session) {
+  return String(session?.status ?? '').toLowerCase() === 'archived'
+}
+
+export function resolveSessionLifecycleStatusText(session) {
+  if (isArchivedReadOnlySession(session)) {
+    return '该会话已归档，恢复后才能继续提问'
+  }
+  return ''
+}
+
 export function hasActiveIndexChanged(session, knowledgeBase) {
   if (!session || !knowledgeBase || session.indexRunId == null || knowledgeBase.activeIndexRunId == null) {
     return false

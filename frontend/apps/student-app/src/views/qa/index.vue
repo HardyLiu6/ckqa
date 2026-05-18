@@ -17,7 +17,7 @@ import {
 } from '@element-plus/icons-vue'
 
 import { listCourses, listCourseKnowledgeBases } from '@/api/courses'
-import { createQaSession, getQaSession, getQaTask, listQaMessages, sendQaMessage, warmupHybrid } from '@/api/qa'
+import { createQaSession, getQaSession, getQaTask, listQaMessages, sendQaMessage, updateQaSession, warmupHybrid } from '@/api/qa'
 import GlassCard from '@/components/common/GlassCard.vue'
 import ModuleTag from '@/components/common/ModuleTag.vue'
 import { useUserStore } from '@/stores/user'
@@ -32,12 +32,14 @@ import QaMarkdownContent from './QaMarkdownContent.vue'
 import {
   isTerminalTaskStatus,
   hasActiveIndexChanged,
+  isArchivedReadOnlySession,
   isLegacyReadOnlySession,
   matchCourseForQuestion,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeQaMessage,
   normalizeQaSession,
+  resolveSessionLifecycleStatusText,
   resolveContextStatusText,
   resolvePollingDelaySeconds,
   selectReadyKnowledgeBase,
@@ -97,9 +99,10 @@ const hybridWarmupText = computed(() => {
 })
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
-  isLegacyReadOnlySession(activeSession.value)
+  resolveSessionLifecycleStatusText(activeSession.value)
+  || (isLegacyReadOnlySession(activeSession.value)
     ? '该旧会话创建于索引版本固化前，请基于当前索引新建会话后继续提问'
-    : ''
+    : '')
 ))
 const activeIndexChanged = computed(() => hasActiveIndexChanged(activeSession.value, selectedKnowledgeBase.value))
 const canSend = computed(() => Boolean(
@@ -382,6 +385,20 @@ async function startNewIndexedSession() {
   resetConversation()
   await clearSessionQuery()
   statusMessage.value = '已切换为基于当前索引的新会话，发送下一条问题时会自动创建'
+}
+
+async function restoreActiveSession() {
+  if (!activeSession.value?.id) {
+    return
+  }
+  try {
+    activeSession.value = normalizeQaSession(await updateQaSession(activeSession.value.id, { status: 'active' }))
+    statusMessage.value = '会话已恢复，可以继续提问'
+    errorMessage.value = ''
+  } catch (error) {
+    errorMessage.value = error?.message || '会话恢复失败'
+    ElMessage.error(errorMessage.value)
+  }
 }
 
 async function clearSessionQuery() {
@@ -771,7 +788,15 @@ function sourceTypeLabel(source) {
       <div v-else-if="activeSessionReadOnlyMessage" class="qa-alert error-alert" role="alert">
         <el-icon><WarningFilled /></el-icon>
         <span>{{ activeSessionReadOnlyMessage }}</span>
-        <button class="inline-action" type="button" @click="startNewIndexedSession">新建会话</button>
+        <button
+          v-if="isArchivedReadOnlySession(activeSession)"
+          class="inline-action"
+          type="button"
+          @click="restoreActiveSession"
+        >
+          恢复会话
+        </button>
+        <button v-else class="inline-action" type="button" @click="startNewIndexedSession">新建会话</button>
       </div>
       <div v-else-if="statusMessage" class="qa-alert info-alert">
         <el-icon><Search /></el-icon>
@@ -786,7 +811,7 @@ function sourceTypeLabel(source) {
           :placeholder="activeSessionReadOnlyMessage || '输入课程问题，或点上方手动选择课程与模式'"
           @keyup.enter="send"
         />
-        <button class="qa-send" :disabled="!canSend" type="button" @click="send">
+        <button class="qa-send" :disabled="!canSend" type="button" aria-label="发送问题" @click="send">
           <el-icon v-if="sending" class="is-loading" :size="18"><Loading /></el-icon>
           <el-icon v-else :size="18"><Position /></el-icon>
         </button>

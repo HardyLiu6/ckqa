@@ -74,8 +74,8 @@
       <div class="filter-container">
         <div class="filter-left">
           <el-radio-group v-model="filterType" @change="handleFilterChange">
-            <el-radio-button value="all">全部</el-radio-button>
-            <el-radio-button value="favorite">已收藏</el-radio-button>
+            <el-radio-button value="active">进行中</el-radio-button>
+            <el-radio-button value="archived">已归档</el-radio-button>
             <el-radio-button value="today">今天</el-radio-button>
             <el-radio-button value="week">本周</el-radio-button>
           </el-radio-group>
@@ -134,11 +134,11 @@
                 <div class="card-actions">
                   <el-tooltip content="继续对话"><el-button :icon="ChatLineRound" circle
                       @click.stop="continueChat(session)" /></el-tooltip>
-                  <el-tooltip :content="session.isFavorite ? '取消收藏' : '收藏'"><el-button
-                      :icon="session.isFavorite ? StarFilled : Star" circle :class="{ favorite: session.isFavorite }"
-                      @click.stop="toggleFavorite(session)" /></el-tooltip>
-                  <el-tooltip content="删除"><el-button :icon="Delete" circle class="delete-btn"
-                      @click.stop="deleteSession(session)" /></el-tooltip>
+                  <el-tooltip content="改名"><el-button :icon="EditPen" circle
+                      @click.stop="renameSession(session)" /></el-tooltip>
+                  <el-tooltip :content="session.status === 'archived' ? '恢复' : '归档'"><el-button
+                      :icon="session.status === 'archived' ? RefreshLeft : Delete" circle class="delete-btn"
+                      @click.stop="toggleArchive(session)" /></el-tooltip>
                 </div>
               </div>
 
@@ -174,9 +174,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete } from '@element-plus/icons-vue'
+import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
 import { listCourses } from '@/api/courses'
-import { listQaSessions } from '@/api/qa'
+import { listQaSessions, updateQaSession } from '@/api/qa'
 import { normalizeCourseList, normalizeQaSession } from './qa-session-model'
 
 const router = useRouter()
@@ -187,7 +187,7 @@ const loading = ref(false)
 
 // 筛选状态
 const searchKeyword = ref('')
-const filterType = ref('all')
+const filterType = ref('active')
 const filterCourse = ref('')
 const sortBy = ref('newest')
 
@@ -216,8 +216,7 @@ const filteredSessions = computed(() => {
     result = result.filter(s => s.title.toLowerCase().includes(kw) || s.lastMessage.toLowerCase().includes(kw))
   }
 
-  if (filterType.value === 'favorite') result = result.filter(s => s.isFavorite)
-  else if (filterType.value === 'today') {
+  if (filterType.value === 'today') {
     const today = new Date().toISOString().split('T')[0]
     result = result.filter(s => s.date === today)
   } else if (filterType.value === 'week') {
@@ -259,7 +258,9 @@ const goBack = () => router.back()
 const goToAsk = () => router.push('/qa/ask')
 const goToDetail = (id) => router.push({ path: '/qa/ask', query: { sessionId: id } })
 const continueChat = (session) => router.push({ path: '/qa/ask', query: { sessionId: session.id } })
-const handleFilterChange = () => { }
+const handleFilterChange = () => {
+  loadHistory()
+}
 
 const getCourseTheme = (courseId) => {
   const themes = ['blue', 'green', 'orange', 'purple', 'cyan']
@@ -273,8 +274,31 @@ const toggleFavorite = () => {
   ElMessage.info('收藏功能暂未接入后端')
 }
 
-const deleteSession = async () => {
-  ElMessage.info('删除会话功能暂未接入后端')
+const renameSession = async (session) => {
+  const title = window.prompt('请输入新的会话标题', session.title)
+  if (!title || title.trim() === session.title) {
+    return
+  }
+  try {
+    const updated = normalizeQaSession(await updateQaSession(session.id, { title: title.trim() }))
+    sessionList.value = sessionList.value.map((item) => (
+      item.id === session.id ? toSessionCard(updated) : item
+    ))
+    ElMessage.success('会话标题已更新')
+  } catch (error) {
+    ElMessage.error(error?.message || '会话改名失败')
+  }
+}
+
+const toggleArchive = async (session) => {
+  const nextStatus = session.status === 'archived' ? 'active' : 'archived'
+  try {
+    await updateQaSession(session.id, { status: nextStatus })
+    ElMessage.success(nextStatus === 'archived' ? '会话已归档' : '会话已恢复')
+    await loadHistory()
+  } catch (error) {
+    ElMessage.error(error?.message || '会话状态更新失败')
+  }
 }
 
 const exportAll = () => {
@@ -294,7 +318,7 @@ async function loadHistory() {
   try {
     const [coursePayload, sessionPayload] = await Promise.all([
       listCourses({ page: 1, size: 100, status: 'active' }),
-      listQaSessions({ status: 'active', page: 1, size: 50 }),
+      listQaSessions({ status: filterType.value === 'archived' ? 'archived' : 'active', page: 1, size: 50 }),
     ])
     courses.value = normalizeCourseList(coursePayload)
     const sessions = Array.isArray(sessionPayload) ? sessionPayload : sessionPayload?.items ?? []
@@ -315,7 +339,9 @@ function toSessionCard(session) {
     courseName: courseNameById.value[session.courseId] || session.courseId || '未绑定课程',
     messageCount: 0,
     lastTime: formatSessionTime(referenceTime),
-    lastMessage: session.isLegacy ? '旧会话仅可查看历史消息' : '点击继续这个真实问答会话',
+    lastMessage: session.status === 'archived'
+      ? '该会话已归档，可恢复后继续提问'
+      : (session.isLegacy ? '旧会话仅可查看历史消息' : '点击继续这个真实问答会话'),
     date,
     isFavorite: false,
     recentMessages: [],
