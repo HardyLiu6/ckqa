@@ -74,6 +74,7 @@ import {
   createCoursesLoaderResult,
   loadCourseDetailBlock,
   loadModulePage,
+  mapIndexRunItem,
   resolveCoursesRequestState,
 } from './views/pages/module-loaders.js'
 import {
@@ -2975,8 +2976,8 @@ test('登录页使用真实账号密码输入并按 LOGIN_PRESETS 切换身份',
   const loginView = readFileSync(new URL('./views/auth/LoginView.vue', import.meta.url), 'utf8')
 
   // 账号密码输入复用 el-input + lucide 图标 prefix
-  assert.match(loginView, /<el-input\s+v-model\.trim="form\.username"[\s\S]*autocomplete="username"/)
-  assert.match(loginView, /<el-input[\s\S]*v-model="form\.password"[\s\S]*type="password"/)
+  assert.match(loginView, /<el-input\s+v-model\.trim="loginForm\.username"[\s\S]*autocomplete="username"/)
+  assert.match(loginView, /<el-input[\s\S]*v-model="loginForm\.password"[\s\S]*type="password"/)
   // preset 角色切换仍按 LOGIN_PRESETS 数据驱动
   assert.match(loginView, /v-for="preset in LOGIN_PRESETS"/)
   // 不再使用旧的 selectedRole 下拉
@@ -3635,4 +3636,25 @@ test('顶部导航 dropdown 暴露个人中心和退出菜单', () => {
   assert.match(authApi, /export async function updateCurrentProfile/)
   assert.match(authApi, /export async function changeCurrentPassword/)
   assert.match(authApi, /export async function uploadCurrentAvatar/)
+})
+
+test('mapIndexRunItem 暴露 buildRunId / status / startedAt 供 build_run 维度过滤使用', () => {
+  const item = mapIndexRunItem({
+    id: 7,
+    buildRunId: 42,
+    status: 'running',
+    startedAt: '2026-05-18T10:00:00',
+    createdAt: '2026-05-18T09:59:50',
+  })
+  assert.equal(item.id, 7)
+  assert.equal(item.buildRunId, 42)
+  assert.equal(item.status, 'running')
+  assert.equal(item.startedAt, '2026-05-18T10:00:00')
+  assert.equal(item.meta, 'running')
+
+  // 缺字段时安全回退
+  const minimal = mapIndexRunItem({ id: 8 })
+  assert.equal(minimal.buildRunId, null)
+  assert.equal(minimal.status, null)
+  assert.equal(minimal.startedAt, null)
 })

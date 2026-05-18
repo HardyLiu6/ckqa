@@ -2174,7 +2174,7 @@ function classifyParseResult(item = {}) {
   return 'other'
 }
 
-function mapIndexRunItem(indexRun = {}) {
+export function mapIndexRunItem(indexRun = {}) {
   const id = indexRun.id ?? indexRun.indexRunId
   return {
     id,
