@@ -465,7 +465,7 @@ CREATE TABLE `qa_retrieval_logs` (
   `session_id` bigint NOT NULL COMMENT '会话ID',
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程ID',
   `index_run_id` bigint NULL DEFAULT NULL COMMENT '索引运行ID',
-  `query_mode` enum('local','global','drift','basic') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
+  `query_mode` enum('local','global','drift','basic','hybrid_v0') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
   `query_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询文本',
   `retrieval_status` enum('success','partial','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '检索状态',
   `error_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '错误信息',
@@ -478,7 +478,7 @@ CREATE TABLE `qa_retrieval_logs` (
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答检索日志表' ROW_FORMAT = Dynamic;
 
 ALTER TABLE `qa_retrieval_logs`
-  MODIFY COLUMN `query_mode` enum('local','global','drift','basic') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
+  MODIFY COLUMN `query_mode` enum('local','global','drift','basic','hybrid_v0') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '查询模式',
   MODIFY COLUMN `retrieval_status` enum('success','partial','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '检索状态',
   ADD COLUMN `user_message_id` bigint NULL COMMENT '用户消息ID' AFTER `session_id`,
   ADD COLUMN `assistant_message_id` bigint NULL COMMENT '助手消息ID' AFTER `user_message_id`,
