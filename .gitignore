@@ -148,6 +148,9 @@ graphrag_pipeline/output/
 graphrag_pipeline/input/
 graphrag_pipeline/inputs/artifacts/
 graphrag_pipeline/runtime/kb-build-runs/
+graphrag_pipeline/runtime/query-tasks/
+frontend/apps/student-app/test-results/
+frontend/apps/student-app/playwright-report/
 
 # LanceDB
 graphrag_pipeline/**/lancedb/

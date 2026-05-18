@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from collections import deque
-from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from dataclasses import dataclass, fields, replace
+from datetime import UTC, datetime, timedelta
 from itertools import count
 from pathlib import Path
 from typing import Any, Callable
@@ -50,6 +51,72 @@ class QueryTaskSnapshot:
     generation_context: str | None = None
 
 
+class QueryTaskSnapshotStore:
+    """轻量文件持久化，仅用于 Python task 重启后诊断和终态回读。"""
+
+    def __init__(
+        self,
+        store_dir: str | Path,
+        *,
+        retention_days: int = 7,
+        retention_limit: int = 5000,
+    ) -> None:
+        self._store_dir = Path(store_dir)
+        self._retention_days = retention_days if retention_days > 0 else 7
+        self._retention_limit = retention_limit if retention_limit > 0 else 5000
+        self._store_dir.mkdir(parents=True, exist_ok=True)
+
+    def load(self) -> dict[str, QueryTaskSnapshot]:
+        loaded: dict[str, QueryTaskSnapshot] = {}
+        for path in sorted(self._store_dir.glob("*.json")):
+            try:
+                snapshot = _snapshot_from_json(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+            loaded[snapshot.python_task_id] = snapshot
+        self.cleanup(loaded)
+        return loaded
+
+    def save(self, snapshot: QueryTaskSnapshot) -> None:
+        try:
+            path = self._path_for(snapshot.python_task_id)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(_snapshot_to_json(snapshot), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            # task 状态以 Java/MySQL 为事实源，Python 文件落盘失败不能阻断问答。
+            return
+
+    def cleanup(self, snapshots: dict[str, QueryTaskSnapshot] | None = None) -> None:
+        snapshots = snapshots if snapshots is not None else self.load()
+        now = utc_now()
+        cutoff = now - timedelta(days=self._retention_days)
+        ordered = sorted(
+            snapshots.values(),
+            key=lambda snapshot: snapshot.created_at,
+            reverse=True,
+        )
+        keep_ids = {
+            snapshot.python_task_id
+            for snapshot in ordered[: self._retention_limit]
+            if snapshot.created_at >= cutoff
+        }
+        for path in self._store_dir.glob("*.json"):
+            task_id = path.stem
+            if task_id in keep_ids:
+                continue
+            try:
+                path.unlink()
+            except OSError:
+                continue
+            snapshots.pop(task_id, None)
+
+    def _path_for(self, python_task_id: str) -> Path:
+        return self._store_dir / f"{python_task_id}.json"
+
+
 def trim_log_tail(lines: list[str], *, max_lines: int, max_chars: int) -> list[str]:
     trimmed = list(lines[-max_lines:])
     while trimmed and len("\n".join(trimmed)) > max_chars:
@@ -71,6 +138,9 @@ class QueryTaskManager:
         cwd: str | Path,
         build_runs_root: str | Path | None = None,
         hybrid_answer_runner: Callable[[QueryTaskRequest], Any] | None = None,
+        task_store_dir: str | Path | None = None,
+        task_store_retention_days: int = 7,
+        task_store_retention_limit: int = 5000,
     ) -> None:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._max_log_lines = max_log_lines
@@ -81,7 +151,12 @@ class QueryTaskManager:
         self._cwd = str(cwd)
         self._build_runs_root = Path(build_runs_root).resolve() if build_runs_root is not None else None
         self._counter = count(1)
-        self._tasks: dict[str, QueryTaskSnapshot] = {}
+        self._task_store = QueryTaskSnapshotStore(
+            task_store_dir,
+            retention_days=task_store_retention_days,
+            retention_limit=task_store_retention_limit,
+        ) if task_store_dir is not None else None
+        self._tasks: dict[str, QueryTaskSnapshot] = self._task_store.load() if self._task_store is not None else {}
         self._task_requests: dict[str, QueryTaskRequest] = {}
         self._lock = asyncio.Lock()
 
@@ -97,7 +172,7 @@ class QueryTaskManager:
     ) -> QueryTaskSnapshot:
         data_dir = self.resolve_data_dir_uri(data_dir_uri)
         effective_retrieval_query = (retrieval_query or prompt).strip()
-        python_task_id = f"qt_{utc_now():%Y%m%d_%H%M%S}_{next(self._counter):03d}"
+        python_task_id = self._next_task_id()
         snapshot = QueryTaskSnapshot(
             python_task_id=python_task_id,
             mode=mode,
@@ -124,6 +199,7 @@ class QueryTaskManager:
         async with self._lock:
             self._tasks[python_task_id] = snapshot
             self._task_requests[python_task_id] = request
+            self._persist_snapshot(snapshot)
             asyncio.create_task(self._run_task(python_task_id))
         return replace(snapshot)
 
@@ -136,7 +212,19 @@ class QueryTaskManager:
     async def _update_task(self, python_task_id: str, **changes) -> None:
         async with self._lock:
             snapshot = self._tasks[python_task_id]
-            self._tasks[python_task_id] = replace(snapshot, **changes)
+            updated = replace(snapshot, **changes)
+            self._tasks[python_task_id] = updated
+            self._persist_snapshot(updated)
+
+    def _next_task_id(self) -> str:
+        while True:
+            task_id = f"qt_{utc_now():%Y%m%d_%H%M%S}_{next(self._counter):03d}"
+            if task_id not in self._tasks:
+                return task_id
+
+    def _persist_snapshot(self, snapshot: QueryTaskSnapshot) -> None:
+        if self._task_store is not None:
+            self._task_store.save(snapshot)
 
     async def _run_task(self, python_task_id: str) -> None:
         logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
@@ -280,6 +368,56 @@ class QueryTaskManager:
 
 def _serialize_sources(sources: list[QueryCitationSource]) -> list[dict[str, Any]]:
     return [source.to_dict() for source in sources]
+
+
+def _snapshot_to_json(snapshot: QueryTaskSnapshot) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field in fields(QueryTaskSnapshot):
+        value = getattr(snapshot, field.name)
+        payload[_camelize(field.name)] = _json_value(value)
+    return payload
+
+
+def _snapshot_from_json(payload: dict[str, Any]) -> QueryTaskSnapshot:
+    kwargs: dict[str, Any] = {}
+    for field in fields(QueryTaskSnapshot):
+        raw_value = payload.get(_camelize(field.name), payload.get(field.name))
+        if field.name in {
+            "created_at",
+            "started_at",
+            "last_heartbeat_at",
+            "finished_at",
+        }:
+            kwargs[field.name] = _parse_datetime(raw_value)
+        else:
+            kwargs[field.name] = raw_value
+    if kwargs.get("created_at") is None:
+        raise ValueError("createdAt is required")
+    kwargs["latest_logs"] = list(kwargs.get("latest_logs") or [])
+    kwargs["sources"] = list(kwargs.get("sources") or []) if kwargs.get("sources") is not None else None
+    # 进程重启后旧 snapshot 只用于诊断和回读，不能继续声称子进程仍存活。
+    kwargs["process_alive"] = False
+    return QueryTaskSnapshot(**kwargs)
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _camelize(name: str) -> str:
+    parts = name.split("_")
+    return parts[0] + "".join(part.title() for part in parts[1:])
 
 
 def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:

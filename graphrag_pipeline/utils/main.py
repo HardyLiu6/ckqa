@@ -354,6 +354,9 @@ QUERY_TASK_MANAGER = QueryTaskManager(
     cwd=GRAPHRAG_ROOT,
     build_runs_root=BUILD_RUNS_ROOT,
     hybrid_answer_runner=_run_hybrid_v0_answer,
+    task_store_dir=os.getenv("GRAPHRAG_QUERY_TASK_STORE_DIR", str(GRAPHRAG_ROOT / "runtime" / "query-tasks")),
+    task_store_retention_days=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_DAYS", "7")),
+    task_store_retention_limit=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_LIMIT", "5000")),
 )
 
 

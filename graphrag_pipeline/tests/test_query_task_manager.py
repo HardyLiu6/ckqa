@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -204,6 +205,91 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(seen[0].retrieval_query, "死锁和资源分配图有什么关系？")
         self.assertEqual(seen[0].generation_context, "最近对话：上一轮解释了死锁。")
+
+    async def test_persists_finished_snapshot_and_loads_it_after_restart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("print('persisted answer', flush=True)"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                build_runs_root=Path(temp_dir) / "runtime" / "kb-build-runs",
+                task_store_dir=store_dir,
+            )
+
+            created = await manager.create_task(
+                "basic",
+                "原问题",
+                index_run_id=18,
+                data_dir_uri="user_2/kb_5/build_27/index/output",
+                retrieval_query="独立问题",
+                generation_context="最近对话",
+            )
+            await asyncio.sleep(0.2)
+
+            reloaded_manager = QueryTaskManager(
+                command_factory=lambda request: _python_cmd("raise SystemExit('should not run')"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                build_runs_root=Path(temp_dir) / "runtime" / "kb-build-runs",
+                task_store_dir=store_dir,
+            )
+            snapshot = reloaded_manager.get_snapshot(created.python_task_id)
+
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertEqual(snapshot.result_text, "persisted answer")
+            self.assertEqual(snapshot.index_run_id, 18)
+            self.assertEqual(snapshot.retrieval_query, "独立问题")
+            self.assertEqual(snapshot.generation_context, "最近对话")
+
+    async def test_ignores_corrupt_persisted_snapshot_and_keeps_new_tasks_available(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            store_dir.mkdir(parents=True)
+            (store_dir / "broken.json").write_text("{not-json", encoding="utf-8")
+
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("print('ok', flush=True)"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                task_store_dir=store_dir,
+            )
+
+            created = await manager.create_task("basic", "问题")
+            await asyncio.sleep(0.15)
+
+            snapshot = manager.get_snapshot(created.python_task_id)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertEqual(snapshot.result_text, "ok")
+
+    async def test_query_task_store_retention_keeps_recent_snapshot_count(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            store_dir.mkdir(parents=True)
+            for index in range(3):
+                created_at = datetime.now(UTC) - timedelta(minutes=10 - index)
+                (store_dir / f"old-{index}.json").write_text(
+                    (
+                        '{"pythonTaskId":"old-%d","mode":"basic","prompt":"q",'
+                        '"taskStatus":"success","progressStage":"done","processAlive":false,'
+                        '"createdAt":"%s","latestLogs":[]}'
+                    ) % (index, created_at.isoformat()),
+                    encoding="utf-8",
+                )
+
+            QueryTaskManager(
+                command_factory=lambda request: _python_cmd("print('unused')"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                task_store_dir=store_dir,
+                task_store_retention_limit=1,
+            )
+
+            remaining = sorted(path.name for path in store_dir.glob("*.json"))
+            self.assertEqual(remaining, ["old-2.json"])
 
     async def test_hybrid_result_text_uses_student_readable_source_marks(self):
         with tempfile.TemporaryDirectory() as temp_dir:
