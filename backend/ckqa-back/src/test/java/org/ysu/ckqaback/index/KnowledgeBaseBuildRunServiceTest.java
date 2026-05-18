@@ -57,6 +57,7 @@ class KnowledgeBaseBuildRunServiceTest {
     private IndexRunsService indexRunsService;
     private CourseMaterialsService courseMaterialsService;
     private ParseResultsService parseResultsService;
+    private IndexProgressParser indexProgressParser;
     private KnowledgeBaseBuildRunService service;
 
     @BeforeEach
@@ -70,6 +71,7 @@ class KnowledgeBaseBuildRunServiceTest {
         indexRunsService = mock(IndexRunsService.class);
         courseMaterialsService = mock(CourseMaterialsService.class);
         parseResultsService = mock(ParseResultsService.class);
+        indexProgressParser = new IndexProgressParser();
         service = new KnowledgeBaseBuildRunService(
                 knowledgeBasesService,
                 buildRunsStore,
@@ -78,7 +80,8 @@ class KnowledgeBaseBuildRunServiceTest {
                 qaWorkflowService,
                 indexRunsService,
                 courseMaterialsService,
-                parseResultsService
+                parseResultsService,
+                indexProgressParser
         );
     }
 

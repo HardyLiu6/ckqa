@@ -30,8 +30,17 @@ public class BuildRunDetailResponse {
     private final LocalDateTime finishedAt;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
+    /**
+     * 索引实时进度。仅在 {@code currentStage="index"} 且 {@code status="running"}
+     * 时由 service 层从 process.log 解析后注入；其他场景为 null。
+     */
+    private final IndexProgress indexProgress;
 
     public static BuildRunDetailResponse fromEntity(KnowledgeBaseBuildRuns buildRun) {
+        return fromEntity(buildRun, null);
+    }
+
+    public static BuildRunDetailResponse fromEntity(KnowledgeBaseBuildRuns buildRun, IndexProgress indexProgress) {
         return BuildRunDetailResponse.builder()
                 .id(buildRun.getId())
                 .knowledgeBaseId(buildRun.getKnowledgeBaseId())
@@ -50,6 +59,7 @@ public class BuildRunDetailResponse {
                 .finishedAt(buildRun.getFinishedAt())
                 .createdAt(buildRun.getCreatedAt())
                 .updatedAt(buildRun.getUpdatedAt())
+                .indexProgress(indexProgress)
                 .build();
     }
 }

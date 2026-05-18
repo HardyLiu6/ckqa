@@ -82,6 +82,7 @@ public class KnowledgeBaseBuildRunService {
     private final IndexRunsService indexRunsService;
     private final CourseMaterialsService courseMaterialsService;
     private final ParseResultsService parseResultsService;
+    private final IndexProgressParser indexProgressParser;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
@@ -153,7 +154,27 @@ public class KnowledgeBaseBuildRunService {
     public BuildRunDetailResponse getBuildRun(Long id) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         syncQaSmokeTerminalIfAvailable(buildRun);
-        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+        KnowledgeBaseBuildRuns refreshed = buildRunsStore.getRequiredById(id);
+        return BuildRunDetailResponse.fromEntity(refreshed, resolveIndexProgress(refreshed));
+    }
+
+    private org.ysu.ckqaback.index.dto.IndexProgress resolveIndexProgress(KnowledgeBaseBuildRuns buildRun) {
+        if (buildRun == null) {
+            return null;
+        }
+        if (!"running".equalsIgnoreCase(buildRun.getStatus())
+                || !"index".equalsIgnoreCase(buildRun.getCurrentStage())
+                || !StringUtils.hasText(buildRun.getWorkspaceUri())) {
+            return null;
+        }
+        try {
+            Path workspaceRoot = workspaceService.resolve(buildRun.getWorkspaceUri());
+            Path logPath = workspaceRoot.resolve("index").resolve("logs").resolve("process.log");
+            return indexProgressParser.parse(logPath).orElse(null);
+        } catch (Exception ex) {
+            // 解析失败不阻断前端轮询；前端会回退到"准备中"
+            return null;
+        }
     }
 
     @Transactional
