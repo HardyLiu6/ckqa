@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record GraphRagSourceSnapshot(
         Integer rank,
         String kind,
+        @JsonProperty("source_type") String sourceType,
         String ref,
         @JsonProperty("chunk_id") String chunkId,
         @JsonProperty("document_key") String documentKey,
@@ -17,4 +18,30 @@ public record GraphRagSourceSnapshot(
         @JsonProperty("page_end") Integer pageEnd,
         String snippet
 ) {
+    public GraphRagSourceSnapshot(
+            Integer rank,
+            String kind,
+            String ref,
+            String chunkId,
+            String documentKey,
+            String sourceFile,
+            String headingPath,
+            Integer pageStart,
+            Integer pageEnd,
+            String snippet
+    ) {
+        this(
+                rank,
+                kind,
+                kind,
+                ref,
+                chunkId,
+                documentKey,
+                sourceFile,
+                headingPath,
+                pageStart,
+                pageEnd,
+                snippet
+        );
+    }
 }

@@ -10,6 +10,7 @@ import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.course.CourseAccessService;
+import org.ysu.ckqaback.entity.IndexArtifacts;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
@@ -18,6 +19,8 @@ import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
+import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
+import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
 import org.ysu.ckqaback.qa.context.QaContextSummary;
@@ -29,6 +32,8 @@ import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
@@ -36,6 +41,7 @@ import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
@@ -71,6 +77,8 @@ public class QaWorkflowService {
     private QaSessionSummariesService qaSessionSummariesService;
     private QaRetrievalHitsService qaRetrievalHitsService;
     private CourseAccessService courseAccessService;
+    private GraphRagTaskClient graphRagTaskClient;
+    private IndexArtifactsService indexArtifactsService;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -90,6 +98,16 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setCourseAccessService(CourseAccessService courseAccessService) {
         this.courseAccessService = courseAccessService;
+    }
+
+    @Autowired(required = false)
+    public void setGraphRagTaskClient(GraphRagTaskClient graphRagTaskClient) {
+        this.graphRagTaskClient = graphRagTaskClient;
+    }
+
+    @Autowired(required = false)
+    public void setIndexArtifactsService(IndexArtifactsService indexArtifactsService) {
+        this.indexArtifactsService = indexArtifactsService;
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -158,6 +176,41 @@ public class QaWorkflowService {
         }
         usersService.getRequiredById(currentUserId);
         return qaSessionsService.pageFormalSessions(currentUserId, request);
+    }
+
+    public QaHybridWarmupResponse warmupHybrid(QaHybridWarmupRequest request, AuthenticatedUser currentUser) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        if (graphRagTaskClient == null || indexArtifactsService == null) {
+            throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT, "混合检索预热服务未就绪");
+        }
+        KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(request.getKnowledgeBaseId());
+        validateFormalSessionScope(toScopeRequest(request, currentUser.id()), knowledgeBase, currentUser.userCode());
+        Long indexRunId = knowledgeBase.getActiveIndexRunId();
+        if (indexRunId == null) {
+            throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
+        }
+        String dataDirUri = resolveReadyOutputDirUri(indexRunId);
+        GraphRagHybridReadinessResult readiness = graphRagTaskClient.warmupHybridV0(dataDirUri);
+        return QaHybridWarmupResponse.of(
+                readiness != null && readiness.ready(),
+                readiness == null ? "not_ready" : readiness.status(),
+                readiness != null && readiness.ready() ? "混合检索已就绪" : "混合检索准备未完成，可继续降级尝试",
+                dataDirUri,
+                readiness != null && readiness.cached(),
+                readiness != null && readiness.textUnitsReady(),
+                readiness == null ? List.of() : readiness.missing()
+        );
+    }
+
+    private CreateQaSessionRequest toScopeRequest(QaHybridWarmupRequest request, Long userId) {
+        CreateQaSessionRequest scopeRequest = new CreateQaSessionRequest();
+        scopeRequest.setUserId(userId);
+        scopeRequest.setCourseId(request.getCourseId());
+        scopeRequest.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        scopeRequest.setSessionType("formal");
+        return scopeRequest;
     }
 
     public void ensureSessionOwner(Long sessionId, Long currentUserId) {
@@ -295,6 +348,28 @@ public class QaWorkflowService {
                 HttpStatus.CONFLICT,
                 "该会话创建于索引版本固化前，请基于当前索引新建会话"
         );
+    }
+
+    private String resolveReadyOutputDirUri(Long indexRunId) {
+        return indexArtifactsService.listByIndexRunId(indexRunId).stream()
+                .filter(artifact -> "output_dir".equals(artifact.getArtifactType()))
+                .filter(artifact -> "ready".equals(artifact.getArtifactStatus()))
+                .map(IndexArtifacts::getStorageUri)
+                .filter(this::isSafeRelativeUri)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT));
+    }
+
+    private boolean isSafeRelativeUri(String storageUri) {
+        if (!StringUtils.hasText(storageUri) || storageUri.contains("\\") || storageUri.contains("/home/")) {
+            return false;
+        }
+        java.nio.file.Path path = java.nio.file.Path.of(storageUri);
+        if (path.isAbsolute()) {
+            return false;
+        }
+        java.nio.file.Path normalized = path.normalize();
+        return !normalized.startsWith("..");
     }
 
     private QaContextSummary loadLatestContextSummary(Long sessionId) {

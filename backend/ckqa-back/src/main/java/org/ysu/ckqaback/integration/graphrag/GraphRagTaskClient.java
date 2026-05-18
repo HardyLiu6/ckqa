@@ -91,4 +91,27 @@ public class GraphRagTaskClient {
             throw exception;
         }
     }
+
+    public GraphRagHybridReadinessResult warmupHybridV0(String dataDirUri) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (dataDirUri != null && !dataDirUri.isBlank()) {
+            body.put("dataDirUri", dataDirUri);
+        }
+        return restClient.post()
+                .uri("/v1/hybrid-v0/warmup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(GraphRagHybridReadinessResult.class);
+    }
+
+    public GraphRagHybridReadinessResult getHybridV0Readiness(String dataDirUri) {
+        return restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/v1/hybrid-v0/readiness")
+                        .queryParam("dataDirUri", dataDirUri)
+                        .build())
+                .retrieve()
+                .body(GraphRagHybridReadinessResult.class);
+    }
 }

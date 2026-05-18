@@ -18,6 +18,7 @@ import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
@@ -201,6 +202,50 @@ class QaSessionsControllerWebMvcTest {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("学生端不能创建 smoke 会话"));
+    }
+
+    @Test
+    void shouldWarmupHybridOnlyForAuthenticatedStudentScope() throws Exception {
+        given(qaWorkflowService.warmupHybrid(any(), eq(authenticatedStudent())))
+                .willReturn(QaHybridWarmupResponse.of(
+                        true,
+                        "ready",
+                        "混合检索已就绪",
+                        "user_2/kb_5/build_27/index/output",
+                        true,
+                        true,
+                        List.of()
+                ));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/hybrid-warmup")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ready").value(true))
+                .andExpect(jsonPath("$.data.status").value("ready"))
+                .andExpect(jsonPath("$.data.dataDirUri").value("user_2/kb_5/build_27/index/output"));
+
+        then(qaWorkflowService).should().warmupHybrid(argThat(request -> "os".equals(request.getCourseId())), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldRequireAuthForHybridWarmup() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/hybrid-warmup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 3
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("请先登录"));
     }
 
     @Test

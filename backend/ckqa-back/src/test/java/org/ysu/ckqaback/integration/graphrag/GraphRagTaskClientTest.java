@@ -131,6 +131,59 @@ class GraphRagTaskClientTest {
     }
 
     @Test
+    void shouldWarmupHybridV0WithBackendOnlyDataDirUri() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/hybrid-v0/warmup"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("\"dataDirUri\":\"user_2/kb_5/build_27/index/output\"")))
+                .andExpect(content().string(not(containsString("/home/"))))
+                .andRespond(withSuccess("""
+                        {
+                          "ready": true,
+                          "status": "ready",
+                          "dataDirUri": "user_2/kb_5/build_27/index/output",
+                          "cached": true,
+                          "textUnitsReady": true,
+                          "missing": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        GraphRagHybridReadinessResult result = client.warmupHybridV0("user_2/kb_5/build_27/index/output");
+
+        assertThat(result.ready()).isTrue();
+        assertThat(result.status()).isEqualTo("ready");
+        assertThat(result.textUnitsReady()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void shouldFetchHybridV0ReadinessWithEncodedDataDirUri() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/hybrid-v0/readiness?dataDirUri=user_2/kb_5/build_27/index/output"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {
+                          "ready": false,
+                          "status": "not_ready",
+                          "dataDirUri": "user_2/kb_5/build_27/index/output",
+                          "cached": false,
+                          "textUnitsReady": false,
+                          "missing": ["text_units.parquet"]
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        GraphRagHybridReadinessResult result = client.getHybridV0Readiness("user_2/kb_5/build_27/index/output");
+
+        assertThat(result.ready()).isFalse();
+        assertThat(result.missing()).containsExactly("text_units.parquet");
+        server.verify();
+    }
+
+    @Test
     void shouldReturnEmptyWhenPythonTaskSnapshotIsMissing() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -168,6 +221,8 @@ class GraphRagTaskClientTest {
                           "sources": [
                             {
                               "rank": 1,
+                              "kind": "bm25",
+                              "source_type": "bm25",
                               "ref": "156",
                               "chunk_id": "chunk-1",
                               "document_key": "doc-1",
@@ -195,6 +250,7 @@ class GraphRagTaskClientTest {
             assertThat(value.latestLogs()).containsExactly("started", "done");
             assertThat(value.resultText()).isEqualTo("图谱主题是操作系统");
             assertThat(value.sources()).hasSize(1);
+            assertThat(value.sources().get(0).sourceType()).isEqualTo("bm25");
             assertThat(value.sources().get(0).sourceFile()).isEqualTo("操作系统教材");
             assertThat(value.returnCode()).isEqualTo(0);
             assertThat(value.lastHeartbeatAt()).isEqualTo(LocalDateTime.of(2026, 4, 22, 20, 20, 36));

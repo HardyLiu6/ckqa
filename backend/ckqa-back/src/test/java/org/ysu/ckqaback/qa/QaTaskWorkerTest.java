@@ -243,6 +243,76 @@ class QaTaskWorkerTest {
     }
 
     @Test
+    void shouldKeepAssistantMessageAndSuccessWhenSourcePersistenceFails() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaRetrievalHitsService retrievalHitsService = mock(QaRetrievalHitsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+        worker.setQaRetrievalHitsService(retrievalHitsService);
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("hybrid_v0");
+        task.setQueryText("死锁和资源分配图有什么关系？");
+
+        GraphRagSourceSnapshot source = new GraphRagSourceSnapshot(
+                1,
+                "bm25",
+                "bm25",
+                "tu-bm25-001",
+                "tu-bm25-001",
+                "tu-bm25-001",
+                "操作系统教材",
+                "",
+                null,
+                null,
+                "资源分配图片段"
+        );
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("hybrid_v0", "死锁和资源分配图有什么关系？", null, null, null))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260518_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260518_001"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260518_001",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "死锁和资源分配图有关。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now(),
+                        List.of(source)
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "死锁和资源分配图有关。")).willReturn(assistant);
+        doThrow(new RuntimeException("hits down")).when(retrievalHitsService).replaceHits(9001L, List.of(source));
+
+        worker.processTask(5L, 9001L);
+
+        then(messagesService).should().appendAssistantMessage(5L, "死锁和资源分配图有关。");
+        then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
+    }
+
+    @Test
     void shouldTriggerSummaryRefreshAfterAssistantMessageSucceeds() {
         GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
         QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);

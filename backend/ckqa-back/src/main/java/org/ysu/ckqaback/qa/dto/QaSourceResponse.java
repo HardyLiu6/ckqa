@@ -12,6 +12,7 @@ public class QaSourceResponse {
     private final Integer rankPosition;
     private final String documentKey;
     private final String chunkId;
+    private final String sourceType;
     private final String sourceRef;
     private final String sourceFile;
     private final String headingPath;
@@ -23,6 +24,7 @@ public class QaSourceResponse {
             Integer rankPosition,
             String documentKey,
             String chunkId,
+            String sourceType,
             String sourceRef,
             String sourceFile,
             String headingPath,
@@ -33,6 +35,7 @@ public class QaSourceResponse {
         this.rankPosition = rankPosition;
         this.documentKey = documentKey;
         this.chunkId = chunkId;
+        this.sourceType = sourceType;
         this.sourceRef = sourceRef;
         this.sourceFile = sourceFile;
         this.headingPath = headingPath;
@@ -52,10 +55,26 @@ public class QaSourceResponse {
             Integer pageEnd,
             String snippet
     ) {
+        return of(rankPosition, documentKey, chunkId, null, sourceRef, sourceFile, headingPath, pageStart, pageEnd, snippet);
+    }
+
+    public static QaSourceResponse of(
+            Integer rankPosition,
+            String documentKey,
+            String chunkId,
+            String sourceType,
+            String sourceRef,
+            String sourceFile,
+            String headingPath,
+            Integer pageStart,
+            Integer pageEnd,
+            String snippet
+    ) {
         return new QaSourceResponse(
                 rankPosition,
                 documentKey,
                 chunkId,
+                sourceType,
                 sourceRef,
                 sourceFile,
                 headingPath,
@@ -70,6 +89,7 @@ public class QaSourceResponse {
                 hit.getRankPosition(),
                 hit.getDocumentKey(),
                 hit.getChunkId(),
+                hit.getSourceType(),
                 hit.getSourceRef(),
                 hit.getSourceFile(),
                 hit.getHeadingPath(),

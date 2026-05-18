@@ -53,6 +53,12 @@ public class QaRetrievalHits implements Serializable {
     private String chunkId;
 
     /**
+     * 来源类型
+     */
+    @TableField("source_type")
+    private String sourceType;
+
+    /**
      * GraphRAG 原始来源编号
      */
     @TableField("source_ref")

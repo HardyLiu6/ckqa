@@ -22,6 +22,8 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
@@ -61,6 +63,14 @@ public class QaSessionsController {
             throw new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能为当前登录用户创建问答会话");
         }
         return ApiResponseUtils.success(qaWorkflowService.createSession(request, currentUser));
+    }
+
+    @PostMapping("/hybrid-warmup")
+    public ApiResponse<QaHybridWarmupResponse> warmupHybrid(
+            @Valid @RequestBody QaHybridWarmupRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaWorkflowService.warmupHybrid(request, currentUser(servletRequest)));
     }
 
     @GetMapping

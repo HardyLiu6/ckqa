@@ -3,6 +3,7 @@ package org.ysu.ckqaback.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.entity.QaRetrievalHits;
 import org.ysu.ckqaback.integration.graphrag.GraphRagSourceSnapshot;
 import org.ysu.ckqaback.mapper.QaRetrievalHitsMapper;
@@ -73,6 +74,7 @@ public class QaRetrievalHitsServiceImpl extends ServiceImpl<QaRetrievalHitsMappe
         hit.setRetrievalLogId(retrievalLogId);
         hit.setDocumentKey(source.documentKey());
         hit.setChunkId(source.chunkId());
+        hit.setSourceType(StringUtils.hasText(source.sourceType()) ? source.sourceType() : source.kind());
         hit.setSourceRef(source.ref());
         hit.setSourceFile(source.sourceFile());
         hit.setHeadingPath(source.headingPath());

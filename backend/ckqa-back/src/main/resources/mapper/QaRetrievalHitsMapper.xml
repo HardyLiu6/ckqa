@@ -8,6 +8,7 @@
         <result column="retrieval_log_id" property="retrievalLogId" />
         <result column="document_key" property="documentKey" />
         <result column="chunk_id" property="chunkId" />
+        <result column="source_type" property="sourceType" />
         <result column="source_ref" property="sourceRef" />
         <result column="source_file" property="sourceFile" />
         <result column="heading_path" property="headingPath" />
@@ -21,7 +22,7 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, retrieval_log_id, document_key, chunk_id, source_ref, source_file, heading_path,
+        id, retrieval_log_id, document_key, chunk_id, source_type, source_ref, source_file, heading_path,
         page_start, page_end, snippet, rank_position, score, created_at
     </sql>
 
