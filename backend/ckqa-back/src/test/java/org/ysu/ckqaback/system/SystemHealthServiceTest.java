@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.RestClient;
+import org.ysu.ckqaback.graph.GraphService;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.system.dto.SystemHealthResponse;
 
@@ -35,7 +36,10 @@ class SystemHealthServiceTest {
         given(builder.build().get().uri("http://127.0.0.1:8012/health").retrieve().toBodilessEntity())
                 .willThrow(new RuntimeException("connect refused"));
 
-        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        GraphService graphService = mock(GraphService.class);
+        given(graphService.pingForHealth()).willReturn(new GraphService.Neo4jHealth(true, "ok"));
+
+        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder, graphService);
         SystemHealthResponse response = service.check();
 
         assertThat(response.getItems()).anySatisfy(item -> {
@@ -63,7 +67,10 @@ class SystemHealthServiceTest {
         given(builder.build().get().uri("http://127.0.0.1:8012/v1/models").retrieve().toEntity(String.class))
                 .willReturn(null);
 
-        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        GraphService graphService = mock(GraphService.class);
+        given(graphService.pingForHealth()).willReturn(new GraphService.Neo4jHealth(true, "ok"));
+
+        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder, graphService);
         SystemHealthResponse response = service.readiness();
 
         assertThat(response.getItems()).anySatisfy(item -> {
@@ -74,7 +81,7 @@ class SystemHealthServiceTest {
     }
 
     @Test
-    void shouldKeepHealthLightweightAndNotRequireSharedGraphRagOutput() throws IOException {
+    void shouldKeepHealthLightweightAndIncludeNeo4j() throws IOException {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         given(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).willReturn(1);
 
@@ -94,7 +101,10 @@ class SystemHealthServiceTest {
         given(builder.build().get().uri("http://127.0.0.1:8012/v1/models").retrieve().toEntity(String.class))
                 .willReturn(null);
 
-        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        GraphService graphService = mock(GraphService.class);
+        given(graphService.pingForHealth()).willReturn(new GraphService.Neo4jHealth(true, "RETURN 1 ok"));
+
+        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder, graphService);
         SystemHealthResponse response = service.check();
 
         assertThat(response.getItems()).extracting("name")
@@ -104,8 +114,37 @@ class SystemHealthServiceTest {
                         "graphrag-root",
                         "graphrag-build-runs-root",
                         "graphrag-api",
-                        "graphrag-ready"
+                        "graphrag-ready",
+                        "neo4j"
                 );
         assertThat(response.getItems()).extracting("name").doesNotContain("graphrag-output");
+    }
+
+    @Test
+    void shouldMarkNeo4jUnreachableWhenDriverDown() {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        given(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).willReturn(1);
+
+        CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
+        properties.getGraphrag().setApiBaseUrl("http://127.0.0.1:8012");
+
+        RestClient.Builder builder = mock(RestClient.Builder.class, RETURNS_DEEP_STUBS);
+        given(builder.build().get().uri("http://127.0.0.1:8012/health").retrieve().toBodilessEntity())
+                .willReturn(null);
+        given(builder.build().get().uri("http://127.0.0.1:8012/v1/models").retrieve().toEntity(String.class))
+                .willReturn(null);
+
+        GraphService graphService = mock(GraphService.class);
+        given(graphService.pingForHealth()).willReturn(new GraphService.Neo4jHealth(false, "neo4j client disabled"));
+
+        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder, graphService);
+        SystemHealthResponse response = service.check();
+
+        assertThat(response.getItems()).anySatisfy(item -> {
+            assertThat(item.getName()).isEqualTo("neo4j");
+            assertThat(item.isReachable()).isFalse();
+            assertThat(item.getMessage()).contains("disabled");
+        });
+        assertThat(response.isUp()).isFalse();
     }
 }
