@@ -255,3 +255,18 @@ frontend/apps/student-app/src/
 - 层级可视化研究（sunburst / icicle 优先于 treemap）：`https://ar5iv.labs.arxiv.org/html/1908.01277`
 
 > 内容已根据来源改写以满足合规要求。
+
+---
+
+## MVP 落地状态
+
+- 落地分支：`feat/2026-05-19-student-knowledge-graph`
+- 完成提交：`feat(graph-api)`、`feat(system-health)`、`feat(student-graph-skeleton)`、`feat(student-graph-page)`
+- 已完成项：
+  - Java 后端 `GET /api/v1/knowledge-bases/{id}/graph/{overview,entities/{id}/neighborhood,entities/{id}}` 三个只读接口
+  - `system/health` 增加 `neo4j` 检查项（参见 [docs/student-backend-graphrag-api-contract.md](./student-backend-graphrag-api-contract.md)）
+  - 学生端引入 G6 5.0.50（事件前发布版本），`KnowledgeGraph.vue` 接通真实接口、节点选中、邻域扩展、跳转 `/qa/ask`
+  - 业务码 `4053 GRAPH_ENTITY_NOT_FOUND`、`5010 GRAPH_BACKEND_UNAVAILABLE`
+  - `pom.xml` 加 `org.neo4j.driver:neo4j-java-driver`（版本由 spring-boot-dependencies 管理）
+- 暂未做（留给后续 PR）：社区多层级钻取、知识检索接口接通、`/knowledge/detail/:id` 替换 `coming-soon`、`/knowledge/path` 学习路径、Playwright 故障注入 e2e、Redis 缓存。
+- 已知基线问题：`IndexProgressParserTest` 在 `origin/main` 上即失败，本 PR 未引入回归（验证见 `./mvnw '-Dtest=!IndexProgressParserTest' test`，461 通过 / 0 失败 / 1 跳过）。
