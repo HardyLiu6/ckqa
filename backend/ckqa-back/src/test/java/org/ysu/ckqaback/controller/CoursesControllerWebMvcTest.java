@@ -288,6 +288,30 @@ class CoursesControllerWebMvcTest {
                 .andExpect(jsonPath("$.data[0].fileName").value("book.pdf"));
     }
 
+    @Test
+    void shouldReturnComingSoonChapters() throws Exception {
+        given(courseLookupService.getCourseDetail("os")).willReturn(
+                org.ysu.ckqaback.course.dto.CourseDetailResponse.builder()
+                        .id(1L).courseId("os").courseName("操作系统").build()
+        );
+
+        mockMvc.perform(get(ApiPaths.COURSES + "/os/chapters"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.featureStatus").value("coming-soon"))
+                .andExpect(jsonPath("$.data.chapters.length()").value(0));
+    }
+
+    @Test
+    void shouldReturnEnrolledProgressPlaceholder() throws Exception {
+        given(courseLookupService.isUserMemberOfCourse("STU2026001", "os")).willReturn(true);
+
+        mockMvc.perform(get(ApiPaths.COURSES + "/os/progress/me")
+                        .header("X-CKQA-User-Code", "STU2026001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.enrolled").value(true))
+                .andExpect(jsonPath("$.data.featureStatus").value("coming-soon"));
+    }
+
     private JwtAuthenticationToken jwtAuthentication(String userCode) {
         Jwt jwt = Jwt.withTokenValue("jwt." + userCode)
                 .header("alg", "HS256")

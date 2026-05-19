@@ -12,8 +12,10 @@ import org.ysu.ckqaback.course.CourseCommandService;
 import org.ysu.ckqaback.course.CourseLookupService;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
+import org.ysu.ckqaback.course.dto.CourseChaptersResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
+import org.ysu.ckqaback.course.dto.CourseProgressResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
 import org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse;
@@ -119,5 +121,29 @@ public class CoursesController {
     ) {
         String resolvedUserCode = AuthContext.resolveUserCode(actorUserCode);
         return ApiResponseUtils.success(courseLookupService.listKnowledgeBases(courseId, resolvedUserCode));
+    }
+
+    /**
+     * 课程章节列表（占位接口）。
+     * <p>完整 LMS 章节 / 课时尚未上线，当前仅返回结构化 {@code coming-soon} 响应供前端展示占位卡。</p>
+     */
+    @GetMapping("/{courseId}/chapters")
+    public ApiResponse<CourseChaptersResponse> listChapters(@PathVariable String courseId) {
+        courseLookupService.getCourseDetail(courseId);
+        return ApiResponseUtils.success(CourseChaptersResponse.comingSoon());
+    }
+
+    /**
+     * 当前学生在该课程下的学习进度（占位接口）。
+     * <p>{@code enrolled} 字段实时反映成员关系，便于前端按"已加入但功能未开放"和"未加入"分别降级。</p>
+     */
+    @GetMapping("/{courseId}/progress/me")
+    public ApiResponse<CourseProgressResponse> getMyProgress(
+            @PathVariable String courseId,
+            @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
+    ) {
+        String resolvedUserCode = AuthContext.resolveUserCode(actorUserCode);
+        boolean enrolled = courseLookupService.isUserMemberOfCourse(resolvedUserCode, courseId);
+        return ApiResponseUtils.success(CourseProgressResponse.comingSoon(enrolled));
     }
 }

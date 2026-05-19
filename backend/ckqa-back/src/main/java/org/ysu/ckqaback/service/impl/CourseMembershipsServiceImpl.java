@@ -40,4 +40,16 @@ public class CourseMembershipsServiceImpl extends ServiceImpl<CourseMembershipsM
                 .orderByAsc(CourseMemberships::getCourseId)
                 .orderByAsc(CourseMemberships::getId));
     }
+
+    @Override
+    public List<CourseMemberships> listActiveByUserIdAndCourseIds(Long userId, Collection<String> courseIds) {
+        if (userId == null || courseIds == null || courseIds.isEmpty()) {
+            return List.of();
+        }
+        return list(new LambdaQueryWrapper<CourseMemberships>()
+                .eq(CourseMemberships::getUserId, userId)
+                .in(CourseMemberships::getCourseId, courseIds)
+                .eq(CourseMemberships::getStatus, "active")
+                .orderByAsc(CourseMemberships::getCourseId));
+    }
 }

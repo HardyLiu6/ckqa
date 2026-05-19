@@ -41,6 +41,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -120,12 +121,14 @@ public class CourseLookupService {
         Map<String, List<CourseTeacherResponse>> teachersByCourseId = buildTeachersByCourseIds(
                 pageCourses.stream().map(Courses::getCourseId).toList()
         );
+        Set<String> memberCourseIds = resolveMemberCourseIds(actorUserCode, pageCourses);
         List<CourseSummaryResponse> items = pageCourses.stream()
                 .map(course -> buildSummary(
                         course,
                         courseMaterialsService.listByCourseId(course.getCourseId()),
                         knowledgeBasesService.listByCourseId(course.getCourseId()),
-                        teachersByCourseId.getOrDefault(course.getCourseId(), List.of())
+                        teachersByCourseId.getOrDefault(course.getCourseId(), List.of()),
+                        resolveMemberStatus(actorUserCode, memberCourseIds, course.getCourseId())
                 ))
                 .toList();
 
@@ -149,7 +152,8 @@ public class CourseLookupService {
                 course,
                 materials,
                 knowledgeBases,
-                teachersByCourseId.getOrDefault(course.getCourseId(), List.of())
+                teachersByCourseId.getOrDefault(course.getCourseId(), List.of()),
+                resolveMemberStatus(actorUserCode, course.getCourseId())
         );
 
         return CourseDetailResponse.builder()
@@ -157,6 +161,12 @@ public class CourseLookupService {
                 .courseId(summary.getCourseId())
                 .courseName(summary.getCourseName())
                 .description(summary.getDescription())
+                .category(course.getCategory())
+                .tags(CourseMetadataJson.fromJsonOrEmpty(course.getTags()))
+                .objectives(CourseMetadataJson.fromJsonOrEmpty(course.getObjectives()))
+                .audience(CourseMetadataJson.fromJsonOrEmpty(course.getAudience()))
+                .difficulty(course.getDifficulty())
+                .estimatedHours(course.getEstimatedHours())
                 .coverUrl(summary.getCoverUrl())
                 .status(summary.getStatus())
                 .accessPolicy(summary.getAccessPolicy())
@@ -212,7 +222,8 @@ public class CourseLookupService {
             Courses course,
             List<CourseMaterials> materials,
             List<KnowledgeBases> knowledgeBases,
-            List<CourseTeacherResponse> teachers
+            List<CourseTeacherResponse> teachers,
+            String memberStatus
     ) {
         Optional<IndexRuns> latestIndexRun = knowledgeBases.stream()
                 .flatMap(knowledgeBase -> indexRunsService.listByKnowledgeBaseId(knowledgeBase.getId()).stream())
@@ -228,6 +239,11 @@ public class CourseLookupService {
                 .coverUrl(CourseCoverService.resolveResponseCoverUrl(course.getCoverUrl()))
                 .status(course.getStatus())
                 .accessPolicy(course.getAccessPolicy())
+                .category(course.getCategory())
+                .tags(CourseMetadataJson.fromJsonOrEmpty(course.getTags()))
+                .difficulty(course.getDifficulty())
+                .estimatedHours(course.getEstimatedHours())
+                .memberStatus(memberStatus)
                 .materialCount((long) materials.size())
                 .parsedMaterialCount(countByStatus(materials, "done"))
                 .failedMaterialCount(countByStatus(materials, "failed"))
@@ -241,6 +257,76 @@ public class CourseLookupService {
                 .teacherCount((long) teachers.size())
                 .updatedAt(course.getUpdatedAt())
                 .build();
+    }
+
+    private Set<String> resolveMemberCourseIds(String actorUserCode, List<Courses> pageCourses) {
+        if (!StringUtils.hasText(actorUserCode) || pageCourses == null || pageCourses.isEmpty()) {
+            return Set.of();
+        }
+        Long userId = findUserIdByUserCode(actorUserCode);
+        if (userId == null) {
+            return Set.of();
+        }
+        List<String> courseIds = pageCourses.stream()
+                .map(Courses::getCourseId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (courseIds.isEmpty()) {
+            return Set.of();
+        }
+        return courseMembershipsService.listActiveByUserIdAndCourseIds(userId, courseIds).stream()
+                .map(CourseMemberships::getCourseId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
+    private String resolveMemberStatus(String actorUserCode, Set<String> memberCourseIds, String courseId) {
+        if (!StringUtils.hasText(actorUserCode)) {
+            return null;
+        }
+        return memberCourseIds.contains(courseId) ? "member" : "public_visitor";
+    }
+
+    private String resolveMemberStatus(String actorUserCode, String courseId) {
+        if (!StringUtils.hasText(actorUserCode) || !StringUtils.hasText(courseId)) {
+            return null;
+        }
+        Long userId = findUserIdByUserCode(actorUserCode);
+        if (userId == null) {
+            return "public_visitor";
+        }
+        boolean isMember = !courseMembershipsService
+                .listActiveByUserIdAndCourseIds(userId, List.of(courseId))
+                .isEmpty();
+        return isMember ? "member" : "public_visitor";
+    }
+
+    private Long findUserIdByUserCode(String userCode) {
+        if (!StringUtils.hasText(userCode)) {
+            return null;
+        }
+        Users user = usersService.lambdaQuery()
+                .eq(Users::getUserCode, userCode)
+                .last("LIMIT 1")
+                .one();
+        return user == null ? null : user.getId();
+    }
+
+    /**
+     * 公开判定：当前 userCode 是否为该课程的 active 成员（含教师 / 助教 / 学生）。
+     * <p>用于 chapters / progress 等占位接口的 enrolled 字段。</p>
+     */
+    public boolean isUserMemberOfCourse(String userCode, String courseId) {
+        if (!StringUtils.hasText(userCode) || !StringUtils.hasText(courseId)) {
+            return false;
+        }
+        Long userId = findUserIdByUserCode(userCode);
+        if (userId == null) {
+            return false;
+        }
+        return !courseMembershipsService
+                .listActiveByUserIdAndCourseIds(userId, List.of(courseId))
+                .isEmpty();
     }
 
     private Map<String, List<CourseTeacherResponse>> buildTeachersByCourseIds(Collection<String> courseIds) {

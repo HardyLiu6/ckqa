@@ -138,6 +138,12 @@ public class CourseCommandService {
 
         course.setCourseName(normalizeText(request.getCourseName()));
         course.setDescription(normalizeNullableText(request.getDescription()));
+        course.setCategory(normalizeNullableText(request.getCategory()));
+        course.setTags(CourseMetadataJson.toJsonOrNull(request.getTags()));
+        course.setObjectives(CourseMetadataJson.toJsonOrNull(request.getObjectives()));
+        course.setAudience(CourseMetadataJson.toJsonOrNull(request.getAudience()));
+        course.setDifficulty(normalizeNullableText(request.getDifficulty()));
+        course.setEstimatedHours(request.getEstimatedHours());
         course.setStatus(targetStatus);
         course.setAccessPolicy(normalizeText(request.getAccessPolicy()));
         course.setUpdatedAt(now);
@@ -204,6 +210,12 @@ public class CourseCommandService {
         course.setCourseId(courseId);
         course.setCourseName(normalizeText(request.getCourseName()));
         course.setDescription(normalizeNullableText(request.getDescription()));
+        course.setCategory(normalizeNullableText(request.getCategory()));
+        course.setTags(CourseMetadataJson.toJsonOrNull(request.getTags()));
+        course.setObjectives(CourseMetadataJson.toJsonOrNull(request.getObjectives()));
+        course.setAudience(CourseMetadataJson.toJsonOrNull(request.getAudience()));
+        course.setDifficulty(normalizeNullableText(request.getDifficulty()));
+        course.setEstimatedHours(request.getEstimatedHours());
         course.setCoverUrl(CourseCoverService.normalizeCoverUrl(request.getCoverUrl()));
         course.setStatus(defaultIfBlank(request.getStatus(), ACTIVE));
         course.setAccessPolicy(defaultIfBlank(request.getAccessPolicy(), DEFAULT_ACCESS_POLICY));
@@ -239,6 +251,12 @@ public class CourseCommandService {
                 .courseId(course.getCourseId())
                 .courseName(course.getCourseName())
                 .description(course.getDescription())
+                .category(course.getCategory())
+                .tags(CourseMetadataJson.fromJsonOrEmpty(course.getTags()))
+                .objectives(CourseMetadataJson.fromJsonOrEmpty(course.getObjectives()))
+                .audience(CourseMetadataJson.fromJsonOrEmpty(course.getAudience()))
+                .difficulty(course.getDifficulty())
+                .estimatedHours(course.getEstimatedHours())
                 .coverUrl(CourseCoverService.resolveResponseCoverUrl(course.getCoverUrl()))
                 .status(course.getStatus())
                 .accessPolicy(course.getAccessPolicy())

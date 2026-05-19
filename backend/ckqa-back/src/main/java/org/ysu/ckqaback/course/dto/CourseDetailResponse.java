@@ -17,6 +17,15 @@ public class CourseDetailResponse {
     private final String courseId;
     private final String courseName;
     private final String description;
+    private final String category;
+    @Builder.Default
+    private final List<String> tags = List.of();
+    @Builder.Default
+    private final List<String> objectives = List.of();
+    @Builder.Default
+    private final List<String> audience = List.of();
+    private final String difficulty;
+    private final Integer estimatedHours;
     private final String coverUrl;
     private final String status;
     private final String accessPolicy;
