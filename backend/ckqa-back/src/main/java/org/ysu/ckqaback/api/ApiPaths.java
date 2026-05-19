@@ -25,6 +25,9 @@ public final class ApiPaths {
     public static final String PDF_FILES = API_V1 + "/pdf-files";
     public static final String PERMISSIONS = API_V1 + "/permissions";
     public static final String QA_MESSAGES = API_V1 + "/qa-messages";
+    public static final String QA_MESSAGE_FEEDBACK = API_V1 + "/qa-message-feedback";
+    public static final String QA_OPERATIONS = API_V1 + "/qa-operations";
+    public static final String QA_ROUTING = API_V1 + "/qa-routing";
     public static final String QA_RETRIEVAL_HITS = API_V1 + "/qa-retrieval-hits";
     public static final String QA_RETRIEVAL_LOGS = API_V1 + "/qa-retrieval-logs";
     public static final String QA_SESSIONS = API_V1 + "/qa-sessions";

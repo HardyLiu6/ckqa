@@ -46,9 +46,23 @@ public class GraphRagTaskClient {
     }
 
     public GraphRagTaskCreateResult createTask(String mode, String prompt, Long indexRunId, String dataDirUri) {
+        return createTask(mode, prompt, indexRunId, dataDirUri, null);
+    }
+
+    public GraphRagTaskCreateResult createTask(
+            String mode,
+            String prompt,
+            Long indexRunId,
+            String dataDirUri,
+            String generationContext
+    ) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("mode", mode);
         body.put("prompt", prompt);
+        body.put("retrievalQuery", prompt);
+        if (generationContext != null && !generationContext.isBlank()) {
+            body.put("generationContext", generationContext);
+        }
         if (indexRunId != null) {
             body.put("indexRunId", indexRunId);
         }
@@ -76,5 +90,28 @@ public class GraphRagTaskClient {
             }
             throw exception;
         }
+    }
+
+    public GraphRagHybridReadinessResult warmupHybridV0(String dataDirUri) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (dataDirUri != null && !dataDirUri.isBlank()) {
+            body.put("dataDirUri", dataDirUri);
+        }
+        return restClient.post()
+                .uri("/v1/hybrid-v0/warmup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .body(GraphRagHybridReadinessResult.class);
+    }
+
+    public GraphRagHybridReadinessResult getHybridV0Readiness(String dataDirUri) {
+        return restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/v1/hybrid-v0/readiness")
+                        .queryParam("dataDirUri", dataDirUri)
+                        .build())
+                .retrieve()
+                .body(GraphRagHybridReadinessResult.class);
     }
 }

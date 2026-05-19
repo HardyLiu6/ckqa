@@ -74,8 +74,8 @@
       <div class="filter-container">
         <div class="filter-left">
           <el-radio-group v-model="filterType" @change="handleFilterChange">
-            <el-radio-button value="all">全部</el-radio-button>
-            <el-radio-button value="favorite">已收藏</el-radio-button>
+            <el-radio-button value="active">进行中</el-radio-button>
+            <el-radio-button value="archived">已归档</el-radio-button>
             <el-radio-button value="today">今天</el-radio-button>
             <el-radio-button value="week">本周</el-radio-button>
           </el-radio-group>
@@ -134,11 +134,11 @@
                 <div class="card-actions">
                   <el-tooltip content="继续对话"><el-button :icon="ChatLineRound" circle
                       @click.stop="continueChat(session)" /></el-tooltip>
-                  <el-tooltip :content="session.isFavorite ? '取消收藏' : '收藏'"><el-button
-                      :icon="session.isFavorite ? StarFilled : Star" circle :class="{ favorite: session.isFavorite }"
-                      @click.stop="toggleFavorite(session)" /></el-tooltip>
-                  <el-tooltip content="删除"><el-button :icon="Delete" circle class="delete-btn"
-                      @click.stop="deleteSession(session)" /></el-tooltip>
+                  <el-tooltip content="改名"><el-button :icon="EditPen" circle
+                      @click.stop="renameSession(session)" /></el-tooltip>
+                  <el-tooltip :content="session.status === 'archived' ? '恢复' : '归档'"><el-button
+                      :icon="session.status === 'archived' ? RefreshLeft : Delete" circle class="delete-btn"
+                      @click.stop="toggleArchive(session)" /></el-tooltip>
                 </div>
               </div>
 
@@ -171,157 +171,39 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
+import { listCourses } from '@/api/courses'
+import { listQaSessions, updateQaSession } from '@/api/qa'
+import { normalizeCourseList, normalizeQaSession } from './qa-session-model'
 
 const router = useRouter()
 
-// 课程列表
-const courseList = ref([
-  { id: 1, name: '数据结构与算法' },
-  { id: 2, name: '计算机网络' },
-  { id: 3, name: '操作系统原理' },
-  { id: 4, name: '数据库系统概论' },
-  { id: 5, name: '软件工程' }
-])
-
-// 模拟对话会话数据
-const sessionList = ref([
-  {
-    id: 'session-1',
-    title: '二叉树遍历算法讨论',
-    courseId: 1,
-    courseName: '数据结构与算法',
-    messageCount: 6,
-    lastTime: '10分钟前',
-    lastMessage: '好的，我来解答关于二叉搜索树的问题...',
-    date: '2024-03-15',
-    isFavorite: true,
-    recentMessages: [
-      { id: 1, role: 'user', content: '什么是二叉树？它有哪些常见的遍历方式？' },
-      { id: 2, role: 'assistant', content: '二叉树是一种重要的数据结构，每个节点最多有两个子节点。常见遍历方式有前序、中序、后序和层序遍历...' }
-    ]
-  },
-  {
-    id: 'session-2',
-    title: 'TCP/IP协议详解',
-    courseId: 2,
-    courseName: '计算机网络',
-    messageCount: 8,
-    lastTime: '1小时前',
-    lastMessage: 'TCP三次握手是建立可靠连接的基础...',
-    date: '2024-03-15',
-    isFavorite: true,
-    recentMessages: [
-      { id: 1, role: 'user', content: 'TCP三次握手的过程是怎样的？' },
-      { id: 2, role: 'assistant', content: 'TCP三次握手确保双方建立可靠连接，过程包括SYN、SYN+ACK、ACK三个步骤...' }
-    ]
-  },
-  {
-    id: 'session-3',
-    title: '进程调度算法比较',
-    courseId: 3,
-    courseName: '操作系统原理',
-    messageCount: 12,
-    lastTime: '3小时前',
-    lastMessage: '常见的进程调度算法包括FCFS、SJF、RR等...',
-    date: '2024-03-15',
-    isFavorite: false,
-    recentMessages: [
-      { id: 1, role: 'user', content: '进程和线程有什么区别？' },
-      { id: 2, role: 'assistant', content: '进程是资源分配的基本单位，线程是CPU调度的基本单位...' }
-    ]
-  },
-  {
-    id: 'session-4',
-    title: '数据库索引优化',
-    courseId: 4,
-    courseName: '数据库系统概论',
-    messageCount: 5,
-    lastTime: '昨天 15:30',
-    lastMessage: 'B+树索引是MySQL最常用的索引类型...',
-    date: '2024-03-14',
-    isFavorite: false,
-    recentMessages: [
-      { id: 1, role: 'user', content: '什么是数据库索引？如何优化SQL查询？' },
-      { id: 2, role: 'assistant', content: '数据库索引是加速查询的关键技术，常见类型有B+树索引、哈希索引等...' }
-    ]
-  },
-  {
-    id: 'session-5',
-    title: '快速排序算法分析',
-    courseId: 1,
-    courseName: '数据结构与算法',
-    messageCount: 4,
-    lastTime: '昨天 10:20',
-    lastMessage: '快速排序的平均时间复杂度是O(n log n)...',
-    date: '2024-03-14',
-    isFavorite: true,
-    recentMessages: [
-      { id: 1, role: 'user', content: '快速排序的时间复杂度是多少？' },
-      { id: 2, role: 'assistant', content: '快速排序平均O(n log n)，最坏O(n²)，可通过随机选择基准优化...' }
-    ]
-  },
-  {
-    id: 'session-6',
-    title: 'HTTP与HTTPS区别',
-    courseId: 2,
-    courseName: '计算机网络',
-    messageCount: 6,
-    lastTime: '3天前',
-    lastMessage: 'HTTPS在HTTP基础上增加了SSL/TLS加密层...',
-    date: '2024-03-12',
-    isFavorite: false,
-    recentMessages: [
-      { id: 1, role: 'user', content: 'HTTP和HTTPS有什么区别？' },
-      { id: 2, role: 'assistant', content: '主要区别在于安全性，HTTPS使用SSL/TLS加密传输数据...' }
-    ]
-  },
-  {
-    id: 'session-7',
-    title: '死锁问题探讨',
-    courseId: 3,
-    courseName: '操作系统原理',
-    messageCount: 7,
-    lastTime: '4天前',
-    lastMessage: '死锁有四个必要条件：互斥、占有等待、不可抢占、循环等待...',
-    date: '2024-03-11',
-    isFavorite: false,
-    recentMessages: [
-      { id: 1, role: 'user', content: '什么是死锁？如何避免死锁？' },
-      { id: 2, role: 'assistant', content: '死锁是多个进程因争夺资源而互相等待的现象...' }
-    ]
-  },
-  {
-    id: 'session-8',
-    title: '敏捷开发方法论',
-    courseId: 5,
-    courseName: '软件工程',
-    messageCount: 9,
-    lastTime: '1周前',
-    lastMessage: 'Scrum是最流行的敏捷开发框架...',
-    date: '2024-03-08',
-    isFavorite: true,
-    recentMessages: [
-      { id: 1, role: 'user', content: '什么是敏捷开发？有哪些常见的敏捷方法？' },
-      { id: 2, role: 'assistant', content: '敏捷开发强调迭代、增量和持续交付，常见方法有Scrum、Kanban、XP等...' }
-    ]
-  }
-])
+const courses = ref([])
+const sessionList = ref([])
+const loading = ref(false)
 
 // 筛选状态
 const searchKeyword = ref('')
-const filterType = ref('all')
+const filterType = ref('active')
 const filterCourse = ref('')
 const sortBy = ref('newest')
+
+const courseList = computed(() => courses.value.map((course) => ({
+  id: course.courseId,
+  name: course.name,
+})))
+const courseNameById = computed(() => Object.fromEntries(
+  courses.value.map((course) => [course.courseId, course.name]),
+))
 
 // 计算统计
 const stats = computed(() => ({
   totalSessions: sessionList.value.length,
   totalMessages: sessionList.value.reduce((sum, s) => sum + s.messageCount, 0),
-  favoriteCount: sessionList.value.filter(s => s.isFavorite).length,
+  favoriteCount: 0,
   courseCount: new Set(sessionList.value.map(s => s.courseId)).size
 }))
 
@@ -334,8 +216,7 @@ const filteredSessions = computed(() => {
     result = result.filter(s => s.title.toLowerCase().includes(kw) || s.lastMessage.toLowerCase().includes(kw))
   }
 
-  if (filterType.value === 'favorite') result = result.filter(s => s.isFavorite)
-  else if (filterType.value === 'today') {
+  if (filterType.value === 'today') {
     const today = new Date().toISOString().split('T')[0]
     result = result.filter(s => s.date === today)
   } else if (filterType.value === 'week') {
@@ -343,7 +224,7 @@ const filteredSessions = computed(() => {
     result = result.filter(s => new Date(s.date) >= weekAgo)
   }
 
-  if (filterCourse.value) result = result.filter(s => s.courseId === filterCourse.value)
+  if (filterCourse.value) result = result.filter(s => String(s.courseId) === String(filterCourse.value))
 
   if (sortBy.value === 'oldest') result.sort((a, b) => new Date(a.date) - new Date(b.date))
   else if (sortBy.value === 'messages') result.sort((a, b) => b.messageCount - a.messageCount)
@@ -375,47 +256,107 @@ const groupedSessions = computed(() => {
 // 方法
 const goBack = () => router.back()
 const goToAsk = () => router.push('/qa/ask')
-const goToDetail = (id) => router.push(`/qa/detail/${id}`)
+const goToDetail = (id) => router.push({ path: '/qa/ask', query: { sessionId: id } })
 const continueChat = (session) => router.push({ path: '/qa/ask', query: { sessionId: session.id } })
-const handleFilterChange = () => { }
+const handleFilterChange = () => {
+  loadHistory()
+}
 
 const getCourseTheme = (courseId) => {
-  const themes = { 1: 'blue', 2: 'green', 3: 'orange', 4: 'purple', 5: 'cyan' }
-  return themes[courseId] || 'blue'
+  const themes = ['blue', 'green', 'orange', 'purple', 'cyan']
+  const key = String(courseId ?? '').split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return themes[key % themes.length] || 'blue'
 }
 
 const truncate = (text, len) => text?.length > len ? text.substring(0, len) + '...' : text
 
-const toggleFavorite = (session) => {
-  session.isFavorite = !session.isFavorite
-  ElMessage.success(session.isFavorite ? '已收藏' : '已取消收藏')
+const toggleFavorite = () => {
+  ElMessage.info('收藏功能暂未接入后端')
 }
 
-const deleteSession = async (session) => {
+const renameSession = async (session) => {
+  const title = window.prompt('请输入新的会话标题', session.title)
+  if (!title || title.trim() === session.title) {
+    return
+  }
   try {
-    await ElMessageBox.confirm('确定删除这个对话？删除后无法恢复。', '删除确认', { type: 'warning' })
-    const idx = sessionList.value.findIndex(s => s.id === session.id)
-    if (idx > -1) sessionList.value.splice(idx, 1)
-    ElMessage.success('已删除')
-  } catch { }
+    const updated = normalizeQaSession(await updateQaSession(session.id, { title: title.trim() }))
+    sessionList.value = sessionList.value.map((item) => (
+      item.id === session.id ? toSessionCard(updated) : item
+    ))
+    ElMessage.success('会话标题已更新')
+  } catch (error) {
+    ElMessage.error(error?.message || '会话改名失败')
+  }
+}
+
+const toggleArchive = async (session) => {
+  const nextStatus = session.status === 'archived' ? 'active' : 'archived'
+  try {
+    await updateQaSession(session.id, { status: nextStatus })
+    ElMessage.success(nextStatus === 'archived' ? '会话已归档' : '会话已恢复')
+    await loadHistory()
+  } catch (error) {
+    ElMessage.error(error?.message || '会话状态更新失败')
+  }
 }
 
 const exportAll = () => {
-  const content = sessionList.value.map(s => `【${s.title}】\n课程：${s.courseName}\n时间：${s.date}\n消息数：${s.messageCount}\n`).join('\n---\n\n')
-  const blob = new Blob([content], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = `问答记录_${new Date().toLocaleDateString()}.txt`; a.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success('导出成功')
+  ElMessage.info('导出功能暂未接入后端')
 }
 
 const clearAll = async () => {
+  ElMessage.info('清空记录功能暂未接入后端')
+}
+
+onMounted(async () => {
+  await loadHistory()
+})
+
+async function loadHistory() {
+  loading.value = true
   try {
-    await ElMessageBox.confirm('确定清空所有记录？此操作不可恢复。', '警告', { type: 'warning' })
+    const [coursePayload, sessionPayload] = await Promise.all([
+      listCourses({ page: 1, size: 100, status: 'active' }),
+      listQaSessions({ status: filterType.value === 'archived' ? 'archived' : 'active', page: 1, size: 50 }),
+    ])
+    courses.value = normalizeCourseList(coursePayload)
+    const sessions = Array.isArray(sessionPayload) ? sessionPayload : sessionPayload?.items ?? []
+    sessionList.value = sessions.map((session) => toSessionCard(normalizeQaSession(session)))
+  } catch (error) {
+    ElMessage.error(error?.message || '问答记录加载失败')
     sessionList.value = []
-    ElMessage.success('已清空')
-  } catch { }
+  } finally {
+    loading.value = false
+  }
+}
+
+function toSessionCard(session) {
+  const referenceTime = session.lastMessageAt || session.createdAt || session.indexLockedAt || ''
+  const date = String(referenceTime).slice(0, 10) || new Date().toISOString().slice(0, 10)
+  return {
+    ...session,
+    courseName: courseNameById.value[session.courseId] || session.courseId || '未绑定课程',
+    messageCount: 0,
+    lastTime: formatSessionTime(referenceTime),
+    lastMessage: session.status === 'archived'
+      ? '该会话已归档，可恢复后继续提问'
+      : (session.isLegacy ? '旧会话仅可查看历史消息' : '点击继续这个真实问答会话'),
+    date,
+    isFavorite: false,
+    recentMessages: [],
+  }
+}
+
+function formatSessionTime(value) {
+  if (!value) {
+    return '暂无消息'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return String(value).replace('T', ' ').slice(0, 16)
+  }
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 </script>
 

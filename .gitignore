@@ -149,12 +149,15 @@ graphrag_pipeline/input/
 graphrag_pipeline/inputs/artifacts/
 graphrag_pipeline/reports/
 graphrag_pipeline/runtime/kb-build-runs/
+graphrag_pipeline/runtime/query-tasks/
 graphrag_pipeline/results/extraction_eval/*.json
 graphrag_pipeline/results/extraction_eval/runs/
 graphrag_pipeline/results/extraction_raw/
 graphrag_pipeline/results/errors/
 graphrag_pipeline/results/reports/extraction_scoring/
 graphrag_pipeline/results/prompt_tune_runs/
+frontend/apps/student-app/test-results/
+frontend/apps/student-app/playwright-report/
 
 # 共享路径上的脚本产物——这些文件在 build_run 隔离实施前会被多次跑覆盖，
 # 现在 Java 已强制把它们重定向到 build_run workspace 内，仓库根级的副本仅
@@ -167,6 +170,21 @@ graphrag_pipeline/data/eval/audit_extraction_set.json
 # CLI 手动跑会覆盖；继续保留 tracked 仅是为了让首次拉代码的开发者有参考文案。
 # 保留 tracked，但若发生 diff 一律视为本地脏数据。
 
+# QA 评测：原始响应与中间 json 不入库
+graphrag_pipeline/results/qa_eval/runs/*/raw/
+graphrag_pipeline/results/qa_eval/runs/*/judge_raw/
+graphrag_pipeline/results/qa_eval/runs/*/rule_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/judge_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/scoring*.json
+
+# QA eval optional third-party outputs
+graphrag_pipeline/results/qa_eval/runs/*/ragas_raw/
+graphrag_pipeline/results/qa_eval/runs/*/ragas_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/factuality_raw/
+graphrag_pipeline/results/qa_eval/runs/*/factuality_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/algorithmic_scoring.json
+graphrag_pipeline/results/qa_eval/runs/hybrid-v0-*/
+graphrag_pipeline/results/qa_eval/runs/global-repair-high-timeout-*/
 
 # LanceDB
 graphrag_pipeline/**/lancedb/
@@ -203,3 +221,19 @@ pdf_ingest/.temp/
 # Superpowers brainstorming (可视化伴随会话产物)
 # =========================
 .superpowers/
+
+# QA 评测：原始响应与中间 json 不入库
+graphrag_pipeline/results/qa_eval/runs/*/raw/
+graphrag_pipeline/results/qa_eval/runs/*/judge_raw/
+graphrag_pipeline/results/qa_eval/runs/*/rule_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/judge_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/scoring*.json
+
+# QA eval optional third-party outputs
+graphrag_pipeline/results/qa_eval/runs/*/ragas_raw/
+graphrag_pipeline/results/qa_eval/runs/*/ragas_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/factuality_raw/
+graphrag_pipeline/results/qa_eval/runs/*/factuality_scoring.json
+graphrag_pipeline/results/qa_eval/runs/*/algorithmic_scoring.json
+graphrag_pipeline/results/qa_eval/runs/hybrid-v0-*/
+graphrag_pipeline/results/qa_eval/runs/global-repair-high-timeout-*/

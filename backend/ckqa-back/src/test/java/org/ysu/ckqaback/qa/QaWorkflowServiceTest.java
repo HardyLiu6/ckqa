@@ -1,19 +1,37 @@
 package org.ysu.ckqaback.qa;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.course.CourseAccessService;
+import org.ysu.ckqaback.entity.IndexArtifacts;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
+import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
+import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
+import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
+import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSourceResponse;
+import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
+import org.ysu.ckqaback.service.QaRetrievalHitsService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
+import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
 import org.ysu.ckqaback.service.UsersService;
 
@@ -22,14 +40,360 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 
 class QaWorkflowServiceTest {
+
+    @Test
+    void shouldAllowSessionOwnerAccess() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+
+        workflowService.ensureSessionOwner(5L, 7L);
+
+        then(qaSessionsService).should().getRequiredById(5L);
+    }
+
+    @Test
+    void shouldRejectSessionAccessForNonOwner() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(9L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+
+        assertThatThrownBy(() -> workflowService.ensureSessionOwner(5L, 7L))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.AUTH_FORBIDDEN.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                })
+                .hasMessageContaining("只能访问自己的问答会话");
+    }
+
+    @Test
+    void shouldRenameAndArchiveOwnedFormalSession() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        session.setSessionType("formal");
+        session.setStatus("active");
+        session.setTitle("旧标题");
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(qaSessionsService.updateSession(5L, "死锁复习", "archived")).willAnswer(invocation -> {
+            session.setTitle(invocation.getArgument(1));
+            session.setStatus(invocation.getArgument(2));
+            return session;
+        });
+
+        UpdateQaSessionRequest request = new UpdateQaSessionRequest();
+        request.setTitle("死锁复习");
+        request.setStatus("archived");
+
+        var response = workflowService.updateSession(5L, request, authenticatedStudent());
+
+        assertThat(response.getTitle()).isEqualTo("死锁复习");
+        assertThat(response.getStatus()).isEqualTo("archived");
+        then(qaSessionsService).should().updateSession(5L, "死锁复习", "archived");
+    }
+
+    @Test
+    void shouldRejectRestoreWhenCoursePermissionIsLost() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setUserId(7L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setStatus("archived");
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        doThrow(new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "无课程访问权限"))
+                .when(courseAccessService).assertCourseReadable("os", "student.zhouzh");
+
+        UpdateQaSessionRequest request = new UpdateQaSessionRequest();
+        request.setStatus("active");
+
+        assertThatThrownBy(() -> workflowService.updateSession(5L, request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(exception.getMessage()).contains("无课程访问权限");
+                });
+
+        then(qaSessionsService).should(never()).updateSession(anyLong(), any(), any());
+    }
+
+    @Test
+    void shouldCreateFormalSessionWithLockedActiveIndexRunId() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        CreateQaSessionRequest request = new CreateQaSessionRequest();
+        request.setUserId(7L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+        request.setTitle("操作系统问答");
+
+        QaSessions saved = new QaSessions();
+        saved.setId(5L);
+        saved.setSessionCode("qa-0001");
+        saved.setUserId(7L);
+        saved.setCourseId("os");
+        saved.setKnowledgeBaseId(3L);
+        saved.setSessionType("formal");
+        saved.setTitle("操作系统问答");
+        saved.setStatus("active");
+        saved.setIndexRunId(17L);
+        saved.setIndexLockedAt(LocalDateTime.of(2026, 5, 17, 10, 0));
+
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaSessionsService.createSession(eq(request), eq(17L), any())).willReturn(saved);
+
+        var response = workflowService.createSession(request);
+
+        assertThat(response.getIndexRunId()).isEqualTo(17L);
+        assertThat(response.getIndexLockedAt()).isEqualTo(LocalDateTime.of(2026, 5, 17, 10, 0));
+    }
+
+    @Test
+    void shouldCreateFormalSessionOnlyWhenKnowledgeBaseBelongsToReadableCourse() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                knowledgeBasesService,
+                usersService,
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+
+        CreateQaSessionRequest request = new CreateQaSessionRequest();
+        request.setUserId(7L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+        request.setTitle("操作系统问答");
+
+        QaSessions saved = new QaSessions();
+        saved.setId(5L);
+        saved.setUserId(7L);
+        saved.setCourseId("os");
+        saved.setKnowledgeBaseId(3L);
+        saved.setSessionType("formal");
+        saved.setStatus("active");
+        saved.setIndexRunId(17L);
+
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaSessionsService.createSession(eq(request), eq(17L), any())).willReturn(saved);
+
+        workflowService.createSession(request, authenticatedStudent());
+
+        then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldWarmupHybridWithCourseScopeAndReadyOutputArtifact() {
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        IndexArtifactsService indexArtifactsService = mock(IndexArtifactsService.class);
+        GraphRagTaskClient graphRagTaskClient = mock(GraphRagTaskClient.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                mock(QaSessionsService.class),
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+        workflowService.setIndexArtifactsService(indexArtifactsService);
+        workflowService.setGraphRagTaskClient(graphRagTaskClient);
+
+        IndexArtifacts outputArtifact = new IndexArtifacts();
+        outputArtifact.setIndexRunId(17L);
+        outputArtifact.setArtifactType("output_dir");
+        outputArtifact.setArtifactStatus("ready");
+        outputArtifact.setStorageUri("user_2/kb_3/build_9/index/output");
+
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(indexArtifactsService.listByIndexRunId(17L)).willReturn(List.of(outputArtifact));
+        given(graphRagTaskClient.warmupHybridV0("user_2/kb_3/build_9/index/output"))
+                .willReturn(new GraphRagHybridReadinessResult(
+                        true,
+                        "ready",
+                        null,
+                        "user_2/kb_3/build_9/index/output",
+                        true,
+                        true,
+                        List.of()
+                ));
+
+        QaHybridWarmupRequest request = new QaHybridWarmupRequest();
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+        QaHybridWarmupResponse response = workflowService.warmupHybrid(request, authenticatedStudent());
+
+        assertThat(response.isReady()).isTrue();
+        assertThat(response.getDataDirUri()).isEqualTo("user_2/kb_3/build_9/index/output");
+        then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldRejectFormalSessionWhenKnowledgeBaseCourseDoesNotMatchRequestCourse() {
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                mock(QaSessionsService.class),
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        KnowledgeBases knowledgeBase = buildKnowledgeBase();
+        knowledgeBase.setCourseId("os");
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(knowledgeBase);
+
+        CreateQaSessionRequest request = new CreateQaSessionRequest();
+        request.setUserId(7L);
+        request.setCourseId("database");
+        request.setKnowledgeBaseId(3L);
+
+        assertThatThrownBy(() -> workflowService.createSession(request, authenticatedStudent()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("知识库不属于当前课程");
+    }
+
+    @Test
+    void shouldRejectFormalSessionWhenCourseIsNotReadableByCurrentUser() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        doThrow(new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.FORBIDDEN, "无课程访问权限"))
+                .when(courseAccessService).assertCourseReadable("os", "student.zhouzh");
+
+        CreateQaSessionRequest request = new CreateQaSessionRequest();
+        request.setUserId(7L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+
+        assertThatThrownBy(() -> workflowService.createSession(request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(exception.getMessage()).contains("无课程访问权限");
+                });
+
+        then(qaSessionsService).should(never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectPublicCreateSessionWhenRequestingSmokeSession() {
+        QaWorkflowService workflowService = new QaWorkflowService(
+                mock(QaSessionsService.class),
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        CreateQaSessionRequest request = new CreateQaSessionRequest();
+        request.setUserId(7L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+        request.setSessionType("smoke");
+
+        assertThatThrownBy(() -> workflowService.createSession(request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.AUTH_FORBIDDEN.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                })
+                .hasMessageContaining("学生端不能创建 smoke 会话");
+    }
 
     @Test
     void shouldSubmitTaskAndDispatchWorkerWithoutAssistantMessage() {
@@ -55,6 +419,8 @@ class QaWorkflowServiceTest {
         session.setStatus("active");
         session.setKnowledgeBaseId(3L);
         session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
 
         QaMessages userMessage = new QaMessages();
         userMessage.setId(11L);
@@ -70,8 +436,19 @@ class QaWorkflowServiceTest {
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
         given(qaMessagesService.appendUserMessage(5L, "请概括这套图谱的主题")).willReturn(userMessage);
-        given(qaRetrievalLogsService.createPendingTask(5L, "os", 17L, 11L, "basic", "请概括这套图谱的主题")).willReturn(task);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(11L),
+                eq("basic"),
+                eq("请概括这套图谱的主题"),
+                argThat(context -> "none".equals(context.contextStrategy())
+                        && "请概括这套图谱的主题".equals(context.originalQueryText())
+                        && "请概括这套图谱的主题".equals(context.retrievalQueryText()))
+        )).willReturn(task);
 
         QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "请概括这套图谱的主题"));
 
@@ -82,8 +459,288 @@ class QaWorkflowServiceTest {
         assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(10);
         assertThat(response.getStaleTimeoutSeconds()).isEqualTo(300);
         assertThat(response.getTimeoutMessage()).contains("basic");
+        assertThat(response.getContextApplied()).isFalse();
+        assertThat(response.getContextStrategy()).isEqualTo("none");
+        assertThat(response.getContextSizeEstimate().getChars()).isZero();
         then(qaTaskWorker).should().dispatch(5L, 9001L);
         then(qaMessagesService).should(never()).appendAssistantMessage(anyLong(), eq("请概括这套图谱的主题"));
+    }
+
+    @Test
+    void shouldSubmitHybridTaskWithRecentContextAndRewrite() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
+
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它和资源分配图有什么关系？");
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9005L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("hybrid_v0"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                argThat(context -> "recent".equals(context.contextStrategy()) && context.rewriteApplied())
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("hybrid_v0", "它和资源分配图有什么关系？"));
+
+        assertThat(response.getMode()).isEqualTo("hybrid_v0");
+        assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(30);
+        assertThat(response.getStaleTimeoutSeconds()).isEqualTo(1800);
+        assertThat(response.getContextStrategy()).isEqualTo("recent");
+    }
+
+    @Test
+    void shouldRewritePronounFollowUpBeforeCreatingPendingTask() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
+
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它和资源分配图有什么关系？");
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9002L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                argThat(context -> "recent".equals(context.contextStrategy())
+                        && context.rewriteApplied()
+                        && "1-2".equals(context.rewriteSourceMessageRange())
+                        && context.contextCharCount() > 0)
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它和资源分配图有什么关系？"));
+
+        assertThat(response.getTaskId()).isEqualTo(9002L);
+        assertThat(response.getContextApplied()).isTrue();
+        assertThat(response.getContextStrategy()).isEqualTo("recent");
+        assertThat(response.getContextSizeEstimate().getChars()).isGreaterThan(0);
+    }
+
+    @Test
+    void shouldUseLatestSummaryWhenCreatingContextForLongSession() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService qaSessionSummariesService = mock(QaSessionSummariesService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaSessionSummariesService(qaSessionSummariesService);
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
+
+        QaSessionSummaries summary = new QaSessionSummaries();
+        summary.setSessionId(5L);
+        summary.setSummaryText("本会话已讨论死锁定义。");
+        summary.setSummaryUntilSequenceNo(2);
+        summary.setStatus("success");
+
+        QaMessages summarizedUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages summarizedAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages recentUser = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaMessages recentAssistant = message(104L, 5L, "assistant", 4, "银行家算法用于避免进入不安全状态。");
+        QaMessages userMessage = message(105L, 5L, "user", 5, "它怎么判断安全？");
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9004L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(summarizedUser, summarizedAssistant, recentUser, recentAssistant));
+        given(qaSessionSummariesService.findLatestSuccessfulBySessionId(5L)).willReturn(summary);
+        given(qaMessagesService.appendUserMessage(5L, "它怎么判断安全？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(105L),
+                eq("basic"),
+                eq("关于上一轮主题「那银行家算法呢」：它怎么判断安全？"),
+                argThat(context -> "summary_recent".equals(context.contextStrategy())
+                        && context.contextSnapshotText().contains("会话摘要")
+                        && context.contextSnapshotText().contains("最近对话")
+                        && context.contextCharCount() > 0)
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它怎么判断安全？"));
+
+        assertThat(response.getContextStrategy()).isEqualTo("summary_recent");
+    }
+
+    @Test
+    void shouldBackfillLegacyFormalSessionIndexRunIdFromUniqueSuccessfulTask() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+
+        QaMessages userMessage = message(11L, 5L, "user", 1, "继续提问");
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9003L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaRetrievalLogsService.findDistinctSuccessfulIndexRunIdsBySession(5L)).willReturn(List.of(18L));
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
+        given(qaMessagesService.appendUserMessage(5L, "继续提问")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(18L),
+                eq(11L),
+                eq("basic"),
+                eq("继续提问"),
+                any(QaRetrievalLogContext.class)
+        )).willReturn(task);
+
+        workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "继续提问"));
+
+        then(qaSessionsService).should().lockIndexRun(eq(5L), eq(18L), any());
+    }
+
+    @Test
+    void shouldRejectLegacyFormalSessionWhenIndexRunIdCannotBeBackfilled() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaRetrievalLogsService.findDistinctSuccessfulIndexRunIdsBySession(5L)).willReturn(List.of(18L, 19L));
+
+        assertThatThrownBy(() -> workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "继续提问")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("索引版本固化前");
+
+        then(qaMessagesService).should(never()).appendUserMessage(anyLong(), any());
     }
 
     @Test
@@ -110,6 +767,8 @@ class QaWorkflowServiceTest {
         session.setStatus("active");
         session.setKnowledgeBaseId(3L);
         session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(17L);
 
         QaMessages userMessage = new QaMessages();
         userMessage.setId(11L);
@@ -125,8 +784,9 @@ class QaWorkflowServiceTest {
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
         given(qaMessagesService.appendUserMessage(5L, "请概括这套图谱的主题")).willReturn(userMessage);
-        given(qaRetrievalLogsService.createPendingTask(5L, "os", 17L, 11L, "basic", "请概括这套图谱的主题")).willReturn(task);
+        given(qaRetrievalLogsService.createPendingTask(eq(5L), eq("os"), eq(17L), eq(11L), eq("basic"), eq("请概括这套图谱的主题"), any(QaRetrievalLogContext.class))).willReturn(task);
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -167,6 +827,8 @@ class QaWorkflowServiceTest {
         session.setStatus("active");
         session.setKnowledgeBaseId(3L);
         session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(17L);
 
         QaMessages userMessage = new QaMessages();
         userMessage.setId(11L);
@@ -182,8 +844,9 @@ class QaWorkflowServiceTest {
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
         given(qaMessagesService.appendUserMessage(5L, "请用 drift 模式回答")).willReturn(userMessage);
-        given(qaRetrievalLogsService.createPendingTask(5L, "os", 17L, 11L, "drift", "请用 drift 模式回答")).willReturn(task);
+        given(qaRetrievalLogsService.createPendingTask(eq(5L), eq("os"), eq(17L), eq(11L), eq("drift"), eq("请用 drift 模式回答"), any(QaRetrievalLogContext.class))).willReturn(task);
 
         QaTaskSubmissionResponse response = workflowService.sendMessage(5L, new CreateQaMessageRequest("drift", "请用 drift 模式回答"));
 
@@ -197,6 +860,7 @@ class QaWorkflowServiceTest {
     void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalHitsService qaRetrievalHitsService = mock(QaRetrievalHitsService.class);
         QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
         KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
         UsersService usersService = mock(UsersService.class);
@@ -211,6 +875,7 @@ class QaWorkflowServiceTest {
                 qaTaskWorker,
                 buildTaskPolicyProperties()
         );
+        workflowService.setQaRetrievalHitsService(qaRetrievalHitsService);
 
         QaSessions session = new QaSessions();
         session.setId(5L);
@@ -234,12 +899,17 @@ class QaWorkflowServiceTest {
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setId(9001L);
         task.setUserMessageId(101L);
+        task.setAssistantMessageId(102L);
         task.setTaskStatus("running");
         task.setProgressStage("running");
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(userMessage, assistantMessage));
         given(qaRetrievalLogsService.findLatestByUserMessageIds(List.of(101L))).willReturn(Map.of(101L, task));
+        given(qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(9001L))).willReturn(Map.of(
+                9001L,
+                List.of(QaSourceResponse.of(1, "doc-1", "chunk-1", "156", "操作系统教材", "第3章/死锁", 123, 124, "死锁来源片段"))
+        ));
 
         List<QaMessageResponse> responses = workflowService.listMessages(5L);
 
@@ -248,6 +918,8 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
+        assertThat(responses.get(1).getSources()).hasSize(1);
+        assertThat(responses.get(1).getSources().get(0).getSourceFile()).isEqualTo("操作系统教材");
     }
 
     @Test
@@ -301,10 +973,25 @@ class QaWorkflowServiceTest {
         return knowledgeBase;
     }
 
+    private QaMessages message(Long id, Long sessionId, String role, int sequenceNo, String content) {
+        QaMessages message = new QaMessages();
+        message.setId(id);
+        message.setSessionId(sessionId);
+        message.setRole(role);
+        message.setSequenceNo(sequenceNo);
+        message.setContent(content);
+        message.setCreatedAt(LocalDateTime.of(2026, 5, 17, 12, sequenceNo));
+        return message;
+    }
+
     private CkqaIntegrationProperties buildTaskPolicyProperties() {
         CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
         properties.getPolling().getQueryTaskModeIntervalSeconds().put("drift", 15L);
         properties.getTimeout().getQueryTaskModeStaleSeconds().put("drift", 1800L);
         return properties;
+    }
+
+    private AuthenticatedUser authenticatedStudent() {
+        return new AuthenticatedUser(7L, "student.zhouzh", "student.zhouzh", "周同学", List.of("student"), List.of());
     }
 }

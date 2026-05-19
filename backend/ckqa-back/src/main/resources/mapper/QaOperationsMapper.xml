@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.QaOperationsMapper">
+
+    <sql id="QaOperationLogColumns">
+        l.id AS retrievalLogId,
+        l.session_id AS sessionId,
+        l.user_message_id AS userMessageId,
+        l.assistant_message_id AS assistantMessageId,
+        s.user_id AS userId,
+        u.username AS username,
+        u.display_name AS displayName,
+        s.course_id AS courseId,
+        c.course_name AS courseName,
+        s.knowledge_base_id AS knowledgeBaseId,
+        kb.name AS knowledgeBaseName,
+        l.index_run_id AS indexRunId,
+        s.title AS sessionTitle,
+        s.session_type AS sessionType,
+        s.status AS sessionStatus,
+        l.query_mode AS queryMode,
+        l.task_status AS taskStatus,
+        l.progress_stage AS progressStage,
+        l.retrieval_status AS retrievalStatus,
+        l.error_message AS errorMessage,
+        l.original_query_text AS originalQueryText,
+        l.retrieval_query_text AS retrievalQueryText,
+        l.standalone_query_text AS standaloneQueryText,
+        l.context_snapshot_text AS generationContext,
+        l.context_snapshot_text AS contextSnapshotText,
+        l.context_strategy AS contextStrategy,
+        l.context_message_range AS contextMessageRange,
+        l.context_char_count AS contextCharCount,
+        l.rewrite_applied AS rewriteApplied,
+        l.rewrite_reason AS rewriteReason,
+        l.rewrite_method AS rewriteMethod,
+        l.rewrite_model AS rewriteModel,
+        l.rewrite_confidence AS rewriteConfidence,
+        l.created_at AS createdAt,
+        l.started_at AS startedAt,
+        l.last_heartbeat_at AS lastHeartbeatAt,
+        l.finished_at AS finishedAt,
+        CASE
+          WHEN l.finished_at IS NOT NULL THEN TIMESTAMPDIFF(MICROSECOND, COALESCE(l.started_at, l.created_at), l.finished_at) DIV 1000
+          ELSE NULL
+        END AS durationMs,
+        (SELECT COUNT(*) FROM qa_retrieval_hits h WHERE h.retrieval_log_id = l.id) AS sourceCount,
+        (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND f.rating = 'helpful') AS helpfulCount,
+        (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND f.rating = 'unhelpful') AS unhelpfulCount,
+        (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND f.rating = 'needs_improvement') AS needsImprovementCount,
+        (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND CAST(f.tags AS CHAR) LIKE '%source_irrelevant%') AS sourceIssueCount,
+        am.content AS assistantContent
+    </sql>
+
+    <sql id="QaOperationFrom">
+        FROM qa_retrieval_logs l
+        JOIN qa_sessions s ON s.id = l.session_id
+        LEFT JOIN users u ON u.id = s.user_id
+        LEFT JOIN courses c ON c.course_id = s.course_id
+        LEFT JOIN knowledge_bases kb ON kb.id = s.knowledge_base_id
+        LEFT JOIN qa_messages am ON am.id = l.assistant_message_id
+    </sql>
+
+    <sql id="QaOperationWhere">
+        WHERE 1 = 1
+        <if test="request != null and request.courseId != null and request.courseId != ''">
+            AND s.course_id = #{request.courseId}
+        </if>
+        <if test="request != null and request.knowledgeBaseId != null">
+            AND s.knowledge_base_id = #{request.knowledgeBaseId}
+        </if>
+        <if test="request != null and request.mode != null and request.mode != ''">
+            AND l.query_mode = #{request.mode}
+        </if>
+        <if test="request != null and request.taskStatus != null and request.taskStatus != ''">
+            AND l.task_status = #{request.taskStatus}
+        </if>
+        <if test="request != null and request.createdFrom != null and request.createdFrom != ''">
+            AND l.created_at &gt;= #{request.createdFrom}
+        </if>
+        <if test="request != null and request.createdTo != null and request.createdTo != ''">
+            AND l.created_at &lt;= #{request.createdTo}
+        </if>
+        <if test="request != null and request.feedbackRating != null and request.feedbackRating != ''">
+            AND EXISTS (
+              SELECT 1 FROM qa_message_feedback f
+              WHERE f.retrieval_log_id = l.id AND f.rating = #{request.feedbackRating}
+            )
+        </if>
+        <if test="request != null and request.feedbackTag != null and request.feedbackTag != ''">
+            AND EXISTS (
+              SELECT 1 FROM qa_message_feedback f
+              WHERE f.retrieval_log_id = l.id AND CAST(f.tags AS CHAR) LIKE CONCAT('%', #{request.feedbackTag}, '%')
+            )
+        </if>
+        <if test="!adminScope">
+            AND (
+              c.access_policy = 'public'
+              OR EXISTS (
+                SELECT 1 FROM course_memberships cm
+                WHERE cm.course_id = s.course_id
+                  AND cm.user_id = #{currentUserId}
+                  AND cm.status = 'active'
+                  AND (cm.effective_from IS NULL OR cm.effective_from &lt;= NOW())
+                  AND (cm.effective_to IS NULL OR cm.effective_to &gt; NOW())
+                  AND (cm.expires_at IS NULL OR cm.expires_at &gt; NOW())
+              )
+            )
+        </if>
+    </sql>
+
+    <select id="countLogs" resultType="long">
+        SELECT COUNT(*)
+        <include refid="QaOperationFrom" />
+        <include refid="QaOperationWhere" />
+    </select>
+
+    <select id="selectLogs" resultType="org.ysu.ckqaback.qa.ops.QaOperationLogRow">
+        SELECT
+        <include refid="QaOperationLogColumns" />
+        <include refid="QaOperationFrom" />
+        <include refid="QaOperationWhere" />
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="selectLogDetail" resultType="org.ysu.ckqaback.qa.ops.QaOperationLogRow">
+        SELECT
+        <include refid="QaOperationLogColumns" />
+        <include refid="QaOperationFrom" />
+        WHERE l.id = #{retrievalLogId}
+        <if test="!adminScope">
+            AND (
+              c.access_policy = 'public'
+              OR EXISTS (
+                SELECT 1 FROM course_memberships cm
+                WHERE cm.course_id = s.course_id
+                  AND cm.user_id = #{currentUserId}
+                  AND cm.status = 'active'
+                  AND (cm.effective_from IS NULL OR cm.effective_from &lt;= NOW())
+                  AND (cm.effective_to IS NULL OR cm.effective_to &gt; NOW())
+                  AND (cm.expires_at IS NULL OR cm.expires_at &gt; NOW())
+              )
+            )
+        </if>
+        LIMIT 1
+    </select>
+
+    <select id="selectFeedbackByLogIds" resultType="org.ysu.ckqaback.qa.ops.QaOperationFeedbackRow">
+        SELECT
+          f.id AS id,
+          f.message_id AS messageId,
+          f.retrieval_log_id AS retrievalLogId,
+          f.session_id AS sessionId,
+          f.user_id AS userId,
+          u.username AS username,
+          u.display_name AS displayName,
+          f.rating AS rating,
+          CAST(f.tags AS CHAR) AS tags,
+          f.comment AS comment,
+          f.created_at AS createdAt,
+          f.updated_at AS updatedAt
+        FROM qa_message_feedback f
+        LEFT JOIN users u ON u.id = f.user_id
+        WHERE f.retrieval_log_id IN
+        <foreach collection="retrievalLogIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY f.created_at DESC, f.id DESC
+    </select>
+
+    <select id="selectSourcesByLogId" resultType="org.ysu.ckqaback.qa.ops.QaOperationSourceRow">
+        SELECT
+          h.id AS id,
+          h.retrieval_log_id AS retrievalLogId,
+          h.rank_position AS rankPosition,
+          h.document_key AS documentKey,
+          h.chunk_id AS chunkId,
+          h.source_type AS sourceType,
+          h.source_ref AS sourceRef,
+          h.source_file AS sourceFile,
+          h.heading_path AS headingPath,
+          h.page_start AS pageStart,
+          h.page_end AS pageEnd,
+          h.snippet AS snippet,
+          h.score AS score
+        FROM qa_retrieval_hits h
+        WHERE h.retrieval_log_id = #{retrievalLogId}
+        ORDER BY h.rank_position ASC, h.id ASC
+    </select>
+</mapper>

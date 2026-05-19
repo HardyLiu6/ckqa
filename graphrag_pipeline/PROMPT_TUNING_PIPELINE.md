@@ -81,3 +81,63 @@ graphrag_pipeline/
 2. `finalize_candidate_prompt.py` 默认优先固化候选目录中现有的 Prompt 文件；候选缺失时，只对可选项回退到默认模板，不会替你补齐不存在的主候选。
 3. 当前脚本已经覆盖“样本准备、候选生成、prompt-tune 封装、最终 Prompt 固化、抽取执行、规则化评测”主链路，但 QA 自动评测仍然相对薄弱。
 4. 现有 `prompts/`、`results/`、`utils/` 继续按原用途工作；调优脚本只在对应子目录内产生产物。
+
+## QA 评测
+
+`scripts/qa_eval/` 提供「规则 + LLM 裁判」双层评测：
+
+- 本流程默认复用已有 parquet 与 LanceDB 查询产物；运行 QA baseline 不会执行 `graphrag index`。若有效产物位于 `output/<index_run>/` 子目录，启动 API 与运行器时必须显式传入同一个索引目录。
+- `data/eval/qa_test_set.jsonl`：不少于 30 道题，由 `test_set_validator.py` 校验；`gold_text_unit_ids` 字段建议非空率不低于 80%。
+- `run_baseline_eval.py`：本地 GraphRAG API `/v1/chat/completions` 串行打四模式，写 `runs/<run_id>/raw/`；`--index-output-dir` 会把本轮索引目录以绝对路径写入 `run_meta.json` 并做四模式完整索引检查，排查慢查询时可用 `--max-items` 先跑小样本诊断。
+- `latency_reporter.py`：读取 baseline raw 产物，生成 `latency_breakdown.md/.csv/.json`，按模式、题型和慢请求拆分耗时。
+- `baseline_scorer.py`：规则评分，输出 `entity_hit_rate / must_cite_hit / citation_format_present / negative_hit / length_score / info_density`，按（题型 x 模式）聚合。
+- `text_unit_lookup.py` + `judge_scorer.py`：通过外部裁判 LLM（默认 `deepseek-v4-flash`，可通过 `GRAPHRAG_JUDGE_MODEL` 切换）计算 `semantic_correctness / faithfulness / retrieval_precision`；未显式传 `--text-units-path` 时优先读取 `run_meta.json` 中的 `index_output_dir`。
+- `baseline_reporter.py`：合并两层评分，生成 `scoring.md`、`combined.csv` 与规则层 `rule_scoring.csv`。
+- `manual_review_template.py`：自动注入指标均值、读取 `hypotheses.md` 生成「假设验证」与「hybrid 路由建议」槽位，供人工复核。
+
+入门顺序：先确认目标索引目录完整，并用同一目录启动 GraphRAG API 通过 smoke query；再在 `results/qa_eval/hypotheses.md` 写至少 4 条可证伪假设，随后跑 baseline，最后在 `manual_review.md` 按假设验证格式给结论。
+
+正式复用子目录索引时推荐用同一个 `INDEX_OUTPUT_DIR` 串起 API、baseline 与裁判评分：
+
+```bash
+cd graphrag_pipeline
+INDEX_OUTPUT_DIR="$PWD/output/auto_tuned_crs-20260506-r4slkr_material7_20260513_001047"
+GRAPHRAG_OUTPUT_DIR="$INDEX_OUTPUT_DIR" \
+GRAPHRAG_STORAGE_DIR="$INDEX_OUTPUT_DIR" \
+GRAPHRAG_LANCEDB_URI="$INDEX_OUTPUT_DIR/lancedb" \
+conda run -n graphrag-oneapi python utils/main.py
+```
+
+另开终端从仓库根目录运行：
+
+```bash
+RUN_ID=baseline-lgb-$(date +%Y%m%d-%H%M%S)
+INDEX_OUTPUT_DIR="graphrag_pipeline/output/auto_tuned_crs-20260506-r4slkr_material7_20260513_001047"
+
+conda run -n graphrag-oneapi python -m graphrag_pipeline.scripts.qa_eval.run_baseline_eval \
+  --test-set graphrag_pipeline/data/eval/qa_test_set.jsonl \
+  --output-root graphrag_pipeline/results/qa_eval/runs \
+  --run-id "$RUN_ID" \
+  --index-run-label auto_tuned_crs-20260506-r4slkr_material7_20260513_001047 \
+  --index-output-dir "$INDEX_OUTPUT_DIR" \
+  --base-url http://127.0.0.1:8000 \
+  --modes local global basic \
+  --request-timeout-seconds 240
+
+conda run -n graphrag-oneapi python -m graphrag_pipeline.scripts.qa_eval.baseline_scorer \
+  --run-dir "graphrag_pipeline/results/qa_eval/runs/$RUN_ID"
+
+conda run -n graphrag-oneapi python -m graphrag_pipeline.scripts.qa_eval.judge_scorer \
+  --run-dir "graphrag_pipeline/results/qa_eval/runs/$RUN_ID" \
+  --judge-base-url "${GRAPHRAG_JUDGE_BASE_URL:?请先设置裁判 LLM 地址}" \
+  --judge-model "${GRAPHRAG_JUDGE_MODEL:-deepseek-v4-flash}"
+
+conda run -n graphrag-oneapi python -m graphrag_pipeline.scripts.qa_eval.baseline_reporter \
+  --run-dir "graphrag_pipeline/results/qa_eval/runs/$RUN_ID"
+
+conda run -n graphrag-oneapi python -m graphrag_pipeline.scripts.qa_eval.manual_review_template \
+  --run-dir "graphrag_pipeline/results/qa_eval/runs/$RUN_ID" \
+  --hypotheses-path graphrag_pipeline/results/qa_eval/hypotheses.md
+```
+
+DRIFT 当前保留为 smoke 或少量抽样；若要纳入全量 baseline，应先改为异步任务或显著拉长模式级超时。

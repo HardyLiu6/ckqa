@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 import time
 import uuid
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -40,6 +41,9 @@ logger = logging.getLogger(__name__)
 
 APP_CONFIG = load_api_runtime_config()
 GRAPHRAG_ROOT = PROJECT_ROOT
+PACKAGE_PARENT = GRAPHRAG_ROOT.parent
+if str(PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(PACKAGE_PARENT))
 OUTPUT_DIR = APP_CONFIG.output_dir
 INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
@@ -50,7 +54,9 @@ SUPPORTED_QUERY_MODELS: dict[str, str] = {
     "graphrag-global-search:latest": "global",
     "graphrag-drift-search:latest": "drift",
     "graphrag-basic-search:latest": "basic",
+    "graphrag-hybrid-v0-search:latest": "hybrid_v0",
 }
+_HYBRID_V0_ORCHESTRATORS: dict[str, Any] = {}
 
 
 def _should_bypass_env_proxy(api_base: str | None) -> bool:
@@ -111,17 +117,9 @@ def _build_query_cmd(request: QueryTaskRequest) -> list[str]:
     cmd.extend([
         "--method",
         request.mode,
-        request.prompt,
+        request.retrieval_query or request.prompt,
     ])
     return cmd
-
-
-QUERY_TASK_MANAGER = QueryTaskManager(
-    command_factory=_build_query_cmd,
-    env_factory=_build_query_env,
-    cwd=GRAPHRAG_ROOT,
-    build_runs_root=BUILD_RUNS_ROOT,
-)
 
 
 async def run_graphrag_query_cli(method: str, prompt: str) -> str:
@@ -150,6 +148,218 @@ async def run_graphrag_query_cli(method: str, prompt: str) -> str:
     return "\n".join(lines)
 
 
+class _CliGraphRagDraftClient:
+    """为 Hybrid v0 提供同步 GraphRAG 草稿查询客户端。"""
+
+    def __init__(self, *, timeout_seconds: float = 240.0, data_dir: Path | None = None) -> None:
+        self.timeout_seconds = timeout_seconds
+        self.data_dir = data_dir
+
+    def query_basic(self, question: str):
+        return self._query("basic", question)
+
+    def query_local(self, question: str):
+        return self._query("local", question)
+
+    def _query(self, mode: str, prompt: str):
+        from graphrag_pipeline.scripts.hybrid_qa.basic_local_client import GraphRagDraft
+
+        request = QueryTaskRequest(mode, prompt, None, None, self.data_dir, retrieval_query=prompt)
+        started_at = time.perf_counter()
+        try:
+            process = subprocess.run(
+                _build_query_cmd(request),
+                cwd=str(GRAPHRAG_ROOT),
+                env=_build_query_env(request),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed_seconds = time.perf_counter() - started_at
+            return GraphRagDraft(
+                mode=mode,
+                answer="",
+                elapsed_seconds=elapsed_seconds,
+                error=f"graphrag query 超时(method={mode}, timeout={self.timeout_seconds}s): {exc}",
+            )
+        elapsed_seconds = time.perf_counter() - started_at
+        stdout = (process.stdout or "").strip()
+        stderr = (process.stderr or "").strip()
+        if process.returncode != 0:
+            error = f"graphrag query 执行失败(method={mode}): {stderr or stdout}"
+            return GraphRagDraft(mode=mode, answer="", elapsed_seconds=elapsed_seconds, error=error)
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        return GraphRagDraft(mode=mode, answer="\n".join(lines), elapsed_seconds=elapsed_seconds)
+
+
+def _parse_bool_env(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_int_env(value: str | None, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        logger.warning("忽略无效整数环境变量值: %s", value)
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _parse_float_env(value: str | None, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        logger.warning("忽略无效浮点环境变量值: %s", value)
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _get_hybrid_v0_orchestrator(output_dir: Path | None = None):
+    """按需构建 Hybrid v0 orchestrator，避免 API 启动时加载重依赖。"""
+    resolved_output_dir = (output_dir or OUTPUT_DIR).resolve()
+    cache_key = str(resolved_output_dir)
+    if cache_key in _HYBRID_V0_ORCHESTRATORS:
+        return _HYBRID_V0_ORCHESTRATORS[cache_key]
+
+    from graphrag_pipeline.scripts.hybrid_qa.bm25_text_units import build_text_unit_bm25
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_guardrail import (
+        EvidenceGuardrailConfig,
+        check_answer_supported_by_evidence,
+    )
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_fusion import EvidenceFusionConfig, fuse_basic_and_bm25_evidence
+    from graphrag_pipeline.scripts.hybrid_qa.evidence_selector import (
+        V6EvidenceSelectorConfig,
+        build_v6_hybrid_evidence_selector,
+    )
+    from graphrag_pipeline.scripts.hybrid_qa.orchestrator_v0 import HybridFallbackPolicy, HybridV0Orchestrator
+    from graphrag_pipeline.scripts.hybrid_qa.synthesis_client import OpenAICompatibleSynthesisClient
+    from graphrag_pipeline.scripts.qa_eval.text_unit_lookup import load_data_citation_lookup, load_text_unit_lookup
+
+    text_units_path = resolved_output_dir / "text_units.parquet"
+    if not text_units_path.exists():
+        raise FileNotFoundError(f"Hybrid v0 需要 text_units.parquet，但未找到: {text_units_path}")
+    data_citation_lookup = load_data_citation_lookup(text_units_path)
+    text_unit_lookup = load_text_unit_lookup(text_units_path)
+
+    graph_client = _CliGraphRagDraftClient(
+        timeout_seconds=float(_parse_int_env(os.environ.get("CKQA_HYBRID_V0_CLI_TIMEOUT_SECONDS"), default=240)),
+        data_dir=resolved_output_dir,
+    )
+    guardrail_config = EvidenceGuardrailConfig(
+        bge_m3_model=os.environ.get("CKQA_BGE_M3_MODEL") or None,
+        bge_device=os.environ.get("CKQA_BGE_M3_DEVICE") or None,
+        bge_use_fp16=_parse_bool_env(os.environ.get("CKQA_BGE_M3_FP16"), default=False),
+        bge_batch_size=_parse_int_env(os.environ.get("CKQA_BGE_M3_BATCH_SIZE"), default=8),
+    )
+    fusion_config = EvidenceFusionConfig(
+        bm25_anchor_top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_ANCHOR_TOP_K"), default=2),
+    )
+    evidence_strategy = (os.environ.get("CKQA_HYBRID_V0_EVIDENCE_STRATEGY") or "legacy").strip().casefold()
+    if evidence_strategy == "v6":
+        bm25 = build_v6_hybrid_evidence_selector(
+            text_units_path,
+            config=V6EvidenceSelectorConfig(
+                top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_TOP_K"), default=8),
+                k1=_parse_float_env(os.environ.get("CKQA_HYBRID_V0_BM25_K1"), default=1.5),
+                b=_parse_float_env(os.environ.get("CKQA_HYBRID_V0_BM25_B"), default=0.75),
+                enable_dense_rerank=_parse_bool_env(
+                    os.environ.get("CKQA_HYBRID_V0_ENABLE_DENSE_RERANK"),
+                    default=False,
+                ),
+                dense_rerank_candidate_pool_k=_parse_int_env(
+                    os.environ.get("CKQA_HYBRID_V0_DENSE_RERANK_POOL_K"),
+                    default=20,
+                ),
+                dense_rerank_model=os.environ.get("CKQA_BGE_M3_MODEL") or None,
+                dense_rerank_device=os.environ.get("CKQA_BGE_M3_DEVICE") or None,
+                dense_rerank_use_fp16=_parse_bool_env(os.environ.get("CKQA_BGE_M3_FP16"), default=False),
+                dense_rerank_batch_size=_parse_int_env(os.environ.get("CKQA_BGE_M3_BATCH_SIZE"), default=8),
+            ),
+        )
+    else:
+        bm25 = build_text_unit_bm25(text_units_path, cache_dir=resolved_output_dir / ".hybrid_v0_cache")
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=lambda answer, evidence: check_answer_supported_by_evidence(
+            answer,
+            evidence,
+            config=guardrail_config,
+        ),
+        llm_complete=lambda prompt: OpenAICompatibleSynthesisClient().complete(prompt),
+        citation_ref_resolver=data_citation_lookup.resolve_answer_refs,
+        evidence_fusion=lambda question, basic_answer, bm25_candidates, citation_ref_resolver: (
+            fuse_basic_and_bm25_evidence(
+                question=question,
+                basic_answer=basic_answer,
+                bm25_candidates=bm25_candidates,
+                text_unit_lookup=text_unit_lookup,
+                citation_ref_resolver=citation_ref_resolver,
+                config=fusion_config,
+            )
+        ),
+        fallback_policy=HybridFallbackPolicy(
+            enable_basic_evidence_injection=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION"),
+                default=False,
+            ),
+            disable_synthesis=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_DISABLE_SYNTHESIS"),
+                default=False,
+            ),
+            enable_local_fallback=_parse_bool_env(
+                os.environ.get("CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK"),
+                default=False,
+            )
+        ),
+    )
+    _HYBRID_V0_ORCHESTRATORS[cache_key] = orchestrator
+    return orchestrator
+
+
+async def _run_hybrid_v0_answer(prompt_or_request: str | QueryTaskRequest):
+    """运行 Hybrid v0 查询并保留答案诊断信息。"""
+    if isinstance(prompt_or_request, QueryTaskRequest):
+        prompt = prompt_or_request.retrieval_query or prompt_or_request.prompt
+        output_dir = prompt_or_request.data_dir
+        generation_context = prompt_or_request.generation_context
+    else:
+        prompt = prompt_or_request
+        output_dir = None
+        generation_context = None
+    return await asyncio.to_thread(
+        _get_hybrid_v0_orchestrator(output_dir).answer,
+        prompt,
+        generation_context,
+    )
+
+
+async def _run_hybrid_v0_query(prompt: str) -> str:
+    """运行 Hybrid v0 查询并返回答案文本。"""
+    result = await _run_hybrid_v0_answer(prompt)
+    return result.answer
+
+
+QUERY_TASK_MANAGER = QueryTaskManager(
+    command_factory=_build_query_cmd,
+    env_factory=_build_query_env,
+    cwd=GRAPHRAG_ROOT,
+    build_runs_root=BUILD_RUNS_ROOT,
+    hybrid_answer_runner=_run_hybrid_v0_answer,
+    task_store_dir=os.getenv("GRAPHRAG_QUERY_TASK_STORE_DIR", str(GRAPHRAG_ROOT / "runtime" / "query-tasks")),
+    task_store_retention_days=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_DAYS", "7")),
+    task_store_retention_limit=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_LIMIT", "5000")),
+)
+
+
 class Message(BaseModel):
     role: str
     content: str
@@ -171,9 +381,18 @@ class ChatCompletionRequest(BaseModel):
 
 
 class QueryTaskCreateRequest(BaseModel):
-    mode: Literal["local", "global", "drift", "basic"] = Field(default="local")
-    prompt: str
+    mode: Literal["local", "global", "drift", "basic", "hybrid_v0"] = Field(default="local")
+    prompt: str | None = None
+    retrievalQuery: str | None = None
+    generationContext: str | None = None
     indexRunId: int | None = None
+    dataDirUri: str | None = None
+
+    def effective_prompt(self) -> str:
+        return (self.retrievalQuery or self.prompt or "").strip()
+
+
+class HybridWarmupRequest(BaseModel):
     dataDirUri: str | None = None
 
 
@@ -197,6 +416,7 @@ class ChatCompletionResponse(BaseModel):
     choices: List[ChatCompletionResponseChoice]
     usage: Usage
     system_fingerprint: Optional[str] = None
+    hybrid_diagnostics: Optional[dict[str, Any]] = None
 
 
 def format_response(response: str) -> str:
@@ -238,10 +458,31 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "finishedAt": _serialize_api_local_datetime(snapshot.finished_at),
         "latestLogs": list(snapshot.latest_logs or []),
         "resultText": snapshot.result_text,
+        "sources": list(snapshot.sources or []),
         "errorMessage": snapshot.error_message,
         "returnCode": snapshot.return_code,
         "indexRunId": snapshot.index_run_id,
         "dataDirUri": snapshot.data_dir_uri,
+        "retrievalQuery": snapshot.retrieval_query,
+        "generationContext": snapshot.generation_context,
+    }
+
+
+def _hybrid_readiness_payload(data_dir, data_dir_uri: str | None) -> dict[str, object]:
+    resolved_output_dir = (data_dir or OUTPUT_DIR).resolve()
+    text_units_ready = (resolved_output_dir / "text_units.parquet").exists()
+    cached = str(resolved_output_dir) in _HYBRID_V0_ORCHESTRATORS
+    missing: list[str] = []
+    if not text_units_ready:
+        missing.append("text_units.parquet")
+    ready = text_units_ready and cached
+    return {
+        "ready": ready,
+        "status": "ready" if ready else "not_ready",
+        "dataDirUri": data_dir_uri,
+        "cached": cached,
+        "textUnitsReady": text_units_ready,
+        "missing": missing,
     }
 
 
@@ -271,11 +512,16 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
     @app.post("/v1/query-tasks")
     async def submit_query_task(request: QueryTaskCreateRequest):
         """提交一个异步查询任务。"""
+        prompt = request.effective_prompt()
+        if not prompt:
+            raise HTTPException(status_code=422, detail="retrievalQuery or prompt is required")
         snapshot = await active_task_manager.create_task(
             request.mode,
-            request.prompt,
+            request.prompt or prompt,
             index_run_id=request.indexRunId,
             data_dir_uri=request.dataDirUri,
+            retrieval_query=prompt,
+            generation_context=request.generationContext,
         )
         return JSONResponse(
             content={
@@ -294,6 +540,34 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Query task not found")
         return JSONResponse(content=_serialize_task_snapshot(snapshot))
 
+    @app.post("/v1/hybrid-v0/warmup")
+    async def warmup_hybrid_v0(request: HybridWarmupRequest):
+        """预热 Hybrid v0 的本地索引与 BM25/orchestrator cache，不调用 One API。"""
+        try:
+            data_dir = active_task_manager.resolve_data_dir_uri(request.dataDirUri)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        payload = _hybrid_readiness_payload(data_dir, request.dataDirUri)
+        if payload["textUnitsReady"]:
+            try:
+                _get_hybrid_v0_orchestrator(data_dir)
+            except FileNotFoundError:
+                return JSONResponse(content=payload)
+            payload = _hybrid_readiness_payload(data_dir, request.dataDirUri)
+            payload["cached"] = True
+            payload["ready"] = True
+            payload["status"] = "ready"
+        return JSONResponse(content=payload)
+
+    @app.get("/v1/hybrid-v0/readiness")
+    async def get_hybrid_v0_readiness(dataDirUri: str | None = None):
+        """查询 Hybrid v0 对指定 build-run 输出目录的本地可用性。"""
+        try:
+            data_dir = active_task_manager.resolve_data_dir_uri(dataDirUri)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content=_hybrid_readiness_payload(data_dir, dataDirUri))
+
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest):
         """OpenAI 兼容的聊天完成接口。"""
@@ -302,7 +576,13 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             prompt = request.messages[-1].content
             logger.info("处理提示: %s...", prompt[:100])
 
-            formatted_response = await _resolve_query_response(request.model, prompt)
+            hybrid_diagnostics: dict[str, Any] | None = None
+            if SUPPORTED_QUERY_MODELS.get(request.model) == "hybrid_v0":
+                hybrid_result = await _run_hybrid_v0_answer(prompt)
+                formatted_response = format_response(hybrid_result.answer)
+                hybrid_diagnostics = hybrid_result.diagnostics.to_dict()
+            else:
+                formatted_response = await _resolve_query_response(request.model, prompt)
             logger.info("搜索完成，响应长度: %s", len(formatted_response))
 
             if request.stream:
@@ -359,6 +639,7 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                     completion_tokens=len(formatted_response.split()),
                     total_tokens=len(prompt.split()) + len(formatted_response.split()),
                 ),
+                hybrid_diagnostics=hybrid_diagnostics,
             )
             return JSONResponse(content=response.model_dump())
         except HTTPException:
@@ -398,6 +679,12 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
                 "id": "graphrag-basic-search:latest",
                 "object": "model",
                 "created": current_time - 85000,
+                "owned_by": "graphrag",
+            },
+            {
+                "id": "graphrag-hybrid-v0-search:latest",
+                "object": "model",
+                "created": current_time - 80000,
                 "owned_by": "graphrag",
             },
         ]
@@ -447,6 +734,8 @@ async def _resolve_query_response(model: str, prompt: str) -> str:
     method = SUPPORTED_QUERY_MODELS.get(model)
     if method is None:
         raise ValueError(f"不支持的模型: {model}")
+    if method == "hybrid_v0":
+        return format_response(await _run_hybrid_v0_query(prompt))
     return format_response(await run_graphrag_query_cli(method, prompt))
 
 

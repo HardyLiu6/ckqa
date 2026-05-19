@@ -1,6 +1,5 @@
 package org.ysu.ckqaback.qa.dto;
 
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -14,7 +13,6 @@ import lombok.Setter;
 @Setter
 public class CreateQaSessionRequest {
 
-    @NotNull(message = "userId不能为空")
     @Positive(message = "userId必须大于0")
     private Long userId;
 

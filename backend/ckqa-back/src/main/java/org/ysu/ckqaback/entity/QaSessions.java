@@ -64,6 +64,18 @@ public class QaSessions implements Serializable {
     private Long knowledgeBaseId;
 
     /**
+     * 本会话固化的索引运行ID
+     */
+    @TableField("index_run_id")
+    private Long indexRunId;
+
+    /**
+     * 索引版本固化时间
+     */
+    @TableField("index_locked_at")
+    private LocalDateTime indexLockedAt;
+
+    /**
      * 会话类型：formal正式问答，smoke构建冒烟验证
      */
     @TableField("session_type")

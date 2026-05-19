@@ -106,6 +106,90 @@ public class QaRetrievalLogs implements Serializable {
     private String queryText;
 
     /**
+     * 学生原始问题
+     */
+    @TableField("original_query_text")
+    private String originalQueryText;
+
+    /**
+     * 实际发给 GraphRAG 的短检索问题
+     */
+    @TableField("retrieval_query_text")
+    private String retrievalQueryText;
+
+    /**
+     * 独立检索问题
+     */
+    @TableField("standalone_query_text")
+    private String standaloneQueryText;
+
+    /**
+     * 本轮上下文快照
+     */
+    @TableField("context_snapshot_text")
+    private String contextSnapshotText;
+
+    /**
+     * 上下文策略
+     */
+    @TableField("context_strategy")
+    private String contextStrategy;
+
+    /**
+     * 上下文消息范围
+     */
+    @TableField("context_message_range")
+    private String contextMessageRange;
+
+    /**
+     * 上下文字符数估算
+     */
+    @TableField("context_char_count")
+    private Integer contextCharCount;
+
+    /**
+     * 是否应用追问改写
+     */
+    @TableField("rewrite_applied")
+    private Boolean rewriteApplied;
+
+    /**
+     * 追问改写原因
+     */
+    @TableField("rewrite_reason")
+    private String rewriteReason;
+
+    /**
+     * 追问改写来源消息范围
+     */
+    @TableField("rewrite_source_message_range")
+    private String rewriteSourceMessageRange;
+
+    /**
+     * 改写方法：none/rule/llm
+     */
+    @TableField("rewrite_method")
+    private String rewriteMethod;
+
+    /**
+     * 改写模型
+     */
+    @TableField("rewrite_model")
+    private String rewriteModel;
+
+    /**
+     * 改写置信度
+     */
+    @TableField("rewrite_confidence")
+    private Double rewriteConfidence;
+
+    /**
+     * 上下文快照版本
+     */
+    @TableField("context_snapshot_version")
+    private String contextSnapshotVersion;
+
+    /**
      * 检索状态
      */
     @TableField("retrieval_status")

@@ -6,15 +6,19 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from query_task_manager import QueryTaskManager
+from query_task_manager import QueryTaskManager, QueryTaskRequest
 
 
 def _python_cmd(code: str) -> list[str]:
@@ -40,7 +44,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(running.progress_stage, "running")
         self.assertIsNotNone(running.last_heartbeat_at)
 
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.15)
         finished = manager.get_snapshot(created.python_task_id)
         self.assertEqual(finished.task_status, "success")
         self.assertEqual(finished.progress_stage, "done")
@@ -115,7 +119,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         )
 
         created = await manager.create_task("global", "图谱主题")
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.25)
 
         snapshot = manager.get_snapshot(created.python_task_id)
         self.assertEqual(snapshot.task_status, "success")
@@ -136,12 +140,236 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             index_run_id=18,
             data_dir_uri="user_2/kb_5/build_27/index/output",
         )
-        await asyncio.sleep(0.15)
+        await asyncio.sleep(0.25)
 
         snapshot = manager.get_snapshot(created.python_task_id)
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(snapshot.index_run_id, 18)
         self.assertEqual(snapshot.data_dir_uri, "user_2/kb_5/build_27/index/output")
+
+    async def test_hybrid_runner_receives_task_specific_data_dir(self):
+        seen: list[QueryTaskRequest] = []
+
+        async def hybrid_runner(request: QueryTaskRequest):
+            seen.append(request)
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": []})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            build_runs_root=_PROJECT_ROOT / "runtime" / "kb-build-runs",
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task(
+            "hybrid_v0",
+            "原问题",
+            index_run_id=18,
+            data_dir_uri="user_2/kb_5/build_27/index/output",
+            retrieval_query="独立检索问题",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "hybrid ok")
+        self.assertEqual(seen[0].retrieval_query, "独立检索问题")
+        self.assertEqual(seen[0].data_dir, _PROJECT_ROOT / "runtime" / "kb-build-runs" / "user_2/kb_5/build_27/index/output")
+
+    async def test_hybrid_runner_receives_generation_context_without_cli(self):
+        seen: list[QueryTaskRequest] = []
+
+        async def hybrid_runner(request: QueryTaskRequest):
+            seen.append(request)
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": []})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task(
+            "hybrid_v0",
+            "它和资源分配图有什么关系？",
+            retrieval_query="死锁和资源分配图有什么关系？",
+            generation_context="最近对话：上一轮解释了死锁。",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(seen[0].retrieval_query, "死锁和资源分配图有什么关系？")
+        self.assertEqual(seen[0].generation_context, "最近对话：上一轮解释了死锁。")
+
+    async def test_persists_finished_snapshot_and_loads_it_after_restart(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("print('persisted answer', flush=True)"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                build_runs_root=Path(temp_dir) / "runtime" / "kb-build-runs",
+                task_store_dir=store_dir,
+            )
+
+            created = await manager.create_task(
+                "basic",
+                "原问题",
+                index_run_id=18,
+                data_dir_uri="user_2/kb_5/build_27/index/output",
+                retrieval_query="独立问题",
+                generation_context="最近对话",
+            )
+            await asyncio.sleep(0.2)
+
+            reloaded_manager = QueryTaskManager(
+                command_factory=lambda request: _python_cmd("raise SystemExit('should not run')"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                build_runs_root=Path(temp_dir) / "runtime" / "kb-build-runs",
+                task_store_dir=store_dir,
+            )
+            snapshot = reloaded_manager.get_snapshot(created.python_task_id)
+
+            self.assertIsNotNone(snapshot)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertEqual(snapshot.result_text, "persisted answer")
+            self.assertEqual(snapshot.index_run_id, 18)
+            self.assertEqual(snapshot.retrieval_query, "独立问题")
+            self.assertEqual(snapshot.generation_context, "最近对话")
+
+    async def test_ignores_corrupt_persisted_snapshot_and_keeps_new_tasks_available(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            store_dir.mkdir(parents=True)
+            (store_dir / "broken.json").write_text("{not-json", encoding="utf-8")
+
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("print('ok', flush=True)"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                task_store_dir=store_dir,
+            )
+
+            created = await manager.create_task("basic", "问题")
+            await asyncio.sleep(0.15)
+
+            snapshot = manager.get_snapshot(created.python_task_id)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertEqual(snapshot.result_text, "ok")
+
+    async def test_query_task_store_retention_keeps_recent_snapshot_count(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            store_dir.mkdir(parents=True)
+            for index in range(3):
+                created_at = datetime.now(UTC) - timedelta(minutes=10 - index)
+                (store_dir / f"old-{index}.json").write_text(
+                    (
+                        '{"pythonTaskId":"old-%d","mode":"basic","prompt":"q",'
+                        '"taskStatus":"success","progressStage":"done","processAlive":false,'
+                        '"createdAt":"%s","latestLogs":[]}'
+                    ) % (index, created_at.isoformat()),
+                    encoding="utf-8",
+                )
+
+            QueryTaskManager(
+                command_factory=lambda request: _python_cmd("print('unused')"),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                task_store_dir=store_dir,
+                task_store_retention_limit=1,
+            )
+
+            remaining = sorted(path.name for path in store_dir.glob("*.json"))
+            self.assertEqual(remaining, ["old-2.json"])
+
+    async def test_hybrid_result_text_uses_student_readable_source_marks(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_runs_root = Path(temp_dir) / "runtime" / "kb-build-runs"
+            data_dir_uri = "user_2/kb_5/build_27/index/output"
+            output_dir = build_runs_root / data_dir_uri
+            output_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "id": "text-unit-156-full-id",
+                        "human_readable_id": 156,
+                        "text": (
+                            "source_file: 操作系统教材. heading_path_text: 第三章 > 死锁检测. "
+                            "page_start: 123. page_end: 125. 资源分配图可以用于死锁检测。"
+                        ),
+                        "n_tokens": 20,
+                        "document_id": "doc-os",
+                        "entity_ids": [],
+                        "relationship_ids": [],
+                        "covariate_ids": [],
+                    }
+                ]
+            ).to_parquet(output_dir / "text_units.parquet")
+
+            async def hybrid_runner(request):
+                return type(
+                    "HybridAnswer",
+                    (),
+                    {"answer": "资源分配图可用于描述死锁状态 [Data: Sources (156)]。", "sources": []},
+                )()
+
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+                env_factory=lambda request: {},
+                cwd=_PROJECT_ROOT,
+                build_runs_root=build_runs_root,
+                hybrid_answer_runner=hybrid_runner,
+            )
+
+            created = await manager.create_task("hybrid_v0", "问题", data_dir_uri=data_dir_uri)
+            await asyncio.sleep(0.15)
+
+            snapshot = manager.get_snapshot(created.python_task_id)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertNotIn("[Data:", snapshot.result_text)
+            self.assertIn("[来源 1]", snapshot.result_text)
+            self.assertEqual(snapshot.sources[0]["ref"], "156")
+            self.assertEqual(snapshot.sources[0]["source_type"], "graphrag_citation")
+
+    async def test_serializes_hybrid_source_type_for_bm25_evidence(self):
+        async def hybrid_runner(request):
+            source = type(
+                "EvidenceSource",
+                (),
+                {
+                    "ref": "tu-bm25-001",
+                    "source": "bm25-v6",
+                    "text": "资源分配图片段",
+                    "metadata": {"rank": 1},
+                },
+            )()
+            return type("HybridAnswer", (), {"answer": "hybrid ok", "sources": [source]})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            hybrid_answer_runner=hybrid_runner,
+        )
+
+        created = await manager.create_task("hybrid_v0", "问题")
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.sources[0]["kind"], "bm25")
+        self.assertEqual(snapshot.sources[0]["source_type"], "bm25")
 
     async def test_rejects_task_data_dir_path_escape(self):
         manager = QueryTaskManager(

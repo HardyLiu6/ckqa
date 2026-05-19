@@ -2,7 +2,12 @@ package org.ysu.ckqaback.service;
 
 import org.ysu.ckqaback.entity.QaSessions;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+
+import java.time.LocalDateTime;
 
 /**
  * <p>
@@ -18,5 +23,13 @@ public interface QaSessionsService extends IService<QaSessions> {
 
     QaSessions createSession(CreateQaSessionRequest request);
 
+    QaSessions createSession(CreateQaSessionRequest request, Long indexRunId, LocalDateTime indexLockedAt);
+
+    ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request);
+
+    void lockIndexRun(Long id, Long indexRunId, LocalDateTime indexLockedAt);
+
     void touchLastMessageAt(Long id);
+
+    QaSessions updateSession(Long id, String title, String status);
 }

@@ -10,6 +10,7 @@ import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
 import org.ysu.ckqaback.mapper.QaRetrievalLogsMapper;
+import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
@@ -43,6 +44,19 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             String mode,
             String queryText
     ) {
+        return createPendingTask(sessionId, courseId, indexRunId, userMessageId, mode, queryText, null);
+    }
+
+    @Override
+    public QaRetrievalLogs createPendingTask(
+            Long sessionId,
+            String courseId,
+            Long indexRunId,
+            Long userMessageId,
+            String mode,
+            String queryText,
+            QaRetrievalLogContext context
+    ) {
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setSessionId(sessionId);
         task.setUserMessageId(userMessageId);
@@ -53,6 +67,22 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
         task.setIndexRunId(indexRunId);
         task.setQueryMode(mode);
         task.setQueryText(queryText);
+        if (context != null) {
+            task.setOriginalQueryText(context.originalQueryText());
+            task.setRetrievalQueryText(context.retrievalQueryText());
+            task.setStandaloneQueryText(context.standaloneQueryText());
+            task.setContextSnapshotText(context.contextSnapshotText());
+            task.setContextStrategy(context.contextStrategy());
+            task.setContextMessageRange(context.contextMessageRange());
+            task.setContextCharCount(context.contextCharCount());
+            task.setRewriteApplied(context.rewriteApplied());
+            task.setRewriteReason(context.rewriteReason());
+            task.setRewriteSourceMessageRange(context.rewriteSourceMessageRange());
+            task.setRewriteMethod(context.rewriteMethod());
+            task.setRewriteModel(context.rewriteModel());
+            task.setRewriteConfidence(context.rewriteConfidence());
+            task.setContextSnapshotVersion(context.contextSnapshotVersion());
+        }
         task.setCreatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         save(task);
         return task;
@@ -166,6 +196,22 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             }
         }
         return latestByUserMessage;
+    }
+
+    @Override
+    public List<Long> findDistinctSuccessfulIndexRunIdsBySession(Long sessionId) {
+        if (sessionId == null) {
+            return List.of();
+        }
+        LambdaQueryWrapper<QaRetrievalLogs> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(QaRetrievalLogs::getSessionId, sessionId)
+                .eq(QaRetrievalLogs::getTaskStatus, "success")
+                .isNotNull(QaRetrievalLogs::getIndexRunId)
+                .select(QaRetrievalLogs::getIndexRunId);
+        return list(queryWrapper).stream()
+                .map(QaRetrievalLogs::getIndexRunId)
+                .distinct()
+                .toList();
     }
 
     private int nextTaskSeq(Long userMessageId) {

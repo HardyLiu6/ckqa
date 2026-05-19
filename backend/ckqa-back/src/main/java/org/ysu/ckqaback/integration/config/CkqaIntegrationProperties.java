@@ -20,6 +20,8 @@ public class CkqaIntegrationProperties {
     private final GraphRagProperties graphrag = new GraphRagProperties();
     private final PollingProperties polling = new PollingProperties();
     private final TimeoutProperties timeout = new TimeoutProperties();
+    private final SummaryProperties summary = new SummaryProperties();
+    private final RewriteProperties rewrite = new RewriteProperties();
 
     public QueryTaskModePolicy resolveQueryTaskModePolicy(String rawMode) {
         String mode = normalizeMode(rawMode);
@@ -53,6 +55,10 @@ public class CkqaIntegrationProperties {
         if ("drift".equals(mode)) {
             return "drift 模式通常耗时更长，任务心跳超过 " + staleTimeoutSeconds
                     + " 秒未更新后会被标记为 stale；可调大 QUERY_TASK_STALE_SECONDS_DRIFT 并降低前端轮询频率。";
+        }
+        if ("hybrid_v0".equals(mode)) {
+            return "混合检索 Beta 模式通常耗时更长，任务心跳超过 " + staleTimeoutSeconds
+                    + " 秒未更新后会被标记为 stale；建议前端低频轮询并展示长耗时提示。";
         }
         return mode + " 模式任务心跳超过 " + staleTimeoutSeconds + " 秒未更新后会被标记为 stale。";
     }
@@ -113,7 +119,8 @@ public class CkqaIntegrationProperties {
                 "local", 10L,
                 "basic", 10L,
                 "global", 30L,
-                "drift", 30L
+                "drift", 30L,
+                "hybrid_v0", 30L
         ));
     }
 
@@ -133,13 +140,42 @@ public class CkqaIntegrationProperties {
                 "local", 300L,
                 "basic", 300L,
                 "global", 1800L,
-                "drift", 1800L
+                "drift", 1800L,
+                "hybrid_v0", 1800L
         ));
         private Map<String, String> queryTaskModeTimeoutMessages = new LinkedHashMap<>(Map.of(
                 "local", "local 模式实测可能需要 2 分钟左右；任务心跳超过阈值未更新后会被标记为 stale。",
                 "basic", "basic 模式沿用轻量查询策略；任务心跳超过阈值未更新后会被标记为 stale。",
                 "global", "global 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
-                "drift", "drift 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。"
+                "drift", "drift 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
+                "hybrid_v0", "混合检索 Beta 模式会融合多路证据，可能需要较长时间；建议前端低频轮询并等待后台完成。"
         ));
+    }
+
+    @Getter
+    @Setter
+    public static class SummaryProperties {
+        private boolean enabled = true;
+        private String apiBaseUrl = "http://127.0.0.1:3000/v1";
+        private String apiKey = "";
+        private String model = "deepseek-v4-flash";
+        private int maxChars = 800;
+        private int triggerMessageCount = 12;
+        private int triggerCharCount = 3000;
+        private boolean thinkingDisabled = true;
+        private long timeoutSeconds = 30L;
+    }
+
+    @Getter
+    @Setter
+    public static class RewriteProperties {
+        private boolean enabled = true;
+        private String apiBaseUrl = "http://127.0.0.1:3000/v1";
+        private String apiKey = "";
+        private String model = "deepseek-v4-flash";
+        private int maxChars = 800;
+        private double minConfidence = 0.6D;
+        private boolean thinkingDisabled = true;
+        private long timeoutSeconds = 20L;
     }
 }
