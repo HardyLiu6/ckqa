@@ -13,16 +13,16 @@
       </div>
       <div class="header-stats">
         <div class="stat-item">
-          <span class="stat-num">{{ courses.length }}+</span>
-          <span class="stat-label">精品课程</span>
+          <span class="stat-num">{{ courseStore.allCourses.length }}</span>
+          <span class="stat-label">可见课程</span>
         </div>
         <div class="stat-item">
-          <span class="stat-num">50k+</span>
-          <span class="stat-label">学习人次</span>
+          <span class="stat-num">{{ courseStore.myCourses.length }}</span>
+          <span class="stat-label">我已加入</span>
         </div>
         <div class="stat-item">
-          <span class="stat-num">98%</span>
-          <span class="stat-label">好评率</span>
+          <span class="stat-num">{{ courseStore.allCategories.length }}</span>
+          <span class="stat-label">课程分类</span>
         </div>
       </div>
     </div>
@@ -32,20 +32,21 @@
       <div class="filter-container">
         <!-- 搜索框 -->
         <div class="search-box">
-          <el-input v-model="searchKeyword" placeholder="搜索课程名称、讲师、关键词..." size="large" clearable>
+          <el-input v-model="searchKeyword" placeholder="搜索课程名称、关键词..." size="large" clearable
+            @keyup.enter="onSearch">
             <template #prefix>
               <el-icon>
                 <Search />
               </el-icon>
             </template>
             <template #append>
-              <el-button type="primary">搜索</el-button>
+              <el-button type="primary" @click="onSearch">搜索</el-button>
             </template>
           </el-input>
         </div>
 
         <!-- 分类筛选 -->
-        <div class="category-filter">
+        <div class="category-filter" v-if="allCategories.length > 1">
           <span class="filter-label">课程分类：</span>
           <div class="category-tags">
             <el-tag v-for="cat in allCategories" :key="cat" :type="selectedCategory === cat ? '' : 'info'"
@@ -56,13 +57,12 @@
           </div>
         </div>
 
-        <!-- 排序 -->
+        <!-- 我加入的 / 全部可见 -->
         <div class="sort-filter">
-          <span class="filter-label">排序方式：</span>
-          <el-radio-group v-model="sortBy">
-            <el-radio-button value="newest">最新发布</el-radio-button>
-            <el-radio-button value="popular">最受欢迎</el-radio-button>
-            <el-radio-button value="rating">评分最高</el-radio-button>
+          <span class="filter-label">范围：</span>
+          <el-radio-group v-model="scope">
+            <el-radio-button value="all">全部可见</el-radio-button>
+            <el-radio-button value="member">我加入的</el-radio-button>
           </el-radio-group>
         </div>
       </div>
@@ -70,11 +70,19 @@
 
     <!-- 课程列表 -->
     <div class="course-section">
-      <div class="course-grid">
+      <div v-if="courseStore.isLoading" class="course-loading">
+        <el-skeleton :rows="3" animated />
+      </div>
+      <div v-else-if="courseStore.errorMessage" class="course-error">
+        <el-empty :description="courseStore.errorMessage" :image-size="160">
+          <el-button type="primary" @click="reload">重试</el-button>
+        </el-empty>
+      </div>
+      <div v-else class="course-grid">
         <div v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goToDetail(course.id)">
           <!-- 课程封面 -->
           <div class="card-cover">
-            <img :src="course.cover" :alt="course.title" />
+            <img :src="course.cover || defaultCover" :alt="course.title" />
             <div class="cover-overlay">
               <el-button type="primary" circle size="large">
                 <el-icon size="24">
@@ -83,23 +91,27 @@
               </el-button>
             </div>
             <div class="card-tags">
-              <el-tag v-if="course.price === 0" type="success" size="small">免费</el-tag>
-              <el-tag v-else type="warning" size="small">¥{{ course.price }}</el-tag>
+              <el-tag v-if="course.memberStatus === 'member'" type="success" size="small">已加入</el-tag>
+              <el-tag v-else-if="course.accessPolicy === 'public'" type="info" size="small">公开</el-tag>
             </div>
-            <div class="card-category">{{ course.category }}</div>
+            <div v-if="course.category" class="card-category">{{ course.category }}</div>
           </div>
 
           <!-- 课程信息 -->
           <div class="card-content">
-            <h3 class="course-title">{{ course.title }}</h3>
-            <p class="course-desc">{{ course.description }}</p>
+            <h3 class="course-title">{{ course.title || course.id }}</h3>
+            <p class="course-desc">{{ course.description || '暂无简介' }}</p>
 
             <!-- 讲师信息 -->
-            <div class="teacher-info">
-              <el-avatar :src="course.teacher.avatar" :size="32" />
+            <div v-if="course.teacher && course.teacher.name" class="teacher-info">
+              <el-avatar :size="32">
+                {{ course.teacher.name.slice(0, 1) }}
+              </el-avatar>
               <div class="teacher-text">
                 <span class="teacher-name">{{ course.teacher.name }}</span>
-                <span class="teacher-title">{{ course.teacher.title }}</span>
+                <span class="teacher-title">
+                  {{ course.teachers.length > 1 ? `等 ${course.teachers.length} 位教师` : '授课教师' }}
+                </span>
               </div>
             </div>
 
@@ -107,27 +119,33 @@
             <div class="course-meta">
               <div class="meta-item">
                 <el-icon>
-                  <User />
+                  <Document />
                 </el-icon>
-                <span>{{ formatNumber(course.studentCount) }}人学习</span>
+                <span>{{ course.materialCount }} 份资料</span>
               </div>
               <div class="meta-item">
                 <el-icon>
+                  <Connection />
+                </el-icon>
+                <span>{{ course.activeKnowledgeBaseCount }} 个知识库</span>
+              </div>
+              <div v-if="course.estimatedHours" class="meta-item">
+                <el-icon>
                   <Clock />
                 </el-icon>
-                <span>{{ course.lessonCount }}课时</span>
+                <span>约 {{ course.estimatedHours }} 学时</span>
               </div>
-              <div class="meta-item rating">
+              <div v-if="course.difficulty" class="meta-item">
                 <el-icon>
                   <Star />
                 </el-icon>
-                <span>{{ course.rating.toFixed(1) }}</span>
+                <span>{{ formatDifficulty(course.difficulty) }}</span>
               </div>
             </div>
 
             <!-- 标签 -->
-            <div class="course-tags">
-              <el-tag v-for="tag in course.tags.slice(0, 3)" :key="tag" size="small" type="info" effect="plain">
+            <div v-if="course.tags.length" class="course-tags">
+              <el-tag v-for="tag in course.tags.slice(0, 4)" :key="tag" size="small" type="info" effect="plain">
                 {{ tag }}
               </el-tag>
             </div>
@@ -136,7 +154,8 @@
       </div>
 
       <!-- 空状态 -->
-      <el-empty v-if="filteredCourses.length === 0" description="暂无相关课程" :image-size="200">
+      <el-empty v-if="!courseStore.isLoading && !courseStore.errorMessage && filteredCourses.length === 0"
+        description="暂无相关课程" :image-size="200">
         <el-button type="primary" @click="resetFilters">重置筛选</el-button>
       </el-empty>
     </div>
@@ -144,179 +163,74 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Reading, Search, VideoPlay, User, Clock, Star
+  Reading, Search, VideoPlay, Document, Connection, Clock, Star,
 } from '@element-plus/icons-vue'
 
+import { useCourseStore } from '@/stores/course'
+
 const router = useRouter()
+const courseStore = useCourseStore()
 
-// ========== 模拟数据 ==========
-const courses = ref([
-  {
-    id: 1,
-    title: '深度学习入门：从原理到实践',
-    cover: 'https://picsum.photos/seed/dl1/400/225',
-    description: '本课程从零开始讲解深度学习的核心概念，包括神经网络基础、反向传播算法、常见网络架构等。',
-    teacher: { id: 1, name: '张教授', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher1', title: '人工智能专家' },
-    category: '人工智能',
-    tags: ['深度学习', '神经网络', 'Python', 'TensorFlow'],
-    lessonCount: 48,
-    studentCount: 12580,
-    rating: 4.9,
-    price: 0
-  },
-  {
-    id: 2,
-    title: 'Vue3.0 + Pinia 企业级实战开发',
-    cover: 'https://picsum.photos/seed/vue3/400/225',
-    description: '从Vue3新特性到Pinia状态管理，手把手带你构建企业级中后台管理系统。',
-    teacher: { id: 2, name: '李老师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher2', title: '前端架构师' },
-    category: '前端开发',
-    tags: ['Vue3', 'Pinia', 'Vite', 'Element Plus'],
-    lessonCount: 36,
-    studentCount: 8920,
-    rating: 4.8,
-    price: 199
-  },
-  {
-    id: 3,
-    title: '自然语言处理(NLP)完全指南',
-    cover: 'https://picsum.photos/seed/nlp1/400/225',
-    description: '系统学习NLP核心技术，从词向量、序列模型到Transformer和大语言模型。',
-    teacher: { id: 3, name: '王博士', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher3', title: '机器学习专家' },
-    category: '人工智能',
-    tags: ['NLP', 'Transformer', 'BERT', 'GPT'],
-    lessonCount: 56,
-    studentCount: 6750,
-    rating: 4.9,
-    price: 299
-  },
-  {
-    id: 4,
-    title: 'Python数据分析与可视化实战',
-    cover: 'https://picsum.photos/seed/python1/400/225',
-    description: '使用Python进行数据处理、分析和可视化，掌握Pandas、NumPy、Matplotlib等核心库。',
-    teacher: { id: 1, name: '张教授', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher1', title: '人工智能专家' },
-    category: '数据科学',
-    tags: ['Python', 'Pandas', '数据分析', 'Matplotlib'],
-    lessonCount: 28,
-    studentCount: 15680,
-    rating: 4.7,
-    price: 0
-  },
-  {
-    id: 5,
-    title: 'React18 + Next.js 全栈开发',
-    cover: 'https://picsum.photos/seed/react1/400/225',
-    description: '掌握React18新特性和Next.js全栈开发框架，构建高性能的服务端渲染应用。',
-    teacher: { id: 2, name: '李老师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher2', title: '前端架构师' },
-    category: '前端开发',
-    tags: ['React', 'Next.js', 'SSR', 'TypeScript'],
-    lessonCount: 32,
-    studentCount: 5420,
-    rating: 4.8,
-    price: 249
-  },
-  {
-    id: 6,
-    title: '机器学习算法详解与实战',
-    cover: 'https://picsum.photos/seed/ml1/400/225',
-    description: '从基础到进阶，系统讲解机器学习核心算法，配合Sklearn实战项目。',
-    teacher: { id: 3, name: '王博士', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher3', title: '机器学习专家' },
-    category: '人工智能',
-    tags: ['机器学习', 'Sklearn', '算法', '实战'],
-    lessonCount: 42,
-    studentCount: 9870,
-    rating: 4.9,
-    price: 199
-  },
-  {
-    id: 7,
-    title: 'Node.js 后端开发实战',
-    cover: 'https://picsum.photos/seed/node1/400/225',
-    description: '从零构建企业级Node.js应用，掌握Express、Koa、数据库设计等核心技能。',
-    teacher: { id: 2, name: '李老师', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher2', title: '前端架构师' },
-    category: '后端开发',
-    tags: ['Node.js', 'Express', 'MongoDB', 'RESTful'],
-    lessonCount: 35,
-    studentCount: 7230,
-    rating: 4.6,
-    price: 179
-  },
-  {
-    id: 8,
-    title: '智能问答系统设计与实现',
-    cover: 'https://picsum.photos/seed/qa1/400/225',
-    description: '结合NLP技术和知识图谱，构建企业级智能问答系统，支持多轮对话。',
-    teacher: { id: 3, name: '王博士', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=teacher3', title: '机器学习专家' },
-    category: '人工智能',
-    tags: ['问答系统', '知识图谱', 'NLP', 'ChatBot'],
-    lessonCount: 52,
-    studentCount: 4560,
-    rating: 4.8,
-    price: 399
-  }
-])
+const defaultCover = '/api/v1/course-covers/default-course-cover.svg'
 
-// ========== 筛选状态 ==========
 const searchKeyword = ref('')
 const selectedCategory = ref('全部')
-const sortBy = ref('newest')
+const scope = ref('all')
 
-// 分类列表
-const allCategories = computed(() => {
-  const cats = [...new Set(courses.value.map(c => c.category))]
-  return ['全部', ...cats]
-})
+const allCategories = computed(() => ['全部', ...courseStore.allCategories])
 
-// 过滤后的课程
 const filteredCourses = computed(() => {
-  let result = [...courses.value]
-
-  // 关键词搜索
-  if (searchKeyword.value) {
-    const keyword = searchKeyword.value.toLowerCase()
-    result = result.filter(c =>
-      c.title.toLowerCase().includes(keyword) ||
-      c.teacher.name.toLowerCase().includes(keyword) ||
-      c.tags.some(t => t.toLowerCase().includes(keyword))
-    )
+  let result = [...courseStore.allCourses]
+  if (scope.value === 'member') {
+    result = result.filter((c) => c.memberStatus === 'member')
   }
-
-  // 分类筛选
-  if (selectedCategory.value !== '全部') {
-    result = result.filter(c => c.category === selectedCategory.value)
+  if (selectedCategory.value && selectedCategory.value !== '全部') {
+    result = result.filter((c) => c.category === selectedCategory.value)
   }
-
-  // 排序
-  if (sortBy.value === 'popular') {
-    result.sort((a, b) => b.studentCount - a.studentCount)
-  } else if (sortBy.value === 'rating') {
-    result.sort((a, b) => b.rating - a.rating)
-  }
-
-  return result
+  return result.sort((a, b) => {
+    const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+    const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
+    return bTime - aTime
+  })
 })
 
-// 格式化数字
-const formatNumber = (num) => {
-  if (num >= 10000) return (num / 10000).toFixed(1) + 'w'
-  return num.toString()
+function formatDifficulty(value) {
+  if (value === 'beginner') return '入门'
+  if (value === 'intermediate') return '进阶'
+  if (value === 'advanced') return '高级'
+  return value
 }
 
-// 重置筛选
-const resetFilters = () => {
+async function reload() {
+  await courseStore.loadCourses({
+    keyword: searchKeyword.value || undefined,
+    force: true,
+  })
+}
+
+function onSearch() {
+  reload()
+}
+
+function resetFilters() {
   searchKeyword.value = ''
   selectedCategory.value = '全部'
-  sortBy.value = 'newest'
+  scope.value = 'all'
+  reload()
 }
 
-// 跳转详情
-const goToDetail = (id) => {
-  router.push(`/course/detail/${id}`)
+function goToDetail(id) {
+  router.push(`/course/detail/${encodeURIComponent(id)}`)
 }
+
+onMounted(() => {
+  if (courseStore.allCourses.length === 0) {
+    courseStore.loadCourses()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
