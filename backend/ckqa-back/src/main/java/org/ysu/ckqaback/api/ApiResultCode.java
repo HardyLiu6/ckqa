@@ -103,6 +103,16 @@ public enum ApiResultCode {
     EXTRACTION_EVAL_RUN_NOT_FOUND(4052, "评分任务不存在"),
 
     /**
+     * 知识图谱节点不存在（实体 ID 找不到）。学生端图谱浏览专用。
+     */
+    GRAPH_ENTITY_NOT_FOUND(4053, "知识图谱节点不存在"),
+
+    /**
+     * 知识图谱依赖（Neo4j）当前不可用。
+     */
+    GRAPH_BACKEND_UNAVAILABLE(5010, "知识图谱依赖暂不可用"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
