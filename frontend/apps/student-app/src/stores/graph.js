@@ -1,0 +1,189 @@
+// 学生端知识图谱 Pinia store
+// 仅 MVP 阶段所需的最小状态：当前知识库 / 节点 / 边 / 选中节点 / 加载状态
+// 多跳邻域历史栈、社区钻取留给后续 PR
+
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+
+import {
+  fetchCourseKnowledgeBases,
+  fetchEntityDetail,
+  fetchEntityNeighborhood,
+  fetchGraphOverview,
+} from '@/api/graph'
+
+export const GRAPH_STATE = Object.freeze({
+  IDLE: 'idle',
+  LOADING: 'loading',
+  READY: 'ready',
+  EMPTY: 'empty',
+  NO_ACTIVE_INDEX: 'no-active-index',
+  ERROR: 'error',
+})
+
+export const useGraphStore = defineStore('graph', () => {
+  const knowledgeBases = ref([])
+  const activeKnowledgeBase = ref(null)
+
+  // 画布数据：以 id 为键去重，避免 G6 changeData 时把同一节点重复加入
+  const nodesById = ref(new Map())
+  const edgesById = ref(new Map())
+
+  const selectedNodeId = ref(null)
+  const entityDetail = ref(null) // { id, name, type, description, communityPath, chunkCount }
+
+  const state = ref(GRAPH_STATE.IDLE)
+  const errorMessage = ref('')
+
+  const nodes = computed(() => Array.from(nodesById.value.values()))
+  const edges = computed(() => Array.from(edgesById.value.values()))
+
+  function reset() {
+    knowledgeBases.value = []
+    activeKnowledgeBase.value = null
+    nodesById.value = new Map()
+    edgesById.value = new Map()
+    selectedNodeId.value = null
+    entityDetail.value = null
+    state.value = GRAPH_STATE.IDLE
+    errorMessage.value = ''
+  }
+
+  function setError(err, fallback = '加载失败，请稍后重试') {
+    state.value = GRAPH_STATE.ERROR
+    errorMessage.value = err?.message || fallback
+  }
+
+  /**
+   * 进入图谱页时调用：拉课程知识库摘要并选取激活索引就绪的第一个 KB。
+   *
+   * @param {string} courseId
+   * @returns {Promise<boolean>} 是否成功选到可用知识库
+   */
+  async function selectKnowledgeBaseForCourse(courseId) {
+    if (!courseId) {
+      state.value = GRAPH_STATE.NO_ACTIVE_INDEX
+      return false
+    }
+    state.value = GRAPH_STATE.LOADING
+    errorMessage.value = ''
+    try {
+      const list = await fetchCourseKnowledgeBases(courseId)
+      knowledgeBases.value = Array.isArray(list) ? list : []
+      const ready = knowledgeBases.value.find((kb) => kb && kb.activeIndexRunId != null)
+      if (!ready) {
+        activeKnowledgeBase.value = null
+        state.value = GRAPH_STATE.NO_ACTIVE_INDEX
+        return false
+      }
+      activeKnowledgeBase.value = ready
+      return true
+    } catch (err) {
+      setError(err, '获取课程知识库失败')
+      return false
+    }
+  }
+
+  /**
+   * 加载图谱总览数据。
+   */
+  async function loadOverview({ level = 0, topN } = {}) {
+    if (!activeKnowledgeBase.value) {
+      state.value = GRAPH_STATE.NO_ACTIVE_INDEX
+      return
+    }
+    state.value = GRAPH_STATE.LOADING
+    errorMessage.value = ''
+    try {
+      const data = await fetchGraphOverview(activeKnowledgeBase.value.id, { level, topN })
+      mergeNodes(data?.nodes ?? [], { replace: true })
+      mergeEdges(data?.edges ?? [], { replace: true })
+      if (nodesById.value.size === 0) {
+        state.value = GRAPH_STATE.EMPTY
+      } else {
+        state.value = GRAPH_STATE.READY
+      }
+    } catch (err) {
+      setError(err, '加载知识图谱失败')
+    }
+  }
+
+  /**
+   * 拉取实体详情（点选节点时调用）。
+   */
+  async function loadEntityDetail(entityId) {
+    if (!activeKnowledgeBase.value || !entityId) {
+      return
+    }
+    selectedNodeId.value = entityId
+    try {
+      entityDetail.value = await fetchEntityDetail(activeKnowledgeBase.value.id, entityId)
+    } catch (err) {
+      entityDetail.value = null
+      // 详情失败不抛到全局；以错误消息形式提示，画布不动
+      errorMessage.value = err?.message || '加载实体详情失败'
+    }
+  }
+
+  /**
+   * 双击节点扩展邻域，把新节点 / 新边并入画布。
+   */
+  async function expandNeighborhood(entityId, { limit } = {}) {
+    if (!activeKnowledgeBase.value || !entityId) {
+      return
+    }
+    try {
+      const data = await fetchEntityNeighborhood(
+        activeKnowledgeBase.value.id,
+        entityId,
+        { depth: 1, limit },
+      )
+      mergeNodes(data?.nodes ?? [])
+      mergeEdges(data?.edges ?? [])
+    } catch (err) {
+      errorMessage.value = err?.message || '扩展邻域失败'
+    }
+  }
+
+  function mergeNodes(list, { replace = false } = {}) {
+    if (replace) {
+      nodesById.value = new Map()
+    }
+    const next = new Map(nodesById.value)
+    for (const node of list) {
+      if (node && node.id) {
+        next.set(node.id, node)
+      }
+    }
+    nodesById.value = next
+  }
+
+  function mergeEdges(list, { replace = false } = {}) {
+    if (replace) {
+      edgesById.value = new Map()
+    }
+    const next = new Map(edgesById.value)
+    for (const edge of list) {
+      if (edge && edge.id) {
+        next.set(edge.id, edge)
+      }
+    }
+    edgesById.value = next
+  }
+
+  return {
+    knowledgeBases,
+    activeKnowledgeBase,
+    selectedNodeId,
+    entityDetail,
+    state,
+    errorMessage,
+    nodes,
+    edges,
+    reset,
+    selectKnowledgeBaseForCourse,
+    loadOverview,
+    loadEntityDetail,
+    expandNeighborhood,
+  }
+})
