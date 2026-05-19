@@ -39,12 +39,12 @@ public class QaModeRoutingService {
 
     private static final String STRATEGY = "rule_semantic_v1";
     private static final List<String> MODES = List.of("basic", "local", "global", "drift", "hybrid_v0");
-    private static final Pattern MATERIAL_PATTERN = Pattern.compile(".*(第\\s*\\d+\\s*(章|节|讲|页)|章节|教材|课件|课程资料|资料中|原文|公式|例题|图表|算法|步骤|机制|条件|过程|根据).*");
+    private static final Pattern MATERIAL_PATTERN = Pattern.compile(".*(第\\s*\\d+\\s*(章|节|讲|页)|章节|教材|课件|课程资料|资料中|原文|公式|例题|图表|算法|步骤|机制|条件|过程|根据|运行时间|平均等待|响应比|页号|偏移|缺页|磁道|权限|寄存器|逻辑地址|物理地址|访问序列|总磁头|申请多少|属于哪类|破坏了哪个|抑制哪).*");
     private static final Pattern SUMMARY_PATTERN = Pattern.compile(".*(综述|概括|总结|整体|全局|主题|脉络|知识体系|框架|overview).*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EXPLORATION_PATTERN = Pattern.compile(".*(关联|联系|扩展|延伸|发散|迁移|类似|对比|比较|区别|异同|影响|应用|探索).*");
+    private static final Pattern EXPLORATION_PATTERN = Pattern.compile(".*(关联|联系|扩展|延伸|发散|迁移|类似|对比|比较|区别|异同|不同|差异|优缺点|优点|特点|作用|场景|影响|应用|探索|为什么|为何|原因|适合|瓶颈|局限|开销|恶化|设计|转换).*");
     private static final Pattern DEFINITION_PATTERN = Pattern.compile(".*(什么是|是什么|定义|概念|含义|解释一下|请解释|介绍一下|简述).*");
     private static final Pattern EVIDENCE_PATTERN = Pattern.compile(".*(证据|依据|来源|引用|出处|佐证|材料依据|课程证据|交叉验证|可靠).*");
-    private static final Pattern RELATION_PATTERN = Pattern.compile(".*(关系|联系|关联|比较|对比|区别|异同|影响).*");
+    private static final Pattern RELATION_PATTERN = Pattern.compile(".*(关系|联系|关联|比较|对比|区别|异同|不同|差异|优缺点|影响|原因).*");
     private static final Pattern FOLLOW_UP_PATTERN = Pattern.compile(".*(它|这个|这一个|该概念|上面|上述|前者|后者|刚才|继续).*");
 
     private static final Map<String, List<String>> ROUTE_REFERENCES = Map.of(
@@ -89,13 +89,18 @@ public class QaModeRoutingService {
         if (reasons.isEmpty()) {
             reasons.add("default_basic");
         }
+        double confidence = confidence(scores, bestMode);
+        String confidenceBand = QaRoutingConfidenceBand.from(confidence);
 
         return QaModeRecommendationResponse.of(
                 bestMode,
                 fallbackMode,
-                confidence(scores, bestMode),
+                confidence,
                 new ArrayList<>(reasons),
                 reasonText(bestMode, reasons, betaHybridEnabled),
+                confidenceBand,
+                QaRoutingConfidenceBand.needsManualSwitch(confidenceBand),
+                QaRoutingConfidenceBand.reviewPriority(confidenceBand),
                 betaHybridEnabled,
                 hasContext,
                 STRATEGY,
@@ -189,6 +194,10 @@ public class QaModeRoutingService {
             add(scores, "hybrid_v0", 0.20D);
             reasons.add("follow_up_context");
         }
+        if (evidence && followUp) {
+            add(scores, "hybrid_v0", 0.24D);
+            reasons.add("evidence_follow_up_context");
+        }
         if (evidence && relation) {
             add(scores, "hybrid_v0", 0.78D);
             reasons.add("evidence_relation_intent");
@@ -200,6 +209,9 @@ public class QaModeRoutingService {
         if (followUp && relation && !evidence) {
             add(scores, "drift", 0.36D);
             reasons.add("contextual_relation_intent");
+        }
+        if (exploration && relation && material && !evidence) {
+            add(scores, "drift", 0.24D);
         }
         if (question.length() <= 24 && definition && !material && !summary && !exploration) {
             add(scores, "basic", 0.12D);

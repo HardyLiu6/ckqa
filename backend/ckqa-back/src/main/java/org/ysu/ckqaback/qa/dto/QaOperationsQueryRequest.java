@@ -28,6 +28,12 @@ public class QaOperationsQueryRequest {
     @Pattern(regexp = "source_irrelevant|too_long|wants_example|unclear|incorrect|other", message = "feedbackTag取值不合法")
     private String feedbackTag;
 
+    @Pattern(regexp = "high_confidence|medium_confidence|low_confidence|uncertain", message = "routingConfidenceBand取值不合法")
+    private String routingConfidenceBand;
+
+    @Pattern(regexp = "normal|low_confidence|hybrid_not_ready", message = "reviewPriority取值不合法")
+    private String reviewPriority;
+
     private String createdFrom;
     private String createdTo;
 

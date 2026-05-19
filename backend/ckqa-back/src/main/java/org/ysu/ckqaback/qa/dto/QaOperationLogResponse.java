@@ -33,6 +33,9 @@ public class QaOperationLogResponse {
     private final Boolean rewriteApplied;
     private final String rewriteMethod;
     private final Double rewriteConfidence;
+    private final Double routingConfidence;
+    private final String routingConfidenceBand;
+    private final String routingReviewPriority;
     private final LocalDateTime createdAt;
     private final LocalDateTime startedAt;
     private final LocalDateTime finishedAt;
@@ -64,6 +67,9 @@ public class QaOperationLogResponse {
         this.rewriteApplied = row.getRewriteApplied();
         this.rewriteMethod = row.getRewriteMethod();
         this.rewriteConfidence = row.getRewriteConfidence();
+        this.routingConfidence = row.getRoutingConfidence();
+        this.routingConfidenceBand = row.getRoutingConfidenceBand();
+        this.routingReviewPriority = row.getRoutingReviewPriority();
         this.createdAt = row.getCreatedAt();
         this.startedAt = row.getStartedAt();
         this.finishedAt = row.getFinishedAt();

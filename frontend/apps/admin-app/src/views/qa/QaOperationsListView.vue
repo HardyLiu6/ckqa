@@ -16,6 +16,8 @@ const filters = reactive({
   taskStatus: '',
   feedbackRating: '',
   feedbackTag: '',
+  routingConfidenceBand: '',
+  reviewPriority: '',
   createdFrom: '',
   createdTo: '',
 })
@@ -59,6 +61,8 @@ function resetFilters() {
     taskStatus: '',
     feedbackRating: '',
     feedbackTag: '',
+    routingConfidenceBand: '',
+    reviewPriority: '',
     createdFrom: '',
     createdTo: '',
   })
@@ -109,6 +113,18 @@ function formatDuration(row = {}) {
   }
   return value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${value}ms`
 }
+
+function routingReviewText(row = {}) {
+  const band = row.routingConfidenceBand || '未记录'
+  const priority = row.routingReviewPriority || 'normal'
+  if (priority === 'low_confidence') {
+    return `${band} / 重点收集`
+  }
+  if (priority === 'hybrid_not_ready') {
+    return `${band} / Hybrid 未就绪`
+  }
+  return band
+}
 </script>
 
 <template>
@@ -148,6 +164,17 @@ function formatDuration(row = {}) {
         <el-option label="不清楚" value="unclear" />
         <el-option label="不正确" value="incorrect" />
       </el-select>
+      <el-select v-model="filters.routingConfidenceBand" clearable placeholder="路由置信度">
+        <el-option label="高置信" value="high_confidence" />
+        <el-option label="中置信" value="medium_confidence" />
+        <el-option label="低置信" value="low_confidence" />
+        <el-option label="不确定" value="uncertain" />
+      </el-select>
+      <el-select v-model="filters.reviewPriority" clearable placeholder="复核优先级">
+        <el-option label="普通" value="normal" />
+        <el-option label="低置信度" value="low_confidence" />
+        <el-option label="Hybrid 未就绪" value="hybrid_not_ready" />
+      </el-select>
       <el-date-picker v-model="filters.createdFrom" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
       <el-date-picker v-model="filters.createdTo" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
       <el-button :loading="loading" type="primary" @click="loadLogs(1)">筛选</el-button>
@@ -171,6 +198,9 @@ function formatDuration(row = {}) {
       </el-table-column>
       <el-table-column prop="queryMode" label="模式" width="120" />
       <el-table-column prop="taskStatus" label="状态" width="110" />
+      <el-table-column label="路由置信度" min-width="170">
+        <template #default="{ row }">{{ routingReviewText(row) }}</template>
+      </el-table-column>
       <el-table-column label="耗时" width="100">
         <template #default="{ row }">{{ formatDuration(row) }}</template>
       </el-table-column>
@@ -227,7 +257,7 @@ function formatDuration(row = {}) {
 
 .ops-filters {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) repeat(4, max-content);
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) repeat(2, minmax(140px, 1fr)) repeat(4, max-content);
   gap: 10px;
   align-items: center;
   padding: 14px;

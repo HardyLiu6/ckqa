@@ -18,6 +18,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +106,14 @@ class ApiClient:
             raise RuntimeError(f"{method} {url} failed: {exc.reason}") from exc
 
 
+@dataclass(frozen=True)
+class ReportPaths:
+    root: Path
+    json_path: Path
+    summary_path: Path
+    comparison_path: Path
+
+
 def unwrap_response(raw: Any) -> Any:
     if isinstance(raw, dict) and {"code", "data"}.issubset(raw.keys()):
         if raw.get("code") != 200:
@@ -144,6 +153,107 @@ def load_matrix(case_file: str | None, limit: int | None) -> list[dict[str, Any]
             if line.strip():
                 cases.append(json.loads(line))
     return cases[:limit] if limit else cases
+
+
+def default_report_root() -> Path:
+    return Path(__file__).resolve().parents[3] / "docs" / "reports" / "qa-routing-smoke"
+
+
+def build_report_paths(output_dir: Path | str, run_label: str | None = None) -> ReportPaths:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    safe_label = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in (run_label or "main")).strip("-")
+    root = Path(output_dir) / f"{timestamp}-{safe_label or 'main'}"
+    return ReportPaths(
+        root=root,
+        json_path=root / "report.json",
+        summary_path=root / "summary.md",
+        comparison_path=root / "comparison.md",
+    )
+
+
+def compare_reports(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, list[str]]:
+    previous_cases = {item.get("id"): item for item in previous.get("cases", []) if item.get("id")}
+    current_cases = {item.get("id"): item for item in current.get("cases", []) if item.get("id")}
+    changed_modes: list[str] = []
+    newly_passed: list[str] = []
+    newly_failed: list[str] = []
+    confidence_changed: list[str] = []
+    for case_id, current_item in current_cases.items():
+        previous_item = previous_cases.get(case_id)
+        if not previous_item:
+            continue
+        if previous_item.get("actualMode") != current_item.get("actualMode"):
+            changed_modes.append(case_id)
+        if not previous_item.get("passed") and current_item.get("passed"):
+            newly_passed.append(case_id)
+        if previous_item.get("passed") and not current_item.get("passed"):
+            newly_failed.append(case_id)
+        previous_confidence = previous_item.get("confidence")
+        current_confidence = current_item.get("confidence")
+        if isinstance(previous_confidence, (int, float)) and isinstance(current_confidence, (int, float)):
+            if abs(float(previous_confidence) - float(current_confidence)) >= 0.05:
+                confidence_changed.append(case_id)
+    return {
+        "changedModes": changed_modes,
+        "newlyPassed": newly_passed,
+        "newlyFailed": newly_failed,
+        "confidenceChanged": confidence_changed,
+    }
+
+
+def write_versioned_report(report: dict[str, Any], failures: list[str], paths: ReportPaths, compare_to: str | None) -> None:
+    paths.root.mkdir(parents=True, exist_ok=True)
+    paths.json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    summary = build_markdown_summary(report, failures)
+    paths.summary_path.write_text(summary, encoding="utf-8")
+    if compare_to:
+        previous = json.loads(Path(compare_to).read_text(encoding="utf-8"))
+        comparison = compare_reports(previous, report)
+        paths.comparison_path.write_text(build_markdown_comparison(comparison), encoding="utf-8")
+
+
+def build_markdown_summary(report: dict[str, Any], failures: list[str]) -> str:
+    lines = [
+        "# CKQA QA Routing Smoke Report",
+        "",
+        f"- base_url: `{report.get('baseUrl')}`",
+        f"- course_id: `{report.get('courseId')}`",
+        f"- knowledge_base_id: `{report.get('knowledgeBaseId')}`",
+        f"- qa_executed: `{bool(report.get('qaExecuted'))}`",
+        f"- cases: `{len(report.get('cases') or [])}`",
+        f"- failures: `{len(failures)}`",
+        "",
+        "## Cases",
+        "",
+    ]
+    for item in report.get("cases") or []:
+        marker = "PASS" if item.get("passed") else "FAIL"
+        lines.append(
+            f"- {marker} `{item.get('id')}` mode=`{item.get('actualMode')}` "
+            f"confidence=`{item.get('confidence')}` band=`{(item.get('raw') or {}).get('confidenceBand')}`"
+        )
+    if failures:
+        lines.extend(["", "## Failures", ""])
+        lines.extend(f"- {failure}" for failure in failures)
+    return "\n".join(lines) + "\n"
+
+
+def build_markdown_comparison(comparison: dict[str, list[str]]) -> str:
+    lines = ["# CKQA QA Routing Smoke Comparison", ""]
+    labels = {
+        "changedModes": "Mode Changes",
+        "newlyPassed": "Newly Passed",
+        "newlyFailed": "Newly Failed",
+        "confidenceChanged": "Confidence Changed >= 0.05",
+    }
+    for key, label in labels.items():
+        lines.extend([f"## {label}", ""])
+        values = comparison.get(key) or []
+        lines.extend(f"- `{value}`" for value in values)
+        if not values:
+            lines.append("- None")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def require(value: str | None, label: str) -> str:
@@ -259,6 +369,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--i-understand-external-model-calls", action="store_true")
     parser.add_argument("--qa-timeout-seconds", type=int, default=180)
     parser.add_argument("--json-out", help="Write full JSON report to this path.")
+    parser.add_argument("--output-dir", default=None, help="Versioned report directory. Defaults to docs/reports/qa-routing-smoke.")
+    parser.add_argument("--run-label", default="main", help="Label included in the versioned report directory name.")
+    parser.add_argument("--compare-to", help="Previous report.json to compare with.")
     return parser.parse_args(argv)
 
 
@@ -295,6 +408,7 @@ def main(argv: list[str]) -> int:
         "knowledgeBaseId": knowledge_base_id,
         "sessionId": args.session_id,
         "qaExecuted": bool(args.execute_qa),
+        "generatedAt": datetime.now().isoformat(timespec="seconds"),
         "warmup": None,
         "cases": [],
     }
@@ -333,6 +447,13 @@ def main(argv: list[str]) -> int:
     print_summary(report, failures)
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    else:
+        paths = build_report_paths(Path(args.output_dir) if args.output_dir else default_report_root(), args.run_label)
+        write_versioned_report(report, failures, paths, args.compare_to)
+        print(f"report_json={paths.json_path}")
+        print(f"report_summary={paths.summary_path}")
+        if args.compare_to:
+            print(f"report_comparison={paths.comparison_path}")
     return 1 if failures else 0
 
 

@@ -21,6 +21,7 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
     private final Integer contextCharCount;
     private final String rewriteReason;
     private final String rewriteModel;
+    private final String routingSnapshotJson;
     private final LocalDateTime lastHeartbeatAt;
     private final String assistantContent;
     private final List<QaOperationFeedbackResponse> feedback;
@@ -42,6 +43,7 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
         this.contextCharCount = row.getContextCharCount();
         this.rewriteReason = row.getRewriteReason();
         this.rewriteModel = row.getRewriteModel();
+        this.routingSnapshotJson = row.getRoutingSnapshotJson();
         this.lastHeartbeatAt = row.getLastHeartbeatAt();
         this.assistantContent = row.getAssistantContent();
         this.feedback = feedback == null ? List.of() : List.copyOf(feedback);

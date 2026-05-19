@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.qa;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -66,6 +68,8 @@ import java.util.Objects;
 public class QaWorkflowService {
 
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final int ROUTING_SNAPSHOT_MAX_CHARS = 4000;
 
     private final QaSessionsService qaSessionsService;
     private final QaMessagesService qaMessagesService;
@@ -300,7 +304,11 @@ public class QaWorkflowService {
                 rewrite.rewriteMethod(),
                 rewrite.rewriteModel(),
                 rewrite.rewriteConfidence(),
-                "phase3-v1"
+                "phase3-v1",
+                request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getConfidence(),
+                request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getConfidenceBand(),
+                request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getReviewPriority(),
+                serializeRoutingSnapshot(request)
         );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
@@ -332,6 +340,21 @@ public class QaWorkflowService {
                 context.strategy(),
                 ContextSizeEstimateResponse.of(context.charCount())
         );
+    }
+
+    private String serializeRoutingSnapshot(CreateQaMessageRequest request) {
+        if (request.getClientRoutingSnapshot() == null) {
+            return null;
+        }
+        try {
+            String json = OBJECT_MAPPER.writeValueAsString(request.getClientRoutingSnapshot());
+            if (json.length() > ROUTING_SNAPSHOT_MAX_CHARS) {
+                throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "智能推荐诊断快照过长");
+            }
+            return json;
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "智能推荐诊断快照格式不合法");
+        }
     }
 
     private void validateSessionScopeStillReadable(QaSessions session, KnowledgeBases knowledgeBase, String actorUserCode) {

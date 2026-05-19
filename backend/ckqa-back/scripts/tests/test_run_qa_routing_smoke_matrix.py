@@ -46,6 +46,35 @@ class QaRoutingSmokeMatrixScriptTest(unittest.TestCase):
             MODULE.main(["--execute-qa"])
         self.assertIn("configured model provider", str(raised.exception))
 
+    def test_build_default_report_paths_under_versioned_docs_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_dir = Path(directory) / "reports"
+            paths = MODULE.build_report_paths(output_dir, "threshold-v2")
+
+            self.assertEqual(paths.root.parent, output_dir)
+            self.assertIn("threshold-v2", paths.root.name)
+            self.assertEqual(paths.json_path.name, "report.json")
+            self.assertEqual(paths.summary_path.name, "summary.md")
+
+    def test_compare_reports_marks_mode_changes(self):
+        previous = {
+            "cases": [
+                {"id": "case-a", "actualMode": "local", "passed": True, "confidence": 0.72},
+                {"id": "case-b", "actualMode": "basic", "passed": False, "confidence": 0.58},
+            ],
+        }
+        current = {
+            "cases": [
+                {"id": "case-a", "actualMode": "hybrid_v0", "passed": True, "confidence": 0.61},
+                {"id": "case-b", "actualMode": "basic", "passed": True, "confidence": 0.67},
+            ],
+        }
+
+        comparison = MODULE.compare_reports(previous, current)
+
+        self.assertEqual(comparison["changedModes"], ["case-a"])
+        self.assertEqual(comparison["newlyPassed"], ["case-b"])
+
 
 if __name__ == "__main__":
     unittest.main()

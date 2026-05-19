@@ -121,8 +121,49 @@ export function resolveQaModeRecommendation(localResolution, recommendation) {
     fromServer: true,
     reason: recommendation.reasonText || `服务端智能推荐为 ${recommendedMode} 模式。`,
     confidence: recommendation.confidence,
+    confidenceBand: recommendation.confidenceBand,
+    manualSwitchSuggested: Boolean(recommendation.manualSwitchSuggested),
+    reviewPriority: recommendation.reviewPriority || 'normal',
     routeReasons: Array.isArray(recommendation.reasons) ? recommendation.reasons : [],
     fallbackMode: recommendation.fallbackMode,
+    routeScores: recommendation.routeScores && typeof recommendation.routeScores === 'object'
+      ? { ...recommendation.routeScores }
+      : undefined,
+  }
+}
+
+export function resolveModeWithHybridReadiness(resolution, options = {}) {
+  const selectedMode = options.selectedMode ?? SMART_QA_MODE
+  const warmupStatus = options.warmupStatus ?? 'idle'
+  const hybridNotReady = ['warming', 'not_ready', 'fallback', 'failed'].includes(warmupStatus)
+  if (resolution?.mode !== 'hybrid_v0' || !hybridNotReady) {
+    return {
+      ...resolution,
+      manualSwitchSuggested: Boolean(resolution?.manualSwitchSuggested),
+      reviewPriority: resolution?.reviewPriority || 'normal',
+    }
+  }
+
+  const base = {
+    ...resolution,
+    manualSwitchSuggested: true,
+    reviewPriority: 'hybrid_not_ready',
+  }
+  if (selectedMode === 'hybrid_v0') {
+    return {
+      ...base,
+      reason: `${resolution.reason || '已手动选择混合检索 Beta'}；混合检索准备中，可能需要更久。`,
+    }
+  }
+
+  const fallbackMode = isBackendQaMode(resolution.fallbackMode) && resolution.fallbackMode !== 'hybrid_v0'
+    ? resolution.fallbackMode
+    : 'local'
+  return {
+    ...base,
+    mode: fallbackMode,
+    originalRecommendedMode: 'hybrid_v0',
+    reason: `服务端推荐混合检索 Beta，但混合检索准备中，已降级到 ${fallbackMode}；可手动切换模式。`,
   }
 }
 

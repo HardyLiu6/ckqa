@@ -17,6 +17,10 @@ public record QaRetrievalLogContext(
         String rewriteMethod,
         String rewriteModel,
         Double rewriteConfidence,
-        String contextSnapshotVersion
+        String contextSnapshotVersion,
+        Double routingConfidence,
+        String routingConfidenceBand,
+        String routingReviewPriority,
+        String routingSnapshotJson
 ) {
 }

@@ -49,6 +49,9 @@ class QaRoutingControllerWebMvcTest {
                 0.82D,
                 List.of("evidence_relation_intent", "follow_up_context"),
                 "已开启 Beta，问题需要证据融合，推荐混合检索。",
+                "high_confidence",
+                false,
+                "normal",
                 true,
                 true,
                 "rule_semantic_v1",
@@ -71,6 +74,9 @@ class QaRoutingControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.recommendedMode").value("hybrid_v0"))
                 .andExpect(jsonPath("$.data.fallbackMode").value("local"))
+                .andExpect(jsonPath("$.data.confidenceBand").value("high_confidence"))
+                .andExpect(jsonPath("$.data.manualSwitchSuggested").value(false))
+                .andExpect(jsonPath("$.data.reviewPriority").value("normal"))
                 .andExpect(jsonPath("$.data.reasons[0]").value("evidence_relation_intent"))
                 .andExpect(jsonPath("$.data.routeScores.hybrid_v0").value(0.92));
 

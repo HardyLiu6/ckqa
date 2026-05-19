@@ -59,6 +59,20 @@ async function saveReview(source) {
 function formatTags(tags = []) {
   return Array.isArray(tags) && tags.length ? tags.join('、') : '无标签'
 }
+
+function routingSnapshotText(snapshot) {
+  if (!snapshot) {
+    return '-'
+  }
+  if (typeof snapshot === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(snapshot), null, 2)
+    } catch {
+      return snapshot
+    }
+  }
+  return JSON.stringify(snapshot, null, 2)
+}
 </script>
 
 <template>
@@ -80,6 +94,8 @@ function formatTags(tags = []) {
         <dl>
           <div><dt>状态</dt><dd>{{ detail.taskStatus }}</dd></div>
           <div><dt>模式</dt><dd>{{ detail.queryMode }}</dd></div>
+          <div><dt>路由置信度</dt><dd>{{ detail.routingConfidenceBand || '-' }}</dd></div>
+          <div><dt>复核优先级</dt><dd>{{ detail.routingReviewPriority || 'normal' }}</dd></div>
           <div><dt>课程</dt><dd>{{ detail.courseName || detail.courseId }}</dd></div>
           <div><dt>知识库</dt><dd>{{ detail.knowledgeBaseName || detail.knowledgeBaseId }}</dd></div>
           <div><dt>学生</dt><dd>{{ detail.displayName || detail.username || detail.userId }}</dd></div>
@@ -104,6 +120,10 @@ function formatTags(tags = []) {
         <div class="diagnostic-block">
           <span>生成上下文</span>
           <pre>{{ detail.generationContext || detail.contextSnapshotText || '-' }}</pre>
+        </div>
+        <div class="diagnostic-block">
+          <span>智能推荐快照</span>
+          <pre>{{ routingSnapshotText(detail.routingSnapshotJson) }}</pre>
         </div>
       </section>
 

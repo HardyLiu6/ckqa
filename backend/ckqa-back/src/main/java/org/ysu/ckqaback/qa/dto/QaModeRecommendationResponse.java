@@ -16,6 +16,9 @@ public class QaModeRecommendationResponse {
     private final Double confidence;
     private final List<String> reasons;
     private final String reasonText;
+    private final String confidenceBand;
+    private final Boolean manualSwitchSuggested;
+    private final String reviewPriority;
     private final Boolean betaHybridEnabled;
     private final Boolean contextDetected;
     private final String strategy;
@@ -27,6 +30,9 @@ public class QaModeRecommendationResponse {
             Double confidence,
             List<String> reasons,
             String reasonText,
+            String confidenceBand,
+            Boolean manualSwitchSuggested,
+            String reviewPriority,
             Boolean betaHybridEnabled,
             Boolean contextDetected,
             String strategy,
@@ -37,10 +43,43 @@ public class QaModeRecommendationResponse {
         this.confidence = confidence;
         this.reasons = reasons == null ? List.of() : List.copyOf(reasons);
         this.reasonText = reasonText;
+        this.confidenceBand = confidenceBand;
+        this.manualSwitchSuggested = manualSwitchSuggested;
+        this.reviewPriority = reviewPriority;
         this.betaHybridEnabled = betaHybridEnabled;
         this.contextDetected = contextDetected;
         this.strategy = strategy;
         this.routeScores = routeScores == null ? Map.of() : Map.copyOf(routeScores);
+    }
+
+    public static QaModeRecommendationResponse of(
+            String recommendedMode,
+            String fallbackMode,
+            Double confidence,
+            List<String> reasons,
+            String reasonText,
+            String confidenceBand,
+            Boolean manualSwitchSuggested,
+            String reviewPriority,
+            Boolean betaHybridEnabled,
+            Boolean contextDetected,
+            String strategy,
+            Map<String, Double> routeScores
+    ) {
+        return new QaModeRecommendationResponse(
+                recommendedMode,
+                fallbackMode,
+                confidence,
+                reasons,
+                reasonText,
+                confidenceBand,
+                manualSwitchSuggested,
+                reviewPriority,
+                betaHybridEnabled,
+                contextDetected,
+                strategy,
+                routeScores
+        );
     }
 
     public static QaModeRecommendationResponse of(
@@ -54,12 +93,15 @@ public class QaModeRecommendationResponse {
             String strategy,
             Map<String, Double> routeScores
     ) {
-        return new QaModeRecommendationResponse(
+        return of(
                 recommendedMode,
                 fallbackMode,
                 confidence,
                 reasons,
                 reasonText,
+                null,
+                null,
+                null,
                 betaHybridEnabled,
                 contextDetected,
                 strategy,

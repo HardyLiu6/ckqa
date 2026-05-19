@@ -39,6 +39,7 @@ import {
   getModeOption,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveModeWithHybridReadiness,
 } from './qa-mode-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
 import {
@@ -112,10 +113,10 @@ const hybridWarmupText = computed(() => {
     return '混合检索已就绪'
   }
   if (hybridWarmupStatus.value === 'fallback') {
-    return '混合检索降级可用'
+    return '混合检索建议降级'
   }
   if (hybridWarmupStatus.value === 'not_ready') {
-    return '混合检索未就绪'
+    return '混合检索准备中'
   }
   return ''
 })
@@ -252,14 +253,19 @@ async function send() {
     selectedCourseId.value = course.courseId
     selectedKnowledgeBaseId.value = String(knowledgeBase.id)
 
-    const modeResolution = await resolveModeForSend(text, course, knowledgeBase)
+    let modeResolution = await resolveModeForSend(text, course, knowledgeBase)
     if (modeResolution.mode === 'hybrid_v0') {
       await ensureHybridWarmup(course, knowledgeBase)
+      modeResolution = resolveModeWithHybridReadiness(modeResolution, {
+        selectedMode: selectedMode.value,
+        warmupStatus: hybridWarmupStatus.value,
+      })
     }
     const session = await ensureSession(course, knowledgeBase, text)
     const submission = await sendQaMessage(session.id, {
       mode: modeResolution.mode,
       content: text,
+      clientRoutingSnapshot: buildClientRoutingSnapshot(modeResolution),
     })
 
     messages.value = upsertQaMessage(messages.value, submission.userMessage)
@@ -270,9 +276,13 @@ async function send() {
       routeReason: modeResolution.reason,
       queryText: text,
     }
+    const confidenceHint = modeResolution.manualSwitchSuggested
+      ? '推荐不够确定，可手动切换模式。'
+      : ''
     statusMessage.value = modeResolution.fromSmart
       ? `智能推荐为 ${modeResolution.mode} 模式：${modeResolution.reason}。${resolveContextStatusText(submission)}`
       : `已使用 ${modeResolution.mode} 模式提交问题。${resolveContextStatusText(submission)}`
+    statusMessage.value = `${statusMessage.value}${confidenceHint}`
     input.value = ''
     await scrollToBottom()
     scheduleTaskPoll(session.id, submission.taskId, resolvePollingDelaySeconds(submission))
@@ -288,6 +298,23 @@ function qaModeResolveOptions() {
   return {
     allowHybridBeta: allowHybridSmartBeta.value,
     hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
+  }
+}
+
+function buildClientRoutingSnapshot(modeResolution = {}) {
+  if (!modeResolution.fromSmart && !modeResolution.fromServer && !modeResolution.reviewPriority) {
+    return undefined
+  }
+  return {
+    selectedMode: selectedMode.value,
+    recommendedMode: modeResolution.originalRecommendedMode || modeResolution.mode,
+    fallbackMode: modeResolution.fallbackMode,
+    confidence: modeResolution.confidence,
+    confidenceBand: modeResolution.confidenceBand,
+    reviewPriority: modeResolution.reviewPriority || 'normal',
+    manualSwitchSuggested: Boolean(modeResolution.manualSwitchSuggested),
+    reasons: modeResolution.routeReasons,
+    routeScores: modeResolution.routeScores,
   }
 }
 

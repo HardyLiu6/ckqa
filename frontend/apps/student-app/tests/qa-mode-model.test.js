@@ -7,6 +7,7 @@ import {
   SMART_QA_MODE,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveModeWithHybridReadiness,
 } from '../src/views/qa/qa-mode-model.js'
 
 test('问答模式只暴露智能推荐和后端真实支持的模式', () => {
@@ -78,13 +79,73 @@ test('服务端智能推荐结果优先于本地智能推荐兜底', () => {
     recommendedMode: 'hybrid_v0',
     reasonText: '服务端检测到证据融合需求',
     confidence: 0.82,
+    confidenceBand: 'high_confidence',
+    manualSwitchSuggested: false,
+    reviewPriority: 'normal',
     reasons: ['evidence_relation_intent'],
   })
 
   assert.equal(result.mode, 'hybrid_v0')
   assert.equal(result.fromSmart, true)
   assert.equal(result.fromServer, true)
+  assert.equal(result.confidenceBand, 'high_confidence')
+  assert.equal(result.manualSwitchSuggested, false)
+  assert.equal(result.reviewPriority, 'normal')
   assert.match(result.reason, /服务端/)
+})
+
+test('低置信度服务端推荐会提示手动切换并保留收集标记', () => {
+  const local = resolveQaMode('请帮我复习一下。', SMART_QA_MODE)
+  const result = resolveQaModeRecommendation(local, {
+    recommendedMode: 'basic',
+    fallbackMode: 'local',
+    reasonText: '推荐不够确定，可手动切换模式',
+    confidence: 0.59,
+    confidenceBand: 'low_confidence',
+    manualSwitchSuggested: true,
+    reviewPriority: 'low_confidence',
+    reasons: ['default_basic'],
+  })
+
+  assert.equal(result.mode, 'basic')
+  assert.equal(result.confidenceBand, 'low_confidence')
+  assert.equal(result.manualSwitchSuggested, true)
+  assert.equal(result.reviewPriority, 'low_confidence')
+})
+
+test('智能推荐命中 hybrid 但 warmup 未 ready 时降级到 fallback', () => {
+  const serverResolution = resolveQaModeRecommendation(resolveQaMode('什么是死锁？', SMART_QA_MODE), {
+    recommendedMode: 'hybrid_v0',
+    fallbackMode: 'local',
+    reasonText: '服务端检测到证据融合需求',
+    confidence: 0.71,
+    confidenceBand: 'medium_confidence',
+    manualSwitchSuggested: false,
+    reasons: ['evidence_relation_intent'],
+  })
+
+  const result = resolveModeWithHybridReadiness(serverResolution, {
+    selectedMode: SMART_QA_MODE,
+    warmupStatus: 'not_ready',
+  })
+
+  assert.equal(result.mode, 'local')
+  assert.equal(result.originalRecommendedMode, 'hybrid_v0')
+  assert.equal(result.reviewPriority, 'hybrid_not_ready')
+  assert.equal(result.manualSwitchSuggested, true)
+  assert.match(result.reason, /准备中|降级/)
+})
+
+test('手动 hybrid 在 warmup 未 ready 时只提示不静默改写模式', () => {
+  const manualResolution = resolveQaMode('请综合比较死锁和饥饿，并给出课程证据', 'hybrid_v0')
+  const result = resolveModeWithHybridReadiness(manualResolution, {
+    selectedMode: 'hybrid_v0',
+    warmupStatus: 'not_ready',
+  })
+
+  assert.equal(result.mode, 'hybrid_v0')
+  assert.equal(result.reviewPriority, 'hybrid_not_ready')
+  assert.equal(result.manualSwitchSuggested, true)
 })
 
 test('服务端返回未知模式时使用本地智能推荐兜底', () => {

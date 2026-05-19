@@ -190,6 +190,30 @@ public class QaRetrievalLogs implements Serializable {
     private String contextSnapshotVersion;
 
     /**
+     * 智能推荐置信度
+     */
+    @TableField("routing_confidence")
+    private Double routingConfidence;
+
+    /**
+     * 智能推荐置信度分档
+     */
+    @TableField("routing_confidence_band")
+    private String routingConfidenceBand;
+
+    /**
+     * 智能推荐复核优先级
+     */
+    @TableField("routing_review_priority")
+    private String routingReviewPriority;
+
+    /**
+     * 学生端智能推荐诊断快照 JSON
+     */
+    @TableField("routing_snapshot_json")
+    private String routingSnapshotJson;
+
+    /**
      * 检索状态
      */
     @TableField("retrieval_status")

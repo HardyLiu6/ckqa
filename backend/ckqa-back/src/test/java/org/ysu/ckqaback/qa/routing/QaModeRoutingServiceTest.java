@@ -77,6 +77,20 @@ class QaModeRoutingServiceTest {
     }
 
     @Test
+    void shouldMarkLowConfidenceDecisionForManualReview() {
+        QaModeRoutingService service = buildService();
+        QaModeRecommendationRequest request = request("请帮我复习一下。", false, false);
+
+        var decision = service.recommend(request, student());
+
+        assertThat(decision.getRecommendedMode()).isEqualTo("basic");
+        assertThat(decision.getConfidence()).isBetween(0.50D, 0.65D);
+        assertThat(decision.getConfidenceBand()).isEqualTo("low_confidence");
+        assertThat(decision.getManualSwitchSuggested()).isTrue();
+        assertThat(decision.getReviewPriority()).isEqualTo("low_confidence");
+    }
+
+    @Test
     void shouldRecommendHybridWhenBetaEnabledAndEvidenceRelationQuestionHasContext() {
         QaModeRoutingService service = buildService();
         QaModeRecommendationRequest request = request("它和资源分配图有什么关系？请给出材料依据", true, false);

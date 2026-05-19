@@ -55,7 +55,9 @@ class QaOperationsControllerWebMvcTest {
         mockMvc.perform(get(ApiPaths.QA_OPERATIONS + "/logs")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedAdmin())
                         .param("mode", "hybrid_v0")
-                        .param("feedbackTag", "source_irrelevant"))
+                        .param("feedbackTag", "source_irrelevant")
+                        .param("routingConfidenceBand", "low_confidence")
+                        .param("reviewPriority", "low_confidence"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray());
 

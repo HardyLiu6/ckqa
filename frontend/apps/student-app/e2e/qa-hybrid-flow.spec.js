@@ -61,6 +61,31 @@ test('学生端展示课程权限 403 文案', async ({ page }) => {
   await expect(page.locator('.qa-alert[role="alert"]')).toContainText('无课程访问权限')
 })
 
+test('智能推荐开启 Beta 后以后端推荐为准并在 warmup 未就绪时降级', async ({ page }) => {
+  const state = {
+    messagePosts: 0,
+    taskPolls: new Map(),
+    messages: [],
+    warmupReady: false,
+    lastMessagePayload: null,
+  }
+  await installStudentSession(page)
+  await installApiMocks(page, state)
+
+  await page.goto('/qa/ask?sessionId=20')
+  await expect(page.getByText('已恢复历史会话，可以继续提问')).toBeVisible()
+
+  await page.getByLabel('允许智能推荐使用混合检索 Beta').check()
+  await page.getByPlaceholder(/输入课程问题/).fill('什么是死锁？')
+  await page.getByRole('button', { name: '发送问题' }).click()
+
+  await expect(page.locator('.hybrid-warmup-pill')).toContainText(/混合检索准备中|混合检索建议降级/)
+  await expect(page.getByText(/智能推荐为 local 模式/)).toBeVisible()
+  expect(state.lastMessagePayload.mode).toBe('local')
+  expect(state.lastMessagePayload.clientRoutingSnapshot.recommendedMode).toBe('hybrid_v0')
+  expect(state.lastMessagePayload.clientRoutingSnapshot.reviewPriority).toBe('hybrid_not_ready')
+})
+
 async function installStudentSession(page) {
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -118,21 +143,39 @@ async function installApiMocks(page, state) {
     }
     if (key === 'POST /qa-sessions/hybrid-warmup') {
       await fulfillApi(route, {
-        ready: true,
-        status: 'ready',
-        message: '混合检索已就绪',
+        ready: state.warmupReady !== false,
+        status: state.warmupReady === false ? 'not_ready' : 'ready',
+        message: state.warmupReady === false ? '混合检索准备未完成，可继续降级尝试' : '混合检索已就绪',
         dataDirUri: 'user_7/kb_3/build_17/index/output',
         cached: true,
-        textUnitsReady: true,
-        missing: [],
+        textUnitsReady: state.warmupReady !== false,
+        missing: state.warmupReady === false ? ['bm25'] : [],
+      })
+      return
+    }
+    if (key === 'POST /qa-routing/recommend') {
+      await fulfillApi(route, {
+        recommendedMode: 'hybrid_v0',
+        fallbackMode: 'local',
+        confidence: 0.61,
+        confidenceBand: 'low_confidence',
+        manualSwitchSuggested: true,
+        reviewPriority: 'low_confidence',
+        reasons: ['evidence_relation_intent'],
+        reasonText: '服务端检测到证据融合需求，推荐混合检索 Beta。',
+        betaHybridEnabled: true,
+        contextDetected: true,
+        strategy: 'rule_semantic_v1',
+        routeScores: { hybrid_v0: 0.88, local: 0.71, basic: 0.3, global: 0.12, drift: 0.1 },
       })
       return
     }
     if (key === 'POST /qa-sessions/20/messages') {
       state.messagePosts += 1
+      state.lastMessagePayload = await request.postDataJSON()
       const taskId = state.messagePosts === 1 ? 9001 : 9002
       const userId = state.messagePosts === 1 ? 101 : 103
-      const content = (await request.postDataJSON()).content
+      const content = state.lastMessagePayload.content
       const userMessage = {
         id: userId,
         sessionId: 20,

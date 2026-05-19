@@ -58,7 +58,17 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.listQaSessions({ status: 'active', page: 1, size: 50, userId: 999 })
   await api.getQaSession(8)
   await api.updateQaSession(8, { title: '死锁复习', status: 'archived' })
-  await api.sendQaMessage(8, { mode: 'basic', content: '什么是进程？' })
+  await api.sendQaMessage(8, {
+    mode: 'basic',
+    content: '什么是进程？',
+    clientRoutingSnapshot: {
+      recommendedMode: 'basic',
+      selectedMode: 'basic',
+      confidence: 0.59,
+      confidenceBand: 'low_confidence',
+      reviewPriority: 'low_confidence',
+    },
+  })
   await api.getQaTask(8, 99)
   await api.listQaMessages(8)
   await api.recommendQaMode({
@@ -104,7 +114,17 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     {
       method: 'post',
       url: '/qa-sessions/8/messages',
-      data: { mode: 'basic', content: '什么是进程？' },
+      data: {
+        mode: 'basic',
+        content: '什么是进程？',
+        clientRoutingSnapshot: {
+          recommendedMode: 'basic',
+          selectedMode: 'basic',
+          confidence: 0.59,
+          confidenceBand: 'low_confidence',
+          reviewPriority: 'low_confidence',
+        },
+      },
       config: {},
     },
     {

@@ -28,16 +28,13 @@ class QaModeRoutingEvaluationTest {
                 mock(QaSessionsService.class),
                 mock(KnowledgeBasesService.class)
         );
-        List<RoutingCase> cases = loadCases();
+        List<RoutingCase> cases = loadCases("qa-routing-eval-set.jsonl");
         List<String> exactMisses = new ArrayList<>();
         List<String> acceptableMisses = new ArrayList<>();
 
         for (RoutingCase item : cases) {
-            QaModeRecommendationRequest request = new QaModeRecommendationRequest();
-            request.setQuestion(item.question());
-            request.setBetaHybridEnabled(item.betaHybridEnabled());
-            request.setHasConversationContext(item.hasConversationContext());
-            String actual = service.recommend(request, student()).getRecommendedMode();
+            var decision = service.recommend(toRequest(item), student());
+            String actual = decision.getRecommendedMode();
             if (!item.expectedMode().equals(actual)) {
                 exactMisses.add(item.id() + ": expected=" + item.expectedMode() + ", actual=" + actual);
             }
@@ -56,8 +53,40 @@ class QaModeRoutingEvaluationTest {
                 .isGreaterThanOrEqualTo(0.90D);
     }
 
-    private List<RoutingCase> loadCases() throws Exception {
-        var resource = getClass().getClassLoader().getResourceAsStream("qa-routing-eval-set.jsonl");
+    @Test
+    void shouldPassBoundaryAndNegativeRoutingEvaluationSet() throws Exception {
+        QaModeRoutingService service = new QaModeRoutingService(
+                mock(QaSessionsService.class),
+                mock(KnowledgeBasesService.class)
+        );
+        List<RoutingCase> cases = loadCases("qa-routing-edge-eval-set.jsonl");
+        assertThat(cases).hasSizeBetween(80, 120);
+
+        List<String> misses = new ArrayList<>();
+        for (RoutingCase item : cases) {
+            var decision = service.recommend(toRequest(item), student());
+            if (!item.acceptableModes().contains(decision.getRecommendedMode())) {
+                misses.add(item.id() + ": acceptable=" + item.acceptableModes() + ", actual=" + decision.getRecommendedMode());
+            }
+            if (item.expectedConfidenceBand() != null
+                    && !item.expectedConfidenceBand().equals(decision.getConfidenceBand())) {
+                misses.add(item.id() + ": expectedBand=" + item.expectedConfidenceBand() + ", actualBand=" + decision.getConfidenceBand());
+            }
+        }
+
+        assertThat(misses).as("boundary route misses").isEmpty();
+    }
+
+    private QaModeRecommendationRequest toRequest(RoutingCase item) {
+        QaModeRecommendationRequest request = new QaModeRecommendationRequest();
+        request.setQuestion(item.question());
+        request.setBetaHybridEnabled(item.betaHybridEnabled());
+        request.setHasConversationContext(item.hasConversationContext());
+        return request;
+    }
+
+    private List<RoutingCase> loadCases(String resourceName) throws Exception {
+        var resource = getClass().getClassLoader().getResourceAsStream(resourceName);
         assertThat(resource).isNotNull();
         List<RoutingCase> cases = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
@@ -73,7 +102,9 @@ class QaModeRoutingEvaluationTest {
                         (String) raw.get("expectedMode"),
                         castStringList(raw.get("acceptableModes")),
                         Boolean.TRUE.equals(raw.get("betaHybridEnabled")),
-                        Boolean.TRUE.equals(raw.get("hasConversationContext"))
+                        Boolean.TRUE.equals(raw.get("hasConversationContext")),
+                        (String) raw.get("caseType"),
+                        (String) raw.get("expectedConfidenceBand")
                 ));
             }
         }
@@ -95,7 +126,9 @@ class QaModeRoutingEvaluationTest {
             String expectedMode,
             List<String> acceptableModes,
             boolean betaHybridEnabled,
-            boolean hasConversationContext
+            boolean hasConversationContext,
+            String caseType,
+            String expectedConfidenceBand
     ) {
     }
 }

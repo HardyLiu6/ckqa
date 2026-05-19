@@ -1,30 +1,152 @@
-{"id":"basic-001","question":"什么是死锁？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"basic-002","question":"信号量的定义是什么？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"basic-003","question":"简述进程和线程的概念。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"basic-004","question":"CPU 调度的含义是什么？","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"basic-005","question":"介绍一下 SPOOLing 系统。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"local-001","question":"请根据第 3 章解释银行家算法的安全性检查过程。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"local-002","question":"教材中银行家算法的步骤是怎样的？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"local-003","question":"资源分配图里死锁产生的条件和过程是什么？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"local-004","question":"请看课件里的例题说明页面置换算法。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"local-005","question":"这段原文里的互斥条件是什么意思？","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"global-001","question":"请综述进程管理这一章的知识体系。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"global-002","question":"总结内存管理章节的整体框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"global-003","question":"操作系统 I/O 系统的主题脉络是什么？","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"global-004","question":"全局概括死锁相关内容。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"global-005","question":"从课程整体看，存储管理包含哪些核心模块？","expectedMode":"global","acceptableModes":["global","local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"drift-001","question":"进程同步和数据库事务锁之间有什么关联？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"drift-002","question":"死锁和现实交通拥堵有什么类似之处？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"drift-003","question":"页面置换算法的思想能迁移到缓存淘汰吗？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"drift-004","question":"PV 操作在并发编程中的应用和影响是什么？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"drift-005","question":"虚拟存储器和云计算里的资源抽象有什么联系？","expectedMode":"drift","acceptableModes":["drift"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"hybrid-001","question":"它和资源分配图有什么关系？请给出材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":true}
-{"id":"hybrid-002","question":"请综合比较死锁和饥饿的区别，并引用课程来源。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
-{"id":"hybrid-003","question":"根据教材证据对比银行家算法和资源分配图的适用场景。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
-{"id":"hybrid-004","question":"请结合来源说明分页和分段的关系。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
-{"id":"hybrid-005","question":"继续上一个问题，综合材料依据说明它的局限。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":true}
-{"id":"hybrid-gated-001","question":"请综合比较死锁和饥饿的区别，并引用课程来源。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
-{"id":"hybrid-gated-002","question":"它和资源分配图有什么关系？请给出材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":true}
-{"id":"context-001","question":"它和前面那个概念有什么区别？","expectedMode":"drift","acceptableModes":["drift","local"],"betaHybridEnabled":false,"hasConversationContext":true}
-{"id":"context-002","question":"这个算法的步骤能再解释一下吗？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":true}
-{"id":"ambiguous-001","question":"请帮我复习一下。","expectedMode":"basic","acceptableModes":["basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-001","question":"什么是操作系统？请从“资源管理”和“用户接口”两个角度进行说明。","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-002","question":"为什么说并发性是现代操作系统的重要特征？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-003","question":"请比较用户态与内核态，并说明为什么需要区分这两种执行状态。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-003","question":"请比较用户态与内核态，并说明为什么需要区分这两种执行状态。请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-003","question":"请比较用户态与内核态，并说明为什么需要区分这两种执行状态。请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-004","question":"系统调用与普通函数调用有什么本质区别？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-004","question":"系统调用与普通函数调用有什么本质区别？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-004","question":"系统调用与普通函数调用有什么本质区别？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-005","question":"中断、异常和系统调用三者之间有什么联系与区别？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-005","question":"中断、异常和系统调用三者之间有什么联系与区别？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-005","question":"中断、异常和系统调用三者之间有什么联系与区别？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-006","question":"模块化内核设计有什么优点？请至少写出两点。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-007","question":"批处理系统与分时系统的主要目标有什么不同？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-007","question":"批处理系统与分时系统的主要目标有什么不同？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-007","question":"批处理系统与分时系统的主要目标有什么不同？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-008","question":"OSTEP 中“虚拟化”思想在操作系统里主要体现在哪些方面？","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-009","question":"为什么“机制”和“策略”需要区分？请结合 CPU 调度举例。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-010","question":"若某交互式系统追求更好的用户体验，为什么不能只关注吞吐量？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-011","question":"什么是进程？为什么说进程是资源分配的基本单位？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-012","question":"进程与线程的主要区别是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-012","question":"进程与线程的主要区别是什么？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-012","question":"进程与线程的主要区别是什么？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-013","question":"请说明就绪态、运行态和阻塞态之间的典型转换关系。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-013","question":"请说明就绪态、运行态和阻塞态之间的典型转换关系。请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-013","question":"请说明就绪态、运行态和阻塞态之间的典型转换关系。请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-014","question":"PCB 一般保存哪些信息？请至少写出四类。","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-015","question":"在 UNIX 风格系统中，fork() 调用成功后，为什么同一段后续代码可能在两个执行流中继续运行？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-016","question":"fork() 与 exec() 的作用有何不同？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-016","question":"fork() 与 exec() 的作用有何不同？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-016","question":"fork() 与 exec() 的作用有何不同？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-017","question":"什么是上下文切换？它为什么会带来开销？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-018","question":"请列举三种常见进程间通信方式，并概括其特点。","expectedMode":"global","acceptableModes":["global","drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-019","question":"为什么多线程程序即使运行在单核处理器上，也可能提升用户体验？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-020","question":"什么情况下运行态进程会重新回到就绪态？","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-021","question":"请解释周转时间、等待时间和响应时间。","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-022","question":"FCFS 与 SJF 两种调度算法各有什么典型优缺点？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-022","question":"FCFS 与 SJF 两种调度算法各有什么典型优缺点？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-022","question":"FCFS 与 SJF 两种调度算法各有什么典型优缺点？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-023","question":"时间片轮转调度为什么适合分时系统？时间片过大或过小各有什么问题？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-024","question":"某作业已等待 12 ms，预计服务时间为 8 ms。按最高响应比优先算法，其响应比是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-025","question":"三个进程几乎同时到达，运行时间分别为 P1=4、P2=2、P3=1。若采用非抢占式 SJF，执行顺序和平均等待时间分别是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-026","question":"为什么多级反馈队列调度通常会动态调整进程优先级？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-027","question":"为什么单纯的静态优先级调度可能导致饥饿？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-028","question":"抢占式调度与非抢占式调度的核心区别是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-028","question":"抢占式调度与非抢占式调度的核心区别是什么？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-028","question":"抢占式调度与非抢占式调度的核心区别是什么？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-029","question":"进程 P1、P2、P3 同时到达，运行时间分别为 5、3、1。若采用 FCFS 且顺序为 P1→P2→P3，平均等待时间是多少？若采用 SJF，又是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-030","question":"如果一个系统里短任务很多、长任务很少，为什么 SJF 往往能取得较好的平均等待时间？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-031","question":"什么是临界区？为什么访问共享变量时经常需要保护临界区？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-032","question":"互斥与同步有什么区别？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-032","question":"互斥与同步有什么区别？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-032","question":"互斥与同步有什么区别？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-033","question":"互斥锁与计数信号量的适用场景有何不同？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-033","question":"互斥锁与计数信号量的适用场景有何不同？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-033","question":"互斥锁与计数信号量的适用场景有何不同？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-034","question":"条件变量通常与互斥锁配合使用，其原因是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-035","question":"在有界缓冲区问题中，为什么通常需要 empty、full 和 mutex 三类同步量？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-036","question":"在读者优先的读者—写者问题中，为什么写者可能饥饿？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-037","question":"为什么对共享变量 count 执行 count++ 并不是原子操作？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-038","question":"自旋锁适合什么情形？为什么不适合长时间等待？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-039","question":"产生死锁的四个必要条件是什么？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-040","question":"“一次性申请所有资源”属于哪类死锁处理思路？它破坏了哪个必要条件？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-041","question":"资源按固定编号递增顺序申请，能够抑制哪一种死锁条件？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-042","question":"死锁预防、死锁避免和死锁检测/恢复三种策略有何区别？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-042","question":"死锁预防、死锁避免和死锁检测/恢复三种策略有何区别？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-042","question":"死锁预防、死锁避免和死锁检测/恢复三种策略有何区别？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-043","question":"系统有 9 台同类打印机，4 个进程竞争使用。若希望保证不会因该类资源发生死锁，每个进程最多申请多少台打印机？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-044","question":"为什么“忙等”通常不适合普通用户态长临界区控制？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-045","question":"原子指令在锁实现中的作用是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-046","question":"某线程在持有锁 A 后申请锁 B，另一线程先持有锁 B 再申请锁 A。该设计有什么风险？如何改进？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-047","question":"什么是竞态条件？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-048","question":"在生产者—消费者问题中，若消费者先执行 P(full)，再执行 P(mutex)，其设计意图是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-049","question":"为什么条件变量的等待通常写成 while(condition_not_met) wait(...)，而不是 if(...) wait(...)？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-050","question":"简述“互斥、同步、死锁、饥饿”四个概念之间的联系与区别。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-050","question":"简述“互斥、同步、死锁、饥饿”四个概念之间的联系与区别。请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-050","question":"简述“互斥、同步、死锁、饥饿”四个概念之间的联系与区别。请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-051","question":"什么是地址空间？为什么操作系统要为每个进程提供独立地址空间？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-052","question":"重定位的基本作用是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-053","question":"基址—界限机制如何同时支持重定位和保护？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-054","question":"某进程基址寄存器为 4000，界限为 1200。逻辑地址 950 是否合法？若合法，物理地址是多少？逻辑地址 1300 呢？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-055","question":"分页与分段的基本区别是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-055","question":"分页与分段的基本区别是什么？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-055","question":"分页与分段的基本区别是什么？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-056","question":"页表的作用是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-057","question":"TLB 的作用是什么？为什么它能提升分页系统性能？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-058","question":"页面大小为 1024B。逻辑地址 2500 对应的页号和页内偏移分别是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-059","question":"页面大小为 1024B，逻辑地址 2500 落在第 2 页，若页表显示第 2 页位于物理页框 5，则物理地址是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-060","question":"多级页表为什么能够节省页表空间？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-061","question":"页内偏移位数由什么决定？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-062","question":"若页面大小为 4KB，则页内偏移需要多少位？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-063","question":"内部碎片与外部碎片有什么区别？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-063","question":"内部碎片与外部碎片有什么区别？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-063","question":"内部碎片与外部碎片有什么区别？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-064","question":"什么是缺页异常？它在请求分页系统中何时发生？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-065","question":"局部性原理为什么能支撑虚拟内存系统？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-066","question":"FIFO 与 LRU 页面置换算法的核心思想有何不同？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-066","question":"FIFO 与 LRU 页面置换算法的核心思想有何不同？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-066","question":"FIFO 与 LRU 页面置换算法的核心思想有何不同？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-067","question":"有 3 个页框，访问序列为 1, 2, 3, 2, 4, 1, 5。若采用 LRU 页面置换，缺页次数是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-068","question":"为什么 Clock 算法常被看作 LRU 的近似实现？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-069","question":"什么是抖动（thrashing）？","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-070","question":"为什么给系统盲目增加多道程序数，可能反而使整体性能下降？","expectedMode":"global","acceptableModes":["global","drift"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-071","question":"按需调页与预调页的基本思路有何不同？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-071","question":"按需调页与预调页的基本思路有何不同？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-071","question":"按需调页与预调页的基本思路有何不同？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-072","question":"Copy-on-write 技术为什么适合在 fork() 之后使用？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-073","question":"页表项中的有效位、脏位和引用位分别有什么用途？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-074","question":"某程序顺序扫描一个远大于物理内存的数据文件。为什么 LRU 不一定明显优于 FIFO？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-075","question":"某进程访问 20 次页面，其中发生 5 次缺页。它的缺页率是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-076","question":"文件系统中，目录和文件控制信息分别承担什么作用？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-077","question":"为什么访问文件前通常需要 open() 操作？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-078","question":"连续分配、链式分配与索引分配三种文件物理结构各有什么特点？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-079","question":"为什么索引分配结构通常更适合随机访问文件？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-080","question":"一个文件大小为 10KB，磁盘块大小为 512B。若只按块计数，不考虑元数据块，至少需要多少个数据块？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-081","question":"硬链接与符号链接的主要区别是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-081","question":"硬链接与符号链接的主要区别是什么？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-081","question":"硬链接与符号链接的主要区别是什么？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-082","question":"日志文件系统（journaling file system）的主要目的是什么？","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-083","question":"若某文件权限记为 rw-r--r--，则文件属主、同组用户和其他用户分别有什么权限？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-084","question":"写入文件时，为什么“数据一致性”和“性能”之间常常需要权衡？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-085","question":"为什么打开文件表通常既有“系统级”视角，也有“进程级”视角？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-086","question":"块设备与字符设备有什么区别？请各举一例。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-086","question":"块设备与字符设备有什么区别？请各举一例。请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-086","question":"块设备与字符设备有什么区别？请各举一例。请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-087","question":"程序查询、中断驱动和 DMA 三种 I/O 控制方式有何差异？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-087","question":"程序查询、中断驱动和 DMA 三种 I/O 控制方式有何差异？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-087","question":"程序查询、中断驱动和 DMA 三种 I/O 控制方式有何差异？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-088","question":"键盘输入为什么通常适合采用中断方式？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-089","question":"磁盘调度算法主要希望优化什么指标？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-local-090","question":"磁头当前位于 50，按 FCFS 顺序处理磁道请求 82、170、43、140。总磁头移动量是多少？","expectedMode":"local","acceptableModes":["local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-091","question":"RAID 0、RAID 1 与 RAID 5 的核心差异是什么？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-091","question":"RAID 0、RAID 1 与 RAID 5 的核心差异是什么？请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-091","question":"RAID 0、RAID 1 与 RAID 5 的核心差异是什么？请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-092","question":"为什么数据条带化能够提升部分磁盘读写场景的吞吐量？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-basic-093","question":"设备独立性软件的意义是什么？","expectedMode":"basic","acceptableModes":["basic","local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-094","question":"为什么 I/O 系统常使用缓冲区？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-095","question":"若系统使用内存映射 I/O，操作系统为什么仍需严格控制设备寄存器访问权限？","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-096","question":"一个程序读取大文件时表现很慢。请从“文件系统缓存、磁盘调度、页面缓存、进程调度”中任选三个角度分析可能原因。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-097","question":"某系统 CPU 利用率很低，但磁盘利用率极高，同时缺页异常频繁。请判断可能发生了什么，并解释。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-098","question":"某多线程服务器吞吐量上升后，响应时间却明显恶化。请给出两类可能的操作系统层面原因。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-099","question":"某进程访问地址时触发异常。请比较“非法越界访问”和“合法地址但发生缺页”两种情况。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-hybrid-099","question":"某进程访问地址时触发异常。请比较“非法越界访问”和“合法地址但发生缺页”两种情况。请给出课程材料依据。","expectedMode":"hybrid_v0","acceptableModes":["hybrid_v0"],"betaHybridEnabled":true,"hasConversationContext":false}
+{"id":"os-hybrid-gated-099","question":"某进程访问地址时触发异常。请比较“非法越界访问”和“合法地址但发生缺页”两种情况。请给出课程材料依据。","expectedMode":"local","acceptableModes":["local"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-drift-100","question":"请为“操作系统课程知识库问答系统”设计一道综合验证题，要求同时考查进程同步与死锁规避，并说明理想答案应包含哪些要点。","expectedMode":"drift","acceptableModes":["drift","local","basic"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-001","question":"请总结同步互斥这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-002","question":"请总结调度算法这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-003","question":"请总结虚拟内存这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-004","question":"请总结文件系统这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-005","question":"请总结分页机制这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-006","question":"请总结内存管理这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-007","question":"请总结死锁这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}
+{"id":"os-global-topic-008","question":"请总结I/O 与设备这一部分的知识框架。","expectedMode":"global","acceptableModes":["global"],"betaHybridEnabled":false,"hasConversationContext":false}

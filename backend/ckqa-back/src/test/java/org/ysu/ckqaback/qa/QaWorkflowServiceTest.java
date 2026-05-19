@@ -17,6 +17,7 @@ import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
+import org.ysu.ckqaback.qa.dto.QaClientRoutingSnapshot;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
@@ -464,6 +465,73 @@ class QaWorkflowServiceTest {
         assertThat(response.getContextSizeEstimate().getChars()).isZero();
         then(qaTaskWorker).should().dispatch(5L, 9001L);
         then(qaMessagesService).should(never()).appendAssistantMessage(anyLong(), eq("请概括这套图谱的主题"));
+    }
+
+    @Test
+    void shouldPersistClientRoutingSnapshotWhenCreatingPendingTask() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        UsersService usersService = mock(UsersService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                usersService,
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = new QaSessions();
+        session.setId(5L);
+        session.setStatus("active");
+        session.setKnowledgeBaseId(3L);
+        session.setCourseId("os");
+        session.setSessionType("formal");
+        session.setIndexRunId(23L);
+
+        QaMessages userMessage = message(11L, 5L, "user", 1, "请帮我复习一下。");
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9008L);
+        task.setTaskStatus("pending");
+        task.setProgressStage("queued");
+
+        QaClientRoutingSnapshot snapshot = new QaClientRoutingSnapshot();
+        snapshot.setSelectedMode("smart");
+        snapshot.setRecommendedMode("basic");
+        snapshot.setFallbackMode("local");
+        snapshot.setConfidence(0.59D);
+        snapshot.setConfidenceBand("low_confidence");
+        snapshot.setReviewPriority("low_confidence");
+        snapshot.setManualSwitchSuggested(true);
+        snapshot.setReasons(List.of("default_basic"));
+        CreateQaMessageRequest request = new CreateQaMessageRequest("basic", "请帮我复习一下。");
+        request.setClientRoutingSnapshot(snapshot);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
+        given(qaMessagesService.appendUserMessage(5L, "请帮我复习一下。")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(11L),
+                eq("basic"),
+                eq("请帮我复习一下。"),
+                argThat(context -> Double.valueOf(0.59D).equals(context.routingConfidence())
+                        && "low_confidence".equals(context.routingConfidenceBand())
+                        && "low_confidence".equals(context.routingReviewPriority())
+                        && context.routingSnapshotJson().contains("\"selectedMode\":\"smart\""))
+        )).willReturn(task);
+
+        workflowService.sendMessage(5L, request);
+
+        then(qaTaskWorker).should().dispatch(5L, 9008L);
     }
 
     @Test

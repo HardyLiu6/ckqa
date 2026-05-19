@@ -44,6 +44,10 @@ public class QaOperationLogRow {
     private String rewriteMethod;
     private String rewriteModel;
     private Double rewriteConfidence;
+    private Double routingConfidence;
+    private String routingConfidenceBand;
+    private String routingReviewPriority;
+    private String routingSnapshotJson;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime lastHeartbeatAt;

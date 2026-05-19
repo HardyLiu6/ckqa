@@ -3,6 +3,7 @@ package org.ysu.ckqaback.qa.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,4 +25,12 @@ public class CreateQaMessageRequest {
     @NotBlank(message = "content不能为空")
     @Size(max = 2000, message = "content长度不能超过2000")
     private String content;
+
+    @Valid
+    private QaClientRoutingSnapshot clientRoutingSnapshot;
+
+    public CreateQaMessageRequest(String mode, String content) {
+        this.mode = mode;
+        this.content = content;
+    }
 }
