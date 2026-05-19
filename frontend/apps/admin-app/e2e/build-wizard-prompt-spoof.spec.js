@@ -20,7 +20,7 @@ test('URL 携带 promptConfirmed=1 但 metadata 为 false → 页面仍显示待
   // 验证方式：前端应将索引步骤的主操作按钮置为 disabled（因为 promptConfirmed=false）
   // 或者前端直接重定向回 step=prompt
   await page.waitForSelector('.build-step-panel, .build-step-stage')
-  const primaryBtn = stage.getByRole('button', { name: /开始构建|创建索引/ })
+  const primaryBtn = stage.locator('.build-step-index__start-btn').first()
   if (await primaryBtn.isVisible()) {
     await expect(primaryBtn).toBeDisabled()
   } else {

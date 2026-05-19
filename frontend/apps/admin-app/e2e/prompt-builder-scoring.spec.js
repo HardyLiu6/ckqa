@@ -11,7 +11,7 @@ test.describe('04 步候选评分', () => {
     await installScoringMocks(page, { initialPhase: 'no-task' })
     // 注意：URL 不带 selectedCandidates
     await page.goto('/app/knowledge-bases/7/build/prompt-builder?buildRunId=18&step=scoring')
-    await page.getByRole('button', { name: '进入平台' }).click()
+    await page.getByRole('button', { name: '进入控制台' }).click()
 
     await expect(page.getByText(/请先在 03 步勾选要评分的候选/)).toBeVisible()
     await expect(page.getByRole('button', { name: '返回 03 步' })).toBeVisible()

@@ -56,29 +56,52 @@ test('GraphRAG 导出冲突在资料面板内显示确认中反馈', async ({ pa
 })
 
 test('索引构建失败在当前步骤主舞台内显示局部反馈', async ({ page }) => {
+  let indexSubmitted = false
   await installApiMocks(page, {
     ...knowledgeBaseBuildMocks({ activeIndexRunId: null }),
-    'POST /knowledge-base-build-runs/77/index-runs': () => failure(502, 5001, 'GraphRAG API 不可用'),
+    'GET /knowledge-base-build-runs/77': () => buildRunSnapshot({
+      selectedMaterialIds: [9],
+      promptConfirmed: true,
+      currentStage: 'index_build',
+      status: indexSubmitted ? 'failed' : 'running',
+      errorMessage: indexSubmitted ? 'GraphRAG API 不可用' : null,
+    }),
+    'POST /knowledge-base-build-runs/77/index-runs': () => {
+      indexSubmitted = true
+      return failure(502, 5001, 'GraphRAG API 不可用')
+    },
   })
 
   await openAuthenticated(page, '/app/knowledge-bases/7/build?materialIds=9&materialConfirmed=1&exportConfirmed=1&promptConfirmed=1&step=index')
-  await page.getByRole('button', { name: '开始构建索引' }).click()
-
   const panel = page.locator('.build-step-stage').filter({
     has: page.getByRole('heading', { name: '索引构建' }),
   })
+  await panel.locator('.build-step-index__start-btn').click()
+
   const feedback = panel.locator('.operation-feedback')
-  await expect(feedback).toBeVisible()
-  await expect(feedback).toHaveAttribute('data-status', 'failed')
+  await expect(feedback).toBeVisible({ timeout: 15000 })
+  await expect(feedback).toHaveAttribute('data-status', 'failed', { timeout: 15000 })
   await expect(feedback).toContainText('索引构建失败')
   await expect(feedback).toContainText('GraphRAG API 不可用')
   await feedback.screenshot({ path: 'test-results/index-build-feedback.png' })
 })
 
 test('QA 冒烟验证失败在当前步骤主舞台内显示局部反馈', async ({ page }) => {
+  let qaSubmitted = false
   await installApiMocks(page, {
     ...knowledgeBaseBuildMocks({ activeIndexRunId: 15 }),
-    'POST /knowledge-base-build-runs/77/qa-smoke': () => failure(502, 5002, '问答会话创建失败'),
+    'GET /knowledge-base-build-runs/77': () => buildRunSnapshot({
+      selectedMaterialIds: [9],
+      currentStage: qaSubmitted ? 'qa_smoke' : 'index_build',
+      activeIndexRunId: 15,
+      qaStatus: qaSubmitted ? 'failed' : null,
+      status: qaSubmitted ? 'failed' : 'running',
+      errorMessage: qaSubmitted ? '问答会话创建失败' : null,
+    }),
+    'POST /knowledge-base-build-runs/77/qa-smoke': () => {
+      qaSubmitted = true
+      return failure(502, 5002, '问答会话创建失败')
+    },
   })
 
   await openAuthenticated(page, '/app/knowledge-bases/7/build?step=qa_check')
@@ -89,7 +112,7 @@ test('QA 冒烟验证失败在当前步骤主舞台内显示局部反馈', async
   })
   const feedback = panel.locator('.operation-feedback')
   await expect(feedback).toBeVisible()
-  await expect(feedback).toHaveAttribute('data-status', 'failed')
+  await expect(feedback).toHaveAttribute('data-status', 'failed', { timeout: 15000 })
   await expect(feedback).toContainText('问答冒烟验证失败')
   await expect(feedback).toContainText('问答会话创建失败')
   await feedback.screenshot({ path: 'test-results/qa-smoke-feedback.png' })
@@ -242,7 +265,7 @@ test('构建向导产物缺失时清理旧 exportConfirmed 和 promptConfirmed',
   })
 
   await page.goto('/app/knowledge-bases/7/build?materialIds=9,10&materialConfirmed=1&exportConfirmed=1&promptConfirmed=1&step=prompt')
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 
   await expect(page).not.toHaveURL(/exportConfirmed=1/)
   await expect(page).not.toHaveURL(/promptConfirmed=1/)
@@ -291,7 +314,7 @@ test('课程创建没有可用教师时显示空态并禁用提交', async ({ pa
 
 async function openAuthenticated(page, path) {
   await page.goto(path)
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
   await expect.poll(async () => isCurrentRoute(page.url(), path)).toBe(true)
 }
 
@@ -403,6 +426,7 @@ function buildRunSnapshot({
   indexRunStatus = null,
   qaStatus = null,
   status = 'running',
+  errorMessage = null,
 } = {}) {
   return {
     id: 77,
@@ -415,6 +439,7 @@ function buildRunSnapshot({
     indexRunStatus,
     qaStatus,
     status,
+    errorMessage,
   }
 }
 

@@ -77,7 +77,7 @@ test('课程列表操作列固定在右侧且横向滚动不遮挡内容列', as
 async function openAuthenticated(page, path) {
   await page.setViewportSize({ width: 1980, height: 720 })
   await page.goto(path)
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
   await expect.poll(async () => isCurrentRoute(page.url(), path)).toBe(true)
 }
 

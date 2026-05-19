@@ -316,7 +316,7 @@ export async function gotoScoringStep(
   await page.goto(
     `/app/knowledge-bases/${kbId}/build/prompt-builder?buildRunId=${buildRunId}&step=scoring&selectedCandidates=${encodeURIComponent(sc)}`,
   )
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 }
 
 function reply(route, httpStatus, body) {

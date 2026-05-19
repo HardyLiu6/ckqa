@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test'
  * Phase 4.5：01 步种子可用性 e2e。
  *
  * 覆盖：
- * - graphrag_tuned 不可用时显示禁用 + tooltip
+ * - graphrag_tuned 不可用时显示卡内触发入口
  * - graphrag_tuned 可用时点击触发 PUT /custom-prompt-draft 持久化 seed
  * - history_draft 始终不可用（Phase 6 落地前）
  *
@@ -122,7 +122,7 @@ async function gotoSeedStep(page, { kbId = 7, buildRunId = 18 } = {}) {
   await page.goto(
     `/app/knowledge-bases/${kbId}/build/prompt-builder?buildRunId=${buildRunId}&step=seed`,
   )
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 }
 
 function corsHeaders() {
@@ -142,7 +142,7 @@ function jsonHeaders() {
 
 test.describe('01 步 seed 可用性', () => {
 
-  test('graphrag_tuned 不可用时显示禁用样式 + tooltip', async ({ page }) => {
+  test('graphrag_tuned 不可用时显示卡内触发入口', async ({ page }) => {
     await installSeedMocks(page, { availabilityState: 'graphrag_tuned_unavailable' })
     await gotoSeedStep(page)
 
@@ -150,8 +150,10 @@ test.describe('01 步 seed 可用性', () => {
     await expect(page.locator('.seed-card', { hasText: '沿用自动调优版' })).toBeVisible()
 
     const card = page.locator('.seed-card', { hasText: '沿用自动调优版' })
-    await expect(card).toHaveAttribute('data-disabled', 'true')
-    await expect(card).toHaveAttribute('title', /先在.*触发自动调优/)
+    await expect(card).toHaveAttribute('data-disabled', 'false')
+    await expect(card).toHaveAttribute('data-needs-trigger', 'true')
+    await expect(card).toContainText('本课程暂无自动调优产物')
+    await expect(card.getByRole('button', { name: '立即触发' })).toBeVisible()
   })
 
   test('graphrag_tuned 可用时点击会触发 PUT 写入 draft', async ({ page }) => {

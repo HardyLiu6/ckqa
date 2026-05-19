@@ -58,7 +58,7 @@ export async function navigateToKnowledgeBaseBuild(page, {
   })
 
   await page.goto(`/app/knowledge-bases/${kbId}/build?buildRunId=${buildRunId}&step=prompt`)
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
   return { kbId, buildRunId }
 }
 

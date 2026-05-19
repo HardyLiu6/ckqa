@@ -229,13 +229,13 @@ export async function installCandidatesMocks(page, {
 
 /**
  * 直接跳到 03 步页面：先访问受保护路由，路由守卫把未认证用户重定向到 /login，
- * 点"进入平台"完成登录回跳，最终落到带 step=candidates 的 PromptBuilderPage。
+ * 点"进入控制台"完成登录回跳，最终落到带 step=candidates 的 PromptBuilderPage。
  */
 export async function gotoCandidatesStep(page, { kbId = 7, buildRunId = 18 } = {}) {
   await page.goto(
     `/app/knowledge-bases/${kbId}/build/prompt-builder?buildRunId=${buildRunId}&step=candidates`,
   )
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 }
 
 function corsHeaders() {
