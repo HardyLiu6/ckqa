@@ -3,11 +3,14 @@ package org.ysu.ckqaback.course;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
 import org.ysu.ckqaback.course.dto.CoursePdfFileSummaryResponse;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
@@ -51,6 +54,10 @@ public class CourseLookupService {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> STRING_OBJECT_MAP = new TypeReference<>() {
     };
+    private static final TypeReference<ApiPageData<CourseSummaryResponse>> COURSE_PAGE_CACHE_TYPE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<KnowledgeBaseSummaryResponse>> COURSE_KB_CACHE_TYPE = new TypeReference<>() {
+    };
 
     private final CoursesService coursesService;
     private final CourseMaterialsService courseMaterialsService;
@@ -59,12 +66,37 @@ public class CourseLookupService {
     private final CourseMembershipsService courseMembershipsService;
     private final UsersService usersService;
     private final CourseAccessService courseAccessService;
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
+    }
 
     public ApiPageData<CourseSummaryResponse> listCourses(CourseQueryRequest request) {
         return listCourses(request, null);
     }
 
     public ApiPageData<CourseSummaryResponse> listCourses(CourseQueryRequest request, String actorUserCode) {
+        if (StringUtils.hasText(actorUserCode) && studentRedisCacheService != null && studentCacheKeyFactory != null) {
+            String key = studentCacheKeyFactory.coursesKey(actorUserCode, request);
+            return studentRedisCacheService.getOrLoad(
+                    key,
+                    COURSE_PAGE_CACHE_TYPE,
+                    studentRedisCacheService.courseTtl(),
+                    () -> listCoursesUncached(request, actorUserCode)
+            );
+        }
+        return listCoursesUncached(request, actorUserCode);
+    }
+
+    private ApiPageData<CourseSummaryResponse> listCoursesUncached(CourseQueryRequest request, String actorUserCode) {
         long page = request.getPage() == null ? 1L : Math.max(1L, request.getPage());
         long size = request.getSize() == null ? 20L : Math.max(1L, request.getSize());
 
@@ -151,6 +183,26 @@ public class CourseLookupService {
     }
 
     public List<KnowledgeBaseSummaryResponse> listKnowledgeBases(String courseId) {
+        return listKnowledgeBases(courseId, null);
+    }
+
+    public List<KnowledgeBaseSummaryResponse> listKnowledgeBases(String courseId, String actorUserCode) {
+        if (StringUtils.hasText(actorUserCode)) {
+            courseAccessService.assertCourseReadable(courseId, actorUserCode);
+        }
+        if (StringUtils.hasText(actorUserCode) && studentRedisCacheService != null && studentCacheKeyFactory != null) {
+            String key = studentCacheKeyFactory.courseKnowledgeBasesKey(actorUserCode, courseId);
+            return studentRedisCacheService.getOrLoad(
+                    key,
+                    COURSE_KB_CACHE_TYPE,
+                    studentRedisCacheService.courseKnowledgeBaseTtl(),
+                    () -> listKnowledgeBasesUncached(courseId)
+            );
+        }
+        return listKnowledgeBasesUncached(courseId);
+    }
+
+    private List<KnowledgeBaseSummaryResponse> listKnowledgeBasesUncached(String courseId) {
         return knowledgeBasesService.listByCourseId(courseId).stream()
                 .map(KnowledgeBaseSummaryResponse::fromEntity)
                 .toList();

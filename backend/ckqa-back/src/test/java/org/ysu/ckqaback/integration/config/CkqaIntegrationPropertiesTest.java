@@ -20,6 +20,10 @@ class CkqaIntegrationPropertiesTest {
         assertThat(properties.resolveQueryTaskModePolicy("drift").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").staleTimeoutSeconds()).isEqualTo(1800L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").timeoutMessage()).contains("10 到 20 分钟");
+
+        assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").recommendedPollingIntervalSeconds()).isEqualTo(30L);
+        assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").staleTimeoutSeconds()).isEqualTo(1800L);
+        assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").timeoutMessage()).contains("混合检索");
     }
 
     @Test

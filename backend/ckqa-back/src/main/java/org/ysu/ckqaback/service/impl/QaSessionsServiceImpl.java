@@ -2,11 +2,16 @@ package org.ysu.ckqaback.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.mapper.QaSessionsMapper;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.service.QaSessionsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.http.HttpStatus;
@@ -41,12 +46,19 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
 
     @Override
     public QaSessions createSession(CreateQaSessionRequest request) {
+        return createSession(request, null, null);
+    }
+
+    @Override
+    public QaSessions createSession(CreateQaSessionRequest request, Long indexRunId, LocalDateTime indexLockedAt) {
         LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
         QaSessions session = new QaSessions();
         session.setSessionCode(generateSessionCode());
         session.setUserId(request.getUserId());
         session.setCourseId(StringUtils.hasText(request.getCourseId()) ? request.getCourseId() : null);
         session.setKnowledgeBaseId(request.getKnowledgeBaseId());
+        session.setIndexRunId(indexRunId);
+        session.setIndexLockedAt(indexLockedAt);
         session.setSessionType(StringUtils.hasText(request.getSessionType()) ? request.getSessionType() : "formal");
         session.setTitle(StringUtils.hasText(request.getTitle()) ? request.getTitle() : "新建问答会话");
         session.setStatus("active");
@@ -56,11 +68,61 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
     }
 
     @Override
+    public ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request) {
+        long current = request.getPage() == null ? 1L : request.getPage();
+        long size = request.getSize() == null ? 20L : request.getSize();
+        LambdaQueryWrapper<QaSessions> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(QaSessions::getUserId, userId)
+                .eq(QaSessions::getSessionType, "formal")
+                .eq(StringUtils.hasText(request.getCourseId()), QaSessions::getCourseId, request.getCourseId())
+                .eq(request.getKnowledgeBaseId() != null, QaSessions::getKnowledgeBaseId, request.getKnowledgeBaseId())
+                .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus())
+                .orderByDesc(QaSessions::getLastMessageAt)
+                .orderByDesc(QaSessions::getCreatedAt);
+
+        IPage<QaSessions> page = page(new Page<>(current, size), wrapper);
+        return new ApiPageData<>(
+                page.getRecords().stream().map(QaSessionResponse::fromEntity).toList(),
+                page.getCurrent(),
+                page.getSize(),
+                page.getTotal(),
+                page.getPages()
+        );
+    }
+
+    @Override
+    public void lockIndexRun(Long id, Long indexRunId, LocalDateTime indexLockedAt) {
+        LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(QaSessions::getId, id)
+                .isNull(QaSessions::getIndexRunId)
+                .set(QaSessions::getIndexRunId, indexRunId)
+                .set(QaSessions::getIndexLockedAt, indexLockedAt);
+        baseMapper.update(null, wrapper);
+    }
+
+    @Override
     public void touchLastMessageAt(Long id) {
         LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(QaSessions::getId, id)
                 .set(QaSessions::getLastMessageAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, wrapper);
+    }
+
+    @Override
+    public QaSessions updateSession(Long id, String title, String status) {
+        QaSessions current = getRequiredById(id);
+        String nextTitle = StringUtils.hasText(title) ? title.trim() : current.getTitle();
+        String nextStatus = StringUtils.hasText(status) ? status.trim() : current.getStatus();
+        LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(QaSessions::getId, id)
+                .set(QaSessions::getTitle, nextTitle)
+                .set(QaSessions::getStatus, nextStatus)
+                .set(QaSessions::getUpdatedAt, LocalDateTime.now(SHANGHAI_ZONE));
+        baseMapper.update(null, wrapper);
+        current.setTitle(nextTitle);
+        current.setStatus(nextStatus);
+        current.setUpdatedAt(LocalDateTime.now(SHANGHAI_ZONE));
+        return current;
     }
 
     private String generateSessionCode() {

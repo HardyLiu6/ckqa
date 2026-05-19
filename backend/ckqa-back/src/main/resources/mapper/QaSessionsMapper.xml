@@ -10,6 +10,8 @@
         <result column="course_id" property="courseId" />
         <result column="course_membership_id" property="courseMembershipId" />
         <result column="knowledge_base_id" property="knowledgeBaseId" />
+        <result column="index_run_id" property="indexRunId" />
+        <result column="index_locked_at" property="indexLockedAt" />
         <result column="session_type" property="sessionType" />
         <result column="title" property="title" />
         <result column="status" property="status" />
@@ -20,7 +22,8 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, session_code, user_id, course_id, course_membership_id, knowledge_base_id, session_type, title, status, last_message_at, created_at, updated_at
+        id, session_code, user_id, course_id, course_membership_id, knowledge_base_id, index_run_id,
+        index_locked_at, session_type, title, status, last_message_at, created_at, updated_at
     </sql>
 
 </mapper>

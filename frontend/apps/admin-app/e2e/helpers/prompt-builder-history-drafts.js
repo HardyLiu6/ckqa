@@ -186,7 +186,7 @@ export async function gotoSeedStep(page, { kbId = 7, buildRunId = 18 } = {}) {
   await page.goto(
     `/app/knowledge-bases/${kbId}/build/prompt-builder?buildRunId=${buildRunId}&step=seed`,
   )
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 }
 
 export async function gotoSaveStep(
@@ -196,7 +196,7 @@ export async function gotoSaveStep(
   await page.goto(
     `/app/knowledge-bases/${kbId}/build/prompt-builder?buildRunId=${buildRunId}&step=save&selectedCandidate=${selectedCandidate}`,
   )
-  await page.getByRole('button', { name: '进入平台' }).click()
+  await page.getByRole('button', { name: '进入控制台' }).click()
 }
 
 function reply(route, httpStatus, body) {

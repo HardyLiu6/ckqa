@@ -1,11 +1,13 @@
 package org.ysu.ckqaback.system;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.system.dto.SystemHealthItemResponse;
 import org.ysu.ckqaback.system.dto.SystemHealthResponse;
 
@@ -25,10 +27,17 @@ public class SystemHealthService {
     private final CkqaIntegrationProperties properties;
     private final RestClient.Builder restClientBuilder;
     private final org.ysu.ckqaback.graph.GraphService graphService;
+    private StudentRedisCacheService studentRedisCacheService;
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
 
     public SystemHealthResponse check() {
         List<SystemHealthItemResponse> items = List.of(
                 checkMySql(),
+                checkRedis(),
                 checkPath("pdf-ingest-root", properties.getPdfIngest().getRoot()),
                 checkPath("graphrag-root", properties.getGraphrag().getRoot()),
                 checkPath("graphrag-build-runs-root", resolveBuildRunsRoot()),
@@ -54,6 +63,14 @@ public class SystemHealthService {
         } catch (Exception exception) {
             return SystemHealthItemResponse.of("mysql", false, false, exception.getMessage());
         }
+    }
+
+    private SystemHealthItemResponse checkRedis() {
+        if (studentRedisCacheService == null) {
+            return SystemHealthItemResponse.of("redis", false, false, "redis template not configured");
+        }
+        boolean reachable = studentRedisCacheService.ping();
+        return SystemHealthItemResponse.of("redis", reachable, reachable, reachable ? "PING PONG" : "PING failed");
     }
 
     private SystemHealthItemResponse checkPath(String name, String rawPath) {

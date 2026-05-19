@@ -2,6 +2,11 @@ package org.ysu.ckqaback.service;
 
 import org.ysu.ckqaback.entity.QaRetrievalHits;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.ysu.ckqaback.integration.graphrag.GraphRagSourceSnapshot;
+import org.ysu.ckqaback.qa.dto.QaSourceResponse;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * <p>
@@ -13,4 +18,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface QaRetrievalHitsService extends IService<QaRetrievalHits> {
 
+    void replaceHits(Long retrievalLogId, List<GraphRagSourceSnapshot> sources);
+
+    Map<Long, List<QaSourceResponse>> findSourcesByRetrievalLogIds(List<Long> retrievalLogIds);
 }

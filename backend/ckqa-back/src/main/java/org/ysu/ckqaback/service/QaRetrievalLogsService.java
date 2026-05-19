@@ -3,6 +3,7 @@ package org.ysu.ckqaback.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 
 import java.util.List;
 import java.util.Map;
@@ -19,13 +20,25 @@ import java.util.function.Function;
  */
 public interface QaRetrievalLogsService extends IService<QaRetrievalLogs> {
 
-    QaRetrievalLogs createPendingTask(
+    default QaRetrievalLogs createPendingTask(
             Long sessionId,
             String courseId,
             Long indexRunId,
             Long userMessageId,
             String mode,
             String queryText
+    ) {
+        return createPendingTask(sessionId, courseId, indexRunId, userMessageId, mode, queryText, null);
+    }
+
+    QaRetrievalLogs createPendingTask(
+            Long sessionId,
+            String courseId,
+            Long indexRunId,
+            Long userMessageId,
+            String mode,
+            String queryText,
+            QaRetrievalLogContext context
     );
 
     QaRetrievalLogs getRequiredTask(Long sessionId, Long taskId);
@@ -44,4 +57,6 @@ public interface QaRetrievalLogsService extends IService<QaRetrievalLogs> {
     );
 
     Map<Long, QaRetrievalLogs> findLatestByUserMessageIds(List<Long> userMessageIds);
+
+    List<Long> findDistinctSuccessfulIndexRunIdsBySession(Long sessionId);
 }

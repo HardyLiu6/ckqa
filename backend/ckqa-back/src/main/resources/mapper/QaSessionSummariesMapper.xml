@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.QaSessionSummariesMapper">
+
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.QaSessionSummaries">
+        <id column="id" property="id" />
+        <result column="session_id" property="sessionId" />
+        <result column="summary_text" property="summaryText" />
+        <result column="summary_until_sequence_no" property="summaryUntilSequenceNo" />
+        <result column="source_message_count" property="sourceMessageCount" />
+        <result column="status" property="status" />
+        <result column="error_message" property="errorMessage" />
+        <result column="model" property="model" />
+        <result column="duration_ms" property="durationMs" />
+        <result column="input_char_count" property="inputCharCount" />
+        <result column="output_char_count" property="outputCharCount" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, session_id, summary_text, summary_until_sequence_no, source_message_count,
+        status, error_message, model, duration_ms, input_char_count, output_char_count,
+        created_at, updated_at
+    </sql>
+
+</mapper>

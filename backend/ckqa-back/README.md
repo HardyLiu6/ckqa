@@ -221,7 +221,7 @@ export INDEX_STALE_SECONDS=2400
 
 一期联调推荐按下面顺序启动：
 
-1. 通过仓库根目录 `infra/docker-compose.yml` 启动 MySQL、MinIO、One API、Neo4j
+1. 通过仓库根目录 `infra/docker-compose.yml` 启动 MySQL、MinIO、One API、Neo4j、Redis
 2. 根据需要确认 `pdf_ingest/` 和 `graphrag_pipeline/` 根目录、Python 解释器路径已配置
 3. 启动 `backend/ckqa-back`
 
@@ -230,7 +230,7 @@ export INDEX_STALE_SECONDS=2400
 ```bash
 cd ../../infra
 cp .env.example .env
-# 编辑 .env，填入当前 MySQL root 密码和 MinIO 账号密码
+# 编辑 .env，填入当前 MySQL root 密码、MinIO 账号密码和可选 REDIS_PASSWORD
 docker compose up -d
 docker compose ps
 ```
@@ -247,6 +247,10 @@ export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+export CKQA_REDIS_HOST=127.0.0.1
+export CKQA_REDIS_PORT=16379
+export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+export CKQA_STUDENT_CACHE_ENABLED=true
 
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
 export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
@@ -282,11 +286,14 @@ curl http://127.0.0.1:8080/api/v1/courses
 curl http://127.0.0.1:8080/api/v1/knowledge-bases
 ```
 
+Redis 只作为学生端读路径缓存和登录/验证码短期状态，不是业务事实源。若 Redis 不可达，课程列表、知识库列表、智能推荐和 Hybrid warmup 会回源继续执行，只是 `/system/health` 的 `redis` 子项会显示不可达。
+
 ## 健康检查说明
 
 `GET /api/v1/system/health` 当前会返回细分子项，而不是单一布尔值，重点包括：
 
 - `mysql`
+- `redis`
 - `pdf-ingest-root`
 - `graphrag-root`
 - `graphrag-build-runs-root`
@@ -299,6 +306,17 @@ curl http://127.0.0.1:8080/api/v1/knowledge-bases
 - `ready` 表示依赖具备处理真实业务的前提条件
 
 `GET /api/v1/system/health` 是轻量健康检查，不再要求共享 `GRAPHRAG_ROOT/output/lancedb` 已存在。`GET /api/v1/system/readiness` 会额外包含 `graphrag-output`，用于手工 CLI 调试路径的就绪判断。
+
+### 学生端 Redis 缓存
+
+后端使用 Redis 缓存低风险学生端读模型，浏览器仍只调用 Java `/api/v1`，不会直连 Redis。当前缓存范围：
+
+- `GET /api/v1/courses`：按当前登录用户和分页/筛选参数隔离，默认 TTL `PT60S`。
+- `GET /api/v1/courses/{courseId}/knowledge-bases`：先校验课程可读，再按当前登录用户和课程隔离，默认 TTL `PT60S`。
+- `POST /api/v1/qa-routing/recommend`：先校验会话/课程/知识库权限，再缓存纯路由结果，默认 TTL `PT5M`。
+- `POST /api/v1/qa-sessions/hybrid-warmup`：按知识库、active index 和 build-run 输出目录缓存 readiness；ready 默认 `PT5M`，not ready 默认 `PT15S`。
+
+不会缓存问答消息、task 轮询结果或最终 assistant answer，避免 pending/success 竞态和旧答案展示。配置项在 `.env.example` 中以 `CKQA_STUDENT_CACHE_*` 开头；如需临时关闭，设置 `CKQA_STUDENT_CACHE_ENABLED=false`。
 
 ## GraphRAG build-run 隔离
 

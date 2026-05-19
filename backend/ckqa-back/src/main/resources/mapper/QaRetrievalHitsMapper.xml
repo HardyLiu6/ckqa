@@ -8,6 +8,13 @@
         <result column="retrieval_log_id" property="retrievalLogId" />
         <result column="document_key" property="documentKey" />
         <result column="chunk_id" property="chunkId" />
+        <result column="source_type" property="sourceType" />
+        <result column="source_ref" property="sourceRef" />
+        <result column="source_file" property="sourceFile" />
+        <result column="heading_path" property="headingPath" />
+        <result column="page_start" property="pageStart" />
+        <result column="page_end" property="pageEnd" />
+        <result column="snippet" property="snippet" />
         <result column="rank_position" property="rankPosition" />
         <result column="score" property="score" />
         <result column="created_at" property="createdAt" />
@@ -15,7 +22,8 @@
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, retrieval_log_id, document_key, chunk_id, rank_position, score, created_at
+        id, retrieval_log_id, document_key, chunk_id, source_type, source_ref, source_file, heading_path,
+        page_start, page_end, snippet, rank_position, score, created_at
     </sql>
 
 </mapper>

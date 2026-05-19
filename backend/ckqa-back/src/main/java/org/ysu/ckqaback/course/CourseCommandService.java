@@ -3,6 +3,7 @@ package org.ysu.ckqaback.course;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.dto.CourseCreateRequest;
 import org.ysu.ckqaback.course.dto.CourseCoverUploadResponse;
 import org.ysu.ckqaback.course.dto.CourseDetailResponse;
@@ -58,6 +61,18 @@ public class CourseCommandService {
     private final CourseIdGenerator courseIdGenerator;
     private final ApplicationEventPublisher eventPublisher;
     private final CourseCoverService courseCoverService;
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
+    }
 
     @Transactional(propagation = Propagation.REQUIRED)
     public CourseDetailResponse createCourse(CourseCreateRequest request) {
@@ -88,6 +103,7 @@ public class CourseCommandService {
                     teacher.getId(),
                     null
             ));
+            evictStudentCourseCaches();
             return toDetailResponse(course, teacher);
         }
 
@@ -116,6 +132,7 @@ public class CourseCommandService {
             course.setUpdatedAt(now);
             coursesService.updateById(course);
             restoreKnowledgeBasesArchivedByCourse(courseId, now);
+            evictStudentCourseCaches();
             return;
         }
 
@@ -129,6 +146,7 @@ public class CourseCommandService {
         if (ARCHIVED.equalsIgnoreCase(targetStatus)) {
             archiveKnowledgeBasesForCourse(courseId, now);
         }
+        evictStudentCourseCaches();
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
@@ -147,6 +165,7 @@ public class CourseCommandService {
         }
 
         coursesService.removeById(course.getId());
+        evictStudentCourseCaches();
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
@@ -157,7 +176,16 @@ public class CourseCommandService {
         course.setCoverUrl(response.getCoverUrl());
         course.setUpdatedAt(LocalDateTime.now());
         coursesService.updateById(course);
+        evictStudentCourseCaches();
         return response;
+    }
+
+    private void evictStudentCourseCaches() {
+        if (studentRedisCacheService == null || studentCacheKeyFactory == null) {
+            return;
+        }
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.coursesPattern());
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.courseKnowledgeBasesPattern());
     }
 
     private void validateInitialTeacher(Users teacher) {

@@ -42,7 +42,7 @@
 | `src/views/course/` | 课程列表、详情、学习页、我的课程原型 |
 | `src/components/NavHeader.vue` | 顶部导航组件 |
 | `src/stores/` | Pinia store，包含学生 JWT 会话与本地页面状态 |
-| `vite.config.js` | Vite 配置，默认监听 `0.0.0.0:8080` |
+| `vite.config.js` | Vite 配置，默认监听 `0.0.0.0:5174`，并将 `/api/v1` 代理到 Java 后端 |
 | `jsconfig.json` | `@/` 路径别名配置 |
 
 ## 路由现状
@@ -78,9 +78,10 @@ cp .env.example .env
 
 ## 环境变量约定
 
-学生端当前只约定两个最小运行时变量：
+学生端当前约定三个最小运行时变量：
 
 - `VITE_API_BASE_URL`：请求基础地址。正式联调时应指向 Java 后端 `/api/v1`，例如 `http://127.0.0.1:8080/api/v1`；如果使用反向代理，建议代理前缀也保持为 `/api/v1`
+- `VITE_API_PROXY_TARGET`：开发服务器代理目标，默认 `http://127.0.0.1:8080`。当 `VITE_API_BASE_URL=/api/v1` 时，浏览器请求同源 `/api/v1/*` 会由 Vite 转发到这个 Java 后端地址
 - `VITE_API_TIMEOUT`：请求超时时间，单位毫秒，默认 `10000`
 
 对应示例见 `.env.example`。当前 `src/axios/index.js` 会自动读取它们，并导出默认实例与 `get` / `post` / `put` / `patch` / `del` 这些最常用方法。
@@ -108,7 +109,7 @@ node --test tests/*.test.js
 http://127.0.0.1:5174
 ```
 
-`pnpm dev` 仍保留 Vite 原始启动方式；`pnpm dev:local` 用于避免和 Java 后端默认 `8080` 端口冲突。
+`pnpm dev` 与 `pnpm dev:local` 都会避开 Java 后端默认 `8080` 端口；本地调试推荐使用 `pnpm dev:local`。
 
 ## 当前实现特点
 

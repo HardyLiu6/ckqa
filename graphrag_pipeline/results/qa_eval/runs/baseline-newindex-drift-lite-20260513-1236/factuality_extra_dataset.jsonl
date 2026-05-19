@@ -1,0 +1,1 @@
+{"question_id": "Q001", "mode": "graphrag-drift-search:latest", "source": "操作系统是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充；它管理硬件资源，提高利用率和吞吐量，并为用户与应用程序提供简单接口。", "claim": "", "reference": "操作系统是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充；它管理硬件资源，提高利用率和吞吐量，并为用户与应用程序提供简单接口。", "gold_text_unit_ids": ["81d99ad61e36"], "target_tools": ["summac", "alignscore", "scale"]}

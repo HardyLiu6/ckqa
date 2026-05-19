@@ -25,15 +25,26 @@ test('新增视觉壳路由已从 coming-soon 清单移除', () => {
 
 test('剩余 coming-soon 路由仍显式标记', () => {
   const comingSoonNames = [
+    'QADetail',
     'KnowledgeDetail',
     'CommunityDiscuss', 'CommunityPost', 'CommunityCreate', 'CommunityRank',
     'WrongAnalysis', 'LearningReport', 'SmartRecommend',
-    'Login', 'Register', 'ForgotPassword',
+    'ForgotPassword',
   ]
   for (const routeName of comingSoonNames) {
     const route = routeMap.get(routeName)
     assert.ok(route, `${routeName} 路由不存在`)
     assert.equal(route.meta.routeState, 'coming-soon', `${routeName} 未标 coming-soon`)
+  }
+})
+
+test('认证路由已经开放并保持免登录访问', () => {
+  for (const routeName of ['Login', 'Register']) {
+    const route = routeMap.get(routeName)
+    assert.ok(route, `${routeName} 路由不存在`)
+    assert.equal(route.meta.routeState, undefined, `${routeName} 不应再是 coming-soon`)
+    assert.equal(route.meta.noAuth, true, `${routeName} 应允许未登录访问`)
+    assert.equal(route.meta.layout, 'landing', `${routeName} 应使用 landing layout`)
   }
 })
 

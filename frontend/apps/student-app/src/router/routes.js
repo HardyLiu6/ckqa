@@ -76,12 +76,15 @@ export const routes = [
     component: () => import('../views/qa/QAHistory.vue'),
     meta: { title: '问答记录', icon: 'Clock', layout: 'module' },
   },
-  {
+  createComingSoonRoute({
     path: '/qa/detail/:id',
     name: 'QADetail',
-    component: () => import('../views/qa/QADetail.vue'),
-    meta: { title: '问题详情', hidden: true, layout: 'module' },
-  },
+    title: '问题详情',
+    hidden: true,
+    section: '智能问答',
+    primaryActionTarget: '/qa/ask',
+    primaryActionText: '返回提问',
+  }),
   {
     path: '/course',
     name: 'Course',

@@ -3,6 +3,8 @@ package org.ysu.ckqaback.course;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.course.dto.CourseQueryRequest;
 import org.ysu.ckqaback.course.dto.CourseSummaryResponse;
@@ -27,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -62,6 +65,57 @@ class CourseLookupServiceTest {
                 usersService,
                 courseAccessService
         );
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void shouldUseRedisCacheForAuthenticatedCourseList() {
+        StudentRedisCacheService cacheService = mock(StudentRedisCacheService.class);
+        StudentCacheKeyFactory keyFactory = mock(StudentCacheKeyFactory.class);
+        service.setStudentRedisCacheService(cacheService);
+        service.setStudentCacheKeyFactory(keyFactory);
+        CourseQueryRequest request = new CourseQueryRequest();
+        ApiPageData<CourseSummaryResponse> cachedPage = new ApiPageData<>(
+                List.of(CourseSummaryResponse.builder()
+                        .id(1L)
+                        .courseId("os")
+                        .courseName("操作系统")
+                        .status("active")
+                        .build()),
+                1,
+                20,
+                1,
+                1
+        );
+        when(keyFactory.coursesKey("STU2026001", request)).thenReturn("courses-key");
+        when(cacheService.getOrLoad(eq("courses-key"), any(com.fasterxml.jackson.core.type.TypeReference.class), any(), any()))
+                .thenReturn((ApiPageData) cachedPage);
+
+        ApiPageData<CourseSummaryResponse> page = service.listCourses(request, "STU2026001");
+
+        assertThat(page).isSameAs(cachedPage);
+        verify(coursesService, never()).list();
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void shouldValidateCourseReadableBeforeUsingKnowledgeBaseCache() {
+        StudentRedisCacheService cacheService = mock(StudentRedisCacheService.class);
+        StudentCacheKeyFactory keyFactory = mock(StudentCacheKeyFactory.class);
+        service.setStudentRedisCacheService(cacheService);
+        service.setStudentCacheKeyFactory(keyFactory);
+        when(keyFactory.courseKnowledgeBasesKey("STU2026001", "os")).thenReturn("course-kbs-key");
+        List<org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse> cached = List.of(
+                org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse.of(3L, "kb-os", "操作系统知识库", "active", 17L)
+        );
+        when(cacheService.getOrLoad(eq("course-kbs-key"), any(com.fasterxml.jackson.core.type.TypeReference.class), any(), any()))
+                .thenReturn((List) cached);
+
+        List<org.ysu.ckqaback.course.dto.KnowledgeBaseSummaryResponse> responses = service.listKnowledgeBases("os", "STU2026001");
+
+        assertThat(responses).hasSize(1);
+        verify(courseAccessService).assertCourseReadable("os", "STU2026001");
+        verify(knowledgeBasesService, never()).listByCourseId("os");
     }
 
     @Test
