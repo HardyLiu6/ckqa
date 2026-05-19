@@ -11,6 +11,7 @@ import {
   fetchEntityNeighborhood,
   fetchGraphOverview,
 } from '@/api/graph'
+import { listCourses } from '@/api/courses'
 
 export const GRAPH_STATE = Object.freeze({
   IDLE: 'idle',
@@ -22,6 +23,11 @@ export const GRAPH_STATE = Object.freeze({
 })
 
 export const useGraphStore = defineStore('graph', () => {
+  // 当前学生可见课程清单（图谱页课程选择器用）
+  const availableCourses = ref([])
+  const selectedCourseId = ref('')
+  const coursesLoading = ref(false)
+
   const knowledgeBases = ref([])
   const activeKnowledgeBase = ref(null)
 
@@ -39,6 +45,9 @@ export const useGraphStore = defineStore('graph', () => {
   const edges = computed(() => Array.from(edgesById.value.values()))
 
   function reset() {
+    availableCourses.value = []
+    selectedCourseId.value = ''
+    coursesLoading.value = false
     knowledgeBases.value = []
     activeKnowledgeBase.value = null
     nodesById.value = new Map()
@@ -52,6 +61,48 @@ export const useGraphStore = defineStore('graph', () => {
   function setError(err, fallback = '加载失败，请稍后重试') {
     state.value = GRAPH_STATE.ERROR
     errorMessage.value = err?.message || fallback
+  }
+
+  /**
+   * 拉取学生当前可见的课程列表，挑选默认课程。
+   *
+   * @param {string} preferredCourseId 来自 URL ?courseId= 的优先课程
+   * @returns {Promise<string>} 实际选定的 courseId（可能为空）
+   */
+  async function loadAvailableCourses(preferredCourseId = '') {
+    coursesLoading.value = true
+    try {
+      const result = await listCourses({ size: 50 })
+      const items = Array.isArray(result?.items) ? result.items : []
+      availableCourses.value = items
+      if (items.length === 0) {
+        selectedCourseId.value = ''
+        return ''
+      }
+      // 默认优先级：URL 指定 -> 已加入 + 有激活索引 -> 已加入 -> 第一个
+      const matchByCourseId = (id) => items.find((c) => c?.courseId === id)
+      let chosen = preferredCourseId ? matchByCourseId(preferredCourseId) : null
+      if (!chosen) {
+        chosen = items.find(
+          (c) => c?.memberStatus === 'member' && (c?.activeKnowledgeBaseCount ?? 0) > 0,
+        )
+      }
+      if (!chosen) {
+        chosen = items.find((c) => c?.memberStatus === 'member')
+      }
+      if (!chosen) {
+        chosen = items[0]
+      }
+      selectedCourseId.value = chosen?.courseId ?? ''
+      return selectedCourseId.value
+    } catch (err) {
+      availableCourses.value = []
+      selectedCourseId.value = ''
+      setError(err, '获取可见课程失败')
+      return ''
+    } finally {
+      coursesLoading.value = false
+    }
   }
 
   /**
@@ -172,6 +223,9 @@ export const useGraphStore = defineStore('graph', () => {
   }
 
   return {
+    availableCourses,
+    selectedCourseId,
+    coursesLoading,
     knowledgeBases,
     activeKnowledgeBase,
     selectedNodeId,
@@ -181,6 +235,7 @@ export const useGraphStore = defineStore('graph', () => {
     nodes,
     edges,
     reset,
+    loadAvailableCourses,
     selectKnowledgeBaseForCourse,
     loadOverview,
     loadEntityDetail,
