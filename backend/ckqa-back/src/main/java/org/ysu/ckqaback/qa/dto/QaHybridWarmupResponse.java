@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.qa.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 
 import java.util.List;
@@ -18,14 +20,15 @@ public class QaHybridWarmupResponse {
     private final boolean textUnitsReady;
     private final List<String> missing;
 
-    private QaHybridWarmupResponse(
-            boolean ready,
-            String status,
-            String message,
-            String dataDirUri,
-            boolean cached,
-            boolean textUnitsReady,
-            List<String> missing
+    @JsonCreator
+    public QaHybridWarmupResponse(
+            @JsonProperty("ready") boolean ready,
+            @JsonProperty("status") String status,
+            @JsonProperty("message") String message,
+            @JsonProperty("dataDirUri") String dataDirUri,
+            @JsonProperty("cached") boolean cached,
+            @JsonProperty("textUnitsReady") boolean textUnitsReady,
+            @JsonProperty("missing") List<String> missing
     ) {
         this.ready = ready;
         this.status = status;

@@ -35,6 +35,7 @@ cp .env.example .env
 
 - `MYSQL_ROOT_PASSWORD` 必须填写当前 MySQL root 密码；复用旧数据时不要改成新密码。
 - `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD` 建议填写当前 MinIO 容器账号密码。
+- `REDIS_PASSWORD` 可选；为空时 Redis 只适合本地匿名访问。若填写密码，后端 `backend/ckqa-back/.env` 或运行环境也要使用同一个 `REDIS_PASSWORD`。
 - 如需新环境全部放在 `infra/` 下，可以把 `CKQA_MYSQL_DATA_DIR` 改为 `./mysql/data`，把 `CKQA_MINIO_DATA_DIR` 改为 `./minio/data`。
 
 ## 启动
@@ -83,5 +84,18 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml config
 - Neo4j Browser: `127.0.0.1:17474`
 - Neo4j Bolt: `127.0.0.1:17687`
 - Redis: `127.0.0.1:16379`
+
+Redis 当前用途：
+
+- 后端登录限频和邮箱验证码短期状态。
+- 学生端服务端读缓存：课程列表、课程知识库列表、智能推荐结果、Hybrid warmup/readiness。
+
+Redis 不存正式问答答案，也不替代 MySQL / GraphRAG Python 的事实源。缓存服务在 Redis 异常时会回源执行；排查连通性可用：
+
+```bash
+docker compose --env-file infra/.env -f infra/docker-compose.yml exec -T redis redis-cli PING
+# 如果设置了 REDIS_PASSWORD：
+docker compose --env-file infra/.env -f infra/docker-compose.yml exec -T redis sh -lc 'redis-cli -a "$REDIS_PASSWORD" PING'
+```
 
 数据库初始化脚本位于仓库根目录 `sql/`。当 MySQL 数据目录为空并首次初始化时，compose 会把 `../sql` 只读挂载到 `/docker-entrypoint-initdb.d`，自动执行其中的 SQL 文件；已有数据库不会重复执行初始化脚本。

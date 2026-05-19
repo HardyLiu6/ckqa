@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.auth.config.CkqaEmailProperties;
 import org.ysu.ckqaback.auth.config.CkqaSecurityProperties;
+import org.ysu.ckqaback.cache.StudentRedisCacheProperties;
 import org.ysu.ckqaback.course.CourseMaterialProperties;
 import org.ysu.ckqaback.course.CourseCoverProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
@@ -20,7 +21,8 @@ import org.ysu.ckqaback.user.UserAvatarProperties;
         CourseMaterialProperties.class,
         UserAvatarProperties.class,
         CkqaSecurityProperties.class,
-        CkqaEmailProperties.class
+        CkqaEmailProperties.class,
+        StudentRedisCacheProperties.class
 })
 @SpringBootApplication
 public class CkqaBackApplication {

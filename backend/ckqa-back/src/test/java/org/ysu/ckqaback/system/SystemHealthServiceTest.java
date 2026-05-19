@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.client.RestClient;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.system.dto.SystemHealthResponse;
 
@@ -36,6 +37,9 @@ class SystemHealthServiceTest {
                 .willThrow(new RuntimeException("connect refused"));
 
         SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        StudentRedisCacheService redisCacheService = mock(StudentRedisCacheService.class);
+        given(redisCacheService.ping()).willReturn(true);
+        service.setStudentRedisCacheService(redisCacheService);
         SystemHealthResponse response = service.check();
 
         assertThat(response.getItems()).anySatisfy(item -> {
@@ -64,6 +68,9 @@ class SystemHealthServiceTest {
                 .willReturn(null);
 
         SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        StudentRedisCacheService redisCacheService = mock(StudentRedisCacheService.class);
+        given(redisCacheService.ping()).willReturn(true);
+        service.setStudentRedisCacheService(redisCacheService);
         SystemHealthResponse response = service.readiness();
 
         assertThat(response.getItems()).anySatisfy(item -> {
@@ -95,11 +102,15 @@ class SystemHealthServiceTest {
                 .willReturn(null);
 
         SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        StudentRedisCacheService redisCacheService = mock(StudentRedisCacheService.class);
+        given(redisCacheService.ping()).willReturn(true);
+        service.setStudentRedisCacheService(redisCacheService);
         SystemHealthResponse response = service.check();
 
         assertThat(response.getItems()).extracting("name")
                 .containsExactly(
                         "mysql",
+                        "redis",
                         "pdf-ingest-root",
                         "graphrag-root",
                         "graphrag-build-runs-root",
@@ -107,5 +118,40 @@ class SystemHealthServiceTest {
                         "graphrag-ready"
                 );
         assertThat(response.getItems()).extracting("name").doesNotContain("graphrag-output");
+    }
+
+    @Test
+    void shouldExposeRedisHealthItem() throws IOException {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        given(jdbcTemplate.queryForObject("SELECT 1", Integer.class)).willReturn(1);
+
+        Path pdfRoot = Files.createDirectories(tempDir.resolve("pdf_ingest"));
+        Path graphragRoot = Files.createDirectories(tempDir.resolve("graphrag"));
+        Path buildRunsRoot = Files.createDirectories(tempDir.resolve("kb-build-runs"));
+
+        CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
+        properties.getPdfIngest().setRoot(pdfRoot.toString());
+        properties.getGraphrag().setRoot(graphragRoot.toString());
+        properties.getGraphrag().setBuildRunsRoot(buildRunsRoot.toString());
+        properties.getGraphrag().setApiBaseUrl("http://127.0.0.1:8012");
+
+        RestClient.Builder builder = mock(RestClient.Builder.class, RETURNS_DEEP_STUBS);
+        given(builder.build().get().uri("http://127.0.0.1:8012/health").retrieve().toBodilessEntity())
+                .willReturn(null);
+        given(builder.build().get().uri("http://127.0.0.1:8012/v1/models").retrieve().toEntity(String.class))
+                .willReturn(null);
+        StudentRedisCacheService redisCacheService = mock(StudentRedisCacheService.class);
+        given(redisCacheService.ping()).willReturn(false);
+
+        SystemHealthService service = new SystemHealthService(jdbcTemplate, properties, builder);
+        service.setStudentRedisCacheService(redisCacheService);
+
+        SystemHealthResponse response = service.check();
+
+        assertThat(response.getItems()).anySatisfy(item -> {
+            assertThat(item.getName()).isEqualTo("redis");
+            assertThat(item.isReachable()).isFalse();
+            assertThat(item.isReady()).isFalse();
+        });
     }
 }

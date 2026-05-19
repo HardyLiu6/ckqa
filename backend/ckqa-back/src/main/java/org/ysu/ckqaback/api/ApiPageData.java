@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 
 import java.util.List;
@@ -46,7 +48,14 @@ public class ApiPageData<T> {
      * @param total 总记录数
      * @param pages 总页数
      */
-    public ApiPageData(List<T> items, long current, long size, long total, long pages) {
+    @JsonCreator
+    public ApiPageData(
+            @JsonProperty("items") List<T> items,
+            @JsonProperty("current") long current,
+            @JsonProperty("size") long size,
+            @JsonProperty("total") long total,
+            @JsonProperty("pages") long pages
+    ) {
         this.items = items;
         this.current = current;
         this.size = size;

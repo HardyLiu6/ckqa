@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaSessions;
@@ -58,10 +60,22 @@ public class QaModeRoutingService {
     private final QaSessionsService qaSessionsService;
     private final KnowledgeBasesService knowledgeBasesService;
     private CourseAccessService courseAccessService;
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
 
     @Autowired(required = false)
     public void setCourseAccessService(CourseAccessService courseAccessService) {
         this.courseAccessService = courseAccessService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
     }
 
     public QaModeRecommendationResponse recommend(QaModeRecommendationRequest request, AuthenticatedUser currentUser) {
@@ -74,6 +88,20 @@ public class QaModeRoutingService {
         boolean betaHybridEnabled = Boolean.TRUE.equals(request.getBetaHybridEnabled());
         boolean hasContext = Boolean.TRUE.equals(request.getHasConversationContext()) || scope.hasSession();
 
+        if (studentRedisCacheService != null && studentCacheKeyFactory != null) {
+            String key = studentCacheKeyFactory.routingKey(currentUser.id(), request, hasContext);
+            return studentRedisCacheService.getOrLoad(
+                    key,
+                    QaModeRecommendationResponse.class,
+                    studentRedisCacheService.routingTtl(),
+                    () -> calculateRecommendation(question, betaHybridEnabled, hasContext)
+            );
+        }
+
+        return calculateRecommendation(question, betaHybridEnabled, hasContext);
+    }
+
+    private QaModeRecommendationResponse calculateRecommendation(String question, boolean betaHybridEnabled, boolean hasContext) {
         Map<String, Double> scores = initialScores();
         Set<String> reasons = new LinkedHashSet<>();
         applyIntentScores(question, hasContext, scores, reasons);

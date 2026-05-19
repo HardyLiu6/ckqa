@@ -2,11 +2,14 @@ package org.ysu.ckqaback.index;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
@@ -42,6 +45,18 @@ public class KnowledgeBaseLookupService {
     private final IndexRunsService indexRunsService;
     private final CoursesService coursesService;
     private final KnowledgeBaseBuildRunsService buildRunsService;
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
+    }
 
     public ApiPageData<KnowledgeBaseSummaryResponse> listKnowledgeBases(KnowledgeBaseQueryRequest request) {
         long page = request.getPage() == null ? 1L : request.getPage();
@@ -122,6 +137,7 @@ public class KnowledgeBaseLookupService {
         knowledgeBase.setCreatedAt(now);
         knowledgeBase.setUpdatedAt(now);
         knowledgeBasesService.save(knowledgeBase);
+        evictStudentCourseCaches();
 
         return KnowledgeBaseDetailResponse.fromEntity(knowledgeBase, null, 0L, 0L);
     }
@@ -133,11 +149,12 @@ public class KnowledgeBaseLookupService {
         knowledgeBase.setStatus(normalizeText(request.getStatus()));
         knowledgeBase.setUpdatedAt(LocalDateTime.now());
         knowledgeBasesService.updateById(knowledgeBase);
+        evictStudentCourseCaches();
         return getKnowledgeBase(id);
     }
 
     public void deleteKnowledgeBase(Long id) {
-        knowledgeBasesService.getRequiredById(id);
+        KnowledgeBases knowledgeBase = knowledgeBasesService.getRequiredById(id);
         if (!buildRunsService.listByKnowledgeBaseId(id).isEmpty()) {
             throw new BusinessException(
                     ApiResultCode.BAD_REQUEST,
@@ -146,6 +163,23 @@ public class KnowledgeBaseLookupService {
             );
         }
         knowledgeBasesService.removeById(id);
+        evictStudentCourseCaches();
+        evictHybridReadinessCaches(knowledgeBase.getId());
+    }
+
+    private void evictStudentCourseCaches() {
+        if (studentRedisCacheService == null || studentCacheKeyFactory == null) {
+            return;
+        }
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.coursesPattern());
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.courseKnowledgeBasesPattern());
+    }
+
+    private void evictHybridReadinessCaches(Long knowledgeBaseId) {
+        if (studentRedisCacheService == null || studentCacheKeyFactory == null) {
+            return;
+        }
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.hybridReadinessPattern(knowledgeBaseId));
     }
 
     private IndexRuns latestIndexRun(List<IndexRuns> indexRuns) {

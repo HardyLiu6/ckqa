@@ -2,6 +2,8 @@ package org.ysu.ckqaback.qa.routing;
 
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaSessions;
@@ -14,6 +16,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 
 class QaModeRoutingServiceTest {
@@ -128,6 +132,47 @@ class QaModeRoutingServiceTest {
 
         service.recommend(request, student());
 
+        then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldUseCacheOnlyAfterScopeValidation() {
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        StudentRedisCacheService cacheService = mock(StudentRedisCacheService.class);
+        StudentCacheKeyFactory keyFactory = mock(StudentCacheKeyFactory.class);
+        QaModeRoutingService service = new QaModeRoutingService(sessionsService, knowledgeBasesService);
+        service.setCourseAccessService(courseAccessService);
+        service.setStudentRedisCacheService(cacheService);
+        service.setStudentCacheKeyFactory(keyFactory);
+
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setId(5L);
+        knowledgeBase.setCourseId("os");
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(knowledgeBase);
+        QaModeRecommendationRequest request = request("请综合比较死锁和资源分配图的关系，并给出课程证据", true, true);
+        request.setBetaHybridEnabled(true);
+        given(keyFactory.routingKey(7L, request, true)).willReturn("routing-key");
+        given(cacheService.getOrLoad(eq("routing-key"), eq(org.ysu.ckqaback.qa.dto.QaModeRecommendationResponse.class), any(), any()))
+                .willReturn(org.ysu.ckqaback.qa.dto.QaModeRecommendationResponse.of(
+                        "hybrid_v0",
+                        "local",
+                        0.88D,
+                        List.of("cached"),
+                        "缓存推荐",
+                        "high_confidence",
+                        false,
+                        "normal",
+                        true,
+                        true,
+                        "rule_semantic_v1",
+                        java.util.Map.of("hybrid_v0", 0.9D)
+                ));
+
+        var decision = service.recommend(request, student());
+
+        assertThat(decision.getReasons()).containsExactly("cached");
         then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
     }
 

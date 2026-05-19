@@ -39,6 +39,7 @@ import {
   getModeOption,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveHybridWarmupText,
   resolveModeWithHybridReadiness,
 } from './qa-mode-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
@@ -77,6 +78,7 @@ const activeSession = ref(null)
 const pendingTask = ref(null)
 const hybridWarmupStatus = ref('idle')
 const hybridWarmupMessage = ref('')
+const hybridWarmupCached = ref(false)
 const loadingCourses = ref(false)
 const loadingKnowledgeBases = ref(false)
 const restoringSession = ref(false)
@@ -105,21 +107,7 @@ const readyKnowledgeBases = computed(() => (
 ))
 const modePreview = computed(() => resolveQaMode(input.value, selectedMode.value, qaModeResolveOptions()))
 const activeModeOption = computed(() => getModeOption(modePreview.value.mode))
-const hybridWarmupText = computed(() => {
-  if (hybridWarmupStatus.value === 'warming') {
-    return '混合检索准备中'
-  }
-  if (hybridWarmupStatus.value === 'ready') {
-    return '混合检索已就绪'
-  }
-  if (hybridWarmupStatus.value === 'fallback') {
-    return '混合检索建议降级'
-  }
-  if (hybridWarmupStatus.value === 'not_ready') {
-    return '混合检索准备中'
-  }
-  return ''
-})
+const hybridWarmupText = computed(() => resolveHybridWarmupText(hybridWarmupStatus.value, hybridWarmupCached.value))
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -216,6 +204,7 @@ function resetConversation() {
   messages.value = []
   hybridWarmupStatus.value = 'idle'
   hybridWarmupMessage.value = ''
+  hybridWarmupCached.value = false
 }
 
 async function send() {
@@ -368,6 +357,7 @@ async function ensureHybridWarmup(course, knowledgeBase) {
     return
   }
   hybridWarmupStatus.value = 'warming'
+  hybridWarmupCached.value = false
   hybridWarmupMessage.value = '正在预热本地混合检索索引'
   try {
     const result = await warmupHybrid({
@@ -375,9 +365,11 @@ async function ensureHybridWarmup(course, knowledgeBase) {
       knowledgeBaseId: knowledgeBase.id,
     })
     hybridWarmupStatus.value = result?.ready ? 'ready' : 'not_ready'
+    hybridWarmupCached.value = Boolean(result?.cached)
     hybridWarmupMessage.value = result?.message || (result?.ready ? '混合检索已就绪' : '混合检索准备未完成，可继续降级尝试')
   } catch (error) {
     hybridWarmupStatus.value = 'fallback'
+    hybridWarmupCached.value = false
     hybridWarmupMessage.value = error?.message || '混合检索预热失败，将按懒加载降级尝试'
   }
 }

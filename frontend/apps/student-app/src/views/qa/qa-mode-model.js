@@ -167,6 +167,22 @@ export function resolveModeWithHybridReadiness(resolution, options = {}) {
   }
 }
 
+export function resolveHybridWarmupText(status, cached = false) {
+  if (status === 'warming') {
+    return '混合检索准备中'
+  }
+  if (status === 'ready') {
+    return cached ? '混合检索已就绪（缓存）' : '混合检索已就绪'
+  }
+  if (status === 'fallback') {
+    return '混合检索建议降级'
+  }
+  if (status === 'not_ready') {
+    return '混合检索准备中'
+  }
+  return ''
+}
+
 export function shouldUseHybridBeta(question, options = {}) {
   if (!options.allowHybridBeta) {
     return false

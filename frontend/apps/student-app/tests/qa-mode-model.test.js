@@ -7,6 +7,7 @@ import {
   SMART_QA_MODE,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveHybridWarmupText,
   resolveModeWithHybridReadiness,
 } from '../src/views/qa/qa-mode-model.js'
 
@@ -146,6 +147,12 @@ test('手动 hybrid 在 warmup 未 ready 时只提示不静默改写模式', () 
   assert.equal(result.mode, 'hybrid_v0')
   assert.equal(result.reviewPriority, 'hybrid_not_ready')
   assert.equal(result.manualSwitchSuggested, true)
+})
+
+test('混合检索 ready 且命中缓存时展示缓存就绪文案', () => {
+  assert.equal(resolveHybridWarmupText('ready', true), '混合检索已就绪（缓存）')
+  assert.equal(resolveHybridWarmupText('ready', false), '混合检索已就绪')
+  assert.equal(resolveHybridWarmupText('not_ready', false), '混合检索准备中')
 })
 
 test('服务端返回未知模式时使用本地智能推荐兜底', () => {

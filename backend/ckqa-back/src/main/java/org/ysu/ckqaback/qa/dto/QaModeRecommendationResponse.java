@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.qa.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 
 import java.util.List;
@@ -24,19 +26,20 @@ public class QaModeRecommendationResponse {
     private final String strategy;
     private final Map<String, Double> routeScores;
 
-    private QaModeRecommendationResponse(
-            String recommendedMode,
-            String fallbackMode,
-            Double confidence,
-            List<String> reasons,
-            String reasonText,
-            String confidenceBand,
-            Boolean manualSwitchSuggested,
-            String reviewPriority,
-            Boolean betaHybridEnabled,
-            Boolean contextDetected,
-            String strategy,
-            Map<String, Double> routeScores
+    @JsonCreator
+    public QaModeRecommendationResponse(
+            @JsonProperty("recommendedMode") String recommendedMode,
+            @JsonProperty("fallbackMode") String fallbackMode,
+            @JsonProperty("confidence") Double confidence,
+            @JsonProperty("reasons") List<String> reasons,
+            @JsonProperty("reasonText") String reasonText,
+            @JsonProperty("confidenceBand") String confidenceBand,
+            @JsonProperty("manualSwitchSuggested") Boolean manualSwitchSuggested,
+            @JsonProperty("reviewPriority") String reviewPriority,
+            @JsonProperty("betaHybridEnabled") Boolean betaHybridEnabled,
+            @JsonProperty("contextDetected") Boolean contextDetected,
+            @JsonProperty("strategy") String strategy,
+            @JsonProperty("routeScores") Map<String, Double> routeScores
     ) {
         this.recommendedMode = recommendedMode;
         this.fallbackMode = fallbackMode;

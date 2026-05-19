@@ -113,7 +113,11 @@ public class CoursesController {
     }
 
     @GetMapping("/{courseId}/knowledge-bases")
-    public ApiResponse<List<KnowledgeBaseSummaryResponse>> listKnowledgeBases(@PathVariable String courseId) {
-        return ApiResponseUtils.success(courseLookupService.listKnowledgeBases(courseId));
+    public ApiResponse<List<KnowledgeBaseSummaryResponse>> listKnowledgeBases(
+            @PathVariable String courseId,
+            @RequestHeader(value = CourseAccessService.ACTOR_USER_CODE_HEADER, required = false) String actorUserCode
+    ) {
+        String resolvedUserCode = AuthContext.resolveUserCode(actorUserCode);
+        return ApiResponseUtils.success(courseLookupService.listKnowledgeBases(courseId, resolvedUserCode));
     }
 }

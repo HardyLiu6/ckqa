@@ -2,6 +2,9 @@ package org.ysu.ckqaback.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.exception.BusinessException;
@@ -24,6 +27,19 @@ import java.util.List;
  */
 @Service
 public class KnowledgeBasesServiceImpl extends ServiceImpl<KnowledgeBasesMapper, KnowledgeBases> implements KnowledgeBasesService {
+
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
+    }
 
     @Override
     public KnowledgeBases getRequiredById(Long id) {
@@ -48,5 +64,15 @@ public class KnowledgeBasesServiceImpl extends ServiceImpl<KnowledgeBasesMapper,
         wrapper.eq(KnowledgeBases::getId, knowledgeBaseId)
                 .set(KnowledgeBases::getActiveIndexRunId, indexRunId);
         baseMapper.update(null, wrapper);
+        evictStudentCourseCaches(knowledgeBaseId);
+    }
+
+    private void evictStudentCourseCaches(Long knowledgeBaseId) {
+        if (studentRedisCacheService == null || studentCacheKeyFactory == null) {
+            return;
+        }
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.coursesPattern());
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.courseKnowledgeBasesPattern());
+        studentRedisCacheService.evictByPattern(studentCacheKeyFactory.hybridReadinessPattern(knowledgeBaseId));
     }
 }

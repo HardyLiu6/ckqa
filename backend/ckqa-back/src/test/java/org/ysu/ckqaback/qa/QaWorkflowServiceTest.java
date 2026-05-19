@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.entity.IndexArtifacts;
 import org.ysu.ckqaback.entity.KnowledgeBases;
@@ -307,6 +309,60 @@ class QaWorkflowServiceTest {
         assertThat(response.isReady()).isTrue();
         assertThat(response.getDataDirUri()).isEqualTo("user_2/kb_3/build_9/index/output");
         then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldReturnCachedHybridWarmupWithoutCallingGraphRagClient() {
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        IndexArtifactsService indexArtifactsService = mock(IndexArtifactsService.class);
+        GraphRagTaskClient graphRagTaskClient = mock(GraphRagTaskClient.class);
+        StudentRedisCacheService cacheService = mock(StudentRedisCacheService.class);
+        StudentCacheKeyFactory keyFactory = mock(StudentCacheKeyFactory.class);
+
+        QaWorkflowService workflowService = new QaWorkflowService(
+                mock(QaSessionsService.class),
+                mock(QaMessagesService.class),
+                mock(QaRetrievalLogsService.class),
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setCourseAccessService(courseAccessService);
+        workflowService.setIndexArtifactsService(indexArtifactsService);
+        workflowService.setGraphRagTaskClient(graphRagTaskClient);
+        workflowService.setStudentRedisCacheService(cacheService);
+        workflowService.setStudentCacheKeyFactory(keyFactory);
+
+        IndexArtifacts outputArtifact = new IndexArtifacts();
+        outputArtifact.setIndexRunId(17L);
+        outputArtifact.setArtifactType("output_dir");
+        outputArtifact.setArtifactStatus("ready");
+        outputArtifact.setStorageUri("user_2/kb_3/build_9/index/output");
+
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(indexArtifactsService.listByIndexRunId(17L)).willReturn(List.of(outputArtifact));
+        given(keyFactory.hybridReadinessKey(3L, 17L, "user_2/kb_3/build_9/index/output"))
+                .willReturn("hybrid-key");
+        given(cacheService.get("hybrid-key", QaHybridWarmupResponse.class)).willReturn(QaHybridWarmupResponse.of(
+                true,
+                "ready",
+                "混合检索已就绪",
+                "user_2/kb_3/build_9/index/output",
+                false,
+                true,
+                List.of()
+        ));
+
+        QaHybridWarmupRequest request = new QaHybridWarmupRequest();
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(3L);
+        QaHybridWarmupResponse response = workflowService.warmupHybrid(request, authenticatedStudent());
+
+        assertThat(response.isReady()).isTrue();
+        assertThat(response.isCached()).isTrue();
+        then(graphRagTaskClient).should(never()).warmupHybridV0(any());
     }
 
     @Test

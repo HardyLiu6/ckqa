@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.course.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 
@@ -15,7 +17,14 @@ public class KnowledgeBaseSummaryResponse {
     private final String status;
     private final Long activeIndexRunId;
 
-    private KnowledgeBaseSummaryResponse(Long id, String kbCode, String name, String status, Long activeIndexRunId) {
+    @JsonCreator
+    private KnowledgeBaseSummaryResponse(
+            @JsonProperty("id") Long id,
+            @JsonProperty("kbCode") String kbCode,
+            @JsonProperty("name") String name,
+            @JsonProperty("status") String status,
+            @JsonProperty("activeIndexRunId") Long activeIndexRunId
+    ) {
         this.id = id;
         this.kbCode = kbCode;
         this.name = name;

@@ -11,6 +11,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.cache.StudentCacheKeyFactory;
+import org.ysu.ckqaback.cache.StudentRedisCacheService;
 import org.ysu.ckqaback.course.CourseAccessService;
 import org.ysu.ckqaback.entity.IndexArtifacts;
 import org.ysu.ckqaback.entity.KnowledgeBases;
@@ -86,6 +88,8 @@ public class QaWorkflowService {
     private CourseAccessService courseAccessService;
     private GraphRagTaskClient graphRagTaskClient;
     private IndexArtifactsService indexArtifactsService;
+    private StudentRedisCacheService studentRedisCacheService;
+    private StudentCacheKeyFactory studentCacheKeyFactory;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -120,6 +124,16 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setIndexArtifactsService(IndexArtifactsService indexArtifactsService) {
         this.indexArtifactsService = indexArtifactsService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentRedisCacheService(StudentRedisCacheService studentRedisCacheService) {
+        this.studentRedisCacheService = studentRedisCacheService;
+    }
+
+    @Autowired(required = false)
+    public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
+        this.studentCacheKeyFactory = studentCacheKeyFactory;
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -204,8 +218,17 @@ public class QaWorkflowService {
             throw new BusinessException(ApiResultCode.KNOWLEDGE_BASE_NOT_READY, HttpStatus.CONFLICT);
         }
         String dataDirUri = resolveReadyOutputDirUri(indexRunId);
+        String cacheKey = studentCacheKeyFactory == null
+                ? null
+                : studentCacheKeyFactory.hybridReadinessKey(knowledgeBase.getId(), indexRunId, dataDirUri);
+        if (studentRedisCacheService != null && StringUtils.hasText(cacheKey)) {
+            QaHybridWarmupResponse cached = studentRedisCacheService.get(cacheKey, QaHybridWarmupResponse.class);
+            if (cached != null) {
+                return withCachedFlag(cached, true);
+            }
+        }
         GraphRagHybridReadinessResult readiness = graphRagTaskClient.warmupHybridV0(dataDirUri);
-        return QaHybridWarmupResponse.of(
+        QaHybridWarmupResponse response = QaHybridWarmupResponse.of(
                 readiness != null && readiness.ready(),
                 readiness == null ? "not_ready" : readiness.status(),
                 readiness != null && readiness.ready() ? "混合检索已就绪" : "混合检索准备未完成，可继续降级尝试",
@@ -213,6 +236,31 @@ public class QaWorkflowService {
                 readiness != null && readiness.cached(),
                 readiness != null && readiness.textUnitsReady(),
                 readiness == null ? List.of() : readiness.missing()
+        );
+        if (studentRedisCacheService != null && StringUtils.hasText(cacheKey)) {
+            studentRedisCacheService.put(
+                    cacheKey,
+                    withCachedFlag(response, false),
+                    response.isReady()
+                            ? studentRedisCacheService.hybridReadyTtl()
+                            : studentRedisCacheService.hybridNotReadyTtl()
+            );
+        }
+        return response;
+    }
+
+    private QaHybridWarmupResponse withCachedFlag(QaHybridWarmupResponse response, boolean cached) {
+        if (response == null) {
+            return null;
+        }
+        return QaHybridWarmupResponse.of(
+                response.isReady(),
+                response.getStatus(),
+                response.getMessage(),
+                response.getDataDirUri(),
+                cached,
+                response.isTextUnitsReady(),
+                response.getMissing()
         );
     }
 
