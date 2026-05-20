@@ -1,9 +1,10 @@
 <script setup>
-// 学生端注册页
-// 表单同时校验账号、邮箱、密码强度、二次确认与服务条款勾选
+// 学生端注册页（精简版）
+// 默认表单只保留：账号、密码、确认密码、协议勾选
+// 邮箱 + 验证码作为「可选绑定」收起，需要绑定才展开，避免初次注册表单过长
 import { computed, reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
-import { ArrowRight, EditPen, Lock, Message, User } from '@element-plus/icons-vue'
+import { ArrowRight, Lock, Message, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 
 import { useUserStore } from '@/stores/user'
@@ -13,18 +14,17 @@ import { evaluatePasswordStrength } from '@/utils/password-strength'
 
 import AuthShell from './AuthShell.vue'
 import PasswordStrengthMeter from './PasswordStrengthMeter.vue'
-import ThirdPartyLogin from './ThirdPartyLogin.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 
 const form = reactive({
   username: '',
-  displayName: '',
-  email: '',
-  emailCode: '',
   password: '',
   confirmPassword: '',
+  bindEmail: false,
+  email: '',
+  emailCode: '',
   agreement: false,
 })
 
@@ -45,18 +45,6 @@ const rules = {
       message: '账号需以字母开头，可包含字母、数字、点、下划线、短横线',
       trigger: 'blur',
     },
-  ],
-  displayName: [
-    { required: true, message: '请输入展示名称', trigger: 'blur' },
-    { min: 2, max: 24, message: '展示名称长度需在 2 到 24 个字符之间', trigger: 'blur' },
-  ],
-  email: [
-    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
-  ],
-  emailCode: [
-    { required: true, message: '请输入邮箱验证码', trigger: 'blur' },
-    { pattern: /^\d{6}$/, message: '请输入 6 位数字验证码', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请设置登录密码', trigger: 'blur' },
@@ -86,6 +74,46 @@ const rules = {
       validator(_rule, value, callback) {
         if (value && value !== form.password) {
           callback(new Error('两次密码不一致'))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  email: [
+    {
+      validator(_rule, value, callback) {
+        if (!form.bindEmail) {
+          callback()
+          return
+        }
+        if (!value) {
+          callback(new Error('请输入邮箱地址'))
+          return
+        }
+        if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(value)) {
+          callback(new Error('邮箱格式不正确'))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur',
+    },
+  ],
+  emailCode: [
+    {
+      validator(_rule, value, callback) {
+        if (!form.bindEmail) {
+          callback()
+          return
+        }
+        if (!value) {
+          callback(new Error('请输入邮箱验证码'))
+          return
+        }
+        if (!/^\d{4,8}$/.test(value)) {
+          callback(new Error('请输入 4-8 位数字验证码'))
           return
         }
         callback()
@@ -149,9 +177,10 @@ async function submit() {
   try {
     await userStore.register({
       username: form.username,
-      displayName: form.displayName,
-      email: form.email,
-      emailCode: form.emailCode,
+      // 注册时默认展示名等于账号，注册后可以在个人中心修改
+      displayName: form.username,
+      email: form.bindEmail ? form.email : undefined,
+      emailCode: form.bindEmail ? form.emailCode : undefined,
       password: form.password,
     })
     ElMessage.success('注册成功，欢迎加入智课问答')
@@ -194,57 +223,6 @@ async function submit() {
         </el-input>
       </el-form-item>
 
-      <el-form-item label="展示名称" prop="displayName">
-        <el-input
-          v-model.trim="form.displayName"
-          autocomplete="name"
-          size="large"
-          placeholder="将显示给老师和同学"
-        >
-          <template #prefix>
-            <el-icon><EditPen /></el-icon>
-          </template>
-        </el-input>
-      </el-form-item>
-
-      <el-form-item label="邮箱" prop="email">
-        <el-input
-          v-model.trim="form.email"
-          autocomplete="email"
-          size="large"
-          placeholder="用于接收验证码与找回密码"
-        >
-          <template #prefix>
-            <el-icon><Message /></el-icon>
-          </template>
-        </el-input>
-      </el-form-item>
-
-      <el-form-item label="邮箱验证码" prop="emailCode">
-        <div class="auth-code">
-          <el-input
-            v-model.trim="form.emailCode"
-            size="large"
-            maxlength="6"
-            placeholder="请输入 6 位验证码"
-          >
-            <template #prefix>
-              <el-icon><Lock /></el-icon>
-            </template>
-          </el-input>
-          <el-button
-            class="auth-code__btn"
-            :loading="codeSending"
-            :disabled="codeRemaining > 0"
-            type="primary"
-            plain
-            @click="handleSendCode"
-          >
-            {{ codeBtnText }}
-          </el-button>
-        </div>
-      </el-form-item>
-
       <el-form-item label="登录密码" prop="password">
         <el-input
           v-model="form.password"
@@ -276,6 +254,52 @@ async function submit() {
         </el-input>
       </el-form-item>
 
+      <div class="auth-toggle">
+        <el-checkbox v-model="form.bindEmail">
+          绑定邮箱（可用于找回密码与登录通知）
+        </el-checkbox>
+      </div>
+
+      <template v-if="form.bindEmail">
+        <el-form-item label="邮箱" prop="email">
+          <el-input
+            v-model.trim="form.email"
+            autocomplete="email"
+            size="large"
+            placeholder="用于接收验证码与找回密码"
+          >
+            <template #prefix>
+              <el-icon><Message /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <el-form-item label="邮箱验证码" prop="emailCode">
+          <div class="auth-code">
+            <el-input
+              v-model.trim="form.emailCode"
+              size="large"
+              maxlength="6"
+              placeholder="请输入 6 位验证码"
+            >
+              <template #prefix>
+                <el-icon><Lock /></el-icon>
+              </template>
+            </el-input>
+            <el-button
+              class="auth-code__btn"
+              :loading="codeSending"
+              :disabled="codeRemaining > 0"
+              type="primary"
+              plain
+              @click="handleSendCode"
+            >
+              {{ codeBtnText }}
+            </el-button>
+          </div>
+        </el-form-item>
+      </template>
+
       <el-form-item prop="agreement" class="auth-form__agreement">
         <el-checkbox v-model="form.agreement">
           我已阅读并同意
@@ -298,8 +322,6 @@ async function submit() {
       完成注册
       <el-icon class="auth-submit__icon"><ArrowRight /></el-icon>
     </el-button>
-
-    <ThirdPartyLogin />
 
     <template #footer>
       <p>
@@ -335,6 +357,26 @@ async function submit() {
   color: #fecaca;
 }
 
+.auth-toggle {
+  margin: 4px 0 14px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: $radius-md;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.auth-toggle :deep(.el-checkbox__label) {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-toggle :deep(.el-checkbox__inner),
+.auth-form__agreement :deep(.el-checkbox__inner) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
 .auth-form__agreement :deep(.el-form-item__content) {
   align-items: flex-start;
 }
@@ -344,11 +386,6 @@ async function submit() {
   font-size: 13px;
   white-space: normal;
   line-height: 1.6;
-}
-
-.auth-form__agreement :deep(.el-checkbox__inner) {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .auth-link {
