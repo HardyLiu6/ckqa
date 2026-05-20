@@ -17,51 +17,37 @@ const store = useGraphStore()
 // 邻域扩展模式：merge 把新邻居叠加到当前画布；replace 只看中心节点+邻居
 const expandMode = ref('merge')
 
-// 章节视图节点 / 边（基于 communities 数组合成）
-const overviewGraph = computed(() => {
+// 章节合成节点（基于 communities 数组），只在画布初始为空时显示
+const overviewSyntheticNodes = computed(() => {
   const list = store.communities ?? []
-  // 按 rank 排序，rank 越大节点越大
+  if (list.length === 0) return []
   const ranks = list.map((c) => Number(c.rank) || 0)
   const maxRank = Math.max(1, ...ranks)
-  const nodes = list.map((c) => ({
+  return list.map((c) => ({
     id: `community-${c.communityId}`,
     name: c.title || `社区 ${c.communityId}`,
     type: '章节',
     communityId: c.communityId,
-    // degree 字段被画布用来调节点大小：用归一化 rank 占位
     degree: Math.round(((Number(c.rank) || 0) / maxRank) * 60),
     __isCommunity: true,
     __raw: c,
   }))
-  // 章节之间不画边（避免乱）
-  return { nodes, edges: [] }
 })
 
-// 钻入某社区后的子图：取该社区的 topEntities + 内部 edges
-const focusedGraph = computed(() => {
-  const cid = store.focusedCommunityId
-  if (cid === null || cid === undefined) return null
-  const community = (store.communities ?? []).find((c) => c.communityId === cid)
-  if (!community) return null
-  const topEntities = community.topEntities ?? []
-  const idSet = new Set(topEntities.map((e) => e.id))
-  // 取后端 nodes 中属于该社区的实体（更稳）
-  const entityNodes = (store.nodes ?? []).filter(
-    (n) => n.communityId === cid || idSet.has(n.id),
-  )
-  // 边只保留两端都在该社区的
-  const entityIds = new Set(entityNodes.map((n) => n.id))
-  const edges = (store.edges ?? []).filter(
-    (e) => entityIds.has(e.source) && entityIds.has(e.target),
-  )
-  return { nodes: entityNodes, edges, community }
-})
-
+// 画布展示的节点：
+// - 如果 store 里没有任何实体节点（用户还没双击过任何章节）→ 显示所有章节节点
+// - 一旦用户双击章节，store 会被填入实体节点，此时合并显示「章节 + 实体」
 const canvasNodes = computed(() => {
-  return focusedGraph.value ? focusedGraph.value.nodes : overviewGraph.value.nodes
+  const entityNodes = store.nodes ?? []
+  if (entityNodes.length === 0) {
+    return overviewSyntheticNodes.value
+  }
+  // 把章节节点和实体节点都放进来；id 不会重复（章节是 community-X，实体是 uuid）
+  return [...overviewSyntheticNodes.value, ...entityNodes]
 })
+
 const canvasEdges = computed(() => {
-  return focusedGraph.value ? focusedGraph.value.edges : overviewGraph.value.edges
+  return store.edges ?? []
 })
 
 // 知识图谱页支持两种入口：
@@ -147,13 +133,21 @@ function onSelectNode(id) {
 
 async function onExpandNode(id) {
   if (!id) return
-  // 章节视图：双击社区 → 钻入
+  // 双击章节社区节点：把该社区的 topEntities 添加到画布，并连边到社区节点
   if (id.startsWith('community-')) {
     const cid = Number(id.slice('community-'.length))
-    store.focusCommunity(cid)
+    const community = (store.communities ?? []).find((c) => c.communityId === cid)
+    if (!community) return
+    if (expandMode.value === 'replace') {
+      // 聚焦模式：只显示该社区节点 + topEntities
+      store.replaceWithCommunityFocus(community)
+    } else {
+      // 叠加模式：把 topEntities 添加到现有图上，连边到 community 节点
+      store.addCommunityChildren(community)
+    }
     return
   }
-  // 子图视图：双击实体 → 邻域扩展
+  // 双击实体节点：扩展邻域
   await store.expandNeighborhood(id, { limit: 50, mode: expandMode.value })
 }
 
@@ -166,7 +160,8 @@ function onAskQuestion(entity) {
 }
 
 function onBackToOverview() {
-  store.backToCommunityOverview()
+  // 重置画布回到纯章节视图：清空 store 里的实体节点
+  store.resetExploration()
 }
 
 watch(
@@ -199,17 +194,23 @@ const courseNotChosen = computed(
   () => store.availableCourses.length > 0 && !store.selectedCourseId,
 )
 
-const focusedCommunityTitle = computed(() => {
-  if (!focusedGraph.value) return ''
-  return focusedGraph.value.community.title || `社区 ${focusedGraph.value.community.communityId}`
+const focusedCommunityTitle = computed(() => '')  // 不再有钻入概念，保留兼容
+
+// 子图中心节点 id（用于 radial 布局的 focusNode）：选中节点优先；否则取最后扩展的节点
+const canvasCenterId = computed(() => {
+  if (store.selectedNodeId) return String(store.selectedNodeId)
+  const last = (store.nodes ?? []).at(-1)
+  return last ? String(last.id) : null
 })
 
+const isExploring = computed(() => (store.nodes?.length ?? 0) > 0)
+
 const breadcrumbHint = computed(() => {
-  if (focusedGraph.value) {
-    return `章节视图 › ${focusedCommunityTitle.value}`
+  if (isExploring.value) {
+    return `已展开 ${store.nodes.length} 个实体（双击节点继续探索，模式可切换叠加/聚焦）`
   }
   if (store.communities?.length) {
-    return `章节视图（${store.communities.length} 个章节，双击节点进入）`
+    return `章节视图（${store.communities.length} 个章节，双击节点展开实体）`
   }
   return ''
 })
@@ -230,12 +231,12 @@ const breadcrumbHint = computed(() => {
           </p>
           <p v-if="breadcrumbHint" class="breadcrumb">
             <span
-              :class="['crumb', { clickable: focusedGraph }]"
+              :class="['crumb', { clickable: isExploring }]"
               @click="onBackToOverview"
             >全部章节</span>
-            <template v-if="focusedGraph">
+            <template v-if="isExploring">
               <span class="sep">›</span>
-              <span class="crumb current">{{ focusedCommunityTitle }}</span>
+              <span class="crumb current">探索中</span>
             </template>
           </p>
         </div>
@@ -260,7 +261,7 @@ const breadcrumbHint = computed(() => {
             </el-option>
           </el-select>
           <GlowButton
-            v-if="focusedGraph"
+            v-if="isExploring"
             size="md"
             variant="ghost"
             @click="onBackToOverview"
@@ -271,7 +272,6 @@ const breadcrumbHint = computed(() => {
             v-model="expandMode"
             size="default"
             class="expand-mode-toggle"
-            :disabled="!focusedGraph"
           >
             <el-radio-button value="merge">叠加</el-radio-button>
             <el-radio-button value="replace">聚焦</el-radio-button>
@@ -312,6 +312,7 @@ const breadcrumbHint = computed(() => {
             :nodes="canvasNodes"
             :edges="canvasEdges"
             :selected-id="store.selectedNodeId"
+            :center-id="canvasCenterId"
             @select="onSelectNode"
             @expand="onExpandNode"
           />

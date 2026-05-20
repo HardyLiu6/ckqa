@@ -7,6 +7,7 @@ const props = defineProps({
   nodes: { type: Array, default: () => [] },
   edges: { type: Array, default: () => [] },
   selectedId: { type: String, default: null },
+  centerId: { type: String, default: null },
 })
 
 const emit = defineEmits(['select', 'expand'])
@@ -58,8 +59,8 @@ function buildDisplayName(node) {
 }
 
 // 章节视图节点全部是 community，使用圆形布局；
-// 子图视图（实体）使用 force 布局
-function buildLayout(isCommunityView) {
+// 子图视图（实体）使用 radial 布局（中心节点居中，邻居围一圈）
+function buildLayout(isCommunityView, centerNodeId) {
   if (isCommunityView) {
     return {
       type: 'circular',
@@ -68,24 +69,21 @@ function buildLayout(isCommunityView) {
       animation: false,
     }
   }
-  return {
-    type: 'force',
-    preventOverlap: true,
-    // 碰撞半径较大确保节点之间留白
-    nodeSize: 90,
-    nodeSpacing: 30,
+  // radial 布局：以 focusNode 为中心，邻居等距分布在外圈
+  const config = {
+    type: 'radial',
+    unitRadius: 140,
     linkDistance: 180,
-    nodeStrength: -500,
-    edgeStrength: 0.2,
-    // 用更大的初始 alpha 重新激活布局，确保新节点被推开
-    alpha: 0.5,
-    alphaDecay: 0.04,
-    alphaMin: 0.005,
-    velocityDecay: 0.4,
+    preventOverlap: true,
+    nodeSize: 80,
+    nodeSpacing: 40,
+    strictRadial: false,
     animation: false,
-    // 让 G6 在节点重叠时强制分散
-    clustering: false,
   }
+  if (centerNodeId) {
+    config.focusNode = String(centerNodeId)
+  }
+  return config
 }
 
 function toGraphData(nodes, edges) {
@@ -154,7 +152,7 @@ onMounted(async () => {
       height,
       autoResize: true,
       data: initialData,
-      layout: buildLayout(initialData.isCommunityView),
+      layout: buildLayout(initialData.isCommunityView, props.centerId),
       behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
       node: {
         style: {
@@ -232,7 +230,7 @@ watch(
     const data = toGraphData(nodes, edges)
     try {
       // 切换视图时同时切换布局；setData 后必须显式 layout() 才能让新数据生效
-      graph.setOptions({ layout: buildLayout(data.isCommunityView) })
+      graph.setOptions({ layout: buildLayout(data.isCommunityView, props.centerId) })
       graph.setData(data)
       await graph.render()
       // 关键：重新跑布局，使用我们在 toGraphData 里给每个节点设置的初始 x/y 作为起点

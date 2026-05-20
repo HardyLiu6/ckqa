@@ -187,6 +187,59 @@ export const useGraphStore = defineStore('graph', () => {
   }
 
   /**
+   * 叠加模式：把社区的 topEntities 添加到 store.nodes，不清空已有节点。
+   * 同时加一条虚拟边从 community 合成节点到每个 topEntity。
+   */
+  function addCommunityChildren(community) {
+    if (!community) return
+    const topEntities = community.topEntities ?? []
+    mergeNodes(topEntities)
+    const communityNodeId = `community-${community.communityId}`
+    const newEdges = topEntities
+      .filter((e) => e && e.id)
+      .map((e) => ({
+        id: `link-${communityNodeId}-${e.id}`,
+        source: communityNodeId,
+        target: e.id,
+        weight: 0,
+        description: '',
+      }))
+    mergeEdges(newEdges)
+  }
+
+  /**
+   * 聚焦模式：清空画布，只放该社区节点 + topEntities。
+   */
+  function replaceWithCommunityFocus(community) {
+    if (!community) return
+    const topEntities = community.topEntities ?? []
+    mergeNodes(topEntities, { replace: true })
+    const communityNodeId = `community-${community.communityId}`
+    const newEdges = topEntities
+      .filter((e) => e && e.id)
+      .map((e) => ({
+        id: `link-${communityNodeId}-${e.id}`,
+        source: communityNodeId,
+        target: e.id,
+        weight: 0,
+        description: '',
+      }))
+    mergeEdges(newEdges, { replace: true })
+    selectedNodeId.value = null
+    entityDetail.value = null
+  }
+
+  /**
+   * 重置探索：清空实体节点/边，回到纯章节视图。
+   */
+  function resetExploration() {
+    nodesById.value = new Map()
+    edgesById.value = new Map()
+    selectedNodeId.value = null
+    entityDetail.value = null
+  }
+
+  /**
    * 拉取实体详情（点选节点时调用）。
    */
   async function loadEntityDetail(entityId) {
@@ -275,5 +328,8 @@ export const useGraphStore = defineStore('graph', () => {
     expandNeighborhood,
     focusCommunity,
     backToCommunityOverview,
+    addCommunityChildren,
+    replaceWithCommunityFocus,
+    resetExploration,
   }
 })
