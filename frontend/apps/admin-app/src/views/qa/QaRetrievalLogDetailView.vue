@@ -94,8 +94,12 @@ function routingSnapshotText(snapshot) {
         <dl>
           <div><dt>状态</dt><dd>{{ detail.taskStatus }}</dd></div>
           <div><dt>模式</dt><dd>{{ detail.queryMode }}</dd></div>
+          <div><dt>查询策略</dt><dd>{{ detail.queryEngineStrategy || 'cli' }}</dd></div>
           <div><dt>路由置信度</dt><dd>{{ detail.routingConfidenceBand || '-' }}</dd></div>
           <div><dt>复核优先级</dt><dd>{{ detail.routingReviewPriority || 'normal' }}</dd></div>
+          <div><dt>学习记忆</dt><dd>{{ detail.memoryApplied ? '已使用' : '未使用' }}</dd></div>
+          <div><dt>记忆来源</dt><dd>{{ detail.memorySourceCount ?? 0 }} 条 / {{ detail.memorySizeChars ?? 0 }} 字</dd></div>
+          <div><dt>History 降级</dt><dd>{{ detail.historyFallbackReason || '-' }}</dd></div>
           <div><dt>课程</dt><dd>{{ detail.courseName || detail.courseId }}</dd></div>
           <div><dt>知识库</dt><dd>{{ detail.knowledgeBaseName || detail.knowledgeBaseId }}</dd></div>
           <div><dt>学生</dt><dd>{{ detail.displayName || detail.username || detail.userId }}</dd></div>
@@ -124,6 +128,10 @@ function routingSnapshotText(snapshot) {
         <div class="diagnostic-block">
           <span>智能推荐快照</span>
           <pre>{{ routingSnapshotText(detail.routingSnapshotJson) }}</pre>
+        </div>
+        <div class="diagnostic-block">
+          <span>长期记忆范围</span>
+          <pre>{{ detail.memoryScope || '-' }}</pre>
         </div>
       </section>
 

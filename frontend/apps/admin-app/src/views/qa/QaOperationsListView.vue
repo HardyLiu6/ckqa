@@ -125,6 +125,17 @@ function routingReviewText(row = {}) {
   }
   return band
 }
+
+function queryStrategyText(row = {}) {
+  const strategy = row.queryEngineStrategy || 'cli'
+  if (row.historyFallbackReason) {
+    return `${strategy} / 已降级`
+  }
+  if (row.memoryApplied) {
+    return `${strategy} / 记忆 ${row.memorySourceCount ?? 0}`
+  }
+  return strategy
+}
 </script>
 
 <template>
@@ -197,6 +208,9 @@ function routingReviewText(row = {}) {
         </template>
       </el-table-column>
       <el-table-column prop="queryMode" label="模式" width="120" />
+      <el-table-column label="查询策略" min-width="150">
+        <template #default="{ row }">{{ queryStrategyText(row) }}</template>
+      </el-table-column>
       <el-table-column prop="taskStatus" label="状态" width="110" />
       <el-table-column label="路由置信度" min-width="170">
         <template #default="{ row }">{{ routingReviewText(row) }}</template>
