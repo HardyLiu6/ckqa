@@ -1687,6 +1687,12 @@ test('课程创建表单移除手填课程标识并使用教师候选选项', ()
     description: '',
     status: 'active',
     accessPolicy: 'restricted',
+    category: '',
+    tags: [],
+    objectives: [],
+    audience: [],
+    difficulty: '',
+    estimatedHours: null,
   })
 
   const options = resolveTeacherSelectOptions([
@@ -4093,11 +4099,11 @@ test('生产链路节点按失败优先规则归一化', () => {
   assert.equal(PRODUCTION_STEPS.length, 6)
   assert.deepEqual(
     deriveTrackNodeState({ done: 18, failed: 2 }),
-    { tone: 'danger', label: '18 done / 2 failed', priority: 5 },
+    { tone: 'danger', label: '18 已完成 / 2 失败', priority: 5 },
   )
   assert.deepEqual(
     deriveTrackNodeState({ running: 3, done: 7 }),
-    { tone: 'running', label: '3 running / 7 done', priority: 4 },
+    { tone: 'running', label: '3 运行中 / 7 已完成', priority: 4 },
   )
   assert.equal(deriveTrackNodeState({ done: 10 }).tone, 'success')
   assert.equal(deriveTrackNodeState({ pending: 4 }).tone, 'warning')
