@@ -2229,7 +2229,7 @@ textarea.text-input {
 }
 
 .course-metadata-panel {
-  grid-column: 1 / -1;
+  align-self: start;
 }
 
 .course-tags-row {
@@ -2242,6 +2242,31 @@ textarea.text-input {
   margin: 0;
   padding-left: 1.2em;
   line-height: 1.8;
+}
+
+.course-metadata-panel .course-info-block {
+  .course-info-row {
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    background: var(--ckqa-surface-muted, #f8fafc);
+    border-radius: var(--ckqa-radius-sm, 8px);
+    border: 1px solid var(--ckqa-border-light, #f1f5f9);
+
+    dt {
+      color: var(--ckqa-text-muted, #64748b);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+
+    dd {
+      margin: 0;
+      font-size: 14px;
+      color: var(--ckqa-text, #0f172a);
+    }
+  }
 }
 
 .multi-row-field {
