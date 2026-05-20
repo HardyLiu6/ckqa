@@ -1,10 +1,11 @@
-<!-- 知识图谱浏览页：拉真实接口 + G6 画布 + 实体详情抽屉 -->
+<!-- 知识图谱浏览页 -->
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import GraphCanvas from '@/components/knowledge/GraphCanvas.vue'
+import GraphLegend from '@/components/knowledge/GraphLegend.vue'
 import EntityDetailPanel from '@/components/knowledge/EntityDetailPanel.vue'
 import GlassCard from '@/components/common/GlassCard.vue'
 import GlowButton from '@/components/common/GlowButton.vue'
@@ -14,104 +15,164 @@ const route = useRoute()
 const router = useRouter()
 const store = useGraphStore()
 
-// 邻域扩展模式：merge 把新邻居叠加到当前画布；replace 只看中心节点+邻居
 const expandMode = ref('merge')
+const focusNodeId = ref(null)
 
-// 章节合成节点（基于 communities 数组），只在画布初始为空时显示
-const overviewSyntheticNodes = computed(() => {
-  const list = store.communities ?? []
-  if (list.length === 0) return []
-  const ranks = list.map((c) => Number(c.rank) || 0)
-  const maxRank = Math.max(1, ...ranks)
-  return list.map((c) => ({
-    id: `community-${c.communityId}`,
-    name: c.title || `社区 ${c.communityId}`,
-    type: '章节',
-    communityId: c.communityId,
-    degree: Math.round(((Number(c.rank) || 0) / maxRank) * 60),
-    __isCommunity: true,
-    __raw: c,
-  }))
-})
-
-// 画布展示的节点：
-// - 如果 store 里没有任何实体节点（用户还没双击过任何章节）→ 显示所有章节节点
-// - 一旦用户双击章节，store 会被填入实体节点，此时合并显示「章节 + 实体」
-const canvasNodes = computed(() => {
-  const entityNodes = store.nodes ?? []
-  if (entityNodes.length === 0) {
-    return overviewSyntheticNodes.value
-  }
-  // 把章节节点和实体节点都放进来；id 不会重复（章节是 community-X，实体是 uuid）
-  return [...overviewSyntheticNodes.value, ...entityNodes]
-})
-
-const canvasEdges = computed(() => {
-  return store.edges ?? []
-})
-
-// 知识图谱页支持两种入口：
-//   1. 课程详情 / 卡片 / 我的课程 → 带 ?courseId= 进
-//   2. 主导航直接进 /knowledge/graph → 通过课程选择器挑课
-// URL ?courseId= 仅作为"默认选中"的优先级，切换课程时同步回写到 URL，便于分享 / 收藏。
-const preferredCourseId = computed(() => {
-  const raw = route.query.courseId
-  if (typeof raw === 'string' && raw.trim()) {
-    return raw.trim()
-  }
-  return ''
-})
-
-async function loadGraphForCourse(courseId) {
-  if (!courseId) {
-    store.activeKnowledgeBase = null
-    return
-  }
-  const ok = await store.selectKnowledgeBaseForCourse(courseId)
-  if (!ok) {
-    return
-  }
-  await store.loadOverview({ level: 0, topN: 20 })
+// ========== 颜色 ==========
+const COLORS = [
+  '#0d9488', '#6366f1', '#f97316', '#0ea5e9', '#a855f7',
+  '#14b8a6', '#ef4444', '#22c55e', '#eab308', '#ec4899',
+]
+function pickColor(communityId) {
+  if (communityId == null) return '#0d9488'
+  return COLORS[Math.abs(Number(communityId)) % COLORS.length]
+}
+function clampLabel(raw, max = 16) {
+  if (!raw) return ''
+  return raw.length > max ? raw.slice(0, max - 1) + '…' : raw
 }
 
-async function bootstrap() {
-  store.reset()
-  const chosen = await store.loadAvailableCourses(preferredCourseId.value)
-  syncCourseToUrl(chosen)
-  await loadGraphForCourse(chosen)
-}
+// ========== 坐标计算 ==========
+// 所有节点坐标由这里计算好，GraphCanvas 只负责渲染
+const renderedNodes = ref([])
+const renderedEdges = ref([])
 
-function syncCourseToUrl(courseId) {
-  const current = preferredCourseId.value
-  if (!courseId) {
-    if (current) {
-      const nextQuery = { ...route.query }
-      delete nextQuery.courseId
-      router.replace({ query: nextQuery })
+// 章节节点坐标：circular 布局
+function layoutCommunities(communities, cx = 400, cy = 300, radius = 250) {
+  const n = communities.length
+  return communities.map((c, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    const rank = Number(c.rank) || 1
+    const maxRank = Math.max(...communities.map((x) => Number(x.rank) || 1), 1)
+    const size = 30 + (rank / maxRank) * 40
+    return {
+      id: `community-${c.communityId}`,
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      size,
+      color: pickColor(c.communityId),
+      stroke: '#ffffff',
+      lineWidth: 2.5,
+      label: clampLabel(c.title || `社区 ${c.communityId}`, 16),
+      labelFontSize: 12,
+      labelFontWeight: 600,
+      __isCommunity: true,
+      __raw: c,
     }
+  })
+}
+
+// 子节点坐标：围绕父节点极坐标分布
+function layoutChildrenAround(parentNode, children, radiusOffset = 120) {
+  const n = children.length
+  const px = parentNode.x
+  const py = parentNode.y
+  return children.map((child, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    return {
+      id: child.id,
+      x: px + Math.cos(angle) * radiusOffset,
+      y: py + Math.sin(angle) * radiusOffset,
+      size: 22,
+      color: pickColor(child.communityId ?? parentNode.__raw?.communityId),
+      stroke: '#ffffff',
+      lineWidth: 1.5,
+      label: clampLabel(child.name || child.id, 14),
+      labelFontSize: 11,
+      labelFontWeight: 400,
+    }
+  })
+}
+
+function buildInitialView() {
+  const communities = store.communities ?? []
+  if (communities.length === 0) {
+    renderedNodes.value = []
+    renderedEdges.value = []
     return
   }
-  if (current !== courseId) {
-    router.replace({ query: { ...route.query, courseId } })
+  renderedNodes.value = layoutCommunities(communities)
+  renderedEdges.value = []
+  focusNodeId.value = null
+}
+
+function expandCommunityNode(communityNodeId) {
+  const cid = Number(communityNodeId.replace('community-', ''))
+  const community = (store.communities ?? []).find((c) => c.communityId === cid)
+  if (!community) return
+
+  const topEntities = community.topEntities ?? []
+  if (topEntities.length === 0) return
+
+  const parentNode = renderedNodes.value.find((n) => n.id === communityNodeId)
+  if (!parentNode) return
+
+  if (expandMode.value === 'replace') {
+    // 聚焦模式：只显示该章节 + 子节点
+    const children = layoutChildrenAround(parentNode, topEntities)
+    renderedNodes.value = [parentNode, ...children]
+    renderedEdges.value = children.map((child) => ({
+      id: `edge-${communityNodeId}-${child.id}`,
+      source: communityNodeId,
+      target: child.id,
+      color: '#94a3b8',
+    }))
+  } else {
+    // 叠加模式：在现有图上追加子节点
+    const existingIds = new Set(renderedNodes.value.map((n) => n.id))
+    const newChildren = topEntities.filter((e) => !existingIds.has(e.id))
+    if (newChildren.length === 0) return
+    const children = layoutChildrenAround(parentNode, newChildren)
+    renderedNodes.value = [...renderedNodes.value, ...children]
+    const newEdges = children.map((child) => ({
+      id: `edge-${communityNodeId}-${child.id}`,
+      source: communityNodeId,
+      target: child.id,
+      color: '#94a3b8',
+    }))
+    renderedEdges.value = [...renderedEdges.value, ...newEdges]
   }
+  focusNodeId.value = communityNodeId
 }
 
-async function onCourseChange(courseId) {
-  if (!courseId) return
-  store.selectedCourseId = courseId
-  syncCourseToUrl(courseId)
-  store.activeKnowledgeBase = null
-  store.entityDetail = null
-  store.selectedNodeId = null
-  store.focusedCommunityId = null
-  await loadGraphForCourse(courseId)
+async function expandEntityNode(entityId) {
+  if (!store.activeKnowledgeBase) return
+  const data = await store.fetchNeighborhoodRaw(entityId, { limit: 30 })
+  if (!data) return
+
+  const parentNode = renderedNodes.value.find((n) => n.id === entityId)
+  if (!parentNode) return
+
+  const neighbors = (data.nodes ?? []).filter((n) => n.id !== entityId)
+
+  if (expandMode.value === 'replace') {
+    const children = layoutChildrenAround(parentNode, neighbors)
+    renderedNodes.value = [parentNode, ...children]
+    renderedEdges.value = (data.edges ?? []).map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      color: '#94a3b8',
+    }))
+  } else {
+    const existingIds = new Set(renderedNodes.value.map((n) => n.id))
+    const newNeighbors = neighbors.filter((n) => !existingIds.has(n.id))
+    const children = layoutChildrenAround(parentNode, newNeighbors)
+    renderedNodes.value = [...renderedNodes.value, ...children]
+    const existingEdgeIds = new Set(renderedEdges.value.map((e) => e.id))
+    const newEdges = (data.edges ?? [])
+      .filter((e) => !existingEdgeIds.has(e.id))
+      .map((e) => ({ id: e.id, source: e.source, target: e.target, color: '#94a3b8' }))
+    renderedEdges.value = [...renderedEdges.value, ...newEdges]
+  }
+  focusNodeId.value = entityId
 }
 
+// ========== 事件处理 ==========
 function onSelectNode(id) {
   if (!id) return
-  // 章节视图：单击社区节点 → 显示社区简介，但不钻入
   if (id.startsWith('community-')) {
-    const cid = Number(id.slice('community-'.length))
+    const cid = Number(id.replace('community-', ''))
     const community = (store.communities ?? []).find((c) => c.communityId === cid)
     if (community) {
       store.selectedNodeId = id
@@ -122,33 +183,20 @@ function onSelectNode(id) {
         description: community.summary || '该章节暂无摘要。',
         communityPath: [{ level: 0, communityId: cid, title: community.title }],
         chunkCount: community.topEntities?.length ?? 0,
-        __isCommunity: true,
       }
     }
     return
   }
-  // 子图视图：点实体 → 拉详情
   store.loadEntityDetail(id)
 }
 
 async function onExpandNode(id) {
   if (!id) return
-  // 双击章节社区节点：把该社区的 topEntities 添加到画布，并连边到社区节点
   if (id.startsWith('community-')) {
-    const cid = Number(id.slice('community-'.length))
-    const community = (store.communities ?? []).find((c) => c.communityId === cid)
-    if (!community) return
-    if (expandMode.value === 'replace') {
-      // 聚焦模式：只显示该社区节点 + topEntities
-      store.replaceWithCommunityFocus(community)
-    } else {
-      // 叠加模式：把 topEntities 添加到现有图上，连边到 community 节点
-      store.addCommunityChildren(community)
-    }
+    expandCommunityNode(id)
     return
   }
-  // 双击实体节点：扩展邻域
-  await store.expandNeighborhood(id, { limit: 50, mode: expandMode.value })
+  await expandEntityNode(id)
 }
 
 function onAskQuestion(entity) {
@@ -160,60 +208,70 @@ function onAskQuestion(entity) {
 }
 
 function onBackToOverview() {
-  // 重置画布回到纯章节视图：清空 store 里的实体节点
-  store.resetExploration()
+  buildInitialView()
+  store.selectedNodeId = null
+  store.entityDetail = null
 }
 
-watch(
-  () => store.errorMessage,
-  (msg) => {
-    if (msg && store.state !== GRAPH_STATE.ERROR) {
-      ElMessage.warning(msg)
-    }
-  },
-)
+// ========== 课程选择 ==========
+const preferredCourseId = computed(() => {
+  const raw = route.query.courseId
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : ''
+})
 
-watch(preferredCourseId, async (next) => {
-  if (next && next !== store.selectedCourseId) {
-    await onCourseChange(next)
+async function loadGraphForCourse(courseId) {
+  if (!courseId) return
+  const ok = await store.selectKnowledgeBaseForCourse(courseId)
+  if (!ok) return
+  await store.loadOverview({ level: 0, topN: 20 })
+  buildInitialView()
+}
+
+async function bootstrap() {
+  store.reset()
+  renderedNodes.value = []
+  renderedEdges.value = []
+  const chosen = await store.loadAvailableCourses(preferredCourseId.value)
+  if (chosen && chosen !== preferredCourseId.value) {
+    router.replace({ query: { ...route.query, courseId: chosen } })
   }
+  await loadGraphForCourse(chosen)
+}
+
+async function onCourseChange(courseId) {
+  if (!courseId) return
+  store.selectedCourseId = courseId
+  router.replace({ query: { ...route.query, courseId } })
+  store.activeKnowledgeBase = null
+  store.entityDetail = null
+  store.selectedNodeId = null
+  renderedNodes.value = []
+  renderedEdges.value = []
+  await loadGraphForCourse(courseId)
+}
+
+watch(() => store.errorMessage, (msg) => {
+  if (msg && store.state !== GRAPH_STATE.ERROR) ElMessage.warning(msg)
 })
 
 onMounted(bootstrap)
 
-const showCanvas = computed(
-  () => store.state === GRAPH_STATE.READY || store.state === GRAPH_STATE.LOADING,
-)
+// ========== 图例数据 ==========
+const legendCommunities = computed(() => {
+  return (store.communities ?? []).map((c) => ({
+    name: clampLabel(c.title || `社区 ${c.communityId}`, 20),
+    color: pickColor(c.communityId),
+  }))
+})
+
+// ========== 状态 ==========
+const showCanvas = computed(() => store.state === GRAPH_STATE.READY || store.state === GRAPH_STATE.LOADING)
 const showEmpty = computed(() => store.state === GRAPH_STATE.EMPTY)
 const showNoActive = computed(() => store.state === GRAPH_STATE.NO_ACTIVE_INDEX)
 const showError = computed(() => store.state === GRAPH_STATE.ERROR)
-const noCoursesAvailable = computed(
-  () => !store.coursesLoading && store.availableCourses.length === 0,
-)
-const courseNotChosen = computed(
-  () => store.availableCourses.length > 0 && !store.selectedCourseId,
-)
-
-const focusedCommunityTitle = computed(() => '')  // 不再有钻入概念，保留兼容
-
-// 子图中心节点 id（用于 radial 布局的 focusNode）：选中节点优先；否则取最后扩展的节点
-const canvasCenterId = computed(() => {
-  if (store.selectedNodeId) return String(store.selectedNodeId)
-  const last = (store.nodes ?? []).at(-1)
-  return last ? String(last.id) : null
-})
-
-const isExploring = computed(() => (store.nodes?.length ?? 0) > 0)
-
-const breadcrumbHint = computed(() => {
-  if (isExploring.value) {
-    return `已展开 ${store.nodes.length} 个实体（双击节点继续探索，模式可切换叠加/聚焦）`
-  }
-  if (store.communities?.length) {
-    return `章节视图（${store.communities.length} 个章节，双击节点展开实体）`
-  }
-  return ''
-})
+const noCoursesAvailable = computed(() => !store.coursesLoading && store.availableCourses.length === 0)
+const courseNotChosen = computed(() => store.availableCourses.length > 0 && !store.selectedCourseId)
+const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommunity))
 </script>
 
 <template>
@@ -224,20 +282,9 @@ const breadcrumbHint = computed(() => {
           <h1 class="title">知识图谱</h1>
           <p class="sub">
             <template v-if="store.activeKnowledgeBase">
-              当前知识库：{{ store.activeKnowledgeBase.name }}（KB #{{ store.activeKnowledgeBase.id }}，激活索引
-              #{{ store.activeKnowledgeBase.activeIndexRunId }}）
+              当前知识库：{{ store.activeKnowledgeBase.name }}
             </template>
             <template v-else>课程概念网络浏览</template>
-          </p>
-          <p v-if="breadcrumbHint" class="breadcrumb">
-            <span
-              :class="['crumb', { clickable: isExploring }]"
-              @click="onBackToOverview"
-            >全部章节</span>
-            <template v-if="isExploring">
-              <span class="sep">›</span>
-              <span class="crumb current">探索中</span>
-            </template>
           </p>
         </div>
         <div class="kg-head-right">
@@ -254,28 +301,15 @@ const breadcrumbHint = computed(() => {
               :key="course.courseId"
               :label="course.courseName || course.courseId"
               :value="course.courseId"
-            >
-              <span>{{ course.courseName || course.courseId }}</span>
-              <span v-if="course.memberStatus === 'member'" class="course-badge">已加入</span>
-              <span v-else-if="course.accessPolicy === 'public'" class="course-badge alt">公开</span>
-            </el-option>
+            />
           </el-select>
-          <GlowButton
-            v-if="isExploring"
-            size="md"
-            variant="ghost"
-            @click="onBackToOverview"
-          >
-            返回章节
-          </GlowButton>
-          <el-radio-group
-            v-model="expandMode"
-            size="default"
-            class="expand-mode-toggle"
-          >
+          <el-radio-group v-model="expandMode" size="small" class="expand-mode-toggle">
             <el-radio-button value="merge">叠加</el-radio-button>
             <el-radio-button value="replace">聚焦</el-radio-button>
           </el-radio-group>
+          <GlowButton v-if="isExploring" size="md" variant="ghost" @click="onBackToOverview">
+            返回章节
+          </GlowButton>
           <GlowButton size="md" :disabled="!store.selectedCourseId" @click="bootstrap">
             重新加载
           </GlowButton>
@@ -285,7 +319,7 @@ const breadcrumbHint = computed(() => {
       <GlassCard tier="base" padding="md" class="canvas-card">
         <div v-if="noCoursesAvailable" class="state-block">
           <h3>暂无可见课程</h3>
-          <p>当前账户尚未加入任何课程，请联系教师邀请加入，或先去课程列表浏览公开课程。</p>
+          <p>当前账户尚未加入任何课程。</p>
           <GlowButton size="sm" @click="$router.push('/course/list')">去课程列表</GlowButton>
         </div>
         <div v-else-if="courseNotChosen" class="state-block">
@@ -294,7 +328,7 @@ const breadcrumbHint = computed(() => {
         </div>
         <div v-else-if="showNoActive" class="state-block">
           <h3>所选课程暂无可用知识库</h3>
-          <p>当前课程下还没有激活的索引（activeIndexRunId 为空），等管理员构建并激活索引后再来浏览。</p>
+          <p>等管理员构建并激活索引后再来浏览。</p>
         </div>
         <div v-else-if="showError" class="state-block error">
           <h3>加载失败</h3>
@@ -303,19 +337,19 @@ const breadcrumbHint = computed(() => {
         </div>
         <div v-else-if="showEmpty" class="state-block">
           <h3>当前社区暂无可视节点</h3>
-          <p>说明该层级的社区或实体还未生成，可换个层级或返回首页。</p>
         </div>
 
         <div v-show="showCanvas" class="canvas-wrap">
           <div v-if="store.state === GRAPH_STATE.LOADING" class="loading-mask">加载中…</div>
           <GraphCanvas
-            :nodes="canvasNodes"
-            :edges="canvasEdges"
+            :nodes="renderedNodes"
+            :edges="renderedEdges"
             :selected-id="store.selectedNodeId"
-            :center-id="canvasCenterId"
+            :focus-node-id="focusNodeId"
             @select="onSelectNode"
             @expand="onExpandNode"
           />
+          <GraphLegend :communities="legendCommunities" />
         </div>
       </GlassCard>
     </main>
@@ -360,43 +394,19 @@ const breadcrumbHint = computed(() => {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
 
-  .kg-head-left {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .breadcrumb {
-    margin: 6px 0 0;
-    font-size: 12px;
-    color: #64748b;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-
-    .crumb.clickable {
-      cursor: pointer;
-      color: #0d9488;
-      &:hover { text-decoration: underline; }
-    }
-    .crumb.current { color: #0f172a; font-weight: 500; }
-    .sep { color: #94a3b8; }
-  }
-
+  .kg-head-left { flex: 1; min-width: 0; }
   .kg-head-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-shrink: 0;
+    flex-wrap: wrap;
   }
 
-  .course-select {
-    width: 240px;
-  }
-
-  .expand-mode-toggle {
-    margin: 0 4px;
-  }
+  .course-select { width: 200px; }
+  .expand-mode-toggle { margin: 0; }
 
   .title {
     font-family: 'Space Grotesk', sans-serif;
@@ -405,26 +415,7 @@ const breadcrumbHint = computed(() => {
     color: #0f172a;
     margin: 0;
   }
-
-  .sub {
-    margin: 4px 0 0;
-    font-size: 13px;
-    color: #64748b;
-  }
-}
-
-.course-badge {
-  margin-left: 8px;
-  font-size: 11px;
-  color: #0d9488;
-  background: rgba(13, 148, 136, 0.12);
-  padding: 1px 6px;
-  border-radius: 8px;
-
-  &.alt {
-    color: #6366f1;
-    background: rgba(99, 102, 241, 0.12);
-  }
+  .sub { margin: 4px 0 0; font-size: 13px; color: #64748b; }
 }
 
 .canvas-card {
@@ -432,6 +423,7 @@ const breadcrumbHint = computed(() => {
   display: flex;
   min-height: 420px;
   border-color: rgba(13, 148, 136, 0.2) !important;
+  position: relative;
 }
 
 .canvas-wrap {
@@ -449,7 +441,7 @@ const breadcrumbHint = computed(() => {
   justify-content: center;
   color: #0d9488;
   font-size: 13px;
-  z-index: 1;
+  z-index: 5;
 }
 
 .state-block {
@@ -458,23 +450,9 @@ const breadcrumbHint = computed(() => {
   gap: 8px;
   padding: 24px;
   text-align: center;
-
-  h3 {
-    margin: 0;
-    color: #0f172a;
-    font-size: 16px;
-  }
-
-  p {
-    margin: 0;
-    color: #64748b;
-    font-size: 13px;
-    line-height: 1.6;
-  }
-
-  &.error h3 {
-    color: #b91c1c;
-  }
+  h3 { margin: 0; color: #0f172a; font-size: 16px; }
+  p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.6; }
+  &.error h3 { color: #b91c1c; }
 }
 
 .kg-aside {

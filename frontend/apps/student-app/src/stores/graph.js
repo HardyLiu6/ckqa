@@ -280,6 +280,23 @@ export const useGraphStore = defineStore('graph', () => {
     }
   }
 
+  /**
+   * 拉取邻域原始数据（不写入 store），供视图层自行计算坐标。
+   */
+  async function fetchNeighborhoodRaw(entityId, { limit } = {}) {
+    if (!activeKnowledgeBase.value || !entityId) return null
+    try {
+      return await fetchEntityNeighborhood(
+        activeKnowledgeBase.value.id,
+        entityId,
+        { depth: 1, limit },
+      )
+    } catch (err) {
+      errorMessage.value = err?.message || '扩展邻域失败'
+      return null
+    }
+  }
+
   function mergeNodes(list, { replace = false } = {}) {
     if (replace) {
       nodesById.value = new Map()
@@ -326,6 +343,7 @@ export const useGraphStore = defineStore('graph', () => {
     loadOverview,
     loadEntityDetail,
     expandNeighborhood,
+    fetchNeighborhoodRaw,
     focusCommunity,
     backToCommunityOverview,
     addCommunityChildren,
