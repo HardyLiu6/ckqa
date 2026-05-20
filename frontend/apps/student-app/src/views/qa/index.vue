@@ -28,6 +28,7 @@ import {
   listQaMessages,
   recommendQaMode,
   sendQaMessage,
+  streamQaTaskEvents,
   submitQaFeedback,
   updateQaMemoryPreference,
   updateQaSession,
@@ -102,6 +103,7 @@ const errorMessage = ref('')
 const statusMessage = ref('')
 const memoryErrorMessage = ref('')
 let pollTimer = null
+let taskStreamController = null
 
 const FEEDBACK_ACTIONS = [
   { key: 'helpful', label: '有用', rating: 'helpful', tags: [] },
@@ -174,6 +176,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearPollTimer()
+  clearTaskStream()
 })
 
 async function loadCourses() {
@@ -241,6 +244,7 @@ async function handleKnowledgeBaseChange() {
 
 function resetConversation() {
   clearPollTimer()
+  clearTaskStream()
   activeSession.value = null
   pendingTask.value = null
   messages.value = []
@@ -383,7 +387,7 @@ async function send() {
     statusMessage.value = `${statusMessage.value}${confidenceHint}`
     input.value = ''
     await scrollToBottom()
-    scheduleTaskPoll(session.id, submission.taskId, resolvePollingDelaySeconds(submission))
+    startTaskStream(session.id, submission.taskId, submission)
   } catch (error) {
     errorMessage.value = error?.message || '问答请求失败，请稍后重试'
     ElMessage.error(errorMessage.value)
@@ -651,6 +655,126 @@ function scheduleTaskPoll(sessionId, taskId, delaySeconds) {
   }, delaySeconds * 1000)
 }
 
+function startTaskStream(sessionId, taskId, submission) {
+  clearTaskStream()
+  if (typeof AbortController === 'undefined') {
+    scheduleTaskPoll(sessionId, taskId, resolvePollingDelaySeconds(submission))
+    return
+  }
+
+  const controller = new AbortController()
+  taskStreamController = controller
+  const state = {
+    terminal: false,
+    fallbackStarted: false,
+    messageReceived: false,
+  }
+
+  const fallbackToPolling = (reason = '事件流暂不可用，已切换为轮询。') => {
+    if (state.terminal || state.fallbackStarted || controller.signal.aborted) {
+      return
+    }
+    state.fallbackStarted = true
+    statusMessage.value = reason
+    scheduleTaskPoll(sessionId, taskId, Math.min(2, resolvePollingDelaySeconds(pendingTask.value || submission)))
+  }
+
+  streamQaTaskEvents(sessionId, taskId, {
+    open() {
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        sessionId,
+        streaming: true,
+        streamText: '',
+      }
+    },
+    status(payload) {
+      if (!payload) {
+        return
+      }
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        ...payload,
+        sessionId,
+        streaming: true,
+      }
+      updateUserMessageTask(payload)
+    },
+    heartbeat() {
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        sessionId,
+        streaming: true,
+        lastStreamHeartbeatAt: new Date().toISOString(),
+      }
+    },
+    delta(payload) {
+      const text = payload?.text ?? ''
+      if (!text) {
+        return
+      }
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        sessionId,
+        streaming: true,
+        streamText: `${pendingTask.value?.streamText ?? ''}${text}`,
+      }
+      scrollToBottom()
+    },
+    sources(payload) {
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        sessionId,
+        streaming: true,
+        sources: Array.isArray(payload) ? payload : [],
+      }
+    },
+    message(payload) {
+      if (payload) {
+        state.messageReceived = true
+        messages.value = upsertQaMessage(messages.value, normalizeQaMessage(payload))
+        pendingTask.value = {
+          ...(pendingTask.value ?? submission),
+          sessionId,
+          streaming: true,
+          streamText: '',
+        }
+      }
+    },
+    async done(payload) {
+      state.terminal = true
+      clearTaskStream()
+      if (!state.messageReceived) {
+        await refreshAssistantAfterEmptySuccess(sessionId, taskId)
+      }
+      if (memoryScopeReady.value) {
+        await loadMemoryState(selectedCourseId.value, selectedKnowledgeBaseId.value)
+      }
+      statusMessage.value = `回答已生成。${resolveContextStatusText(pendingTask.value || payload)}。${resolveMemoryStatusText(pendingTask.value || payload)}`
+      pendingTask.value = null
+      await scrollToBottom()
+    },
+    error(payloadOrError) {
+      const isNetworkError = payloadOrError instanceof Error
+      if (isNetworkError) {
+        fallbackToPolling('事件流连接中断，已切换为轮询。')
+        return
+      }
+      state.terminal = true
+      clearTaskStream()
+      errorMessage.value = payloadOrError?.message || '问答任务执行失败'
+      pendingTask.value = null
+    },
+    close() {
+      fallbackToPolling()
+    },
+  }, {
+    signal: controller.signal,
+  }).catch(() => {
+    fallbackToPolling('事件流连接失败，已切换为轮询。')
+  })
+}
+
 async function pollTask(sessionId, taskId) {
   try {
     const detail = await getQaTask(sessionId, taskId)
@@ -778,6 +902,13 @@ function clearPollTimer() {
   if (pollTimer) {
     window.clearTimeout(pollTimer)
     pollTimer = null
+  }
+}
+
+function clearTaskStream() {
+  if (taskStreamController) {
+    taskStreamController.abort()
+    taskStreamController = null
   }
 }
 
@@ -1106,9 +1237,15 @@ function sourceTypeLabel(source) {
             <div class="pending-copy">
               {{ pendingTask.routeReason || pendingTask.timeoutMessage || '后端正在执行 GraphRAG 查询任务。' }}
             </div>
+            <QaMarkdownContent
+              v-if="pendingTask.streamText"
+              :content="pendingTask.streamText"
+              class="pending-stream-content"
+            />
             <div class="msg-meta">
               <el-icon><Clock /></el-icon>
-              <span>模式 {{ pendingTask.mode }}，轮询间隔 {{ resolvePollingDelaySeconds(pendingTask) }} 秒</span>
+              <span v-if="pendingTask.streaming">模式 {{ pendingTask.mode }}，事件流连接中</span>
+              <span v-else>模式 {{ pendingTask.mode }}，轮询间隔 {{ resolvePollingDelaySeconds(pendingTask) }} 秒</span>
             </div>
             <div class="msg-meta">{{ resolveMemoryStatusText(pendingTask) }}</div>
           </GlassCard>
@@ -1690,6 +1827,12 @@ function sourceTypeLabel(source) {
   color: #475569;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.pending-stream-content {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .qa-input-wrap {

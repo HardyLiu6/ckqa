@@ -22,6 +22,7 @@ import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.stream.QaTaskEventStreamService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,14 +41,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class QaSessionsControllerWebMvcTest {
 
     private QaWorkflowService qaWorkflowService;
+    private QaTaskEventStreamService qaTaskEventStreamService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         qaWorkflowService = Mockito.mock(QaWorkflowService.class);
+        qaTaskEventStreamService = Mockito.mock(QaTaskEventStreamService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new QaSessionsController(qaWorkflowService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new QaSessionsController(qaWorkflowService, qaTaskEventStreamService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -426,6 +429,40 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.contextSizeEstimate.chars").value(38))
                 .andExpect(jsonPath("$.data.queryText").doesNotExist())
                 .andExpect(jsonPath("$.data.latestLogs[0]").value("started graphrag query --method global"));
+    }
+
+    @Test
+    void shouldOpenTaskEventStreamForOwner() throws Exception {
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
+                new org.springframework.web.servlet.mvc.method.annotation.SseEmitter();
+        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L)).willReturn(emitter);
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM));
+
+        then(qaWorkflowService).should().ensureSessionOwner(5L, 7L);
+        then(qaTaskEventStreamService).should().openStream(5L, 9001L, 7L);
+    }
+
+    @Test
+    void shouldRequireAuthWhenOpeningTaskEventStream() throws Exception {
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(4010));
+    }
+
+    @Test
+    void shouldRejectTaskEventStreamForNonOwner() throws Exception {
+        Mockito.doThrow(new BusinessException(ApiResultCode.AUTH_FORBIDDEN, HttpStatus.FORBIDDEN, "只能访问自己的问答会话"))
+                .when(qaWorkflowService).ensureSessionOwner(5L, 7L);
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(4030));
     }
 
     @Test

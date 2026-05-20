@@ -117,6 +117,97 @@ def test_orchestrator_one_shot_injects_low_evidence_into_basic_and_never_synthes
     graph_client.query_local.assert_not_called()
 
 
+def test_orchestrator_one_shot_disable_synthesis_keeps_policy_failed_basic_answer():
+    low_candidate = EvidenceCandidate(
+        source="bm25-v6",
+        ref="tu1111111111",
+        text="操作系统是第一层软件。",
+        score=0.7,
+        layer=HybridLayer.LOW,
+    )
+    bm25 = MagicMock()
+    bm25.search.return_value = [low_candidate]
+    graph_client = MagicMock()
+    graph_client.query_basic.return_value = GraphRagDraft("basic", "答案太短", 0.5)
+    guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
+    llm_complete = MagicMock(return_value="不应调用")
+    fusion = MagicMock(
+        return_value=FusedEvidencePack(
+            candidates=[low_candidate],
+            refs=["tu1111111111"],
+            source_counts={"bm25-v6": 1},
+            fusion_debug=[],
+        )
+    )
+
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=guardrail,
+        llm_complete=llm_complete,
+        evidence_fusion=fusion,
+        fallback_policy=HybridFallbackPolicy(
+            enable_basic_evidence_injection=True,
+            disable_synthesis=True,
+        ),
+    )
+
+    result = orchestrator.answer("操作系统是什么？")
+
+    basic_prompt = graph_client.query_basic.call_args.args[0]
+    assert "LOCAL_BM25_EVIDENCE" in basic_prompt
+    assert result.answer == "答案太短"
+    assert result.diagnostics.synthesis_attempted is False
+    assert "basic_answer_too_short" in result.diagnostics.fallback_reasons
+    assert "basic_missing_data_citation" in result.diagnostics.fallback_reasons
+    llm_complete.assert_not_called()
+    graph_client.query_local.assert_not_called()
+
+
+def test_orchestrator_can_still_synthesize_when_explicitly_enabled_with_basic_injection():
+    low_candidate = EvidenceCandidate(
+        source="bm25-v6",
+        ref="tu1111111111",
+        text="操作系统是第一层软件。",
+        score=0.7,
+        layer=HybridLayer.LOW,
+    )
+    bm25 = MagicMock()
+    bm25.search.return_value = [low_candidate]
+    graph_client = MagicMock()
+    graph_client.query_basic.return_value = GraphRagDraft("basic", "答案太短", 0.5)
+    guardrail = MagicMock(return_value=SimpleNamespace(status="pass", supported_ratio=1.0))
+    llm_complete = MagicMock(return_value=BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]")
+    fusion = MagicMock(
+        return_value=FusedEvidencePack(
+            candidates=[low_candidate],
+            refs=["tu1111111111"],
+            source_counts={"bm25-v6": 1},
+            fusion_debug=[],
+        )
+    )
+
+    orchestrator = HybridV0Orchestrator(
+        bm25=bm25,
+        graph_client=graph_client,
+        guardrail=guardrail,
+        llm_complete=llm_complete,
+        evidence_fusion=fusion,
+        fallback_policy=HybridFallbackPolicy(
+            enable_basic_evidence_injection=True,
+            disable_synthesis=False,
+        ),
+    )
+
+    result = orchestrator.answer("操作系统是什么？")
+
+    assert "LOCAL_BM25_EVIDENCE" in graph_client.query_basic.call_args.args[0]
+    assert result.answer == BASIC_LONG_ANSWER + "[Data: Hybrid(tu1111111111)]"
+    assert result.diagnostics.synthesis_attempted is True
+    assert result.diagnostics.synthesis_reason == "basic_answer_too_short"
+    llm_complete.assert_called_once()
+
+
 def test_orchestrator_synthesizes_when_basic_lacks_data_citation_without_local_by_default():
     low_candidate = EvidenceCandidate(
         source="bm25",

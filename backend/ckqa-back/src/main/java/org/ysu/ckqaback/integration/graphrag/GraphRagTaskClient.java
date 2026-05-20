@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.integration.graphrag;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -10,10 +12,15 @@ import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 
 import java.time.Duration;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * GraphRAG 异步查询任务客户端。
@@ -22,22 +29,41 @@ import java.util.Optional;
 public class GraphRagTaskClient {
 
     private final RestClient restClient;
+    private final RestClient eventRestClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
     public GraphRagTaskClient(RestClient.Builder builder, CkqaIntegrationProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        Duration timeout = Duration.ofSeconds(properties.getPolling().getQueryTaskIntervalSeconds());
-        int timeoutMillis = Math.toIntExact(timeout.toMillis());
-        requestFactory.setConnectTimeout(timeoutMillis);
-        requestFactory.setReadTimeout(timeoutMillis);
+        int connectTimeoutMillis = Math.toIntExact(Duration.ofSeconds(
+                Math.max(1L, properties.getStreaming().getPythonStreamConnectTimeoutSeconds())
+        ).toMillis());
+        int readTimeoutMillis = Math.toIntExact(Duration.ofSeconds(
+                Math.max(
+                        Math.max(1L, properties.getTimeout().getQuerySeconds()),
+                        properties.getStreaming().getPythonStreamReadTimeoutSeconds()
+                )
+        ).toMillis());
+        requestFactory.setConnectTimeout(connectTimeoutMillis);
+        requestFactory.setReadTimeout(readTimeoutMillis);
         this.restClient = builder
                 .requestFactory(requestFactory)
+                .baseUrl(properties.getGraphrag().getApiBaseUrl())
+                .build();
+        SimpleClientHttpRequestFactory eventRequestFactory = new SimpleClientHttpRequestFactory();
+        eventRequestFactory.setConnectTimeout(connectTimeoutMillis);
+        eventRequestFactory.setReadTimeout(readTimeoutMillis);
+        this.eventRestClient = RestClient.builder()
+                .requestFactory(eventRequestFactory)
                 .baseUrl(properties.getGraphrag().getApiBaseUrl())
                 .build();
     }
 
     GraphRagTaskClient(RestClient.Builder builder, String baseUrl, Duration timeout) {
         this.restClient = builder
+                .baseUrl(baseUrl)
+                .build();
+        this.eventRestClient = builder
                 .baseUrl(baseUrl)
                 .build();
     }
@@ -69,10 +95,27 @@ public class GraphRagTaskClient {
             String queryEngineStrategy,
             List<GraphRagConversationMessage> conversationHistory
     ) {
+        return createTask(mode, prompt, indexRunId, dataDirUri, generationContext, queryEngineStrategy, conversationHistory, false);
+    }
+
+    public GraphRagTaskCreateResult createTask(
+            String mode,
+            String prompt,
+            Long indexRunId,
+            String dataDirUri,
+            String generationContext,
+            String queryEngineStrategy,
+            List<GraphRagConversationMessage> conversationHistory,
+            boolean streamResponse
+    ) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("mode", mode);
         body.put("prompt", prompt);
         body.put("retrievalQuery", prompt);
+        if (streamResponse) {
+            body.put("streamResponse", true);
+            body.put("streamSource", "native_graphrag");
+        }
         if (generationContext != null && !generationContext.isBlank()) {
             body.put("generationContext", generationContext);
         }
@@ -109,6 +152,51 @@ public class GraphRagTaskClient {
             }
             throw exception;
         }
+    }
+
+    public void streamTaskEvents(String pythonTaskId, Consumer<GraphRagTaskEvent> consumer) {
+        eventRestClient.get()
+                .uri("/v1/query-tasks/{taskId}/events", pythonTaskId)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .exchange((request, response) -> {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(response.getBody(), StandardCharsets.UTF_8)
+                    )) {
+                        parseSseEvents(reader, consumer);
+                    }
+                    return null;
+                });
+    }
+
+    private void parseSseEvents(BufferedReader reader, Consumer<GraphRagTaskEvent> consumer) throws IOException {
+        String eventName = "message";
+        StringBuilder data = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            if (line.isBlank()) {
+                if (!data.isEmpty()) {
+                    consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString())));
+                }
+                eventName = "message";
+                data.setLength(0);
+                continue;
+            }
+            if (line.startsWith("event:")) {
+                eventName = line.substring("event:".length()).trim();
+            } else if (line.startsWith("data:")) {
+                if (!data.isEmpty()) {
+                    data.append('\n');
+                }
+                data.append(line.substring("data:".length()).trim());
+            }
+        }
+        if (!data.isEmpty()) {
+            consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString())));
+        }
+    }
+
+    private JsonNode parseJson(String raw) throws IOException {
+        return objectMapper.readTree(raw);
     }
 
     public GraphRagHybridReadinessResult warmupHybridV0(String dataDirUri) {

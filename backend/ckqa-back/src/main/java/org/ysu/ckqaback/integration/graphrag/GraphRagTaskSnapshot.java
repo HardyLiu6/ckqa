@@ -22,7 +22,11 @@ public record GraphRagTaskSnapshot(
         String queryEngineStrategy,
         String historyFallbackReason,
         Boolean historyApplied,
-        Integer historyTurnsUsed
+        Integer historyTurnsUsed,
+        Boolean streamingEnabled,
+        String streamingProvider,
+        String streamingFallbackReason,
+        Integer streamedTextLength
 ) {
 
     public GraphRagTaskSnapshot(
@@ -54,6 +58,10 @@ public record GraphRagTaskSnapshot(
                 null,
                 null,
                 false,
+                0,
+                false,
+                null,
+                null,
                 0
         );
     }
@@ -88,6 +96,10 @@ public record GraphRagTaskSnapshot(
                 null,
                 null,
                 false,
+                0,
+                false,
+                null,
+                null,
                 0
         );
     }
@@ -96,6 +108,8 @@ public record GraphRagTaskSnapshot(
         sources = sources == null ? List.of() : List.copyOf(sources);
         historyApplied = Boolean.TRUE.equals(historyApplied);
         historyTurnsUsed = historyTurnsUsed == null ? 0 : historyTurnsUsed;
+        streamingEnabled = Boolean.TRUE.equals(streamingEnabled);
+        streamedTextLength = streamedTextLength == null ? 0 : streamedTextLength;
     }
 
     public boolean isTerminal() {

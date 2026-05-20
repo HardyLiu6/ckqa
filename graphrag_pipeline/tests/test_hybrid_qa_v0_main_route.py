@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 
@@ -59,6 +60,82 @@ def test_hybrid_cli_draft_client_returns_error_on_timeout():
     assert draft.mode == "basic"
     assert draft.answer == ""
     assert "超时" in draft.error
+
+
+def _build_hybrid_orchestrator_with_fake_dependencies(monkeypatch, tmp_path):
+    import main
+    import graphrag_pipeline.scripts.hybrid_qa.bm25_text_units as bm25_text_units
+    import graphrag_pipeline.scripts.hybrid_qa.evidence_selector as evidence_selector
+    import graphrag_pipeline.scripts.hybrid_qa.orchestrator_v0 as orchestrator_v0
+    import graphrag_pipeline.scripts.qa_eval.text_unit_lookup as text_unit_lookup
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    (output_dir / "text_units.parquet").write_text("placeholder", encoding="utf-8")
+    main._HYBRID_V0_ORCHESTRATORS.clear()
+
+    constructed: dict[str, object] = {}
+
+    class FakeLookup:
+        def resolve_answer_refs(self, answer: str):
+            del answer
+            return []
+
+    class FakeOrchestrator:
+        def __init__(self, **kwargs):
+            constructed.update(kwargs)
+
+    monkeypatch.setattr(main, "_CliGraphRagDraftClient", lambda **kwargs: SimpleNamespace(kind="graph", kwargs=kwargs))
+    monkeypatch.setattr(text_unit_lookup, "load_data_citation_lookup", lambda path: FakeLookup())
+    monkeypatch.setattr(text_unit_lookup, "load_text_unit_lookup", lambda path: SimpleNamespace(kind="lookup"))
+    monkeypatch.setattr(
+        bm25_text_units,
+        "build_text_unit_bm25",
+        lambda path, cache_dir=None: SimpleNamespace(kind="legacy", path=path, cache_dir=cache_dir),
+    )
+    monkeypatch.setattr(
+        evidence_selector,
+        "build_v6_hybrid_evidence_selector",
+        lambda path, config: SimpleNamespace(kind="v6", path=path, config=config),
+    )
+    monkeypatch.setattr(orchestrator_v0, "HybridV0Orchestrator", FakeOrchestrator)
+
+    orchestrator = main._get_hybrid_v0_orchestrator(output_dir)
+    assert isinstance(orchestrator, FakeOrchestrator)
+    return constructed
+
+
+def test_hybrid_v0_factory_defaults_to_v6_basic_injection_without_synthesis(monkeypatch, tmp_path):
+    for name in (
+        "CKQA_HYBRID_V0_EVIDENCE_STRATEGY",
+        "CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION",
+        "CKQA_HYBRID_V0_DISABLE_SYNTHESIS",
+        "CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    constructed = _build_hybrid_orchestrator_with_fake_dependencies(monkeypatch, tmp_path)
+
+    assert constructed["bm25"].kind == "v6"
+    policy = constructed["fallback_policy"]
+    assert policy.enable_basic_evidence_injection is True
+    assert policy.disable_synthesis is True
+    assert policy.enable_local_fallback is False
+
+
+def test_hybrid_v0_factory_preserves_explicit_legacy_synthesis_overrides(monkeypatch, tmp_path):
+    monkeypatch.setenv("CKQA_HYBRID_V0_EVIDENCE_STRATEGY", "legacy")
+    monkeypatch.setenv("CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION", "false")
+    monkeypatch.setenv("CKQA_HYBRID_V0_DISABLE_SYNTHESIS", "false")
+    monkeypatch.setenv("CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK", "true")
+
+    constructed = _build_hybrid_orchestrator_with_fake_dependencies(monkeypatch, tmp_path)
+
+    assert constructed["bm25"].kind == "legacy"
+    policy = constructed["fallback_policy"]
+    assert policy.enable_basic_evidence_injection is False
+    assert policy.disable_synthesis is False
+    assert policy.enable_local_fallback is True
 
 
 def _get_route_endpoint(app, path: str, method: str):

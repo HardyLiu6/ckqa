@@ -116,8 +116,9 @@ http://127.0.0.1:5174
 - 页面视觉层已经明显超出 Vite 默认模板，适合继续往正式学员端演进
 - 路由、菜单、页面结构已经初步成型
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
+- 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `delta`，不可用时自动回退到 task 轮询或最终答案分段
 - 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在
-- 尚未形成稳定 API 层，也没有和 `graphrag_pipeline` / `backend/ckqa-back` 建立正式契约
+- 已形成面向学生端问答的 Java `/api/v1` 契约；浏览器不直连 `graphrag_pipeline` Python `/v1`
 
 ## 使用时要注意
 

@@ -22,9 +22,9 @@ export function setAuthSessionProvider(provider) {
   authSessionProvider = typeof provider === 'function' ? provider : () => null
 }
 
-request.interceptors.request.use((config) => {
+export function resolveAuthHeaders() {
   const session = authSessionProvider?.() ?? {}
-  const headers = { ...(config.headers ?? {}) }
+  const headers = {}
 
   if (session.token) {
     headers.Authorization = `Bearer ${session.token}`
@@ -33,9 +33,18 @@ request.interceptors.request.use((config) => {
     headers['X-CKQA-User-Code'] = session.user.userCode
   }
 
+  return headers
+}
+
+request.interceptors.request.use((config) => {
+  const headers = { ...(config.headers ?? {}) }
+
   return {
     ...config,
-    headers,
+    headers: {
+      ...headers,
+      ...resolveAuthHeaders(),
+    },
   }
 })
 

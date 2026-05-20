@@ -12,6 +12,7 @@ import org.ysu.ckqaback.cache.StudentRedisCacheProperties;
 import org.ysu.ckqaback.course.CourseMaterialProperties;
 import org.ysu.ckqaback.course.CourseCoverProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.qa.stream.QaTaskStreamProperties;
 import org.ysu.ckqaback.user.UserAvatarProperties;
 
 @MapperScan("org.ysu.ckqaback.mapper")
@@ -22,7 +23,8 @@ import org.ysu.ckqaback.user.UserAvatarProperties;
         UserAvatarProperties.class,
         CkqaSecurityProperties.class,
         CkqaEmailProperties.class,
-        StudentRedisCacheProperties.class
+        StudentRedisCacheProperties.class,
+        QaTaskStreamProperties.class
 })
 @SpringBootApplication
 public class CkqaBackApplication {

@@ -39,12 +39,13 @@ def build_hybrid_v0_prompt(
 def build_hybrid_v0_basic_injection_prompt(
     question: str,
     low_layer: Sequence[EvidenceCandidate],
+    max_evidence_chars: int = 6000,
 ) -> str:
     return (
         "请回答下面的课程问题。你可以优先参考 LOCAL_BM25_EVIDENCE 中的课程原文片段，"
         "但仍需保持 GraphRAG Basic 原有检索和回答能力。\n\n"
         "---LOCAL_BM25_EVIDENCE---\n"
-        f"{_render_low_layer_evidence(low_layer)}\n\n"
+        f"{_render_low_layer_evidence(low_layer, max_chars=max_evidence_chars)}\n\n"
         "---QUESTION---\n"
         f"{question}\n\n"
         "回答要求：如果使用 LOCAL_BM25_EVIDENCE，请在答案末尾保留 "
@@ -54,16 +55,17 @@ def build_hybrid_v0_basic_injection_prompt(
     )
 
 
-def _render_low_layer_evidence(candidates: Sequence[EvidenceCandidate]) -> str:
+def _render_low_layer_evidence(candidates: Sequence[EvidenceCandidate], max_chars: int | None = None) -> str:
     if not candidates:
         return "（无证据）"
 
-    return "\n\n".join(
+    rendered = "\n\n".join(
         f"[{candidate.source}:{candidate.ref}] score={candidate.score:.4f}\n"
         f"Text Unit Ref: {candidate.ref}\n"
         f"{candidate.text}"
         for candidate in _ordered_low_layer_for_prompt(candidates)
     )
+    return _truncate_text(rendered, max_chars)
 
 
 def _render_evidence(candidates: Sequence[EvidenceCandidate]) -> str:
@@ -109,9 +111,15 @@ def _render_generation_context(context: str | None, max_chars: int) -> str:
     normalized = re.sub(r"\s+", " ", str(context or "")).strip()
     if not normalized:
         return ""
+    return _truncate_text(normalized, max_chars)
+
+
+def _truncate_text(text: str, max_chars: int | None) -> str:
+    if max_chars is None:
+        return text
     limit = max(max_chars, 0)
     if not limit:
         return ""
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: max(limit - 1, 0)].rstrip() + "…"
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 1, 0)].rstrip() + "…"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, fields, replace
@@ -30,6 +31,8 @@ class QueryTaskRequest:
     generation_context: str | None = None
     query_engine_strategy: str = "cli"
     conversation_history: list[dict[str, str]] = field(default_factory=list)
+    stream_response: bool = False
+    stream_source: str = "none"
 
 
 @dataclass(slots=True)
@@ -58,6 +61,10 @@ class QueryTaskSnapshot:
     history_fallback_reason: str | None = None
     history_applied: bool = False
     history_turns_used: int = 0
+    streaming_enabled: bool = False
+    streaming_provider: str | None = None
+    streaming_fallback_reason: str | None = None
+    streamed_text_length: int = 0
 
 
 class QueryTaskSnapshotStore:
@@ -170,9 +177,11 @@ class QueryTaskManager:
         build_runs_root: str | Path | None = None,
         hybrid_answer_runner: Callable[[QueryTaskRequest], Any] | None = None,
         history_adapter_factory: Callable[[], Any] | None = None,
+        native_streaming_runner: Callable[[QueryTaskRequest], Any] | None = None,
         task_store_dir: str | Path | None = None,
         task_store_retention_days: int = 7,
         task_store_retention_limit: int = 5000,
+        stream_replay_max_chars: int = 12000,
     ) -> None:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._max_log_lines = max_log_lines
@@ -181,6 +190,7 @@ class QueryTaskManager:
         self._env_factory = env_factory
         self._hybrid_answer_runner = hybrid_answer_runner
         self._history_adapter_factory = history_adapter_factory
+        self._native_streaming_runner = native_streaming_runner
         self._cwd = str(cwd)
         self._build_runs_root = Path(build_runs_root).resolve() if build_runs_root is not None else None
         self._counter = count(1)
@@ -191,6 +201,10 @@ class QueryTaskManager:
         ) if task_store_dir is not None else None
         self._tasks: dict[str, QueryTaskSnapshot] = self._task_store.load() if self._task_store is not None else {}
         self._task_requests: dict[str, QueryTaskRequest] = {}
+        self._task_event_replay: dict[str, list[dict[str, Any]]] = {}
+        self._task_event_replay_chars: dict[str, int] = {}
+        self._task_event_subscribers: dict[str, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._stream_replay_max_chars = max(1000, stream_replay_max_chars)
         self._lock = asyncio.Lock()
 
     async def create_task(
@@ -204,11 +218,15 @@ class QueryTaskManager:
         generation_context: str | None = None,
         query_engine_strategy: str = "cli",
         conversation_history: list[dict[str, str]] | None = None,
+        stream_response: bool = False,
+        stream_source: str = "none",
     ) -> QueryTaskSnapshot:
         data_dir = self.resolve_data_dir_uri(data_dir_uri)
         effective_retrieval_query = (retrieval_query or prompt).strip()
         effective_strategy = _normalize_query_engine_strategy(query_engine_strategy)
         normalized_history = _normalize_conversation_history_payload(conversation_history)
+        effective_stream_source = _normalize_stream_source(stream_source)
+        streaming_enabled = bool(stream_response) and effective_stream_source != "none"
         python_task_id = self._next_task_id()
         snapshot = QueryTaskSnapshot(
             python_task_id=python_task_id,
@@ -225,6 +243,8 @@ class QueryTaskManager:
             data_dir_uri=data_dir_uri,
             query_engine_strategy=effective_strategy,
             conversation_history=normalized_history,
+            streaming_enabled=streaming_enabled,
+            streaming_provider=effective_stream_source if streaming_enabled else None,
         )
         request = QueryTaskRequest(
             mode=mode,
@@ -236,11 +256,14 @@ class QueryTaskManager:
             generation_context=generation_context,
             query_engine_strategy=effective_strategy,
             conversation_history=normalized_history,
+            stream_response=streaming_enabled,
+            stream_source=effective_stream_source,
         )
         async with self._lock:
             self._tasks[python_task_id] = snapshot
             self._task_requests[python_task_id] = request
             self._persist_snapshot(snapshot)
+            self._publish_event(python_task_id, "status", _snapshot_status_payload(snapshot))
             asyncio.create_task(self._run_task(python_task_id))
         return replace(snapshot)
 
@@ -250,12 +273,29 @@ class QueryTaskManager:
             return None
         return replace(snapshot, latest_logs=list(snapshot.latest_logs or []))
 
+    def subscribe_events(self, python_task_id: str) -> tuple[list[dict[str, Any]], asyncio.Queue[dict[str, Any]], Callable[[], None]]:
+        if python_task_id not in self._tasks:
+            raise KeyError(python_task_id)
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._task_event_subscribers.setdefault(python_task_id, set()).add(queue)
+        replay = list(self._task_event_replay.get(python_task_id, []))
+
+        def unsubscribe() -> None:
+            subscribers = self._task_event_subscribers.get(python_task_id)
+            if subscribers is not None:
+                subscribers.discard(queue)
+                if not subscribers:
+                    self._task_event_subscribers.pop(python_task_id, None)
+
+        return replay, queue, unsubscribe
+
     async def _update_task(self, python_task_id: str, **changes) -> None:
         async with self._lock:
             snapshot = self._tasks[python_task_id]
             updated = replace(snapshot, **changes)
             self._tasks[python_task_id] = updated
             self._persist_snapshot(updated)
+            self._publish_event(python_task_id, "status", _snapshot_status_payload(updated))
 
     def _next_task_id(self) -> str:
         while True:
@@ -267,10 +307,29 @@ class QueryTaskManager:
         if self._task_store is not None:
             self._task_store.save(snapshot)
 
+    def _publish_event(self, python_task_id: str, event: str, data: dict[str, Any]) -> None:
+        payload = {"event": event, "data": data}
+        replay = self._task_event_replay.setdefault(python_task_id, [])
+        replay.append(payload)
+        self._task_event_replay_chars[python_task_id] = self._task_event_replay_chars.get(python_task_id, 0) + len(
+            json.dumps(payload, ensure_ascii=False)
+        )
+        while replay and self._task_event_replay_chars.get(python_task_id, 0) > self._stream_replay_max_chars:
+            removed = replay.pop(0)
+            self._task_event_replay_chars[python_task_id] -= len(json.dumps(removed, ensure_ascii=False))
+
+        for queue in list(self._task_event_subscribers.get(python_task_id, set())):
+            queue.put_nowait(payload)
+
     async def _run_task(self, python_task_id: str) -> None:
         logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
         try:
             request = self._task_requests[python_task_id]
+            if request.stream_response:
+                fallback_logs = await self._try_run_native_streaming_task(python_task_id, request)
+                if fallback_logs is None:
+                    return
+                logs.extend(fallback_logs)
             if request.mode == "hybrid_v0":
                 await self._run_hybrid_task(python_task_id, request)
                 return
@@ -290,6 +349,11 @@ class QueryTaskManager:
                 latest_logs=latest_logs,
                 error_message=str(exc),
                 finished_at=utc_now(),
+            )
+            self._publish_event(
+                python_task_id,
+                "error",
+                {"taskStatus": "failed", "message": str(exc)},
             )
 
     async def _run_cli_task(
@@ -350,9 +414,117 @@ class QueryTaskManager:
                 return_code=return_code,
                 finished_at=utc_now(),
             )
+            if return_code == 0:
+                self._publish_event(
+                    python_task_id,
+                    "sources",
+                    {"sources": _serialize_sources(resolved_answer.sources)},
+                )
+                self._publish_event(python_task_id, "done", {"taskStatus": "success"})
+            else:
+                self._publish_event(
+                    python_task_id,
+                    "error",
+                    {"taskStatus": "failed", "message": f"graphrag query exit code={return_code}"},
+                )
         finally:
             if heartbeat is not None:
                 heartbeat.cancel()
+
+    async def _try_run_native_streaming_task(
+        self,
+        python_task_id: str,
+        request: QueryTaskRequest,
+    ) -> list[str] | None:
+        started_log = f"started native streaming query task provider={request.stream_source}"
+        await self._update_task(
+            python_task_id,
+            task_status="running",
+            progress_stage="streaming",
+            process_alive=True,
+            started_at=utc_now(),
+            last_heartbeat_at=utc_now(),
+            latest_logs=[started_log],
+            streaming_enabled=True,
+            streaming_provider=request.stream_source,
+        )
+        if self._native_streaming_runner is None:
+            return await self._record_streaming_fallback(
+                python_task_id,
+                started_log,
+                "native streaming runner is not configured",
+            )
+        raw_chunks: list[str] = []
+        visible_chunks: list[str] = []
+        response_sources: list[dict[str, Any]] = []
+        delta_filter = _DataCitationDeltaFilter()
+        try:
+            stream_result = self._native_streaming_runner(request)
+            if inspect.isawaitable(stream_result):
+                stream_result = await stream_result
+            async for chunk in stream_result:
+                raw_text = _stream_chunk_text(chunk)
+                chunk_sources = _stream_chunk_sources(chunk)
+                if chunk_sources:
+                    response_sources = chunk_sources
+                if not raw_text:
+                    continue
+                raw_chunks.append(raw_text)
+                visible = delta_filter.feed(raw_text)
+                if visible:
+                    visible_chunks.append(visible)
+                    self._publish_event(python_task_id, "delta", {"text": visible})
+                    await self._update_task(
+                        python_task_id,
+                        last_heartbeat_at=utc_now(),
+                        streamed_text_length=sum(len(part) for part in visible_chunks),
+                    )
+            tail = delta_filter.finish()
+            if tail:
+                visible_chunks.append(tail)
+                self._publish_event(python_task_id, "delta", {"text": tail})
+
+            raw_answer = "".join(raw_chunks)
+            resolved_answer = resolve_answer_citations(raw_answer, request.data_dir)
+            final_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else response_sources
+            finished_log = "finished native streaming query task"
+            await self._update_task(
+                python_task_id,
+                task_status="success",
+                progress_stage="done",
+                process_alive=False,
+                latest_logs=[started_log, finished_log],
+                result_text=resolved_answer.display_text,
+                sources=final_sources,
+                error_message=None,
+                return_code=0,
+                finished_at=utc_now(),
+                streamed_text_length=sum(len(part) for part in visible_chunks),
+            )
+            self._publish_event(python_task_id, "sources", {"sources": final_sources})
+            self._publish_event(python_task_id, "done", {"taskStatus": "success"})
+            return None
+        except Exception as exc:  # noqa: BLE001 - native streaming 失败时回退原有非流式链路
+            return await self._record_streaming_fallback(python_task_id, started_log, str(exc))
+
+    async def _record_streaming_fallback(
+        self,
+        python_task_id: str,
+        started_log: str,
+        reason: str,
+    ) -> list[str]:
+        fallback_reason = reason or "native streaming unavailable"
+        fallback_log = f"fallback native streaming to non-streaming task: {fallback_reason}"
+        logs = [started_log, fallback_log]
+        await self._update_task(
+            python_task_id,
+            process_alive=False,
+            latest_logs=logs,
+            streaming_fallback_reason=fallback_reason,
+            streamed_text_length=0,
+        )
+        self._publish_event(python_task_id, "status", {"streamingFallbackReason": fallback_reason})
+        return logs
 
     async def _try_run_local_history_task(
         self,
@@ -424,6 +596,12 @@ class QueryTaskManager:
                 history_applied=bool(getattr(result, "history_applied", False)),
                 history_turns_used=int(getattr(result, "history_turns_used", 0) or 0),
             )
+            self._publish_event(
+                python_task_id,
+                "sources",
+                {"sources": list(getattr(result, "sources", []) or [])},
+            )
+            self._publish_event(python_task_id, "done", {"taskStatus": "success"})
             return None
         except Exception as exc:  # noqa: BLE001 - history 策略失败时必须回退 CLI local
             return await self._record_history_fallback(python_task_id, started_log, str(exc))
@@ -478,6 +656,8 @@ class QueryTaskManager:
             return_code=0,
             finished_at=utc_now(),
         )
+        self._publish_event(python_task_id, "sources", {"sources": response_sources})
+        self._publish_event(python_task_id, "done", {"taskStatus": "success"})
 
     def _resolve_data_dir(self, data_dir_uri: str | None) -> Path | None:
         return self.resolve_data_dir_uri(data_dir_uri)
@@ -556,10 +736,17 @@ def _snapshot_from_json(payload: dict[str, Any]) -> QueryTaskSnapshot:
     kwargs["conversation_history"] = _normalize_conversation_history_payload(kwargs.get("conversation_history"))
     kwargs["history_fallback_reason"] = kwargs.get("history_fallback_reason") or None
     kwargs["history_applied"] = bool(kwargs.get("history_applied") or False)
+    kwargs["streaming_enabled"] = bool(kwargs.get("streaming_enabled") or False)
+    kwargs["streaming_provider"] = kwargs.get("streaming_provider") or None
+    kwargs["streaming_fallback_reason"] = kwargs.get("streaming_fallback_reason") or None
     try:
         kwargs["history_turns_used"] = int(kwargs.get("history_turns_used") or 0)
     except (TypeError, ValueError):
         kwargs["history_turns_used"] = 0
+    try:
+        kwargs["streamed_text_length"] = int(kwargs.get("streamed_text_length") or 0)
+    except (TypeError, ValueError):
+        kwargs["streamed_text_length"] = 0
     # 进程重启后旧 snapshot 只用于诊断和回读，不能继续声称子进程仍存活。
     kwargs["process_alive"] = False
     return QueryTaskSnapshot(**kwargs)
@@ -592,6 +779,13 @@ def _normalize_query_engine_strategy(value: Any) -> str:
     return strategy
 
 
+def _normalize_stream_source(value: Any) -> str:
+    source = str(value or "none").strip().casefold()
+    if source not in {"none", "native_graphrag"}:
+        raise ValueError(f"非法 stream_source: {source}")
+    return source
+
+
 def _normalize_conversation_history_payload(value: Any) -> list[dict[str, str]]:
     normalized: list[dict[str, str]] = []
     for turn in value or []:
@@ -605,6 +799,87 @@ def _normalize_conversation_history_payload(value: Any) -> list[dict[str, str]]:
             continue
         normalized.append({"role": role, "content": content})
     return normalized
+
+
+def _snapshot_status_payload(snapshot: QueryTaskSnapshot) -> dict[str, Any]:
+    return {
+        "pythonTaskId": snapshot.python_task_id,
+        "taskStatus": snapshot.task_status,
+        "progressStage": snapshot.progress_stage,
+        "processAlive": snapshot.process_alive,
+        "lastHeartbeatAt": _json_value(snapshot.last_heartbeat_at),
+        "startedAt": _json_value(snapshot.started_at),
+        "finishedAt": _json_value(snapshot.finished_at),
+        "streamingEnabled": snapshot.streaming_enabled,
+        "streamingProvider": snapshot.streaming_provider,
+        "streamingFallbackReason": snapshot.streaming_fallback_reason,
+        "streamedTextLength": snapshot.streamed_text_length,
+    }
+
+
+def _stream_chunk_text(chunk: Any) -> str:
+    if isinstance(chunk, str):
+        return chunk
+    if isinstance(chunk, dict):
+        return str(chunk.get("text") or "")
+    return str(getattr(chunk, "text", "") or "")
+
+
+def _stream_chunk_sources(chunk: Any) -> list[dict[str, Any]]:
+    sources: Any
+    if isinstance(chunk, dict):
+        sources = chunk.get("sources")
+    else:
+        sources = getattr(chunk, "sources", None)
+    return list(sources or []) if isinstance(sources, list) else []
+
+
+class _DataCitationDeltaFilter:
+    _PREFIX = "[Data:"
+
+    def __init__(self) -> None:
+        self._buffer = ""
+
+    def feed(self, text: str) -> str:
+        self._buffer += text or ""
+        emitted: list[str] = []
+        while self._buffer:
+            start = self._buffer.casefold().find(self._PREFIX.casefold())
+            if start < 0:
+                keep = _partial_prefix_len(self._buffer, self._PREFIX)
+                if keep:
+                    emitted.append(self._buffer[:-keep])
+                    self._buffer = self._buffer[-keep:]
+                else:
+                    emitted.append(self._buffer)
+                    self._buffer = ""
+                break
+            if start > 0:
+                emitted.append(self._buffer[:start])
+                self._buffer = self._buffer[start:]
+                continue
+            end = self._buffer.find("]")
+            if end < 0:
+                break
+            self._buffer = self._buffer[end + 1 :]
+        return "".join(emitted)
+
+    def finish(self) -> str:
+        tail = re.sub(r"\[Data:\s*[^\]]*\]", "", self._buffer, flags=re.IGNORECASE)
+        if tail.casefold().startswith(self._PREFIX.casefold()):
+            tail = ""
+        self._buffer = ""
+        return tail
+
+
+def _partial_prefix_len(text: str, prefix: str) -> int:
+    max_len = min(len(text), len(prefix) - 1)
+    lower_text = text.casefold()
+    lower_prefix = prefix.casefold()
+    for length in range(max_len, 0, -1):
+        if lower_prefix.startswith(lower_text[-length:]):
+            return length
+    return 0
 
 
 def _history_readiness_fallback_reason(readiness: Any) -> str:

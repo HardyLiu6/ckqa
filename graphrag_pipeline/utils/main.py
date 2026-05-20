@@ -17,6 +17,8 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -49,6 +51,8 @@ GRAPHRAG_ROOT = PROJECT_ROOT
 PACKAGE_PARENT = GRAPHRAG_ROOT.parent
 if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
+from query_streaming_adapter import NativeGraphRagStreamingAdapter, NativeStreamingConfig  # noqa: E402
+
 OUTPUT_DIR = APP_CONFIG.output_dir
 INPUT_DIR = APP_CONFIG.input_dir
 LANCEDB_URI = APP_CONFIG.lancedb_uri
@@ -267,7 +271,7 @@ def _get_hybrid_v0_orchestrator(output_dir: Path | None = None):
     fusion_config = EvidenceFusionConfig(
         bm25_anchor_top_k=_parse_int_env(os.environ.get("CKQA_HYBRID_V0_BM25_ANCHOR_TOP_K"), default=2),
     )
-    evidence_strategy = (os.environ.get("CKQA_HYBRID_V0_EVIDENCE_STRATEGY") or "legacy").strip().casefold()
+    evidence_strategy = (os.environ.get("CKQA_HYBRID_V0_EVIDENCE_STRATEGY") or "v6").strip().casefold()
     if evidence_strategy == "v6":
         bm25 = build_v6_hybrid_evidence_selector(
             text_units_path,
@@ -314,11 +318,11 @@ def _get_hybrid_v0_orchestrator(output_dir: Path | None = None):
         fallback_policy=HybridFallbackPolicy(
             enable_basic_evidence_injection=_parse_bool_env(
                 os.environ.get("CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION"),
-                default=False,
+                default=True,
             ),
             disable_synthesis=_parse_bool_env(
                 os.environ.get("CKQA_HYBRID_V0_DISABLE_SYNTHESIS"),
-                default=False,
+                default=True,
             ),
             enable_local_fallback=_parse_bool_env(
                 os.environ.get("CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK"),
@@ -363,6 +367,19 @@ def _build_query_task_history_adapter() -> QueryEngineHistoryPocAdapter:
     )
 
 
+def _build_native_streaming_adapter() -> NativeGraphRagStreamingAdapter:
+    """为 `/v1/query-tasks` 构建 GraphRAG 原生 streaming adapter。"""
+    return NativeGraphRagStreamingAdapter(
+        root_dir=GRAPHRAG_ROOT,
+        config=NativeStreamingConfig.from_env(),
+        hybrid_orchestrator_factory=_get_hybrid_v0_orchestrator,
+    )
+
+
+def _run_native_streaming_answer(request: QueryTaskRequest):
+    return _build_native_streaming_adapter().stream(request)
+
+
 QUERY_TASK_MANAGER = QueryTaskManager(
     command_factory=_build_query_cmd,
     env_factory=_build_query_env,
@@ -370,9 +387,11 @@ QUERY_TASK_MANAGER = QueryTaskManager(
     build_runs_root=BUILD_RUNS_ROOT,
     hybrid_answer_runner=_run_hybrid_v0_answer,
     history_adapter_factory=_build_query_task_history_adapter,
+    native_streaming_runner=_run_native_streaming_answer,
     task_store_dir=os.getenv("GRAPHRAG_QUERY_TASK_STORE_DIR", str(GRAPHRAG_ROOT / "runtime" / "query-tasks")),
     task_store_retention_days=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_DAYS", "7")),
     task_store_retention_limit=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_LIMIT", "5000")),
+    stream_replay_max_chars=int(os.getenv("CKQA_QA_PYTHON_STREAM_REPLAY_MAX_CHARS", "12000")),
 )
 
 
@@ -408,6 +427,8 @@ class QueryTaskCreateRequest(BaseModel):
     generationContext: str | None = None
     queryEngineStrategy: Literal["cli", "local_history"] = Field(default="cli")
     conversationHistory: List[QueryEngineHistoryTurn] = Field(default_factory=list)
+    streamResponse: bool = False
+    streamSource: Literal["native_graphrag", "none"] = Field(default="none")
     indexRunId: int | None = None
     dataDirUri: str | None = None
 
@@ -502,7 +523,15 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "historyFallbackReason": snapshot.history_fallback_reason,
         "historyApplied": snapshot.history_applied,
         "historyTurnsUsed": snapshot.history_turns_used,
+        "streamingEnabled": snapshot.streaming_enabled,
+        "streamingProvider": snapshot.streaming_provider,
+        "streamingFallbackReason": snapshot.streaming_fallback_reason,
+        "streamedTextLength": snapshot.streamed_text_length,
     }
+
+
+def _sse_event(event_name: str, payload: dict[str, Any]) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
 
 
 def _hybrid_readiness_payload(data_dir, data_dir_uri: str | None) -> dict[str, object]:
@@ -561,6 +590,8 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             generation_context=request.generationContext,
             query_engine_strategy=request.queryEngineStrategy,
             conversation_history=[turn.model_dump() for turn in request.conversationHistory],
+            stream_response=request.streamResponse,
+            stream_source=request.streamSource,
         )
         return JSONResponse(
             content={
@@ -578,6 +609,45 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
         if snapshot is None:
             raise HTTPException(status_code=404, detail="Query task not found")
         return JSONResponse(content=_serialize_task_snapshot(snapshot))
+
+    @app.get("/v1/query-tasks/{taskId}/events")
+    async def stream_query_task_events(taskId: str):
+        """Java 后端内部消费的查询任务事件流。"""
+        snapshot = active_task_manager.get_snapshot(taskId)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Query task not found")
+
+        async def generate_events():
+            yield _sse_event("ack", {"pythonTaskId": taskId})
+            replay, queue, unsubscribe = active_task_manager.subscribe_events(taskId)
+            terminal = False
+            try:
+                for item in replay:
+                    yield _sse_event(item["event"], item["data"])
+                    if item["event"] in {"done", "error"}:
+                        terminal = True
+                current = active_task_manager.get_snapshot(taskId)
+                if not terminal and current is not None and current.task_status in {"success", "failed"}:
+                    yield _sse_event("status", _serialize_task_snapshot(current))
+                    if current.task_status == "success":
+                        yield _sse_event("sources", {"sources": list(current.sources or [])})
+                        yield _sse_event("done", {"taskStatus": "success"})
+                    else:
+                        yield _sse_event("error", {"taskStatus": "failed", "message": current.error_message})
+                    terminal = True
+                while not terminal:
+                    try:
+                        item = await asyncio.wait_for(queue.get(), timeout=15)
+                    except asyncio.TimeoutError:
+                        yield _sse_event("heartbeat", {"pythonTaskId": taskId, "serverTime": _serialize_api_local_datetime(datetime.now(API_TIME_ZONE))})
+                        continue
+                    yield _sse_event(item["event"], item["data"])
+                    if item["event"] in {"done", "error"}:
+                        terminal = True
+            finally:
+                unsubscribe()
+
+        return StreamingResponse(generate_events(), media_type="text/event-stream")
 
     def history_poc_adapter() -> QueryEngineHistoryPocAdapter:
         return QueryEngineHistoryPocAdapter(

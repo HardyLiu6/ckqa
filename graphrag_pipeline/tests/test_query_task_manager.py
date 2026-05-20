@@ -533,6 +533,74 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.sources[0]["kind"], "bm25")
         self.assertEqual(snapshot.sources[0]["source_type"], "bm25")
 
+    async def test_native_streaming_task_publishes_filtered_delta_and_final_snapshot(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            yield type("Chunk", (), {"text": "死锁"})()
+            yield type("Chunk", (), {"text": "[Data: Sources (156)]"})()
+            yield type("Chunk", (), {"text": "会导致进程无法推进。"})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "什么是死锁？",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        await asyncio.sleep(0.08)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertTrue(snapshot.streaming_enabled)
+        self.assertEqual(snapshot.streaming_provider, "native_graphrag")
+        self.assertIsNone(snapshot.streaming_fallback_reason)
+        self.assertIn("[已参考课程知识库]", snapshot.result_text)
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
+        self.assertEqual(delta_text, "死锁会导致进程无法推进。")
+        self.assertNotIn("[Data:", delta_text)
+
+    async def test_native_streaming_failure_falls_back_to_non_streaming_cli(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            raise RuntimeError("stream failed")
+            yield ""  # pragma: no cover
+
+        command_calls: list[QueryTaskRequest] = []
+
+        def command_factory(request: QueryTaskRequest):
+            command_calls.append(request)
+            return _python_cmd("print('fallback answer')")
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=command_factory,
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "什么是死锁？",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "fallback answer")
+        self.assertEqual(snapshot.streaming_fallback_reason, "stream failed")
+        self.assertEqual(len(command_calls), 1)
+
     async def test_rejects_task_data_dir_path_escape(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,

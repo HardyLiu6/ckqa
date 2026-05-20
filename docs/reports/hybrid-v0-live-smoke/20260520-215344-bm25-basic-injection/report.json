@@ -1,0 +1,88 @@
+{
+  "dataDirUri": "user_12/kb_5/build_20/index/output",
+  "strategyExpectation": {
+    "evidenceStrategy": "v6",
+    "oneShotBasicInjection": true,
+    "disableSynthesis": true,
+    "enableLocalFallback": false
+  },
+  "results": [
+    {
+      "question": "什么是死锁？",
+      "elapsedSeconds": 121.669,
+      "answerPreview": "## 死锁的定义与成因\n死锁是操作系统中一组进程陷入无限期等待的僵持状态。具体而言，如果一组进程中的每一个进程都在等待仅由该组进程中的其它进程才能引发的事件，那么这组进程就处于死锁状态 [Data: Sources (141)]。这些进程既无法继续运行，也无法释放其占有的资源，导致没有任何进程能够被唤醒。\n死锁的产生源于多个进程对资源的激烈争夺。这种争夺既可能发生在竞争不可抢占性资源（如文件、打印机等可重用资源）时，也可能发生在争夺可消耗资源（如报文）时 [Data: Sources (137)]。例如，当两个进程各自占用了一个文件，又同时去请求对方已占用的文件时，双方都会因资源被占用而阻塞，并无限期地等待对方释放，从而形成死锁。\n## 产生死锁的四个必要条件\n进程死锁的发生并非偶然，必须同时具备以下四个必要条件，缺一不可 [Data: Sources (141)]：\n1.  **互斥条件**：进程对所分配到的资源进行排它性使用，即资源在一段时间内只能被一个进程独占。\n2.  **请求和保持条件**：进程在已经持有了至少一个资源的情况下，又提出新的资源请求，而该资源正被其它进程占有，此时请求进程虽然被阻塞，但仍对自己已获得的资源保持不放。\n3.  **不可抢占条件**：进程已获得的资源在未使用完之前不能被系统强行抢占，只能由该进程在使用完毕后自行释放。\n4.  **循环等待条件**：在发生死锁时，存在一个进程-资源的循环等待链，即进程集合中的每个进程都在等待下一个进程所占用的资源。\n## 多处理机系统中的死锁\n在复合的多处理机系统中，死锁问题更为复杂。除了上述传统的资源死锁外，还存在**通信死锁** [Data: Sources (436)]。资源死锁源于对可重复使用资源的竞争顺序不当；而通信死锁则主要发生在分布式系统中，由于不同节点的进程在发送和接收报文时竞争缓冲区，导致",
+      "answerLength": 1186,
+      "sourceCount": 8,
+      "diagnostics": {
+        "layer": "low",
+        "classifier_confidence": 0.5,
+        "used_local_fallback": false,
+        "guardrail_status": "pass",
+        "guardrail_score": 1.0,
+        "low_evidence_count": 8,
+        "high_evidence_count": 1,
+        "synthesis_attempted": false,
+        "fallback_reasons": [],
+        "fused_evidence_refs": [
+          "484256ed3872",
+          "27a11a04433a",
+          "045b43597822",
+          "daa5b3e1e0e6",
+          "d5fb4ca2b663",
+          "0571e0dd9e04",
+          "839602cebe13",
+          "c0f3c202a762"
+        ],
+        "fused_evidence_sources": {
+          "bm25": 7,
+          "basic-citation": 3
+        },
+        "synthesis_reason": "",
+        "local_fallback_enabled": false,
+        "elapsed_seconds": 121.66907748700032,
+        "errors": []
+      }
+    },
+    {
+      "question": "死锁和资源分配图有什么关系？",
+      "elapsedSeconds": 13.975,
+      "answerPreview": "",
+      "answerLength": 0,
+      "sourceCount": 8,
+      "diagnostics": {
+        "layer": "mixed",
+        "classifier_confidence": 0.75,
+        "used_local_fallback": false,
+        "guardrail_status": "fail",
+        "guardrail_score": 0.0,
+        "low_evidence_count": 8,
+        "high_evidence_count": 0,
+        "synthesis_attempted": false,
+        "fallback_reasons": [
+          "basic_empty_answer",
+          "basic_error",
+          "basic_guardrail_fail"
+        ],
+        "fused_evidence_refs": [
+          "484256ed3872",
+          "27a11a04433a",
+          "c0f3c202a762",
+          "9b2e752556c1",
+          "045b43597822",
+          "daa5b3e1e0e6",
+          "0571e0dd9e04",
+          "fb1441c0819e"
+        ],
+        "fused_evidence_sources": {
+          "bm25": 8
+        },
+        "synthesis_reason": "basic_empty_answer",
+        "local_fallback_enabled": false,
+        "elapsed_seconds": 13.975337638999918,
+        "errors": [
+          "graphrag basic embedding failed: Range of input length should be [1, 8192]"
+        ]
+      }
+    }
+  ]
+}

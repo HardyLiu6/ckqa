@@ -124,6 +124,33 @@ def test_basic_injection_prompt_constrains_hybrid_refs_to_text_unit_refs():
     assert "LOCAL_BM25_EVIDENCE" in prompt
 
 
+def test_basic_injection_prompt_truncates_low_evidence_to_safe_budget():
+    low_layer = [
+        EvidenceCandidate(
+            source="bm25-v6",
+            ref="d244f9016ac8",
+            text="A" * 200,
+            score=1.0,
+            layer=HybridLayer.LOW,
+        ),
+        EvidenceCandidate(
+            source="bm25-v6",
+            ref="e355f0127bd9",
+            text="B" * 200,
+            score=0.9,
+            layer=HybridLayer.LOW,
+        ),
+    ]
+
+    prompt = build_hybrid_v0_basic_injection_prompt("操作系统是什么？", low_layer, max_evidence_chars=120)
+
+    evidence_block = prompt.split("---LOCAL_BM25_EVIDENCE---", 1)[1].split("---QUESTION---", 1)[0]
+    assert len(evidence_block.strip()) <= 120
+    assert "Text Unit Ref: d244f9016ac8" in evidence_block
+    assert "e355f0127bd9" not in evidence_block
+    assert evidence_block.strip().endswith("…")
+
+
 def test_low_layer_evidence_displays_subsection_before_heading(tmp_path):
     template_path = tmp_path / "hybrid-template.txt"
     template_path.write_text("LOW={low_layer_text}\nQ={question}", encoding="utf-8")

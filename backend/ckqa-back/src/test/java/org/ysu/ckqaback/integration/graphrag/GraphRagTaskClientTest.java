@@ -8,6 +8,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -182,6 +183,76 @@ class GraphRagTaskClientTest {
         );
 
         assertThat(result.pythonTaskId()).isEqualTo("qt_20260520_000001_001");
+        server.verify();
+    }
+
+    @Test
+    void shouldCreateQueryTaskWithNativeStreamFlag() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "mode": "hybrid_v0",
+                          "prompt": "什么是死锁？",
+                          "retrievalQuery": "什么是死锁？",
+                          "streamResponse": true,
+                          "streamSource": "native_graphrag",
+                          "indexRunId": 18,
+                          "dataDirUri": "user_2/kb_5/build_27/index/output"
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "pythonTaskId": "qt_20260520_000001_002",
+                          "taskStatus": "pending",
+                          "progressStage": "queued",
+                          "createdAt": "2026-05-20T20:20:34"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        GraphRagTaskCreateResult result = client.createTask(
+                "hybrid_v0",
+                "什么是死锁？",
+                18L,
+                "user_2/kb_5/build_27/index/output",
+                null,
+                null,
+                null,
+                true
+        );
+
+        assertThat(result.pythonTaskId()).isEqualTo("qt_20260520_000001_002");
+        server.verify();
+    }
+
+    @Test
+    void shouldParsePythonTaskEventStream() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks/qt_1/events"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        event: ack
+                        data: {"pythonTaskId":"qt_1"}
+
+                        event: delta
+                        data: {"text":"死锁"}
+
+                        event: done
+                        data: {"taskStatus":"success"}
+
+                        """, MediaType.TEXT_EVENT_STREAM));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        List<GraphRagTaskEvent> events = new ArrayList<>();
+        client.streamTaskEvents("qt_1", events::add);
+
+        assertThat(events).extracting(GraphRagTaskEvent::eventName)
+                .containsExactly("ack", "delta", "done");
+        assertThat(events.get(1).data().get("text").asText()).isEqualTo("死锁");
         server.verify();
     }
 

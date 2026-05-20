@@ -56,6 +56,7 @@ public class QaTaskWorker {
     private final Function<String, Duration> pollIntervalResolver;
     private final Function<String, Duration> staleThresholdResolver;
     private final Function<String, String> timeoutMessageResolver;
+    private final Function<String, Boolean> pythonStreamModeResolver;
     private final Clock clock;
     private QaSessionSummaryService qaSessionSummaryService;
     private QaRetrievalHitsService qaRetrievalHitsService;
@@ -81,6 +82,7 @@ public class QaTaskWorker {
                 mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).recommendedPollingIntervalSeconds()),
                 mode -> Duration.ofSeconds(properties.resolveQueryTaskModePolicy(mode).staleTimeoutSeconds()),
                 mode -> properties.resolveQueryTaskModePolicy(mode).timeoutMessage(),
+                mode -> properties.getStreaming().isPythonStreamModeEnabled(mode),
                 Clock.system(SHANGHAI_ZONE)
         );
     }
@@ -105,6 +107,7 @@ public class QaTaskWorker {
                 mode -> pollInterval,
                 mode -> staleThreshold,
                 mode -> "任务心跳超时",
+                mode -> false,
                 clock
         );
     }
@@ -130,6 +133,7 @@ public class QaTaskWorker {
                 pollIntervalResolver,
                 staleThresholdResolver,
                 timeoutMessageResolver,
+                mode -> false,
                 clock
         );
     }
@@ -146,6 +150,34 @@ public class QaTaskWorker {
             Function<String, String> timeoutMessageResolver,
             Clock clock
     ) {
+        this(
+                qaTaskExecutor,
+                graphRagTaskClient,
+                qaRetrievalLogsService,
+                qaMessagesService,
+                qaSessionsService,
+                indexArtifactsService,
+                pollIntervalResolver,
+                staleThresholdResolver,
+                timeoutMessageResolver,
+                mode -> false,
+                clock
+        );
+    }
+
+    QaTaskWorker(
+            TaskExecutor qaTaskExecutor,
+            GraphRagTaskClient graphRagTaskClient,
+            QaRetrievalLogsService qaRetrievalLogsService,
+            QaMessagesService qaMessagesService,
+            QaSessionsService qaSessionsService,
+            IndexArtifactsService indexArtifactsService,
+            Function<String, Duration> pollIntervalResolver,
+            Function<String, Duration> staleThresholdResolver,
+            Function<String, String> timeoutMessageResolver,
+            Function<String, Boolean> pythonStreamModeResolver,
+            Clock clock
+    ) {
         this.qaTaskExecutor = qaTaskExecutor;
         this.graphRagTaskClient = graphRagTaskClient;
         this.qaRetrievalLogsService = qaRetrievalLogsService;
@@ -155,6 +187,7 @@ public class QaTaskWorker {
         this.pollIntervalResolver = pollIntervalResolver;
         this.staleThresholdResolver = staleThresholdResolver;
         this.timeoutMessageResolver = timeoutMessageResolver;
+        this.pythonStreamModeResolver = pythonStreamModeResolver;
         this.clock = clock;
     }
 
@@ -293,6 +326,7 @@ public class QaTaskWorker {
         String dataDirUri = resolveReadyOutputDirUri(task);
         List<GraphRagConversationMessage> conversationHistory = parseMemoryHistory(task.getMemoryHistoryJson());
         boolean useHistoryStrategy = StringUtils.hasText(task.getQueryEngineStrategy()) || !conversationHistory.isEmpty();
+        boolean streamResponse = Boolean.TRUE.equals(pythonStreamModeResolver.apply(task.getQueryMode()));
         if (!StringUtils.hasText(dataDirUri)) {
             if (!useHistoryStrategy) {
                 return graphRagTaskClient.createTask(
@@ -310,16 +344,29 @@ public class QaTaskWorker {
                     null,
                     task.getContextSnapshotText(),
                     task.getQueryEngineStrategy(),
-                    conversationHistory
+                    conversationHistory,
+                    streamResponse
             );
         }
         if (!useHistoryStrategy) {
+            if (!streamResponse) {
+                return graphRagTaskClient.createTask(
+                        task.getQueryMode(),
+                        task.getQueryText(),
+                        task.getIndexRunId(),
+                        dataDirUri,
+                        task.getContextSnapshotText()
+                );
+            }
             return graphRagTaskClient.createTask(
                     task.getQueryMode(),
                     task.getQueryText(),
                     task.getIndexRunId(),
                     dataDirUri,
-                    task.getContextSnapshotText()
+                    task.getContextSnapshotText(),
+                    null,
+                    null,
+                    streamResponse
             );
         }
         return graphRagTaskClient.createTask(
@@ -329,7 +376,8 @@ public class QaTaskWorker {
                 dataDirUri,
                 task.getContextSnapshotText(),
                 task.getQueryEngineStrategy(),
-                conversationHistory
+                conversationHistory,
+                streamResponse
         );
     }
 

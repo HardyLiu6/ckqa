@@ -1,0 +1,48 @@
+{
+  "dataDirUri": "user_12/kb_5/build_20/index/output",
+  "strategyExpectation": {
+    "evidenceStrategy": "v6",
+    "oneShotBasicInjection": true,
+    "disableSynthesis": true,
+    "enableLocalFallback": false,
+    "basicInjectionMaxEvidenceChars": 6000
+  },
+  "results": [
+    {
+      "question": "死锁和资源分配图有什么关系？",
+      "elapsedSeconds": 66.368,
+      "answerPreview": "# 死锁与资源分配图的关系\n死锁和资源分配图之间存在非常紧密的关联。资源分配图是描述系统中进程和资源状态的有力工具，主要用于检测系统是否已进入死锁状态。\n## 资源分配图的定义与作用\n系统死锁可以利用资源分配图来描述。该图由一组结点 **N** 和一组边 **E** 组成，即 **G = (N, E)**。其中，结点 **N** 包含两个互斥的子集：[Data: Hybrid(484256ed3872, 27a11a04433a)]\n- **进程结点集 P**：用圆圈表示，代表系统中的进程。\n- **资源结点集 R**：用方框表示，代表系统中的一类资源。如果一类资源有多个实例，则方框中的一个小圆圈（或点）代表该类资源中的一个具体实例。\n图中的边则分为两种类型：\n- **资源请求边**：由进程 **P_i** 指向资源 **R_j**，表示进程请求一个单位的 **R_j** 资源。\n- **资源分配边**：由资源 **R_j** 指向进程 **P_i**，表示将一个单位的 **R_j** 资源分配给了进程 **P_i**。\n## 死锁定理：通过资源分配图判定死锁\n资源分配图的核心价值在于，可以通过**简化资源分配图**的方法来检测系统是否处于死锁状态，这被称为**死锁定理**。[Data: Hybrid(27a11a04433a)]\n简化的过程如下：\n1.  在资源分配图中，寻找一个**既不阻塞又非孤立**的进程结点 **P_i**。这个进程能够顺利获得所需资源并运行完成，之后会释放其占有的全部资源。这相当于从图中消去 **P_i** 所有的请求边和分配边，使其成为孤立结点。\n2.  **P_i** 释放资源后，可能导致其他阻塞进程（如 **P_2**）获得资源并继续运行，从而可以继续消去其请求边和分配边。\n3.  重复上述步骤，尝试简化整个图。\n根据死锁定理：**状态S为死",
+      "answerLength": 1377,
+      "sourceCount": 8,
+      "diagnostics": {
+        "layer": "mixed",
+        "classifier_confidence": 0.75,
+        "used_local_fallback": false,
+        "guardrail_status": "pass",
+        "guardrail_score": 1.0,
+        "low_evidence_count": 8,
+        "high_evidence_count": 1,
+        "synthesis_attempted": false,
+        "fallback_reasons": [],
+        "fused_evidence_refs": [
+          "484256ed3872",
+          "27a11a04433a",
+          "c0f3c202a762",
+          "9b2e752556c1",
+          "045b43597822",
+          "daa5b3e1e0e6",
+          "0571e0dd9e04",
+          "fb1441c0819e"
+        ],
+        "fused_evidence_sources": {
+          "basic-citation": 2,
+          "bm25": 8
+        },
+        "synthesis_reason": "",
+        "local_fallback_enabled": false,
+        "elapsed_seconds": 62.032603313004074,
+        "errors": []
+      }
+    }
+  ]
+}

@@ -22,6 +22,7 @@ public class CkqaIntegrationProperties {
     private final TimeoutProperties timeout = new TimeoutProperties();
     private final SummaryProperties summary = new SummaryProperties();
     private final RewriteProperties rewrite = new RewriteProperties();
+    private final StreamingProperties streaming = new StreamingProperties();
 
     public QueryTaskModePolicy resolveQueryTaskModePolicy(String rawMode) {
         String mode = normalizeMode(rawMode);
@@ -150,6 +151,28 @@ public class CkqaIntegrationProperties {
                 "drift", "drift 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
                 "hybrid_v0", "混合检索 Beta 模式会融合多路证据，可能需要较长时间；建议前端低频轮询并等待后台完成。"
         ));
+    }
+
+    @Getter
+    @Setter
+    public static class StreamingProperties {
+        private boolean pythonStreamEnabled = true;
+        private String pythonStreamModes = "hybrid_v0,basic";
+        private long pythonStreamConnectTimeoutSeconds = 10L;
+        private long pythonStreamReadTimeoutSeconds = 300L;
+
+        public boolean isPythonStreamModeEnabled(String rawMode) {
+            if (!pythonStreamEnabled || rawMode == null || rawMode.isBlank()) {
+                return false;
+            }
+            String mode = rawMode.trim().toLowerCase(Locale.ROOT);
+            for (String item : pythonStreamModes.split(",")) {
+                if (mode.equals(item.trim().toLowerCase(Locale.ROOT))) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     @Getter

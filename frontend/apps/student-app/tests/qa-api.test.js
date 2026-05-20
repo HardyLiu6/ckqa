@@ -1,8 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+import { setAuthSessionProvider } from '../src/axios/index.js'
 import { createCoursesApi } from '../src/api/courses.js'
-import { createQaApi } from '../src/api/qa.js'
+import {
+  createQaApi,
+  QA_HYBRID_WARMUP_TIMEOUT_MS,
+  QA_MESSAGE_SUBMISSION_TIMEOUT_MS,
+  QA_ROUTING_TIMEOUT_MS,
+  QA_TASK_POLL_TIMEOUT_MS,
+} from '../src/api/qa.js'
 
 function createClientRecorder() {
   const calls = []
@@ -129,12 +136,12 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
           reviewPriority: 'low_confidence',
         },
       },
-      config: {},
+      config: { timeout: QA_MESSAGE_SUBMISSION_TIMEOUT_MS },
     },
     {
       method: 'get',
       url: '/qa-sessions/8/tasks/99',
-      config: {},
+      config: { timeout: QA_TASK_POLL_TIMEOUT_MS },
     },
     {
       method: 'get',
@@ -151,13 +158,13 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
         question: '它和资源分配图有什么关系？',
         betaHybridEnabled: true,
       },
-      config: {},
+      config: { timeout: QA_ROUTING_TIMEOUT_MS },
     },
     {
       method: 'post',
       url: '/qa-sessions/hybrid-warmup',
       data: { courseId: 'os', knowledgeBaseId: 2 },
-      config: {},
+      config: { timeout: QA_HYBRID_WARMUP_TIMEOUT_MS },
     },
     {
       method: 'post',
@@ -171,6 +178,45 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
       config: {},
     },
   ])
+})
+
+test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件', async () => {
+  const { client } = createClientRecorder()
+  const streamCalls = []
+  const received = []
+  setAuthSessionProvider(() => ({
+    token: 'student-token',
+    user: { userCode: 'STU2026001' },
+  }))
+  const fakeFetchEventSource = async (url, options) => {
+    streamCalls.push({ url, options })
+    await options.onopen({ ok: true, status: 200 })
+    options.onmessage({ event: 'ack', data: '{"sessionId":8,"taskId":99}' })
+    options.onmessage({ event: 'status', data: '{"taskStatus":"running","mode":"basic"}' })
+    options.onmessage({ event: 'delta', data: '{"text":"死锁"}' })
+    options.onmessage({ event: 'sources', data: '[{"rankPosition":1,"sourceFile":"操作系统教材"}]' })
+    options.onmessage({ event: 'done', data: '{"taskId":99,"taskStatus":"success"}' })
+    options.onclose()
+  }
+  const api = createQaApi(client, fakeFetchEventSource)
+
+  await api.streamQaTaskEvents(8, 99, {
+    event: (eventName, payload) => received.push({ eventName, payload }),
+  }, {
+    signal: 'test-signal',
+  })
+
+  assert.equal(streamCalls[0].url, '/api/v1/qa-sessions/8/tasks/99/events')
+  assert.equal(streamCalls[0].options.method, 'GET')
+  assert.deepEqual(streamCalls[0].options.headers, {
+    Accept: 'text/event-stream',
+    Authorization: 'Bearer student-token',
+    'X-CKQA-User-Code': 'STU2026001',
+  })
+  assert.equal(streamCalls[0].options.signal, 'test-signal')
+  assert.deepEqual(received.map((item) => item.eventName), ['ack', 'status', 'delta', 'sources', 'done'])
+  assert.equal(received[2].payload.text, '死锁')
+  setAuthSessionProvider(() => null)
 })
 
 test('学习记忆 API 使用 qa-memory 偏好与条目契约', async () => {

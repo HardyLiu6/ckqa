@@ -1,0 +1,51 @@
+{
+  "startedAt": "20260520-230912",
+  "baseUrl": "http://127.0.0.1:18082/api/v1",
+  "user": {
+    "id": 4,
+    "username": "student.zhouzh",
+    "userCode": "STU2026001"
+  },
+  "course": {
+    "id": "crs-20260506-r4slkr",
+    "name": "操作系统2026春"
+  },
+  "knowledgeBase": {
+    "id": 5,
+    "activeIndexRunId": 14
+  },
+  "warmup": {
+    "ready": true,
+    "status": "ready",
+    "cached": true
+  },
+  "sessionId": 31,
+  "taskId": 36,
+  "mode": "hybrid_v0",
+  "taskStatus": "success",
+  "eventCounts": {
+    "ack": 1,
+    "status": 17,
+    "heartbeat": 3,
+    "delta": 110,
+    "sources": 1,
+    "message": 1,
+    "done": 1
+  },
+  "deltaCount": 110,
+  "deltaChars": 935,
+  "firstDeltaSeconds": 8.193,
+  "rawDataSeenInDelta": false,
+  "doneEvent": {
+    "event": "done",
+    "data": {
+      "taskStatus": "success",
+      "taskId": 36
+    }
+  },
+  "assistantPresent": true,
+  "assistantChars": 1337,
+  "assistantPreview": "## 什么是死锁\n\n死锁是指在一组进程中的每个进程都在等待一个事件（通常是资源的释放），而该事件只能由这组进程中的另一个进程来触发，从而导致所有进程都无法继续推进的一种僵持状态。根据课程内容，死锁可以从**处理机调度**和**多处理机系统**两个角度来理解。\n\n### 处理机调度中的死锁\n\n在单处理机或集中式系统中，死锁主要是由于进程对可重复使用资源的竞争和推进顺序不当所引起的。课程指出，如果系统既不采取死锁预防措施，也不配备死锁避免算法，则系统很可能会发生死锁 [来源 1]。一旦发生死锁，系统就需要依赖两个核心算法来应对：\n\n1.  **死锁检测算法**：用于检测系统状态，以确定系统中是否确",
+  "sourceCount": 5,
+  "containsRawDataInFinal": false
+}

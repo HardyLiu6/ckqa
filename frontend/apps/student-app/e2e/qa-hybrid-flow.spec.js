@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 const API_PREFIX = '/api/v1'
 
-test('学生端 hybrid 两轮问答展示 Markdown、来源卡片和延迟 assistant 兜底', async ({ page }) => {
+test('学生端 hybrid 两轮问答通过 SSE 展示 Markdown 和来源卡片', async ({ page }) => {
   const state = {
     messagePosts: 0,
     taskPolls: new Map(),
@@ -32,6 +32,26 @@ test('学生端 hybrid 两轮问答展示 Markdown、来源卡片和延迟 assis
   await expect(page.getByRole('heading', { name: '资源分配图' })).toBeVisible()
   await expect(page.getByText('可以用有向图表示进程和资源之间的占有与请求关系')).toBeVisible()
   await expect(page.getByText('[Data: Sources')).toHaveCount(0)
+})
+
+test('学生端 QA 事件流中断后回退 task 轮询', async ({ page }) => {
+  const state = {
+    messagePosts: 0,
+    taskPolls: new Map(),
+    messages: [],
+    streamMode: 'fail',
+  }
+  await installStudentSession(page)
+  await installApiMocks(page, state)
+
+  await page.goto('/qa/ask?sessionId=20')
+  await page.getByRole('radio', { name: /混合检索 Beta/ }).click()
+  await page.getByPlaceholder(/输入课程问题/).fill('什么是死锁？')
+  await page.getByRole('button', { name: '发送问题' }).click()
+
+  await expect(page.getByText(/事件流连接失败|事件流连接中断|回答已生成/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: '死锁' })).toBeVisible()
+  expect(state.taskPolls.get(9001)).toBeGreaterThan(0)
 })
 
 test('学生端展示课程权限 403 文案', async ({ page }) => {
@@ -80,7 +100,7 @@ test('智能推荐开启 Beta 后以后端推荐为准并在 warmup 未就绪时
   await page.getByRole('button', { name: '发送问题' }).click()
 
   await expect(page.locator('.hybrid-warmup-pill')).toContainText(/混合检索准备中|混合检索建议降级/)
-  await expect(page.getByText(/智能推荐为 local 模式/)).toBeVisible()
+  await expect.poll(() => state.lastMessagePayload?.mode).toBe('local')
   expect(state.lastMessagePayload.mode).toBe('local')
   expect(state.lastMessagePayload.clientRoutingSnapshot.recommendedMode).toBe('hybrid_v0')
   expect(state.lastMessagePayload.clientRoutingSnapshot.reviewPriority).toBe('hybrid_not_ready')
@@ -190,7 +210,7 @@ async function installApiMocks(page, state) {
         taskId,
         taskStatus: 'pending',
         progressStage: 'queued',
-        mode: 'hybrid_v0',
+        mode: state.lastMessagePayload.mode,
         recommendedPollingIntervalSeconds: 0.05,
         staleTimeoutSeconds: 1800,
         timeoutMessage: '混合检索 Beta 模式会融合多路证据',
@@ -200,17 +220,42 @@ async function installApiMocks(page, state) {
       })
       return
     }
+    if (key === 'GET /qa-sessions/20/tasks/9001/events' || key === 'GET /qa-sessions/20/tasks/9002/events') {
+      if (state.streamMode === 'fail') {
+        await route.fulfill({
+          status: 503,
+          headers: jsonHeaders(),
+          body: JSON.stringify({ code: 5000, message: '事件流临时不可用', data: null }),
+        })
+        return
+      }
+      const taskId = Number(path.split('/').at(-2))
+      const assistantMessage = taskId === 9001 ? firstAssistant() : secondAssistant()
+      state.messages = upsertById(state.messages, assistantMessage)
+      const actualMode = state.lastMessagePayload?.mode ?? 'hybrid_v0'
+      await fulfillSse(route, [
+        ['ack', { sessionId: 20, taskId }],
+        ['status', taskDetail(taskId, null, 'running', actualMode)],
+        ['heartbeat', { taskId, serverTime: '2026-05-18T13:31:01' }],
+        ['delta', { text: assistantMessage.content }],
+        ['sources', assistantMessage.sources],
+        ['message', assistantMessage],
+        ['done', { taskId, taskStatus: 'success' }],
+      ])
+      return
+    }
     if (key === 'GET /qa-sessions/20/tasks/9001' || key === 'GET /qa-sessions/20/tasks/9002') {
       const taskId = Number(path.split('/').pop())
       const count = (state.taskPolls.get(taskId) ?? 0) + 1
       state.taskPolls.set(taskId, count)
       const assistantMessage = taskId === 9001 ? firstAssistant() : secondAssistant()
+      const actualMode = state.lastMessagePayload?.mode ?? 'hybrid_v0'
       if (taskId === 9001 && count === 1) {
-        await fulfillApi(route, taskDetail(taskId, null))
+        await fulfillApi(route, taskDetail(taskId, null, 'success', actualMode))
         return
       }
       state.messages = upsertById(state.messages, assistantMessage)
-      await fulfillApi(route, taskDetail(taskId, assistantMessage))
+      await fulfillApi(route, taskDetail(taskId, assistantMessage, 'success', actualMode))
       return
     }
 
@@ -273,16 +318,16 @@ function source(rankPosition, headingPath) {
   }
 }
 
-function taskDetail(taskId, assistantMessage) {
+function taskDetail(taskId, assistantMessage, status = 'success', mode = 'hybrid_v0') {
   const userMessageId = taskId === 9001 ? 101 : 103
   return {
     taskId,
     userMessageId,
     assistantMessageId: assistantMessage?.id ?? null,
-    taskStatus: 'success',
-    progressStage: 'done',
-    retrievalStatus: 'success',
-    mode: 'hybrid_v0',
+    taskStatus: status,
+    progressStage: status === 'success' ? 'done' : 'running',
+    retrievalStatus: status === 'success' ? 'success' : 'running',
+    mode,
     latestLogs: ['hybrid ok'],
     assistantMessage,
     recommendedPollingIntervalSeconds: 0.05,
@@ -307,6 +352,21 @@ async function fulfillApi(route, data, options = {}) {
       message: options.message ?? '操作成功',
       data,
     }),
+  })
+}
+
+async function fulfillSse(route, events) {
+  const body = events
+    .map(([eventName, data]) => `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`)
+    .join('')
+  await route.fulfill({
+    status: 200,
+    headers: {
+      ...corsHeaders(),
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+    },
+    body,
   })
 }
 

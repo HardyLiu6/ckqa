@@ -59,6 +59,8 @@ class _FakeQueryTaskManager:
         generation_context: str | None = None,
         query_engine_strategy: str = "cli",
         conversation_history: list[dict[str, str]] | None = None,
+        stream_response: bool = False,
+        stream_source: str = "none",
     ) -> QueryTaskSnapshot:
         self.created_requests.append(
             (
@@ -122,6 +124,15 @@ class _FakeQueryTaskManager:
             conversation_history=[],
         )
 
+    def subscribe_events(self, python_task_id: str):
+        if python_task_id != "qt_20260422_000001_001":
+            raise KeyError(python_task_id)
+        replay = [
+            {"event": "delta", "data": {"text": "死锁"}},
+            {"event": "done", "data": {"taskStatus": "success"}},
+        ]
+        return replay, asyncio.Queue(), lambda: None
+
 
 def _get_route_endpoint(app, path: str, method: str):
     for route in app.routes:
@@ -168,6 +179,24 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertFalse(fetch_payload["historyApplied"])
         self.assertEqual(fetch_payload["historyTurnsUsed"], 0)
         self.assertEqual(fetch_payload["sources"][0]["source_file"], "操作系统教材")
+
+    def test_query_task_events_streams_replay_payloads(self):
+        app = create_app(task_manager=_FakeQueryTaskManager())
+        events_endpoint = _get_route_endpoint(app, "/v1/query-tasks/{taskId}/events", "GET")
+
+        response = asyncio.run(events_endpoint("qt_20260422_000001_001"))
+
+        async def collect_body():
+            chunks = []
+            async for chunk in response.body_iterator:
+                chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk)
+            return "".join(chunks)
+
+        body = asyncio.run(collect_body())
+        self.assertIn("event: ack", body)
+        self.assertIn("event: delta", body)
+        self.assertIn('"text": "死锁"', body)
+        self.assertIn("event: done", body)
 
     def test_submit_query_task_accepts_backend_index_context(self):
         task_manager = _FakeQueryTaskManager()

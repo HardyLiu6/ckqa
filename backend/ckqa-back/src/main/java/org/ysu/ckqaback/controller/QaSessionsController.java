@@ -31,8 +31,11 @@ import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
+import org.ysu.ckqaback.qa.stream.QaTaskEventStreamService;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -51,6 +54,7 @@ import java.util.List;
 public class QaSessionsController {
 
     private final QaWorkflowService qaWorkflowService;
+    private final QaTaskEventStreamService qaTaskEventStreamService;
 
     @PostMapping
     public ApiResponse<QaSessionResponse> createSession(
@@ -130,6 +134,17 @@ public class QaSessionsController {
     ) {
         qaWorkflowService.ensureSessionOwner(sessionId, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.getTaskDetail(sessionId, taskId, currentUserId(servletRequest)));
+    }
+
+    @GetMapping(value = "/{sessionId}/tasks/{taskId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamTaskEvents(
+            @PathVariable @Positive(message = "sessionId必须大于0") Long sessionId,
+            @PathVariable @Positive(message = "taskId必须大于0") Long taskId,
+            HttpServletRequest servletRequest
+    ) {
+        Long currentUserId = currentUserId(servletRequest);
+        qaWorkflowService.ensureSessionOwner(sessionId, currentUserId);
+        return qaTaskEventStreamService.openStream(sessionId, taskId, currentUserId);
     }
 
     private Long currentUserId(HttpServletRequest servletRequest) {

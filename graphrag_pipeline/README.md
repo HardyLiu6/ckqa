@@ -128,6 +128,52 @@ python utils/main.py
 
 默认端口为 `8012`。
 
+### 5.1 Hybrid v0 默认策略
+
+`hybrid_v0` 现在默认采用 **BM25 证据注入 GraphRAG Basic**：
+
+1. 使用 `v6` evidence selector 从 `text_units.parquet` 选取 BM25/text-unit 证据。
+2. 把证据写入 `LOCAL_BM25_EVIDENCE` 段落并交给 GraphRAG `basic` 查询。
+3. 解析 Basic 返回中的 `[Data:]` / `[Data: Hybrid(...)]` 来源。
+4. 默认不再调用 DeepSeek/One API synthesis 后处理，也不启用 local fallback。
+
+默认环境变量等价于：
+
+```bash
+CKQA_HYBRID_V0_EVIDENCE_STRATEGY=v6
+CKQA_HYBRID_V0_ONE_SHOT_BASIC_INJECTION=true
+CKQA_HYBRID_V0_DISABLE_SYNTHESIS=true
+CKQA_HYBRID_V0_ENABLE_LOCAL_FALLBACK=false
+```
+
+如果需要回退旧的后处理 synthesis 路径，可以在 `.env` 或进程环境中显式设置：
+
+```bash
+CKQA_HYBRID_V0_DISABLE_SYNTHESIS=false
+```
+
+该设置只恢复 synthesis 后备能力，不会改变 `basic/local/global/drift` 的原有路径。
+
+### 5.2 GraphRAG 原生流式生成
+
+`/v1/query-tasks` 支持可选 `streamResponse=true` 与 `streamSource=native_graphrag`。该能力只供 Java 后端消费；浏览器仍只连接 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`。
+
+默认开启的原生流式模式为：
+
+```bash
+CKQA_GRAPHRAG_NATIVE_STREAMING_MODES=hybrid_v0,basic
+```
+
+`basic` 会调用 GraphRAG `basic_search_streaming`。`hybrid_v0` 仍保持当前质量路径：先用 `v6` BM25/text-unit evidence selector 构造 `LOCAL_BM25_EVIDENCE`，再把注入后的 Basic query 交给 GraphRAG `basic_search_streaming`；默认不调用 CKQA synthesis client。
+
+Python 内部事件流：
+
+```text
+GET /v1/query-tasks/{taskId}/events
+```
+
+事件包括 `ack/status/delta/sources/done/error/heartbeat`。如果 GraphRAG 原生 streaming 不可用、artifact 缺失或连接中断，Java 会继续使用阶段 1 的状态流和最终答案分段，不影响 MySQL 中的最终 assistant message 与 sources。
+
 ### 6. Prompt 调优辅助脚本
 
 ```bash
