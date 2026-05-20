@@ -18,7 +18,7 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from query_task_manager import QueryTaskManager, QueryTaskRequest
+from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot, QueryTaskSnapshotStore
 
 
 def _python_cmd(code: str) -> list[str]:
@@ -206,6 +206,134 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen[0].retrieval_query, "死锁和资源分配图有什么关系？")
         self.assertEqual(seen[0].generation_context, "最近对话：上一轮解释了死锁。")
 
+    async def test_local_history_success_uses_adapter_without_cli(self):
+        command_calls: list[QueryTaskRequest] = []
+        query_calls: list[dict[str, object]] = []
+
+        class FakeHistoryAdapter:
+            def readiness(self, data_dir_uri):
+                return type("Readiness", (), {"supported": True, "error_message": None, "missing": []})()
+
+            def query(self, **kwargs):
+                query_calls.append(kwargs)
+                return type(
+                    "HistoryResult",
+                    (),
+                    {
+                        "supported": True,
+                        "answer": "history answer",
+                        "raw_answer": "history answer",
+                        "sources": [{"rank": 1, "ref": "156", "snippet": "死锁来源"}],
+                        "history_applied": True,
+                        "history_turns_used": 2,
+                        "error_message": None,
+                    },
+                )()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: command_calls.append(request) or _python_cmd("print('should not run')"),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+            history_adapter_factory=lambda: FakeHistoryAdapter(),
+        )
+
+        created = await manager.create_task(
+            "local",
+            "它和资源分配图有什么关系？",
+            query_engine_strategy="local_history",
+            conversation_history=[
+                {"role": "user", "content": "什么是死锁？"},
+                {"role": "assistant", "content": "死锁是进程互相等待资源。"},
+            ],
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(command_calls, [])
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "history answer")
+        self.assertEqual(snapshot.sources[0]["ref"], "156")
+        self.assertEqual(snapshot.return_code, 0)
+        self.assertTrue(snapshot.history_applied)
+        self.assertEqual(snapshot.history_turns_used, 2)
+        self.assertIsNone(snapshot.history_fallback_reason)
+        self.assertEqual(
+            snapshot.latest_logs,
+            ["started local_history query task", "finished local_history query task"],
+        )
+        self.assertEqual(query_calls[0]["query"], "它和资源分配图有什么关系？")
+        self.assertEqual(query_calls[0]["conversation_history"][0]["role"], "user")
+
+    async def test_local_history_failure_falls_back_to_cli_and_records_reason(self):
+        command_calls: list[QueryTaskRequest] = []
+
+        class FakeHistoryAdapter:
+            def readiness(self, data_dir_uri):
+                return type("Readiness", (), {"supported": False, "error_message": "missing artifacts", "missing": []})()
+
+            def query(self, **_kwargs):
+                raise AssertionError("query should not run when readiness is unsupported")
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: command_calls.append(request) or _python_cmd("print('fallback answer', flush=True)"),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+            history_adapter_factory=lambda: FakeHistoryAdapter(),
+        )
+
+        created = await manager.create_task(
+            "local",
+            "问题",
+            query_engine_strategy="local_history",
+            conversation_history=[{"role": "user", "content": "上一轮"}],
+        )
+        await asyncio.sleep(0.2)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(len(command_calls), 1)
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "fallback answer")
+        self.assertEqual(snapshot.return_code, 0)
+        self.assertFalse(snapshot.history_applied)
+        self.assertEqual(snapshot.history_turns_used, 0)
+        self.assertEqual(snapshot.history_fallback_reason, "missing artifacts")
+        self.assertTrue(any("fallback local_history to cli: missing artifacts" in line for line in snapshot.latest_logs))
+
+    async def test_non_local_mode_with_local_history_strategy_still_uses_cli(self):
+        command_calls: list[QueryTaskRequest] = []
+        adapter_calls = 0
+
+        def history_adapter_factory():
+            nonlocal adapter_calls
+            adapter_calls += 1
+            return object()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: command_calls.append(request) or _python_cmd("print('global answer', flush=True)"),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+            history_adapter_factory=history_adapter_factory,
+        )
+
+        created = await manager.create_task(
+            "global",
+            "问题",
+            query_engine_strategy="local_history",
+            conversation_history=[{"role": "user", "content": "上一轮"}],
+        )
+        await asyncio.sleep(0.15)
+
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(adapter_calls, 0)
+        self.assertEqual(len(command_calls), 1)
+        self.assertEqual(command_calls[0].mode, "global")
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "global answer")
+        self.assertFalse(snapshot.history_applied)
+
     async def test_persists_finished_snapshot_and_loads_it_after_restart(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             store_dir = Path(temp_dir) / "query-tasks"
@@ -225,6 +353,8 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
                 data_dir_uri="user_2/kb_5/build_27/index/output",
                 retrieval_query="独立问题",
                 generation_context="最近对话",
+                query_engine_strategy="local_history",
+                conversation_history=[{"role": "user", "content": "上一轮"}],
             )
             await asyncio.sleep(0.2)
 
@@ -243,6 +373,38 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(snapshot.index_run_id, 18)
             self.assertEqual(snapshot.retrieval_query, "独立问题")
             self.assertEqual(snapshot.generation_context, "最近对话")
+            self.assertEqual(snapshot.query_engine_strategy, "local_history")
+            self.assertEqual(snapshot.conversation_history, [{"role": "user", "content": "上一轮"}])
+            self.assertFalse(snapshot.history_applied)
+            self.assertEqual(snapshot.history_turns_used, 0)
+
+    async def test_snapshot_store_round_trips_history_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = QueryTaskSnapshotStore(Path(temp_dir) / "query-tasks")
+            snapshot = QueryTaskSnapshot(
+                python_task_id="qt_history",
+                mode="local",
+                prompt="问题",
+                task_status="success",
+                progress_stage="done",
+                process_alive=False,
+                created_at=datetime.now(UTC),
+                latest_logs=["started local_history query task", "finished local_history query task"],
+                query_engine_strategy="local_history",
+                conversation_history=[{"role": "user", "content": "上一轮"}],
+                history_fallback_reason="missing artifacts",
+                history_applied=True,
+                history_turns_used=1,
+            )
+
+            store.save(snapshot)
+            loaded = store.load()["qt_history"]
+
+            self.assertEqual(loaded.query_engine_strategy, "local_history")
+            self.assertEqual(loaded.conversation_history, [{"role": "user", "content": "上一轮"}])
+            self.assertEqual(loaded.history_fallback_reason, "missing artifacts")
+            self.assertTrue(loaded.history_applied)
+            self.assertEqual(loaded.history_turns_used, 1)
 
     async def test_ignores_corrupt_persisted_snapshot_and_keeps_new_tasks_available(self):
         with tempfile.TemporaryDirectory() as temp_dir:

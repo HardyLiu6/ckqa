@@ -44,6 +44,15 @@ class _AsyncFakeSearchEngine(_FakeSearchEngine):
 
 
 class TestQueryEngineHistoryPoc(unittest.TestCase):
+    def test_default_config_uses_formal_local_history_limits(self):
+        config = HistoryPocConfig()
+
+        self.assertEqual(config.max_turns, 3)
+        self.assertEqual(config.max_history_chars, 3000)
+        self.assertEqual(config.max_context_tokens, 32000)
+        self.assertEqual(config.top_k_entities, 6)
+        self.assertEqual(config.top_k_relationships, 6)
+
     def test_local_search_overrides_limit_history_context_and_topk(self):
         overrides = _local_search_cli_overrides(
             Path("/tmp/index-output"),

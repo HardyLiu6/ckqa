@@ -4,8 +4,10 @@ import asyncio
 import inspect
 import json
 from collections import deque
-from dataclasses import dataclass, fields, replace
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from itertools import count
 from pathlib import Path
 from typing import Any, Callable
@@ -26,6 +28,8 @@ class QueryTaskRequest:
     data_dir: Path | None
     retrieval_query: str | None = None
     generation_context: str | None = None
+    query_engine_strategy: str = "cli"
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -49,6 +53,11 @@ class QueryTaskSnapshot:
     data_dir_uri: str | None = None
     retrieval_query: str | None = None
     generation_context: str | None = None
+    query_engine_strategy: str = "cli"
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
+    history_fallback_reason: str | None = None
+    history_applied: bool = False
+    history_turns_used: int = 0
 
 
 class QueryTaskSnapshotStore:
@@ -126,6 +135,28 @@ def trim_log_tail(lines: list[str], *, max_lines: int, max_chars: int) -> list[s
     return trimmed
 
 
+def merge_log_tail(
+    preserved_lines: list[str],
+    stream_lines: list[str],
+    *,
+    max_lines: int,
+    max_chars: int,
+) -> list[str]:
+    """合并历史策略诊断与 CLI 输出，优先保留回退原因。"""
+    preserved = list(preserved_lines)
+    if len(preserved) >= max_lines:
+        return trim_log_tail(preserved, max_lines=max_lines, max_chars=max_chars)
+    stream_tail = list(stream_lines[-(max_lines - len(preserved)):])
+    merged = preserved + stream_tail
+    while merged and len("\n".join(merged)) > max_chars:
+        if len(merged) > len(preserved):
+            merged.pop(len(preserved))
+        else:
+            merged.pop(0)
+            preserved = preserved[1:]
+    return merged
+
+
 class QueryTaskManager:
     def __init__(
         self,
@@ -138,6 +169,7 @@ class QueryTaskManager:
         cwd: str | Path,
         build_runs_root: str | Path | None = None,
         hybrid_answer_runner: Callable[[QueryTaskRequest], Any] | None = None,
+        history_adapter_factory: Callable[[], Any] | None = None,
         task_store_dir: str | Path | None = None,
         task_store_retention_days: int = 7,
         task_store_retention_limit: int = 5000,
@@ -148,6 +180,7 @@ class QueryTaskManager:
         self._command_factory = command_factory
         self._env_factory = env_factory
         self._hybrid_answer_runner = hybrid_answer_runner
+        self._history_adapter_factory = history_adapter_factory
         self._cwd = str(cwd)
         self._build_runs_root = Path(build_runs_root).resolve() if build_runs_root is not None else None
         self._counter = count(1)
@@ -169,9 +202,13 @@ class QueryTaskManager:
         data_dir_uri: str | None = None,
         retrieval_query: str | None = None,
         generation_context: str | None = None,
+        query_engine_strategy: str = "cli",
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> QueryTaskSnapshot:
         data_dir = self.resolve_data_dir_uri(data_dir_uri)
         effective_retrieval_query = (retrieval_query or prompt).strip()
+        effective_strategy = _normalize_query_engine_strategy(query_engine_strategy)
+        normalized_history = _normalize_conversation_history_payload(conversation_history)
         python_task_id = self._next_task_id()
         snapshot = QueryTaskSnapshot(
             python_task_id=python_task_id,
@@ -186,6 +223,8 @@ class QueryTaskManager:
             latest_logs=[],
             index_run_id=index_run_id,
             data_dir_uri=data_dir_uri,
+            query_engine_strategy=effective_strategy,
+            conversation_history=normalized_history,
         )
         request = QueryTaskRequest(
             mode=mode,
@@ -195,6 +234,8 @@ class QueryTaskManager:
             data_dir=data_dir,
             retrieval_query=effective_retrieval_query,
             generation_context=generation_context,
+            query_engine_strategy=effective_strategy,
+            conversation_history=normalized_history,
         )
         async with self._lock:
             self._tasks[python_task_id] = snapshot
@@ -228,13 +269,41 @@ class QueryTaskManager:
 
     async def _run_task(self, python_task_id: str) -> None:
         logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
-        stdout_lines: list[str] = []
-        heartbeat: asyncio.Task[None] | None = None
         try:
             request = self._task_requests[python_task_id]
             if request.mode == "hybrid_v0":
                 await self._run_hybrid_task(python_task_id, request)
                 return
+            if request.mode == "local" and request.query_engine_strategy == "local_history":
+                fallback_logs = await self._try_run_local_history_task(python_task_id, request)
+                if fallback_logs is None:
+                    return
+                logs.extend(fallback_logs)
+            await self._run_cli_task(python_task_id, request, initial_logs=list(logs))
+        except Exception as exc:  # noqa: BLE001 - 任务管理器需要把运行时异常转成可观测终态
+            latest_logs = trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars)
+            await self._update_task(
+                python_task_id,
+                task_status="failed",
+                progress_stage="done",
+                process_alive=False,
+                latest_logs=latest_logs,
+                error_message=str(exc),
+                finished_at=utc_now(),
+            )
+
+    async def _run_cli_task(
+        self,
+        python_task_id: str,
+        request: QueryTaskRequest,
+        *,
+        initial_logs: list[str] | None = None,
+    ) -> None:
+        logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
+        stdout_lines: list[str] = []
+        heartbeat: asyncio.Task[None] | None = None
+        preserved_logs = list(initial_logs or [])
+        try:
             cmd = self._command_factory(request)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -251,6 +320,7 @@ class QueryTaskManager:
                 started_at=utc_now(),
                 # 任务进入 running 时立即写入首次心跳，后续定时器继续刷新。
                 last_heartbeat_at=utc_now(),
+                latest_logs=preserved_logs,
             )
 
             heartbeat = asyncio.create_task(self._heartbeat_loop(python_task_id, process))
@@ -260,7 +330,12 @@ class QueryTaskManager:
             await asyncio.gather(stdout_task, stderr_task)
             return_code = await process.wait()
 
-            final_logs = trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars)
+            final_logs = merge_log_tail(
+                preserved_logs,
+                list(logs),
+                max_lines=self._max_log_lines,
+                max_chars=self._max_log_chars,
+            )
             stdout_text = "\n".join(stdout_lines)
             resolved_answer = resolve_answer_citations(stdout_text, request.data_dir)
             await self._update_task(
@@ -275,20 +350,102 @@ class QueryTaskManager:
                 return_code=return_code,
                 finished_at=utc_now(),
             )
-        except Exception as exc:  # noqa: BLE001 - 任务管理器需要把运行时异常转成可观测终态
-            latest_logs = trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars)
-            await self._update_task(
-                python_task_id,
-                task_status="failed",
-                progress_stage="done",
-                process_alive=False,
-                latest_logs=latest_logs,
-                error_message=str(exc),
-                finished_at=utc_now(),
-            )
         finally:
             if heartbeat is not None:
                 heartbeat.cancel()
+
+    async def _try_run_local_history_task(
+        self,
+        python_task_id: str,
+        request: QueryTaskRequest,
+    ) -> list[str] | None:
+        started_log = "started local_history query task"
+        await self._update_task(
+            python_task_id,
+            task_status="running",
+            progress_stage="running",
+            process_alive=True,
+            started_at=utc_now(),
+            last_heartbeat_at=utc_now(),
+            latest_logs=[started_log],
+        )
+        try:
+            if self._history_adapter_factory is None:
+                return await self._record_history_fallback(
+                    python_task_id,
+                    started_log,
+                    "local_history adapter is not configured",
+                )
+            adapter = self._history_adapter_factory()
+            readiness = adapter.readiness(request.data_dir_uri)
+            if inspect.isawaitable(readiness):
+                readiness = await readiness
+            if not bool(getattr(readiness, "supported", False)):
+                return await self._record_history_fallback(
+                    python_task_id,
+                    started_log,
+                    _history_readiness_fallback_reason(readiness),
+                )
+
+            query_call = partial(
+                adapter.query,
+                data_dir_uri=request.data_dir_uri,
+                query=request.retrieval_query or request.prompt,
+                conversation_history=request.conversation_history,
+                max_turns=None,
+                user_turns_only=True,
+                return_candidate_context=False,
+            )
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="ckqa-local-history") as executor:
+                result = await asyncio.get_running_loop().run_in_executor(executor, query_call)
+            if inspect.isawaitable(result):
+                result = await result
+            if not bool(getattr(result, "supported", False)):
+                return await self._record_history_fallback(
+                    python_task_id,
+                    started_log,
+                    _history_result_fallback_reason(result),
+                )
+
+            finished_log = "finished local_history query task"
+            answer = getattr(result, "answer", None) or getattr(result, "raw_answer", None) or ""
+            await self._update_task(
+                python_task_id,
+                task_status="success",
+                progress_stage="done",
+                process_alive=False,
+                latest_logs=[started_log, finished_log],
+                result_text=str(answer),
+                sources=list(getattr(result, "sources", []) or []),
+                error_message=None,
+                return_code=0,
+                finished_at=utc_now(),
+                history_fallback_reason=None,
+                history_applied=bool(getattr(result, "history_applied", False)),
+                history_turns_used=int(getattr(result, "history_turns_used", 0) or 0),
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001 - history 策略失败时必须回退 CLI local
+            return await self._record_history_fallback(python_task_id, started_log, str(exc))
+
+    async def _record_history_fallback(
+        self,
+        python_task_id: str,
+        started_log: str,
+        reason: str,
+    ) -> list[str]:
+        fallback_reason = reason or "local_history unavailable"
+        fallback_log = f"fallback local_history to cli: {fallback_reason}"
+        logs = [started_log, fallback_log]
+        await self._update_task(
+            python_task_id,
+            process_alive=False,
+            latest_logs=logs,
+            history_fallback_reason=fallback_reason,
+            history_applied=False,
+            history_turns_used=0,
+        )
+        return logs
 
     async def _run_hybrid_task(self, python_task_id: str, request: QueryTaskRequest) -> None:
         if self._hybrid_answer_runner is None:
@@ -395,6 +552,14 @@ def _snapshot_from_json(payload: dict[str, Any]) -> QueryTaskSnapshot:
         raise ValueError("createdAt is required")
     kwargs["latest_logs"] = list(kwargs.get("latest_logs") or [])
     kwargs["sources"] = list(kwargs.get("sources") or []) if kwargs.get("sources") is not None else None
+    kwargs["query_engine_strategy"] = _normalize_query_engine_strategy(kwargs.get("query_engine_strategy") or "cli")
+    kwargs["conversation_history"] = _normalize_conversation_history_payload(kwargs.get("conversation_history"))
+    kwargs["history_fallback_reason"] = kwargs.get("history_fallback_reason") or None
+    kwargs["history_applied"] = bool(kwargs.get("history_applied") or False)
+    try:
+        kwargs["history_turns_used"] = int(kwargs.get("history_turns_used") or 0)
+    except (TypeError, ValueError):
+        kwargs["history_turns_used"] = 0
     # 进程重启后旧 snapshot 只用于诊断和回读，不能继续声称子进程仍存活。
     kwargs["process_alive"] = False
     return QueryTaskSnapshot(**kwargs)
@@ -418,6 +583,46 @@ def _parse_datetime(value: Any) -> datetime | None:
 def _camelize(name: str) -> str:
     parts = name.split("_")
     return parts[0] + "".join(part.title() for part in parts[1:])
+
+
+def _normalize_query_engine_strategy(value: Any) -> str:
+    strategy = str(value or "cli").strip().casefold()
+    if strategy not in {"cli", "local_history"}:
+        raise ValueError(f"非法 query_engine_strategy: {strategy}")
+    return strategy
+
+
+def _normalize_conversation_history_payload(value: Any) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+    for turn in value or []:
+        if not isinstance(turn, dict):
+            raise ValueError("conversation_history item must be object")
+        role = str(turn.get("role", "")).strip().casefold()
+        content = str(turn.get("content", "")).strip()
+        if role not in {"user", "assistant"}:
+            raise ValueError(f"非法 conversation_history role: {role}")
+        if not content:
+            continue
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def _history_readiness_fallback_reason(readiness: Any) -> str:
+    error_message = str(getattr(readiness, "error_message", "") or "").strip()
+    if error_message:
+        return error_message
+    missing = [str(item) for item in list(getattr(readiness, "missing", []) or []) if str(item).strip()]
+    if missing:
+        return "missing artifacts: " + ", ".join(missing)
+    status = str(getattr(readiness, "status", "") or "not_ready").strip()
+    return f"local_history readiness {status}"
+
+
+def _history_result_fallback_reason(result: Any) -> str:
+    error_message = str(getattr(result, "error_message", "") or "").strip()
+    if error_message:
+        return error_message
+    return "local_history query did not return a supported result"
 
 
 def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:

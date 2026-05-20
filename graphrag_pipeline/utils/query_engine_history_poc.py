@@ -1,7 +1,8 @@
-"""GraphRAG query engine conversation history 旁路 PoC。
+"""GraphRAG query engine conversation history 适配层。
 
-该模块只服务 P3-D1 实验端点，不接入正式 `/v1/query-tasks`。
-正式问答仍以 Java/MySQL 为事实源，当前模块失败时只返回诊断结果。
+该模块继续服务 P3-D1 实验端点，同时可被 `/v1/query-tasks` 的
+`local_history` 任务策略复用。正式问答仍以 Java/MySQL 为事实源，
+任务策略失败时由调用方回退到 CLI local 查询。
 """
 
 from __future__ import annotations
@@ -36,9 +37,9 @@ ALLOWED_HISTORY_ROLES = {"user", "assistant"}
 @dataclass(frozen=True, slots=True)
 class HistoryPocConfig:
     enabled: bool = False
-    max_turns: int = 5
-    max_history_chars: int = 2500
-    max_context_tokens: int = 5000
+    max_turns: int = 3
+    max_history_chars: int = 3000
+    max_context_tokens: int = 32000
     top_k_entities: int = 6
     top_k_relationships: int = 6
     return_context: bool = False
@@ -116,12 +117,12 @@ def parse_int_env(value: str | None, *, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
-def load_history_poc_config_from_env() -> HistoryPocConfig:
+def load_history_poc_config_from_env(*, default_enabled: bool = False) -> HistoryPocConfig:
     return HistoryPocConfig(
-        enabled=parse_bool_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_ENABLED"), default=False),
-        max_turns=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_TURNS"), default=5),
-        max_history_chars=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_HISTORY_CHARS"), default=2500),
-        max_context_tokens=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_CONTEXT_TOKENS"), default=5000),
+        enabled=parse_bool_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_ENABLED"), default=default_enabled),
+        max_turns=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_TURNS"), default=3),
+        max_history_chars=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_HISTORY_CHARS"), default=3000),
+        max_context_tokens=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_MAX_CONTEXT_TOKENS"), default=32000),
         top_k_entities=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_TOP_K_ENTITIES"), default=6),
         top_k_relationships=parse_int_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_TOP_K_RELATIONSHIPS"), default=6),
         return_context=parse_bool_env(os.getenv("CKQA_GRAPHRAG_HISTORY_POC_RETURN_CONTEXT"), default=False),

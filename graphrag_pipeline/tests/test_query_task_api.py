@@ -42,7 +42,9 @@ from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnap
 
 class _FakeQueryTaskManager:
     def __init__(self) -> None:
-        self.created_requests: list[tuple[str, str, int | None, str | None, str | None, str | None]] = []
+        self.created_requests: list[
+            tuple[str, str, int | None, str | None, str | None, str | None, str, list[dict[str, str]]]
+        ] = []
         self.created_at = datetime(2026, 4, 22, 12, 20, 34, tzinfo=UTC)
         self.started_at = datetime(2026, 4, 22, 12, 20, 35, tzinfo=UTC)
         self.last_heartbeat_at = datetime(2026, 4, 22, 12, 20, 36, tzinfo=UTC)
@@ -55,8 +57,21 @@ class _FakeQueryTaskManager:
         data_dir_uri: str | None = None,
         retrieval_query: str | None = None,
         generation_context: str | None = None,
+        query_engine_strategy: str = "cli",
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> QueryTaskSnapshot:
-        self.created_requests.append((mode, prompt, index_run_id, data_dir_uri, retrieval_query, generation_context))
+        self.created_requests.append(
+            (
+                mode,
+                prompt,
+                index_run_id,
+                data_dir_uri,
+                retrieval_query,
+                generation_context,
+                query_engine_strategy,
+                list(conversation_history or []),
+            )
+        )
         return QueryTaskSnapshot(
             python_task_id="qt_20260422_000001_001",
             mode=mode,
@@ -70,6 +85,8 @@ class _FakeQueryTaskManager:
             latest_logs=[],
             retrieval_query=retrieval_query or prompt,
             generation_context=generation_context,
+            query_engine_strategy=query_engine_strategy,
+            conversation_history=list(conversation_history or []),
         )
 
     def get_snapshot(self, python_task_id: str) -> QueryTaskSnapshot | None:
@@ -101,6 +118,8 @@ class _FakeQueryTaskManager:
             ],
             retrieval_query="请概括这套图谱的主题",
             generation_context="最近对话",
+            query_engine_strategy="cli",
+            conversation_history=[],
         )
 
 
@@ -126,7 +145,10 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(submit_payload["pythonTaskId"], "qt_20260422_000001_001")
         self.assertEqual(submit_payload["progressStage"], "queued")
         self.assertEqual(submit_payload["createdAt"], "2026-04-22T20:20:34")
-        self.assertEqual(task_manager.created_requests, [("drift", "请概括这套图谱的主题", None, None, "请概括这套图谱的主题", None)])
+        self.assertEqual(
+            task_manager.created_requests,
+            [("drift", "请概括这套图谱的主题", None, None, "请概括这套图谱的主题", None, "cli", [])],
+        )
 
         fetch_response = asyncio.run(detail_endpoint("qt_20260422_000001_001"))
         self.assertEqual(fetch_response.status_code, 200)
@@ -140,6 +162,11 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(fetch_payload["dataDirUri"], "user_2/kb_5/build_27/index/output")
         self.assertEqual(fetch_payload["retrievalQuery"], "请概括这套图谱的主题")
         self.assertEqual(fetch_payload["generationContext"], "最近对话")
+        self.assertEqual(fetch_payload["queryEngineStrategy"], "cli")
+        self.assertEqual(fetch_payload["conversationHistory"], [])
+        self.assertIsNone(fetch_payload["historyFallbackReason"])
+        self.assertFalse(fetch_payload["historyApplied"])
+        self.assertEqual(fetch_payload["historyTurnsUsed"], 0)
         self.assertEqual(fetch_payload["sources"][0]["source_file"], "操作系统教材")
 
     def test_submit_query_task_accepts_backend_index_context(self):
@@ -161,7 +188,7 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             task_manager.created_requests,
-            [("basic", "问题", 18, "user_2/kb_5/build_27/index/output", "问题", None)],
+            [("basic", "问题", 18, "user_2/kb_5/build_27/index/output", "问题", None, "cli", [])],
         )
 
     def test_submit_query_task_accepts_retrieval_query_and_generation_context(self):
@@ -193,6 +220,47 @@ class TestQueryTaskApi(unittest.TestCase):
                     "user_2/kb_5/build_27/index/output",
                     "死锁和资源分配图有什么关系？",
                     "最近对话：什么是死锁？",
+                    "cli",
+                    [],
+                )
+            ],
+        )
+
+    def test_submit_query_task_accepts_history_strategy_without_new_mode(self):
+        task_manager = _FakeQueryTaskManager()
+        app = create_app(task_manager=task_manager)
+        submit_endpoint = _get_route_endpoint(app, "/v1/query-tasks", "POST")
+
+        response = asyncio.run(
+            submit_endpoint(
+                QueryTaskCreateRequest(
+                    mode="local",
+                    prompt="它和资源分配图有什么关系？",
+                    queryEngineStrategy="local_history",
+                    conversationHistory=[
+                        {"role": "user", "content": "什么是死锁？"},
+                        {"role": "assistant", "content": "死锁是进程互相等待资源。"},
+                    ],
+                )
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            task_manager.created_requests,
+            [
+                (
+                    "local",
+                    "它和资源分配图有什么关系？",
+                    None,
+                    None,
+                    "它和资源分配图有什么关系？",
+                    None,
+                    "local_history",
+                    [
+                        {"role": "user", "content": "什么是死锁？"},
+                        {"role": "assistant", "content": "死锁是进程互相等待资源。"},
+                    ],
                 )
             ],
         )
@@ -216,7 +284,18 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             task_manager.created_requests,
-            [("hybrid_v0", "它和资源分配图有什么关系？", None, None, "死锁和资源分配图有什么关系？", "最近对话：什么是死锁？")],
+            [
+                (
+                    "hybrid_v0",
+                    "它和资源分配图有什么关系？",
+                    None,
+                    None,
+                    "死锁和资源分配图有什么关系？",
+                    "最近对话：什么是死锁？",
+                    "cli",
+                    [],
+                )
+            ],
         )
 
     def test_query_task_manager_runs_hybrid_without_cli_command(self):

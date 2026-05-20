@@ -353,12 +353,23 @@ async def _run_hybrid_v0_query(prompt: str) -> str:
     return result.answer
 
 
+def _build_query_task_history_adapter() -> QueryEngineHistoryPocAdapter:
+    """为正式 query task 策略构建 LocalSearch history adapter。"""
+    return QueryEngineHistoryPocAdapter(
+        root_dir=GRAPHRAG_ROOT,
+        output_dir=OUTPUT_DIR,
+        build_runs_root=BUILD_RUNS_ROOT,
+        config=load_history_poc_config_from_env(default_enabled=True),
+    )
+
+
 QUERY_TASK_MANAGER = QueryTaskManager(
     command_factory=_build_query_cmd,
     env_factory=_build_query_env,
     cwd=GRAPHRAG_ROOT,
     build_runs_root=BUILD_RUNS_ROOT,
     hybrid_answer_runner=_run_hybrid_v0_answer,
+    history_adapter_factory=_build_query_task_history_adapter,
     task_store_dir=os.getenv("GRAPHRAG_QUERY_TASK_STORE_DIR", str(GRAPHRAG_ROOT / "runtime" / "query-tasks")),
     task_store_retention_days=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_DAYS", "7")),
     task_store_retention_limit=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_LIMIT", "5000")),
@@ -385,21 +396,23 @@ class ChatCompletionRequest(BaseModel):
     user: Optional[str] = None
 
 
+class QueryEngineHistoryTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
 class QueryTaskCreateRequest(BaseModel):
     mode: Literal["local", "global", "drift", "basic", "hybrid_v0"] = Field(default="local")
     prompt: str | None = None
     retrievalQuery: str | None = None
     generationContext: str | None = None
+    queryEngineStrategy: Literal["cli", "local_history"] = Field(default="cli")
+    conversationHistory: List[QueryEngineHistoryTurn] = Field(default_factory=list)
     indexRunId: int | None = None
     dataDirUri: str | None = None
 
     def effective_prompt(self) -> str:
         return (self.retrievalQuery or self.prompt or "").strip()
-
-
-class QueryEngineHistoryTurn(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str = Field(min_length=1)
 
 
 class QueryEngineHistoryRequest(BaseModel):
@@ -484,6 +497,11 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "dataDirUri": snapshot.data_dir_uri,
         "retrievalQuery": snapshot.retrieval_query,
         "generationContext": snapshot.generation_context,
+        "queryEngineStrategy": snapshot.query_engine_strategy,
+        "conversationHistory": list(snapshot.conversation_history or []),
+        "historyFallbackReason": snapshot.history_fallback_reason,
+        "historyApplied": snapshot.history_applied,
+        "historyTurnsUsed": snapshot.history_turns_used,
     }
 
 
@@ -541,6 +559,8 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
             data_dir_uri=request.dataDirUri,
             retrieval_query=prompt,
             generation_context=request.generationContext,
+            query_engine_strategy=request.queryEngineStrategy,
+            conversation_history=[turn.model_dump() for turn in request.conversationHistory],
         )
         return JSONResponse(
             content={
