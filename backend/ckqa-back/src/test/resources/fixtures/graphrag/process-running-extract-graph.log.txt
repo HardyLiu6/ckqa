@@ -1,0 +1,13 @@
+[stdout] 2026-05-20 09:12:01 INFO graphrag.cli.index Starting indexing pipeline.
+[stdout] 2026-05-20 09:12:02 INFO graphrag.index.run Starting pipeline with workflows: load_input_documents, create_base_text_units, create_final_documents, extract_graph, finalize_graph, create_communities, create_final_text_units, create_community_reports, generate_text_embeddings
+[stdout] 2026-05-20 09:12:03 INFO graphrag.index.run Starting workflow: load_input_documents
+[stderr] 2026-05-20 09:12:03 DEBUG graphrag.config noisy stderr line that should be ignored 999/999
+[stdout] 2026-05-20 09:12:04 INFO graphrag.index.run Workflow complete: load_input_documents
+[stdout] 2026-05-20 09:12:05 INFO graphrag.index.run Starting workflow: create_base_text_units
+[stdout] 2026-05-20 09:12:11 INFO graphrag.index.run Workflow complete: create_base_text_units
+[stdout] 2026-05-20 09:12:12 INFO graphrag.index.run Starting workflow: create_final_documents
+[stdout] 2026-05-20 09:12:13 INFO graphrag.index.run Workflow complete: create_final_documents
+[stdout] 2026-05-20 09:12:14 INFO graphrag.index.run Starting workflow: extract_graph
+[stdout] 2026-05-20 09:12:20 INFO graphrag.index.workflows.extract_graph extracting graph entities 64 / 533
+[stdout] 2026-05-20 09:12:30 INFO graphrag.index.workflows.extract_graph extracting graph entities 96 / 533
+[stdout] 2026-05-20 09:12:42 INFO graphrag.index.workflows.extract_graph extracting graph entities 128 / 533

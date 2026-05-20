@@ -15,7 +15,7 @@ class IndexProgressParserTest {
     @Test
     void shouldReturnEmptyWhenLogIsEmpty() {
         Optional<IndexProgress> progress = parser.parse(
-                Path.of("src/test/resources/fixtures/graphrag/process-empty.log"));
+                Path.of("src/test/resources/fixtures/graphrag/process-empty.log.txt"));
         assertThat(progress).isEmpty();
     }
 
@@ -28,7 +28,7 @@ class IndexProgressParserTest {
     @Test
     void shouldParseRunningExtractGraphSnapshot() {
         Optional<IndexProgress> maybe = parser.parse(
-                Path.of("src/test/resources/fixtures/graphrag/process-running-extract-graph.log"));
+                Path.of("src/test/resources/fixtures/graphrag/process-running-extract-graph.log.txt"));
         assertThat(maybe).isPresent();
         IndexProgress progress = maybe.get();
 
@@ -51,7 +51,7 @@ class IndexProgressParserTest {
     @Test
     void shouldClampPercentageBetweenZeroAndNinetyNine() {
         Optional<IndexProgress> maybe = parser.parse(
-                Path.of("src/test/resources/fixtures/graphrag/process-running-extract-graph.log"));
+                Path.of("src/test/resources/fixtures/graphrag/process-running-extract-graph.log.txt"));
         assertThat(maybe).isPresent();
         assertThat(maybe.get().getPercentage()).isBetween(0, 99);
     }

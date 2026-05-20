@@ -281,7 +281,17 @@ public enum ApiResultCode {
     /**
      * 邮件发送失败（SMTP 异常或第三方服务不可用）。
      */
-    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试");
+    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试"),
+
+    /**
+     * 注册或绑定时邮箱已被其他账号占用。
+     */
+    EMAIL_ALREADY_BOUND(4295, "该邮箱已被其他账号绑定"),
+
+    /**
+     * 重置密码 / 注册时邮箱与现有账号绑定不一致。
+     */
+    EMAIL_BINDING_MISMATCH(4296, "该邮箱与账号信息不匹配");
 
     /**
      * 业务响应码。

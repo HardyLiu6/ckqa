@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.dto.AccountAvailabilityResponse;
 import org.ysu.ckqaback.auth.dto.AuthLoginRequest;
 import org.ysu.ckqaback.auth.dto.AuthRegisterRequest;
 import org.ysu.ckqaback.auth.dto.AuthResponse;
@@ -88,7 +89,10 @@ public class AuthService {
     }
 
     /**
-     * 邮箱验证码登录（admin audience，不允许学生使用此入口）。
+     * 邮箱验证码登录。
+     *
+     * <p>{@code audience} 决定可登录的学生 / 教师 / 管理员；调用入口同时校验该用户是否被允许使用此 audience，
+     * 防止学生邮箱拿管理员入口的 token。</p>
      */
     public AuthResponse loginByEmailCode(String email, String code, String turnstileToken, String clientIp, String audience) {
         turnstileVerifier.verify(turnstileToken, clientIp);
@@ -106,7 +110,7 @@ public class AuthService {
             throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.UNAUTHORIZED);
         }
         try {
-            emailCodeService.verifyAndConsume(email, code);
+            emailCodeService.verifyAndConsume(email, code, EmailCodeService.SCENE_LOGIN);
         } catch (BusinessException ex) {
             loginRateLimiter.recordFailure(bucket);
             throw ex;
@@ -124,20 +128,45 @@ public class AuthService {
 
     /**
      * 通过邮箱发送验证码（限频 + 人机验证）。
+     *
+     * <p>scene 决定 Redis key 与邮件文案：
+     * <ul>
+     *   <li>{@link EmailCodeService#SCENE_LOGIN}：要求邮箱已绑定 active 用户，避免被滥用作邮件群发</li>
+     *   <li>{@link EmailCodeService#SCENE_REGISTER}：要求邮箱当前未被占用，避免重复绑定</li>
+     *   <li>{@link EmailCodeService#SCENE_RESET_PASSWORD}：要求邮箱已绑定 active 用户</li>
+     * </ul></p>
      */
     public void sendEmailLoginCode(String email, String turnstileToken, String clientIp) {
+        sendEmailCode(email, EmailCodeService.SCENE_LOGIN, turnstileToken, clientIp);
+    }
+
+    public void sendEmailCode(String email, String scene, String turnstileToken, String clientIp) {
         turnstileVerifier.verify(turnstileToken, clientIp);
         if (!StringUtils.hasText(email)) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "邮箱不能为空");
         }
-        // 校验邮箱已绑定到 active 用户，避免被滥用作邮件群发
-        Users user = usersService.getOne(new LambdaQueryWrapper<Users>()
-                .eq(Users::getEmail, email.trim().toLowerCase())
+        String normalized = email.trim().toLowerCase();
+        String normalizedScene = StringUtils.hasText(scene) ? scene.trim().toLowerCase() : EmailCodeService.SCENE_LOGIN;
+
+        Users existing = usersService.getOne(new LambdaQueryWrapper<Users>()
+                .eq(Users::getEmail, normalized)
                 .eq(Users::getIsDeleted, false));
-        if (user == null || !"active".equals(user.getStatus())) {
-            throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.NOT_FOUND);
+
+        switch (normalizedScene) {
+            case EmailCodeService.SCENE_REGISTER -> {
+                if (existing != null) {
+                    throw new BusinessException(ApiResultCode.EMAIL_ALREADY_BOUND, HttpStatus.CONFLICT);
+                }
+            }
+            case EmailCodeService.SCENE_RESET_PASSWORD, EmailCodeService.SCENE_LOGIN -> {
+                if (existing == null || !"active".equals(existing.getStatus())) {
+                    throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.NOT_FOUND);
+                }
+            }
+            default -> throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "不支持的验证码场景");
         }
-        emailCodeService.sendCode(email);
+
+        emailCodeService.sendCode(normalized, normalizedScene);
     }
 
     private String bucketKey(String identity, String clientIp, String audience) {
@@ -162,7 +191,8 @@ public class AuthService {
 
     @Transactional
     public AuthResponse registerStudent(AuthRegisterRequest request) {
-        if (usersService.count(new LambdaQueryWrapper<Users>().eq(Users::getUsername, request.getUsername())) > 0) {
+        String username = request.getUsername() == null ? "" : request.getUsername().trim();
+        if (usersService.count(new LambdaQueryWrapper<Users>().eq(Users::getUsername, username)) > 0) {
             throw new BusinessException(ApiResultCode.USERNAME_EXISTS, HttpStatus.CONFLICT);
         }
         Roles studentRole = rolesService.getOne(new LambdaQueryWrapper<Roles>().eq(Roles::getRoleCode, "student"));
@@ -170,12 +200,36 @@ public class AuthService {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.CONFLICT, "缺少student角色");
         }
 
+        // 注册时若提供邮箱，需要同步校验验证码并确认邮箱未被占用
+        String boundEmail = null;
+        boolean emailVerified = false;
+        if (StringUtils.hasText(request.getEmail())) {
+            boundEmail = request.getEmail().trim().toLowerCase();
+            if (!StringUtils.hasText(request.getEmailCode())) {
+                throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "邮箱已填写，请同时输入邮箱验证码");
+            }
+            long emailUsed = usersService.count(new LambdaQueryWrapper<Users>()
+                    .eq(Users::getEmail, boundEmail)
+                    .eq(Users::getIsDeleted, false));
+            if (emailUsed > 0) {
+                throw new BusinessException(ApiResultCode.EMAIL_ALREADY_BOUND, HttpStatus.CONFLICT);
+            }
+            emailCodeService.verifyAndConsume(boundEmail, request.getEmailCode(), EmailCodeService.SCENE_REGISTER);
+            emailVerified = true;
+        }
+
         Users user = new Users();
         user.setUserCode(nextStudentCode());
-        user.setUsername(request.getUsername().trim());
+        user.setUsername(username);
         user.setDisplayName(request.getDisplayName().trim());
         user.setPasswordHash(passwordService.hash(request.getPassword()));
         user.setStatus("active");
+        if (boundEmail != null) {
+            user.setEmail(boundEmail);
+            if (emailVerified) {
+                user.setEmailVerifiedAt(LocalDateTime.now());
+            }
+        }
         usersService.save(user);
 
         UserRoles userRole = new UserRoles();
@@ -192,6 +246,77 @@ public class AuthService {
         authIdentitiesService.save(identity);
 
         return issueResponse(user, List.of("student"));
+    }
+
+    /**
+     * 通过邮箱验证码重置密码。
+     *
+     * <p>校验流程：
+     * <ol>
+     *   <li>邮箱必须已绑定到 active 用户</li>
+     *   <li>验证码必须与 reset-password 场景匹配（一次性消费）</li>
+     *   <li>新密码满足强度规则（≥ 8 字符、含字母与数字）</li>
+     * </ol>
+     * 成功后立即写入新的 password_hash。</p>
+     */
+    @Transactional
+    public void resetPasswordByEmail(String email, String code, String newPassword) {
+        if (!StringUtils.hasText(email)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "邮箱不能为空");
+        }
+        if (!StringUtils.hasText(newPassword)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码不能为空");
+        }
+        if (newPassword.length() < 8 || newPassword.length() > 72) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码长度需在 8-72 字符之间");
+        }
+        if (!newPassword.matches(".*[A-Za-z].*") || !newPassword.matches(".*\\d.*")) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "新密码需同时包含字母与数字");
+        }
+
+        String normalizedEmail = email.trim().toLowerCase();
+        Users user = usersService.getOne(new LambdaQueryWrapper<Users>()
+                .eq(Users::getEmail, normalizedEmail)
+                .eq(Users::getIsDeleted, false));
+        if (user == null || !"active".equals(user.getStatus())) {
+            throw new BusinessException(ApiResultCode.EMAIL_NOT_REGISTERED, HttpStatus.NOT_FOUND);
+        }
+        emailCodeService.verifyAndConsume(normalizedEmail, code, EmailCodeService.SCENE_RESET_PASSWORD);
+        user.setPasswordHash(passwordService.hash(newPassword));
+        usersService.updateById(user);
+    }
+
+    /**
+     * 注册前的账号 / 邮箱占用检查。
+     *
+     * <p>{@code field} 取值：username / email；其他取值返回 BAD_REQUEST。
+     * 该接口故意不暴露具体冲突账号的展示名，避免账号枚举攻击。</p>
+     */
+    public AccountAvailabilityResponse checkAvailability(String field, String value) {
+        if (!StringUtils.hasText(field) || !StringUtils.hasText(value)) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "请提供 field 与 value 参数");
+        }
+        String normalizedField = field.trim().toLowerCase();
+        String normalizedValue = value.trim();
+        long taken;
+        switch (normalizedField) {
+            case "username" -> taken = usersService.count(new LambdaQueryWrapper<Users>()
+                    .eq(Users::getUsername, normalizedValue)
+                    .eq(Users::getIsDeleted, false));
+            case "email" -> taken = usersService.count(new LambdaQueryWrapper<Users>()
+                    .eq(Users::getEmail, normalizedValue.toLowerCase())
+                    .eq(Users::getIsDeleted, false));
+            default -> throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "field 仅支持 username 或 email");
+        }
+        boolean available = taken == 0;
+        String message = available
+                ? ("username".equals(normalizedField) ? "账号可用" : "邮箱可用")
+                : ("username".equals(normalizedField) ? "账号已被占用" : "邮箱已被绑定");
+        return AccountAvailabilityResponse.builder()
+                .available(available)
+                .field(normalizedField)
+                .message(message)
+                .build();
     }
 
     public AuthUserProfile getCurrentProfile(AuthenticatedUser currentUser) {

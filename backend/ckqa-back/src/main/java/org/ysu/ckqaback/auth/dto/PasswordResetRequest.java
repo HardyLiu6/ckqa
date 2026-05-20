@@ -7,24 +7,21 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 申请邮箱验证码请求。
+ * 通过邮箱验证码重置密码的请求。
  */
 @Data
-public class EmailCodeSendRequest {
+public class PasswordResetRequest {
 
     @NotBlank(message = "邮箱不能为空")
     @Email(message = "邮箱格式不正确")
     @Size(max = 255, message = "邮箱长度不能超过 255 字符")
     private String email;
 
-    /**
-     * 验证码场景：login（默认）/ register / reset-password。
-     */
-    @Pattern(regexp = "^(login|register|reset-password)$", message = "不支持的验证码场景")
-    private String scene;
+    @NotBlank(message = "验证码不能为空")
+    @Pattern(regexp = "^\\d{4,8}$", message = "验证码需为 4-8 位数字")
+    private String code;
 
-    /**
-     * Cloudflare Turnstile token，未启用时可省略。
-     */
-    private String turnstileToken;
+    @NotBlank(message = "新密码不能为空")
+    @Size(min = 8, max = 72, message = "密码长度必须在 8 到 72 位之间")
+    private String newPassword;
 }

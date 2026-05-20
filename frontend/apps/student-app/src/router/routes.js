@@ -1,7 +1,9 @@
 // 路由表 · layout meta 决定壳层（landing / product / module）
 
 const routeStateView = () => import('../views/status/RouteState.vue')
-const authAccessView = () => import('../views/auth/AuthAccess.vue')
+const authLoginView = () => import('../views/auth/AuthLogin.vue')
+const authRegisterView = () => import('../views/auth/AuthRegister.vue')
+const authForgotPasswordView = () => import('../views/auth/AuthForgotPassword.vue')
 
 function createComingSoonDescription(title, section) {
   if (section) {
@@ -192,16 +194,21 @@ export const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: authAccessView,
+    component: authLoginView,
     meta: { title: '登录', noAuth: true, layout: 'landing' },
   },
   {
     path: '/register',
     name: 'Register',
-    component: authAccessView,
+    component: authRegisterView,
     meta: { title: '注册', noAuth: true, layout: 'landing' },
   },
-  createComingSoonRoute({ path: '/forgot-password', name: 'ForgotPassword', title: '忘记密码', noAuth: true, primaryActionTarget: '/', primaryActionText: '返回介绍页', section: '账号系统' }),
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: authForgotPasswordView,
+    meta: { title: '忘记密码', noAuth: true, layout: 'landing' },
+  },
   createSystemStateRoute({ path: '/403', name: 'Forbidden', title: '无权限', routeState: '403', stateTitle: '暂无权限访问', stateDescription: '当前原型尚未接入完整鉴权流程，请返回可用页面继续浏览。' }),
   createSystemStateRoute({ path: '/404', name: 'NotFound', title: '页面不存在', routeState: '404', stateTitle: '页面不存在', stateDescription: '你访问的页面不存在，或者当前学生端原型尚未提供该地址对应的页面。' }),
   createSystemStateRoute({ path: '/500', name: 'ServerError', title: '服务器错误', routeState: '500', stateTitle: '页面暂时不可用', stateDescription: '当前页面暂时无法展示，请稍后重试，或先返回其他已开放页面继续浏览。' }),
