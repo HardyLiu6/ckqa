@@ -1,6 +1,6 @@
-import { del, get, patch, post } from '../axios/index.js'
+import { del, get, patch, post, put } from '../axios/index.js'
 
-export function createQaApi(client = { del, get, patch, post }) {
+export function createQaApi(client = { delete: del, del, get, patch, post, put }) {
   return {
     listQaSessions(params = {}) {
       const { userId, ...safeParams } = params ?? {}
@@ -31,6 +31,18 @@ export function createQaApi(client = { del, get, patch, post }) {
     warmupHybrid(payload) {
       return client.post('/qa-sessions/hybrid-warmup', payload)
     },
+    getQaMemoryPreference(params = {}) {
+      return client.get('/qa-memory/preferences', { params })
+    },
+    updateQaMemoryPreference(payload) {
+      return client.put('/qa-memory/preferences', payload)
+    },
+    listQaMemoryItems(params = {}) {
+      return client.get('/qa-memory/items', { params })
+    },
+    deleteQaMemoryItem(id) {
+      return client.delete(`/qa-memory/items/${encodeURIComponent(id)}`)
+    },
     submitQaFeedback(payload) {
       const { userId, ...safePayload } = payload ?? {}
       return client.post('/qa-message-feedback', safePayload)
@@ -52,5 +64,9 @@ export const getQaTask = qaApi.getQaTask
 export const listQaMessages = qaApi.listQaMessages
 export const recommendQaMode = qaApi.recommendQaMode
 export const warmupHybrid = qaApi.warmupHybrid
+export const getQaMemoryPreference = qaApi.getQaMemoryPreference
+export const updateQaMemoryPreference = qaApi.updateQaMemoryPreference
+export const listQaMemoryItems = qaApi.listQaMemoryItems
+export const deleteQaMemoryItem = qaApi.deleteQaMemoryItem
 export const submitQaFeedback = qaApi.submitQaFeedback
 export const deleteQaFeedback = qaApi.deleteQaFeedback

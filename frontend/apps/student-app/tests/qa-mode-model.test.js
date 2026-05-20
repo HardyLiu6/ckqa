@@ -8,6 +8,7 @@ import {
   resolveQaMode,
   resolveQaModeRecommendation,
   resolveHybridWarmupText,
+  resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
 } from '../src/views/qa/qa-mode-model.js'
 
@@ -19,6 +20,7 @@ test('问答模式只暴露智能推荐和后端真实支持的模式', () => {
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'full'), false)
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'hybrid'), false)
   assert.equal(QA_MODE_OPTIONS.some((option) => option.value === 'auto'), false)
+  assert.equal(QA_MODE_OPTIONS.some((option) => option.value.includes('memory')), false)
 })
 
 test('智能推荐将事实和定义类问题路由到 basic', () => {
@@ -164,4 +166,14 @@ test('服务端返回未知模式时使用本地智能推荐兜底', () => {
 
   assert.equal(result.mode, 'basic')
   assert.equal(result.fromServer, false)
+})
+
+test('学习记忆策略只跟随最终 Local 模式，不新增问答模式', () => {
+  const smartLocal = resolveQaMode('请根据第 3 章解释进程调度算法', SMART_QA_MODE)
+
+  assert.equal(smartLocal.mode, 'local')
+  assert.equal(resolveMemoryPolicyForMode(smartLocal.mode, true), 'auto')
+  assert.equal(resolveMemoryPolicyForMode('local', false), 'off')
+  assert.equal(resolveMemoryPolicyForMode('global', true), 'off')
+  assert.equal(resolveMemoryPolicyForMode('hybrid_v0', true), 'off')
 })

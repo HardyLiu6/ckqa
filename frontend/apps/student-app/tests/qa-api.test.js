@@ -21,6 +21,10 @@ function createClientRecorder() {
         calls.push({ method: 'patch', url, data, config })
         return Promise.resolve({ ok: true })
       },
+      put(url, data, config = {}) {
+        calls.push({ method: 'put', url, data, config })
+        return Promise.resolve({ ok: true })
+      },
       delete(url, config = {}) {
         calls.push({ method: 'delete', url, config })
         return Promise.resolve({ ok: true })
@@ -164,6 +168,40 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     {
       method: 'delete',
       url: '/qa-message-feedback/33',
+      config: {},
+    },
+  ])
+})
+
+test('学习记忆 API 使用 qa-memory 偏好与条目契约', async () => {
+  const { calls, client } = createClientRecorder()
+  const api = createQaApi(client)
+
+  await api.getQaMemoryPreference({ courseId: 'os', knowledgeBaseId: 2 })
+  await api.updateQaMemoryPreference({ courseId: 'os', knowledgeBaseId: 2, enabled: true })
+  await api.listQaMemoryItems({ courseId: 'os', knowledgeBaseId: 2 })
+  await api.deleteQaMemoryItem('mem-1')
+
+  assert.deepEqual(calls, [
+    {
+      method: 'get',
+      url: '/qa-memory/preferences',
+      config: { params: { courseId: 'os', knowledgeBaseId: 2 } },
+    },
+    {
+      method: 'put',
+      url: '/qa-memory/preferences',
+      data: { courseId: 'os', knowledgeBaseId: 2, enabled: true },
+      config: {},
+    },
+    {
+      method: 'get',
+      url: '/qa-memory/items',
+      config: { params: { courseId: 'os', knowledgeBaseId: 2 } },
+    },
+    {
+      method: 'delete',
+      url: '/qa-memory/items/mem-1',
       config: {},
     },
   ])

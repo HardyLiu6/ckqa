@@ -236,6 +236,47 @@ export function resolveContextStatusText(task) {
   return `已使用 ${strategy} 上下文，约 ${Number.isFinite(chars) ? chars : 0} 字`
 }
 
+export function normalizeMemoryPreference(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      enabled: false,
+      courseId: '',
+      knowledgeBaseId: null,
+      indexRunId: null,
+    }
+  }
+  return {
+    enabled: Boolean(payload.enabled),
+    courseId: String(payload.courseId ?? ''),
+    knowledgeBaseId: payload.knowledgeBaseId ?? null,
+    indexRunId: payload.indexRunId ?? null,
+  }
+}
+
+export function normalizeLearningMemory(item = {}) {
+  return {
+    id: item.id ?? '',
+    memoryType: item.memoryType ?? '',
+    memoryText: item.memoryText ?? '',
+    createdAt: item.createdAt ?? '',
+  }
+}
+
+export function resolveMemoryStatusText(task = {}) {
+  const mode = String(task.mode ?? task.searchMode ?? '').toLowerCase()
+  if (mode && mode !== 'local') {
+    return '学习记忆仅 Local 模式可用'
+  }
+  if (!task.memoryApplied) {
+    return '本次未使用学习记忆'
+  }
+
+  const strategy = task.memoryStrategy || 'auto'
+  const sourceCount = Number(task.memorySourceCount ?? 0)
+  const chars = Number(task.memorySizeEstimate?.chars ?? task.memorySizeEstimateChars ?? 0)
+  return `本次使用学习记忆：${strategy}，${Number.isFinite(sourceCount) ? sourceCount : 0} 条，约 ${Number.isFinite(chars) ? chars : 0} 字`
+}
+
 export function upsertQaMessage(messages, message) {
   const normalizedMessage = normalizeQaMessage(message)
   const index = messages.findIndex((item) => item.id === normalizedMessage.id)

@@ -9,8 +9,11 @@ import {
   normalizeQaMessage,
   normalizeQaSources,
   normalizeQaSession,
+  normalizeLearningMemory,
+  normalizeMemoryPreference,
   resolvePollingDelaySeconds,
   resolveContextStatusText,
+  resolveMemoryStatusText,
   hasActiveIndexChanged,
   isArchivedReadOnlySession,
   isLegacyReadOnlySession,
@@ -227,4 +230,62 @@ test('上下文状态文案只展示策略和字符数', () => {
     '已使用 recent 上下文，约 128 字',
   )
   assert.equal(resolveContextStatusText({ contextApplied: false, contextStrategy: 'none' }), '未使用历史上下文')
+})
+
+test('学习记忆偏好兼容缺字段并默认关闭', () => {
+  assert.deepEqual(normalizeMemoryPreference({
+    enabled: true,
+    courseId: 'os',
+    knowledgeBaseId: 3,
+    indexRunId: 18,
+  }), {
+    enabled: true,
+    courseId: 'os',
+    knowledgeBaseId: 3,
+    indexRunId: 18,
+  })
+
+  assert.deepEqual(normalizeMemoryPreference(null), {
+    enabled: false,
+    courseId: '',
+    knowledgeBaseId: null,
+    indexRunId: null,
+  })
+})
+
+test('学习记忆条目规范化不要求后端返回完整字段', () => {
+  assert.deepEqual(normalizeLearningMemory({
+    id: 'mem-1',
+    memoryType: 'preference',
+    memoryText: '学生经常追问调度算法例题',
+    createdAt: '2026-05-20T09:30:00',
+  }), {
+    id: 'mem-1',
+    memoryType: 'preference',
+    memoryText: '学生经常追问调度算法例题',
+    createdAt: '2026-05-20T09:30:00',
+  })
+
+  assert.equal(normalizeLearningMemory({}).memoryText, '')
+})
+
+test('学习记忆状态文案区分使用、未使用和非 Local 模式', () => {
+  assert.equal(
+    resolveMemoryStatusText({
+      mode: 'local',
+      memoryApplied: true,
+      memoryStrategy: 'auto',
+      memorySourceCount: 2,
+      memorySizeEstimate: { chars: 320 },
+    }),
+    '本次使用学习记忆：auto，2 条，约 320 字',
+  )
+  assert.equal(
+    resolveMemoryStatusText({ mode: 'local', memoryApplied: false, memoryStrategy: 'off' }),
+    '本次未使用学习记忆',
+  )
+  assert.equal(
+    resolveMemoryStatusText({ mode: 'global', memoryApplied: false }),
+    '学习记忆仅 Local 模式可用',
+  )
 })

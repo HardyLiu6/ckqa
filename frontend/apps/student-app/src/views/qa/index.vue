@@ -19,13 +19,17 @@ import {
 import { listCourses, listCourseKnowledgeBases } from '@/api/courses'
 import {
   createQaSession,
+  deleteQaMemoryItem,
   deleteQaFeedback,
+  getQaMemoryPreference,
   getQaSession,
+  listQaMemoryItems,
   getQaTask,
   listQaMessages,
   recommendQaMode,
   sendQaMessage,
   submitQaFeedback,
+  updateQaMemoryPreference,
   updateQaSession,
   warmupHybrid,
 } from '@/api/qa'
@@ -40,6 +44,7 @@ import {
   resolveQaMode,
   resolveQaModeRecommendation,
   resolveHybridWarmupText,
+  resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
 } from './qa-mode-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
@@ -51,11 +56,14 @@ import {
   matchCourseForQuestion,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
+  normalizeLearningMemory,
+  normalizeMemoryPreference,
   normalizeQaFeedback,
   normalizeQaMessage,
   normalizeQaSession,
   resolveSessionLifecycleStatusText,
   resolveContextStatusText,
+  resolveMemoryStatusText,
   resolvePollingDelaySeconds,
   selectReadyKnowledgeBase,
   upsertQaMessage,
@@ -73,6 +81,8 @@ const selectedCourseId = ref('')
 const selectedKnowledgeBaseId = ref('')
 const selectedMode = ref(SMART_QA_MODE)
 const allowHybridSmartBeta = ref(false)
+const memoryPreference = ref(normalizeMemoryPreference(null))
+const learningMemoryItems = ref([])
 const input = ref(typeof route.query.topic === 'string' ? route.query.topic : '')
 const activeSession = ref(null)
 const pendingTask = ref(null)
@@ -81,11 +91,15 @@ const hybridWarmupMessage = ref('')
 const hybridWarmupCached = ref(false)
 const loadingCourses = ref(false)
 const loadingKnowledgeBases = ref(false)
+const loadingMemory = ref(false)
+const savingMemoryPreference = ref(false)
+const deletingMemoryItemId = ref(null)
 const restoringSession = ref(false)
 const sending = ref(false)
 const feedbackSubmittingMessageId = ref(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
+const memoryErrorMessage = ref('')
 let pollTimer = null
 
 const FEEDBACK_ACTIONS = [
@@ -108,6 +122,21 @@ const readyKnowledgeBases = computed(() => (
 const modePreview = computed(() => resolveQaMode(input.value, selectedMode.value, qaModeResolveOptions()))
 const activeModeOption = computed(() => getModeOption(modePreview.value.mode))
 const hybridWarmupText = computed(() => resolveHybridWarmupText(hybridWarmupStatus.value, hybridWarmupCached.value))
+const memoryScopeReady = computed(() => Boolean(selectedCourseId.value && selectedKnowledgeBaseId.value))
+const memoryEnabled = computed(() => Boolean(memoryScopeReady.value && memoryPreference.value.enabled))
+const memoryStatusText = computed(() => {
+  if (!memoryScopeReady.value) {
+    return '选择课程和知识库后可启用'
+  }
+  return memoryEnabled.value ? '已开启跨对话学习记忆' : '已关闭跨对话学习记忆'
+})
+const memorySendStatusText = computed(() => resolveMemoryStatusText({
+  mode: modePreview.value.mode,
+  memoryApplied: modePreview.value.mode === 'local' && memoryEnabled.value,
+  memoryStrategy: memoryEnabled.value ? 'auto' : 'off',
+  memorySourceCount: learningMemoryItems.value.length,
+  memorySizeEstimate: { chars: estimateLearningMemoryChars() },
+}))
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -159,10 +188,11 @@ async function loadCourses() {
   }
 }
 
-async function loadKnowledgeBases(courseId) {
+async function loadKnowledgeBases(courseId, options = {}) {
   if (!courseId) {
     knowledgeBases.value = []
     selectedKnowledgeBaseId.value = ''
+    resetMemoryState()
     return []
   }
 
@@ -174,11 +204,15 @@ async function loadKnowledgeBases(courseId) {
     knowledgeBases.value = nextKnowledgeBases
     const selected = selectReadyKnowledgeBase(nextKnowledgeBases, selectedKnowledgeBaseId.value)
     selectedKnowledgeBaseId.value = selected.knowledgeBase?.id ? String(selected.knowledgeBase.id) : ''
+    if (options.loadMemory !== false) {
+      await loadMemoryState(courseId, selectedKnowledgeBaseId.value)
+    }
     return nextKnowledgeBases
   } catch (error) {
     errorMessage.value = error?.message || '知识库列表加载失败'
     knowledgeBases.value = []
     selectedKnowledgeBaseId.value = ''
+    resetMemoryState()
     return []
   } finally {
     loadingKnowledgeBases.value = false
@@ -187,6 +221,7 @@ async function loadKnowledgeBases(courseId) {
 
 async function handleCourseChange(courseId) {
   resetConversation()
+  resetMemoryState()
   await clearSessionQuery()
   selectedKnowledgeBaseId.value = ''
   await loadKnowledgeBases(courseId)
@@ -194,6 +229,7 @@ async function handleCourseChange(courseId) {
 
 async function handleKnowledgeBaseChange() {
   resetConversation()
+  await loadMemoryState(selectedCourseId.value, selectedKnowledgeBaseId.value)
   await clearSessionQuery()
 }
 
@@ -205,6 +241,67 @@ function resetConversation() {
   hybridWarmupStatus.value = 'idle'
   hybridWarmupMessage.value = ''
   hybridWarmupCached.value = false
+}
+
+function resetMemoryState() {
+  memoryPreference.value = normalizeMemoryPreference({
+    courseId: selectedCourseId.value,
+    knowledgeBaseId: selectedKnowledgeBaseId.value || null,
+    enabled: false,
+  })
+  learningMemoryItems.value = []
+  memoryErrorMessage.value = ''
+}
+
+async function loadMemoryState(courseId = selectedCourseId.value, knowledgeBaseId = selectedKnowledgeBaseId.value) {
+  if (!courseId || !knowledgeBaseId) {
+    resetMemoryState()
+    return
+  }
+
+  const requestCourseId = String(courseId)
+  const requestKnowledgeBaseId = String(knowledgeBaseId)
+  loadingMemory.value = true
+  memoryErrorMessage.value = ''
+  try {
+    const [preferencePayload, itemsPayload] = await Promise.all([
+      getQaMemoryPreference({ courseId: requestCourseId, knowledgeBaseId: requestKnowledgeBaseId }),
+      listQaMemoryItems({ courseId: requestCourseId, knowledgeBaseId: requestKnowledgeBaseId }),
+    ])
+    if (
+      requestCourseId !== String(selectedCourseId.value)
+      || requestKnowledgeBaseId !== String(selectedKnowledgeBaseId.value)
+    ) {
+      return
+    }
+    memoryPreference.value = normalizeMemoryPreference({
+      ...preferencePayload,
+      courseId: requestCourseId,
+      knowledgeBaseId: preferencePayload?.knowledgeBaseId ?? knowledgeBaseId,
+    })
+    const list = Array.isArray(itemsPayload) ? itemsPayload : itemsPayload?.items ?? itemsPayload?.records ?? []
+    learningMemoryItems.value = list.map(normalizeLearningMemory).filter((item) => item.id)
+  } catch (error) {
+    memoryPreference.value = normalizeMemoryPreference({
+      courseId: requestCourseId,
+      knowledgeBaseId,
+      enabled: false,
+    })
+    learningMemoryItems.value = []
+    memoryErrorMessage.value = error?.message || '学习记忆状态加载失败，已按关闭处理'
+  } finally {
+    loadingMemory.value = false
+  }
+}
+
+async function ensureMemoryStateForScope(courseId, knowledgeBaseId) {
+  if (
+    String(memoryPreference.value.courseId) === String(courseId)
+    && String(memoryPreference.value.knowledgeBaseId) === String(knowledgeBaseId)
+  ) {
+    return
+  }
+  await loadMemoryState(courseId, knowledgeBaseId)
 }
 
 async function send() {
@@ -241,6 +338,7 @@ async function send() {
     const knowledgeBase = knowledgeBaseResult.knowledgeBase
     selectedCourseId.value = course.courseId
     selectedKnowledgeBaseId.value = String(knowledgeBase.id)
+    await ensureMemoryStateForScope(course.courseId, knowledgeBase.id)
 
     let modeResolution = await resolveModeForSend(text, course, knowledgeBase)
     if (modeResolution.mode === 'hybrid_v0') {
@@ -254,6 +352,7 @@ async function send() {
     const submission = await sendQaMessage(session.id, {
       mode: modeResolution.mode,
       content: text,
+      memoryPolicy: resolveMemoryPolicyForMode(modeResolution.mode, memoryEnabled.value),
       clientRoutingSnapshot: buildClientRoutingSnapshot(modeResolution),
     })
 
@@ -268,9 +367,13 @@ async function send() {
     const confidenceHint = modeResolution.manualSwitchSuggested
       ? '推荐不够确定，可手动切换模式。'
       : ''
+    const memoryStatus = resolveMemoryStatusText({
+      ...submission,
+      mode: modeResolution.mode,
+    })
     statusMessage.value = modeResolution.fromSmart
-      ? `智能推荐为 ${modeResolution.mode} 模式：${modeResolution.reason}。${resolveContextStatusText(submission)}`
-      : `已使用 ${modeResolution.mode} 模式提交问题。${resolveContextStatusText(submission)}`
+      ? `智能推荐为 ${modeResolution.mode} 模式：${modeResolution.reason}。${resolveContextStatusText(submission)}。${memoryStatus}`
+      : `已使用 ${modeResolution.mode} 模式提交问题。${resolveContextStatusText(submission)}。${memoryStatus}`
     statusMessage.value = `${statusMessage.value}${confidenceHint}`
     input.value = ''
     await scrollToBottom()
@@ -346,6 +449,61 @@ async function handleHybridBetaToggle() {
     && selectedKnowledgeBase.value
   ) {
     await ensureHybridWarmup(selectedCourse.value, selectedKnowledgeBase.value)
+  }
+}
+
+async function handleMemoryToggle(nextEnabled) {
+  if (!memoryScopeReady.value || savingMemoryPreference.value) {
+    return
+  }
+
+  const previousPreference = memoryPreference.value
+  const courseId = selectedCourseId.value
+  const knowledgeBaseId = selectedKnowledgeBaseId.value
+  savingMemoryPreference.value = true
+  memoryErrorMessage.value = ''
+  memoryPreference.value = normalizeMemoryPreference({
+    ...previousPreference,
+    courseId,
+    knowledgeBaseId,
+    enabled: nextEnabled,
+  })
+  try {
+    const preference = await updateQaMemoryPreference({
+      courseId,
+      knowledgeBaseId,
+      enabled: nextEnabled,
+    })
+    memoryPreference.value = normalizeMemoryPreference({
+      ...preference,
+      courseId,
+      knowledgeBaseId: preference?.knowledgeBaseId ?? knowledgeBaseId,
+    })
+    ElMessage.success(nextEnabled ? '已开启跨对话学习记忆' : '已关闭跨对话学习记忆')
+  } catch (error) {
+    memoryPreference.value = previousPreference
+    memoryErrorMessage.value = error?.message || '学习记忆设置保存失败'
+    ElMessage.error(memoryErrorMessage.value)
+  } finally {
+    savingMemoryPreference.value = false
+  }
+}
+
+async function handleDeleteMemoryItem(item) {
+  if (!item?.id || deletingMemoryItemId.value) {
+    return
+  }
+  deletingMemoryItemId.value = item.id
+  memoryErrorMessage.value = ''
+  try {
+    await deleteQaMemoryItem(item.id)
+    learningMemoryItems.value = learningMemoryItems.value.filter((memory) => memory.id !== item.id)
+    ElMessage.success('学习记忆已删除')
+  } catch (error) {
+    memoryErrorMessage.value = error?.message || '学习记忆删除失败'
+    ElMessage.error(memoryErrorMessage.value)
+  } finally {
+    deletingMemoryItemId.value = null
   }
 }
 
@@ -432,9 +590,10 @@ async function restoreSessionFromQuery() {
     activeSession.value = session
     selectedCourseId.value = session.courseId
     if (session.courseId) {
-      await loadKnowledgeBases(session.courseId)
+      await loadKnowledgeBases(session.courseId, { loadMemory: false })
     }
     selectedKnowledgeBaseId.value = session.knowledgeBaseId != null ? String(session.knowledgeBaseId) : ''
+    await loadMemoryState(session.courseId, selectedKnowledgeBaseId.value)
     const list = await listQaMessages(session.id)
     messages.value = list.map(normalizeQaMessage)
     statusMessage.value = activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问'
@@ -507,10 +666,7 @@ async function pollTask(sessionId, taskId) {
       } else {
         await refreshAssistantAfterEmptySuccess(sessionId, taskId)
       }
-      statusMessage.value = '回答已生成'
-      if (detail.contextStrategy) {
-        statusMessage.value = `回答已生成。${resolveContextStatusText(detail)}`
-      }
+      statusMessage.value = `回答已生成。${resolveContextStatusText(detail)}。${resolveMemoryStatusText(detail)}`
       pendingTask.value = null
       await scrollToBottom()
       return
@@ -656,6 +812,10 @@ function taskStatusText(task) {
   return task.progressStage || task.taskStatus || '处理中'
 }
 
+function estimateLearningMemoryChars() {
+  return learningMemoryItems.value.reduce((total, item) => total + String(item.memoryText ?? '').length, 0)
+}
+
 function sourceTitle(source) {
   return source.sourceFile || source.headingPath || source.documentKey || `来源 ${source.rankPosition || ''}`.trim()
 }
@@ -786,6 +946,46 @@ function sourceTypeLabel(source) {
         <span>允许智能推荐使用混合检索 Beta</span>
       </label>
 
+      <div class="memory-panel">
+        <label class="memory-toggle">
+          <input
+            :checked="memoryEnabled"
+            type="checkbox"
+            :disabled="!memoryScopeReady || loadingMemory || savingMemoryPreference"
+            @change="handleMemoryToggle($event.target.checked)"
+          />
+          <span>跨对话学习记忆</span>
+        </label>
+        <div class="memory-state">
+          <span>{{ loadingMemory ? '学习记忆加载中' : memoryStatusText }}</span>
+          <span>{{ memorySendStatusText }}</span>
+          <span v-if="memoryErrorMessage" class="memory-error">{{ memoryErrorMessage }}</span>
+        </div>
+        <details class="memory-cleaner">
+          <summary>清除学习记忆</summary>
+          <div v-if="!memoryScopeReady" class="memory-empty">请先选择课程和知识库</div>
+          <div v-else-if="loadingMemory" class="memory-empty">正在读取学习记忆</div>
+          <div v-else-if="!learningMemoryItems.length" class="memory-empty">暂无学习记忆</div>
+          <ul v-else class="memory-list">
+            <li v-for="memory in learningMemoryItems" :key="memory.id" class="memory-item">
+              <div class="memory-item-main">
+                <span class="memory-type">{{ memory.memoryType || 'memory' }}</span>
+                <span class="memory-created">{{ memory.createdAt || '时间未记录' }}</span>
+                <span class="memory-preview">{{ memory.memoryText || '内容为空' }}</span>
+              </div>
+              <button
+                class="memory-delete"
+                type="button"
+                :disabled="deletingMemoryItemId === memory.id"
+                @click="handleDeleteMemoryItem(memory)"
+              >
+                删除
+              </button>
+            </li>
+          </ul>
+        </details>
+      </div>
+
       <div class="scope-status">
         <span class="scope-pill">
           <el-icon><Reading /></el-icon>
@@ -804,6 +1004,9 @@ function sourceTypeLabel(source) {
         </span>
         <span v-if="hybridWarmupText" class="scope-pill hybrid-warmup-pill" :title="hybridWarmupMessage">
           {{ hybridWarmupText }}
+        </span>
+        <span class="scope-pill memory-pill">
+          {{ memorySendStatusText }}
         </span>
       </div>
 
@@ -898,6 +1101,7 @@ function sourceTypeLabel(source) {
               <el-icon><Clock /></el-icon>
               <span>模式 {{ pendingTask.mode }}，轮询间隔 {{ resolvePollingDelaySeconds(pendingTask) }} 秒</span>
             </div>
+            <div class="msg-meta">{{ resolveMemoryStatusText(pendingTask) }}</div>
           </GlassCard>
         </div>
       </template>
@@ -1094,6 +1298,125 @@ function sourceTypeLabel(source) {
   accent-color: var(--qa-primary);
 }
 
+.memory-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  border-radius: $radius-lg;
+  background: rgba(240, 253, 250, 0.62);
+  padding: 10px 12px;
+}
+
+.memory-toggle {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 8px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.memory-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--qa-teal);
+}
+
+.memory-toggle input:disabled {
+  cursor: not-allowed;
+}
+
+.memory-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memory-error {
+  color: #b91c1c;
+}
+
+.memory-cleaner {
+  width: max-content;
+  max-width: 100%;
+  color: #475569;
+  font-size: 12px;
+}
+
+.memory-cleaner summary {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.memory-empty {
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.memory-list {
+  display: grid;
+  width: min(480px, 100%);
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: $radius-md;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 8px 10px;
+}
+
+.memory-item-main {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memory-type {
+  color: #0f766e;
+  font-weight: 900;
+}
+
+.memory-created {
+  color: #64748b;
+}
+
+.memory-preview {
+  flex: 1 1 100%;
+  min-width: 0;
+  color: #334155;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.memory-delete {
+  min-height: 28px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: $radius-md;
+  background: #fff;
+  color: #b91c1c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.memory-delete:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
 .scope-status {
   display: flex;
   flex-wrap: wrap;
@@ -1124,6 +1447,10 @@ function sourceTypeLabel(source) {
 
 .hybrid-warmup-pill {
   color: #7c3aed;
+}
+
+.memory-pill {
+  color: #0f766e;
 }
 
 .qa-main {

@@ -183,6 +183,10 @@ export function resolveHybridWarmupText(status, cached = false) {
   return ''
 }
 
+export function resolveMemoryPolicyForMode(mode, memoryEnabled = false) {
+  return mode === 'local' && memoryEnabled ? 'auto' : 'off'
+}
+
 export function shouldUseHybridBeta(question, options = {}) {
   if (!options.allowHybridBeta) {
     return false
