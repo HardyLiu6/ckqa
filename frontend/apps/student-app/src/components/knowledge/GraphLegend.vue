@@ -77,8 +77,8 @@ const collapsed = ref(false)
   transition: all 0.2s ease;
 
   &.collapsed {
-    max-width: 80px;
-    padding: 8px 10px;
+    max-width: 120px;
+    padding: 8px 12px;
   }
 }
 

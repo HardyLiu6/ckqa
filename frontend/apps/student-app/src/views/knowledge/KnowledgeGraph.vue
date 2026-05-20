@@ -307,10 +307,10 @@ const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommun
             <el-radio-button value="merge">叠加</el-radio-button>
             <el-radio-button value="replace">聚焦</el-radio-button>
           </el-radio-group>
-          <GlowButton v-if="isExploring" size="md" variant="ghost" @click="onBackToOverview">
+          <GlowButton v-if="isExploring" size="sm" variant="ghost" @click="onBackToOverview">
             返回章节
           </GlowButton>
-          <GlowButton size="md" :disabled="!store.selectedCourseId" @click="bootstrap">
+          <GlowButton size="sm" :disabled="!store.selectedCourseId" @click="bootstrap">
             重新加载
           </GlowButton>
         </div>
