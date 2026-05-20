@@ -13,8 +13,12 @@ const collapsed = ref(false)
 <template>
   <div :class="['graph-legend', { collapsed }]">
     <div class="legend-header" @click="collapsed = !collapsed">
-      <span class="legend-title">{{ collapsed ? '图例' : '图例说明' }}</span>
-      <span class="toggle-icon">{{ collapsed ? '▶' : '▼' }}</span>
+      <span class="legend-title">{{ collapsed ? '📊 图例' : '📊 图例说明' }}</span>
+      <span :class="['toggle-btn', { open: !collapsed }]">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
     </div>
 
     <div v-show="!collapsed" class="legend-body">
@@ -84,10 +88,15 @@ const collapsed = ref(false)
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  gap: 6px;
+  gap: 8px;
+  padding: 2px 0;
+  border-radius: 6px;
+  transition: background 0.15s;
 
   &:hover {
-    color: #0d9488;
+    background: rgba(13, 148, 136, 0.06);
+    margin: -2px -4px;
+    padding: 4px 4px;
   }
 }
 
@@ -97,9 +106,23 @@ const collapsed = ref(false)
   color: #0f172a;
 }
 
-.toggle-icon {
-  font-size: 10px;
-  color: #94a3b8;
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: #64748b;
+  transition: transform 0.2s ease, color 0.15s;
+
+  &.open {
+    transform: rotate(0deg);
+  }
+
+  &:not(.open) {
+    transform: rotate(-90deg);
+  }
 }
 
 .legend-body {

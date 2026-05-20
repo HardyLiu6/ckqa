@@ -391,10 +391,14 @@ const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommun
 
 .kg-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #f0fdfa 0%, #f8fafc 100%);
+  border-radius: $radius-xl;
+  border: 1px solid rgba(13, 148, 136, 0.12);
 
   .kg-head-left { flex: 1; min-width: 0; }
   .kg-head-right {
@@ -406,16 +410,23 @@ const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommun
   }
 
   .course-select { width: 200px; }
-  .expand-mode-toggle { margin: 0; }
+
+  .expand-mode-toggle {
+    :deep(.el-radio-button__inner) {
+      padding: 7px 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
 
   .title {
     font-family: 'Space Grotesk', sans-serif;
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 800;
     color: #0f172a;
     margin: 0;
   }
-  .sub { margin: 4px 0 0; font-size: 13px; color: #64748b; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: #64748b; }
 }
 
 .canvas-card {
