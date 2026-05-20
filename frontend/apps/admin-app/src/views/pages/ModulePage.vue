@@ -4417,19 +4417,19 @@ onBeforeUnmount(() => {
           <div v-if="courseBlock.item.category" class="course-meta-card">
             <div class="course-meta-card__label">分类</div>
             <div class="course-meta-card__value">
-              <el-tag type="primary">{{ courseBlock.item.category }}</el-tag>
+              <el-tag type="primary" effect="plain">{{ courseBlock.item.category }}</el-tag>
             </div>
           </div>
           <div v-if="courseBlock.item.difficulty" class="course-meta-card">
             <div class="course-meta-card__label">难度</div>
             <div class="course-meta-card__value">
-              <el-tag :type="{ beginner: 'success', intermediate: 'warning', advanced: 'danger' }[courseBlock.item.difficulty] || 'info'">{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</el-tag>
+              <el-tag :type="{ beginner: 'success', intermediate: 'warning', advanced: 'danger' }[courseBlock.item.difficulty] || 'info'" effect="plain">{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</el-tag>
             </div>
           </div>
           <div v-if="courseBlock.item.estimatedHours" class="course-meta-card">
             <div class="course-meta-card__label">预计学时</div>
             <div class="course-meta-card__value">
-              <el-tag>约 {{ courseBlock.item.estimatedHours }} 小时</el-tag>
+              <el-tag effect="plain">约 {{ courseBlock.item.estimatedHours }} 小时</el-tag>
             </div>
           </div>
         </div>
@@ -4438,7 +4438,7 @@ onBeforeUnmount(() => {
           <div class="course-meta-card">
             <div class="course-meta-card__label">标签</div>
             <div class="course-meta-card__chips">
-              <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small">{{ tag }}</el-tag>
+              <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag>
             </div>
           </div>
         </div>
@@ -4453,7 +4453,7 @@ onBeforeUnmount(() => {
           <div v-if="courseBlock.item.audience?.length" class="course-meta-card">
             <div class="course-meta-card__label">适合人群</div>
             <div class="course-meta-card__chips">
-              <el-tag v-for="(aud, idx) in courseBlock.item.audience" :key="idx" size="small" type="info">{{ aud }}</el-tag>
+              <el-tag v-for="(aud, idx) in courseBlock.item.audience" :key="idx" size="small" type="info" effect="plain">{{ aud }}</el-tag>
             </div>
           </div>
         </div>
