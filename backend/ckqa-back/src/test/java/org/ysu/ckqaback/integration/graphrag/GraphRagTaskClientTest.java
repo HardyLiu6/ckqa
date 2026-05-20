@@ -8,6 +8,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -127,6 +128,60 @@ class GraphRagTaskClientTest {
         );
 
         assertThat(result.pythonTaskId()).isEqualTo("qt_20260517_000001_001");
+        server.verify();
+    }
+
+    @Test
+    void shouldCreateQueryTaskWithLocalHistoryStrategyAndConversationHistory() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "mode": "local",
+                          "prompt": "时间片轮转为什么会影响响应时间？",
+                          "retrievalQuery": "时间片轮转为什么会影响响应时间？",
+                          "generationContext": "最近对话：调度算法",
+                          "queryEngineStrategy": "local_history",
+                          "conversationHistory": [
+                            {
+                              "role": "user",
+                              "content": "什么是时间片轮转？"
+                            },
+                            {
+                              "role": "assistant",
+                              "content": "学习记忆：偏好用步骤化解释调度算法。"
+                            }
+                          ],
+                          "indexRunId": 18,
+                          "dataDirUri": "user_2/kb_5/build_27/index/output"
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "pythonTaskId": "qt_20260520_000001_001",
+                          "taskStatus": "pending",
+                          "progressStage": "queued",
+                          "createdAt": "2026-05-20T20:20:34"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        GraphRagTaskCreateResult result = client.createTask(
+                "local",
+                "时间片轮转为什么会影响响应时间？",
+                18L,
+                "user_2/kb_5/build_27/index/output",
+                "最近对话：调度算法",
+                "local_history",
+                List.of(
+                        new GraphRagConversationMessage("user", "什么是时间片轮转？"),
+                        new GraphRagConversationMessage("assistant", "学习记忆：偏好用步骤化解释调度算法。")
+                )
+        );
+
+        assertThat(result.pythonTaskId()).isEqualTo("qt_20260520_000001_001");
         server.verify();
     }
 

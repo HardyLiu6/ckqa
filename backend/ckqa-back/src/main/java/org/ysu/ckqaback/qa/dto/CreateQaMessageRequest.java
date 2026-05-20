@@ -29,6 +29,9 @@ public class CreateQaMessageRequest {
     @Valid
     private QaClientRoutingSnapshot clientRoutingSnapshot;
 
+    @Pattern(regexp = "default|off|auto", message = "memoryPolicy取值不合法")
+    private String memoryPolicy = "default";
+
     public CreateQaMessageRequest(String mode, String content) {
         this.mode = mode;
         this.content = content;

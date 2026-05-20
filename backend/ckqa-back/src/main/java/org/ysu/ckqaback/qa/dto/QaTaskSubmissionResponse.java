@@ -23,6 +23,11 @@ public class QaTaskSubmissionResponse {
     private final Boolean contextApplied;
     private final String contextStrategy;
     private final ContextSizeEstimateResponse contextSizeEstimate;
+    private final Boolean memoryApplied;
+    private final String memoryStrategy;
+    private final String memoryScope;
+    private final Integer memorySourceCount;
+    private final Integer memorySizeEstimate;
 
     private QaTaskSubmissionResponse(
             QaMessageResponse userMessage,
@@ -37,7 +42,12 @@ public class QaTaskSubmissionResponse {
             String timeoutMessage,
             Boolean contextApplied,
             String contextStrategy,
-            ContextSizeEstimateResponse contextSizeEstimate
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate
     ) {
         this.userMessage = userMessage;
         this.taskId = taskId;
@@ -52,6 +62,11 @@ public class QaTaskSubmissionResponse {
         this.contextApplied = contextApplied;
         this.contextStrategy = contextStrategy;
         this.contextSizeEstimate = contextSizeEstimate;
+        this.memoryApplied = memoryApplied;
+        this.memoryStrategy = memoryStrategy;
+        this.memoryScope = memoryScope;
+        this.memorySourceCount = memorySourceCount;
+        this.memorySizeEstimate = memorySizeEstimate;
     }
 
     public static QaTaskSubmissionResponse of(
@@ -67,7 +82,8 @@ public class QaTaskSubmissionResponse {
             String timeoutMessage
     ) {
         return of(userMessage, taskId, taskStatus, progressStage, retrievalStatus, createdAt, mode,
-                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none", ContextSizeEstimateResponse.of(0));
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none", ContextSizeEstimateResponse.of(0),
+                false, "none", null, 0, 0);
     }
 
     public static QaTaskSubmissionResponse of(
@@ -85,6 +101,31 @@ public class QaTaskSubmissionResponse {
             String contextStrategy,
             ContextSizeEstimateResponse contextSizeEstimate
     ) {
+        return of(userMessage, taskId, taskStatus, progressStage, retrievalStatus, createdAt, mode,
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, contextApplied, contextStrategy,
+                contextSizeEstimate, false, "none", null, 0, 0);
+    }
+
+    public static QaTaskSubmissionResponse of(
+            QaMessageResponse userMessage,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            LocalDateTime createdAt,
+            String mode,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate
+    ) {
         return new QaTaskSubmissionResponse(
                 userMessage,
                 taskId,
@@ -98,7 +139,12 @@ public class QaTaskSubmissionResponse {
                 timeoutMessage,
                 contextApplied,
                 contextStrategy,
-                contextSizeEstimate
+                contextSizeEstimate,
+                memoryApplied,
+                memoryStrategy,
+                memoryScope,
+                memorySourceCount,
+                memorySizeEstimate
         );
     }
 }

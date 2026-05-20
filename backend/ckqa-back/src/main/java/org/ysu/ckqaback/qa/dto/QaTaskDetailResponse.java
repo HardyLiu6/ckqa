@@ -32,6 +32,11 @@ public class QaTaskDetailResponse {
     private final Boolean contextApplied;
     private final String contextStrategy;
     private final ContextSizeEstimateResponse contextSizeEstimate;
+    private final Boolean memoryApplied;
+    private final String memoryStrategy;
+    private final String memoryScope;
+    private final Integer memorySourceCount;
+    private final Integer memorySizeEstimate;
 
     private QaTaskDetailResponse(
             Long taskId,
@@ -53,7 +58,12 @@ public class QaTaskDetailResponse {
             String timeoutMessage,
             Boolean contextApplied,
             String contextStrategy,
-            ContextSizeEstimateResponse contextSizeEstimate
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate
     ) {
         this.taskId = taskId;
         this.userMessageId = userMessageId;
@@ -75,6 +85,11 @@ public class QaTaskDetailResponse {
         this.contextApplied = contextApplied;
         this.contextStrategy = contextStrategy;
         this.contextSizeEstimate = contextSizeEstimate;
+        this.memoryApplied = memoryApplied;
+        this.memoryStrategy = memoryStrategy;
+        this.memoryScope = memoryScope;
+        this.memorySourceCount = memorySourceCount;
+        this.memorySizeEstimate = memorySizeEstimate;
     }
 
     @JsonIgnore
@@ -103,7 +118,8 @@ public class QaTaskDetailResponse {
     ) {
         return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, queryText,
                 latestLogs, startedAt, lastHeartbeatAt, finishedAt, assistantMessage, errorMessage,
-                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none", ContextSizeEstimateResponse.of(0));
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none",
+                ContextSizeEstimateResponse.of(0), false, "none", null, 0, 0);
     }
 
     public static QaTaskDetailResponse of(
@@ -128,6 +144,39 @@ public class QaTaskDetailResponse {
             String contextStrategy,
             ContextSizeEstimateResponse contextSizeEstimate
     ) {
+        return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, queryText,
+                latestLogs, startedAt, lastHeartbeatAt, finishedAt, assistantMessage, errorMessage,
+                recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, contextApplied, contextStrategy,
+                contextSizeEstimate, false, "none", null, 0, 0);
+    }
+
+    public static QaTaskDetailResponse of(
+            Long taskId,
+            Long userMessageId,
+            Long assistantMessageId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            String mode,
+            String queryText,
+            List<String> latestLogs,
+            LocalDateTime startedAt,
+            LocalDateTime lastHeartbeatAt,
+            LocalDateTime finishedAt,
+            QaMessageResponse assistantMessage,
+            String errorMessage,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate
+    ) {
         return new QaTaskDetailResponse(
                 taskId,
                 userMessageId,
@@ -148,7 +197,12 @@ public class QaTaskDetailResponse {
                 timeoutMessage,
                 contextApplied,
                 contextStrategy,
-                contextSizeEstimate
+                contextSizeEstimate,
+                memoryApplied,
+                memoryStrategy,
+                memoryScope,
+                memorySourceCount,
+                memorySizeEstimate
         );
     }
 }

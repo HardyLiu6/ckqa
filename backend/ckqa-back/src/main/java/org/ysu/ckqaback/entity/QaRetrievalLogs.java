@@ -214,6 +214,54 @@ public class QaRetrievalLogs implements Serializable {
     private String routingSnapshotJson;
 
     /**
+     * 是否应用长期记忆
+     */
+    @TableField("memory_applied")
+    private Boolean memoryApplied;
+
+    /**
+     * 长期记忆策略
+     */
+    @TableField("memory_strategy")
+    private String memoryStrategy;
+
+    /**
+     * 长期记忆隔离范围
+     */
+    @TableField("memory_scope")
+    private String memoryScope;
+
+    /**
+     * 长期记忆来源数量
+     */
+    @TableField("memory_source_count")
+    private Integer memorySourceCount;
+
+    /**
+     * 长期记忆上下文字符数
+     */
+    @TableField("memory_size_chars")
+    private Integer memorySizeChars;
+
+    /**
+     * Python 查询引擎策略
+     */
+    @TableField("query_engine_strategy")
+    private String queryEngineStrategy;
+
+    /**
+     * 历史上下文降级原因
+     */
+    @TableField("history_fallback_reason")
+    private String historyFallbackReason;
+
+    /**
+     * 内部传递给 Python 的历史上下文 JSON，不对外展示。
+     */
+    @TableField("memory_history_json")
+    private String memoryHistoryJson;
+
+    /**
      * 检索状态
      */
     @TableField("retrieval_status")

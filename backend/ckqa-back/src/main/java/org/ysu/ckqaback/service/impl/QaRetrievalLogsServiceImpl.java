@@ -86,6 +86,14 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setRoutingConfidenceBand(context.routingConfidenceBand());
             task.setRoutingReviewPriority(context.routingReviewPriority());
             task.setRoutingSnapshotJson(context.routingSnapshotJson());
+            task.setMemoryApplied(context.memoryApplied());
+            task.setMemoryStrategy(context.memoryStrategy());
+            task.setMemoryScope(context.memoryScope());
+            task.setMemorySourceCount(context.memorySourceCount());
+            task.setMemorySizeChars(context.memorySizeChars());
+            task.setQueryEngineStrategy(context.queryEngineStrategy());
+            task.setHistoryFallbackReason(context.historyFallbackReason());
+            task.setMemoryHistoryJson(context.memoryHistoryJson());
         }
         task.setCreatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         save(task);
@@ -124,6 +132,8 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .set(QaRetrievalLogs::getLatestLogs, joinLatestLogs(snapshot.latestLogs()))
                 .set(QaRetrievalLogs::getStartedAt, snapshot.startedAt())
                 .set(QaRetrievalLogs::getLastHeartbeatAt, snapshot.lastHeartbeatAt())
+                .set(StringUtils.hasText(snapshot.queryEngineStrategy()), QaRetrievalLogs::getQueryEngineStrategy, snapshot.queryEngineStrategy())
+                .set(StringUtils.hasText(snapshot.historyFallbackReason()), QaRetrievalLogs::getHistoryFallbackReason, snapshot.historyFallbackReason())
                 .set(snapshot.finishedAt() != null, QaRetrievalLogs::getFinishedAt, snapshot.finishedAt());
         baseMapper.update(null, updateWrapper);
     }

@@ -21,6 +21,14 @@ public record QaRetrievalLogContext(
         Double routingConfidence,
         String routingConfidenceBand,
         String routingReviewPriority,
-        String routingSnapshotJson
+        String routingSnapshotJson,
+        boolean memoryApplied,
+        String memoryStrategy,
+        String memoryScope,
+        Integer memorySourceCount,
+        Integer memorySizeChars,
+        String queryEngineStrategy,
+        String historyFallbackReason,
+        String memoryHistoryJson
 ) {
 }

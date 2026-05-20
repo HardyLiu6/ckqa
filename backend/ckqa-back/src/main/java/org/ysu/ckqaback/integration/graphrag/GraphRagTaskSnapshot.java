@@ -18,7 +18,11 @@ public record GraphRagTaskSnapshot(
         Integer returnCode,
         LocalDateTime startedAt,
         LocalDateTime finishedAt,
-        List<GraphRagSourceSnapshot> sources
+        List<GraphRagSourceSnapshot> sources,
+        String queryEngineStrategy,
+        String historyFallbackReason,
+        Boolean historyApplied,
+        Integer historyTurnsUsed
 ) {
 
     public GraphRagTaskSnapshot(
@@ -46,8 +50,52 @@ public record GraphRagTaskSnapshot(
                 returnCode,
                 startedAt,
                 finishedAt,
-                List.of()
+                List.of(),
+                null,
+                null,
+                false,
+                0
         );
+    }
+
+    public GraphRagTaskSnapshot(
+            String pythonTaskId,
+            String taskStatus,
+            String progressStage,
+            boolean processAlive,
+            LocalDateTime lastHeartbeatAt,
+            List<String> latestLogs,
+            String resultText,
+            String errorMessage,
+            Integer returnCode,
+            LocalDateTime startedAt,
+            LocalDateTime finishedAt,
+            List<GraphRagSourceSnapshot> sources
+    ) {
+        this(
+                pythonTaskId,
+                taskStatus,
+                progressStage,
+                processAlive,
+                lastHeartbeatAt,
+                latestLogs,
+                resultText,
+                errorMessage,
+                returnCode,
+                startedAt,
+                finishedAt,
+                sources,
+                null,
+                null,
+                false,
+                0
+        );
+    }
+
+    public GraphRagTaskSnapshot {
+        sources = sources == null ? List.of() : List.copyOf(sources);
+        historyApplied = Boolean.TRUE.equals(historyApplied);
+        historyTurnsUsed = historyTurnsUsed == null ? 0 : historyTurnsUsed;
     }
 
     public boolean isTerminal() {

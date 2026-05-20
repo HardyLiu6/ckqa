@@ -32,6 +32,8 @@ import org.ysu.ckqaback.qa.context.QaQuestionRewriteClientPort;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
+import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
+import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
@@ -90,6 +92,7 @@ public class QaWorkflowService {
     private IndexArtifactsService indexArtifactsService;
     private StudentRedisCacheService studentRedisCacheService;
     private StudentCacheKeyFactory studentCacheKeyFactory;
+    private QaMemoryContextService qaMemoryContextService;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -134,6 +137,11 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setStudentCacheKeyFactory(StudentCacheKeyFactory studentCacheKeyFactory) {
         this.studentCacheKeyFactory = studentCacheKeyFactory;
+    }
+
+    @Autowired(required = false)
+    public void setQaMemoryContextService(QaMemoryContextService qaMemoryContextService) {
+        this.qaMemoryContextService = qaMemoryContextService;
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -338,6 +346,9 @@ public class QaWorkflowService {
         );
         qaQuestionRewriteService.setRewriteProperties(properties.getRewrite());
         QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
+        QaMemoryContextResult memoryContext = qaMemoryContextService == null
+                ? QaMemoryContextResult.notApplied("service_unavailable")
+                : qaMemoryContextService.buildContext(request.getMode(), request.getMemoryPolicy(), session, history);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),
@@ -356,7 +367,15 @@ public class QaWorkflowService {
                 request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getConfidence(),
                 request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getConfidenceBand(),
                 request.getClientRoutingSnapshot() == null ? null : request.getClientRoutingSnapshot().getReviewPriority(),
-                serializeRoutingSnapshot(request)
+                serializeRoutingSnapshot(request),
+                memoryContext.memoryApplied(),
+                memoryContext.strategy(),
+                memoryContext.scope(),
+                memoryContext.sourceCount(),
+                memoryContext.sizeEstimate(),
+                memoryContext.memoryApplied() ? memoryContext.strategy() : null,
+                memoryContext.historyFallbackReason(),
+                serializeMemoryHistory(memoryContext)
         );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
@@ -386,8 +405,24 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 context.contextApplied(),
                 context.strategy(),
-                ContextSizeEstimateResponse.of(context.charCount())
+                ContextSizeEstimateResponse.of(context.charCount()),
+                memoryContext.memoryApplied(),
+                memoryContext.strategy(),
+                memoryContext.scope(),
+                memoryContext.sourceCount(),
+                memoryContext.sizeEstimate()
         );
+    }
+
+    private String serializeMemoryHistory(QaMemoryContextResult memoryContext) {
+        if (memoryContext == null || !memoryContext.memoryApplied() || memoryContext.conversationHistory().isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(memoryContext.conversationHistory());
+        } catch (JsonProcessingException exception) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "长期记忆上下文格式不合法");
+        }
     }
 
     private String serializeRoutingSnapshot(CreateQaMessageRequest request) {
@@ -620,7 +655,12 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 !"none".equals(contextStrategy),
                 contextStrategy,
-                ContextSizeEstimateResponse.of(task.getContextCharCount())
+                ContextSizeEstimateResponse.of(task.getContextCharCount()),
+                Boolean.TRUE.equals(task.getMemoryApplied()),
+                StringUtils.hasText(task.getMemoryStrategy()) ? task.getMemoryStrategy() : "none",
+                task.getMemoryScope(),
+                task.getMemorySourceCount() == null ? 0 : task.getMemorySourceCount(),
+                task.getMemorySizeChars() == null ? 0 : task.getMemorySizeChars()
         );
     }
 }

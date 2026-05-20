@@ -1,5 +1,8 @@
 package org.ysu.ckqaback.qa;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -12,6 +15,7 @@ import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
@@ -38,6 +42,9 @@ import java.util.function.Function;
 public class QaTaskWorker {
 
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<List<GraphRagConversationMessage>> HISTORY_TYPE = new TypeReference<>() {
+    };
 
     private final TaskExecutor qaTaskExecutor;
     private final GraphRagTaskClient graphRagTaskClient;
@@ -265,12 +272,34 @@ public class QaTaskWorker {
 
     private GraphRagTaskCreateResult createGraphRagTask(QaRetrievalLogs task) {
         String dataDirUri = resolveReadyOutputDirUri(task);
+        List<GraphRagConversationMessage> conversationHistory = parseMemoryHistory(task.getMemoryHistoryJson());
+        boolean useHistoryStrategy = StringUtils.hasText(task.getQueryEngineStrategy()) || !conversationHistory.isEmpty();
         if (!StringUtils.hasText(dataDirUri)) {
+            if (!useHistoryStrategy) {
+                return graphRagTaskClient.createTask(
+                        task.getQueryMode(),
+                        task.getQueryText(),
+                        null,
+                        null,
+                        task.getContextSnapshotText()
+                );
+            }
             return graphRagTaskClient.createTask(
                     task.getQueryMode(),
                     task.getQueryText(),
                     null,
                     null,
+                    task.getContextSnapshotText(),
+                    task.getQueryEngineStrategy(),
+                    conversationHistory
+            );
+        }
+        if (!useHistoryStrategy) {
+            return graphRagTaskClient.createTask(
+                    task.getQueryMode(),
+                    task.getQueryText(),
+                    task.getIndexRunId(),
+                    dataDirUri,
                     task.getContextSnapshotText()
             );
         }
@@ -279,8 +308,22 @@ public class QaTaskWorker {
                 task.getQueryText(),
                 task.getIndexRunId(),
                 dataDirUri,
-                task.getContextSnapshotText()
+                task.getContextSnapshotText(),
+                task.getQueryEngineStrategy(),
+                conversationHistory
         );
+    }
+
+    private List<GraphRagConversationMessage> parseMemoryHistory(String memoryHistoryJson) {
+        if (!StringUtils.hasText(memoryHistoryJson)) {
+            return List.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(memoryHistoryJson, HISTORY_TYPE);
+        } catch (JsonProcessingException exception) {
+            // 记忆上下文只是增强能力，历史 JSON 损坏时降级为无 history，避免阻断正式问答。
+            return List.of();
+        }
     }
 
     private String resolveReadyOutputDirUri(QaRetrievalLogs task) {

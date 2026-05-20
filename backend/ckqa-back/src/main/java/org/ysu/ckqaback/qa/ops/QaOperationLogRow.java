@@ -48,6 +48,13 @@ public class QaOperationLogRow {
     private String routingConfidenceBand;
     private String routingReviewPriority;
     private String routingSnapshotJson;
+    private Boolean memoryApplied;
+    private String memoryStrategy;
+    private String memoryScope;
+    private Integer memorySourceCount;
+    private Integer memorySizeChars;
+    private String queryEngineStrategy;
+    private String historyFallbackReason;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime lastHeartbeatAt;

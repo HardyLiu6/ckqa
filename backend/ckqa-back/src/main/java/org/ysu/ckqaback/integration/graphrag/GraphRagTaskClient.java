@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -56,6 +57,18 @@ public class GraphRagTaskClient {
             String dataDirUri,
             String generationContext
     ) {
+        return createTask(mode, prompt, indexRunId, dataDirUri, generationContext, null, null);
+    }
+
+    public GraphRagTaskCreateResult createTask(
+            String mode,
+            String prompt,
+            Long indexRunId,
+            String dataDirUri,
+            String generationContext,
+            String queryEngineStrategy,
+            List<GraphRagConversationMessage> conversationHistory
+    ) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("mode", mode);
         body.put("prompt", prompt);
@@ -68,6 +81,12 @@ public class GraphRagTaskClient {
         }
         if (dataDirUri != null && !dataDirUri.isBlank()) {
             body.put("dataDirUri", dataDirUri);
+        }
+        if (queryEngineStrategy != null && !queryEngineStrategy.isBlank()) {
+            body.put("queryEngineStrategy", queryEngineStrategy);
+        }
+        if (conversationHistory != null && !conversationHistory.isEmpty()) {
+            body.put("conversationHistory", conversationHistory);
         }
         return restClient.post()
                 .uri("/v1/query-tasks")

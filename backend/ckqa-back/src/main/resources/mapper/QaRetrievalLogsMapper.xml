@@ -31,6 +31,18 @@
         <result column="rewrite_model" property="rewriteModel" />
         <result column="rewrite_confidence" property="rewriteConfidence" />
         <result column="context_snapshot_version" property="contextSnapshotVersion" />
+        <result column="routing_confidence" property="routingConfidence" />
+        <result column="routing_confidence_band" property="routingConfidenceBand" />
+        <result column="routing_review_priority" property="routingReviewPriority" />
+        <result column="routing_snapshot_json" property="routingSnapshotJson" />
+        <result column="memory_applied" property="memoryApplied" />
+        <result column="memory_strategy" property="memoryStrategy" />
+        <result column="memory_scope" property="memoryScope" />
+        <result column="memory_source_count" property="memorySourceCount" />
+        <result column="memory_size_chars" property="memorySizeChars" />
+        <result column="query_engine_strategy" property="queryEngineStrategy" />
+        <result column="history_fallback_reason" property="historyFallbackReason" />
+        <result column="memory_history_json" property="memoryHistoryJson" />
         <result column="retrieval_status" property="retrievalStatus" />
         <result column="error_message" property="errorMessage" />
         <result column="started_at" property="startedAt" />
@@ -46,6 +58,9 @@
         retrieval_query_text, standalone_query_text, context_snapshot_text, context_strategy, context_message_range,
         context_char_count, rewrite_applied, rewrite_reason, rewrite_source_message_range,
         rewrite_method, rewrite_model, rewrite_confidence, context_snapshot_version,
+        routing_confidence, routing_confidence_band, routing_review_priority, routing_snapshot_json,
+        memory_applied, memory_strategy, memory_scope, memory_source_count, memory_size_chars,
+        query_engine_strategy, history_fallback_reason, memory_history_json,
         retrieval_status, error_message, started_at, last_heartbeat_at, finished_at, created_at
     </sql>
 

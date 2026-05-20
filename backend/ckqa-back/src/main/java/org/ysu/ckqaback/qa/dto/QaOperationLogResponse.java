@@ -36,6 +36,12 @@ public class QaOperationLogResponse {
     private final Double routingConfidence;
     private final String routingConfidenceBand;
     private final String routingReviewPriority;
+    private final Boolean memoryApplied;
+    private final String memoryStrategy;
+    private final Integer memorySourceCount;
+    private final Integer memorySizeChars;
+    private final String queryEngineStrategy;
+    private final String historyFallbackReason;
     private final LocalDateTime createdAt;
     private final LocalDateTime startedAt;
     private final LocalDateTime finishedAt;
@@ -70,6 +76,12 @@ public class QaOperationLogResponse {
         this.routingConfidence = row.getRoutingConfidence();
         this.routingConfidenceBand = row.getRoutingConfidenceBand();
         this.routingReviewPriority = row.getRoutingReviewPriority();
+        this.memoryApplied = row.getMemoryApplied();
+        this.memoryStrategy = row.getMemoryStrategy();
+        this.memorySourceCount = row.getMemorySourceCount();
+        this.memorySizeChars = row.getMemorySizeChars();
+        this.queryEngineStrategy = row.getQueryEngineStrategy();
+        this.historyFallbackReason = row.getHistoryFallbackReason();
         this.createdAt = row.getCreatedAt();
         this.startedAt = row.getStartedAt();
         this.finishedAt = row.getFinishedAt();
