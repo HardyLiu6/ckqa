@@ -103,6 +103,16 @@ public enum ApiResultCode {
     EXTRACTION_EVAL_RUN_NOT_FOUND(4052, "评分任务不存在"),
 
     /**
+     * 知识图谱节点不存在（实体 ID 找不到）。学生端图谱浏览专用。
+     */
+    GRAPH_ENTITY_NOT_FOUND(4053, "知识图谱节点不存在"),
+
+    /**
+     * 知识图谱依赖（Neo4j）当前不可用。
+     */
+    GRAPH_BACKEND_UNAVAILABLE(5010, "知识图谱依赖暂不可用"),
+
+    /**
      * courseId 已存在。
      */
     COURSE_ID_EXISTS(4090, "课程ID已存在"),
@@ -271,7 +281,17 @@ public enum ApiResultCode {
     /**
      * 邮件发送失败（SMTP 异常或第三方服务不可用）。
      */
-    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试");
+    EMAIL_SEND_FAILED(5009, "邮件发送失败，请稍后重试"),
+
+    /**
+     * 注册或绑定时邮箱已被其他账号占用。
+     */
+    EMAIL_ALREADY_BOUND(4295, "该邮箱已被其他账号绑定"),
+
+    /**
+     * 重置密码 / 注册时邮箱与现有账号绑定不一致。
+     */
+    EMAIL_BINDING_MISMATCH(4296, "该邮箱与账号信息不匹配");
 
     /**
      * 业务响应码。

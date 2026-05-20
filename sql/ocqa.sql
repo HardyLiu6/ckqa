@@ -27,6 +27,12 @@ CREATE TABLE `courses`  (
   `course_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '课程ID，如: os, cs61b',
   `course_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程名称',
   `description` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '课程描述',
+  `category` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '课程分类（自由输入），如：人工智能/前端开发',
+  `tags` json NULL COMMENT '课程标签字符串数组，DTO 层限制最多 20 个',
+  `objectives` json NULL COMMENT '学习目标字符串数组，DTO 层限制最多 12 条',
+  `audience` json NULL COMMENT '适合人群字符串数组，DTO 层限制最多 10 条',
+  `difficulty` enum('beginner','intermediate','advanced') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '难度级别',
+  `estimated_hours` int NULL DEFAULT NULL COMMENT '预计学习时长（小时），完整 LMS 上线前由教师手填',
   `cover_url` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '/api/v1/course-covers/default-course-cover.svg' COMMENT '课程封面访问地址',
   `status` enum('active','inactive','archived') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '课程状态',
   `access_policy` enum('restricted','public') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'restricted' COMMENT '访问策略',
@@ -35,7 +41,8 @@ CREATE TABLE `courses`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_course_id`(`course_id` ASC) USING BTREE,
   INDEX `idx_created_at`(`created_at` ASC) USING BTREE,
-  INDEX `idx_courses_is_deleted`(`is_deleted` ASC) USING BTREE
+  INDEX `idx_courses_is_deleted`(`is_deleted` ASC) USING BTREE,
+  INDEX `idx_courses_category`(`category` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '课程表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------

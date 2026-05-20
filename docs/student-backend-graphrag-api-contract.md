@@ -110,7 +110,7 @@ GET /api/v1/system/readiness
 前端建议：
 
 - `reachable=false` 表示依赖不可达。
-- `GET /system/health` 是轻量健康检查，重点覆盖 `mysql`、`redis`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api` 和 `graphrag-ready`。Redis 只用于服务端读缓存和短期状态，失败时学生端 API 回源执行。
+- `GET /system/health` 是轻量健康检查，重点覆盖 `mysql`、`redis`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api`、`graphrag-ready` 和 `neo4j`。Redis 只用于服务端读缓存和短期状态，失败时学生端 API 回源执行。Neo4j 用于学生端知识图谱只读浏览，不可达时图谱页应显式降级。
 - `GET /system/readiness` 会额外检查共享 `GRAPHRAG_ROOT/output` 和 `output/lancedb`，它们主要用于手工 CLI 调试和兼容旧调用，不再是管理端 build-run 构建的唯一就绪条件。
 - 学员端问答入口应优先关注知识库摘要里的 `activeIndexRunId` 以及后端后续聚合出的业务就绪状态。
 

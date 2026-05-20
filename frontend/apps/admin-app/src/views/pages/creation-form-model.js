@@ -33,8 +33,21 @@ export function createCreationForm(type, options = {}) {
     description: '',
     status: 'active',
     accessPolicy: 'restricted',
+    category: '',
+    tags: [],
+    objectives: [],
+    audience: [],
+    difficulty: '',
+    estimatedHours: null,
   }
 }
+
+export const DIFFICULTY_OPTIONS = [
+  { value: '', label: '未设置' },
+  { value: 'beginner', label: '入门' },
+  { value: 'intermediate', label: '进阶' },
+  { value: 'advanced', label: '高级' },
+]
 
 export function resolveCourseSelectOptions(courses = []) {
   return courses

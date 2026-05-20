@@ -101,6 +101,7 @@ import {
 import {
   ACCESS_POLICY_OPTIONS,
   COURSE_STATUS_OPTIONS,
+  DIFFICULTY_OPTIONS,
   KNOWLEDGE_BASE_STATUS_OPTIONS,
   createCreationForm,
   resolveCourseSelectOptions,
@@ -624,6 +625,12 @@ function createCourseEditForm(course = {}) {
     description: course.description ?? '',
     status: course.status ?? 'active',
     accessPolicy: course.accessPolicy ?? 'restricted',
+    category: course.category ?? '',
+    tags: Array.isArray(course.tags) ? [...course.tags] : [],
+    objectives: Array.isArray(course.objectives) ? [...course.objectives] : [],
+    audience: Array.isArray(course.audience) ? [...course.audience] : [],
+    difficulty: course.difficulty ?? '',
+    estimatedHours: course.estimatedHours ?? null,
   }
 }
 
@@ -1601,6 +1608,12 @@ async function submitCourseEdit() {
       description: courseEditForm.value.description.trim() || undefined,
       status: courseEditForm.value.status,
       accessPolicy: courseEditForm.value.accessPolicy,
+      category: courseEditForm.value.category?.trim() || undefined,
+      tags: courseEditForm.value.tags?.length ? courseEditForm.value.tags : undefined,
+      objectives: courseEditForm.value.objectives?.filter(Boolean).length ? courseEditForm.value.objectives.filter(Boolean) : undefined,
+      audience: courseEditForm.value.audience?.filter(Boolean).length ? courseEditForm.value.audience.filter(Boolean) : undefined,
+      difficulty: courseEditForm.value.difficulty || undefined,
+      estimatedHours: courseEditForm.value.estimatedHours || undefined,
     })
     courseActionState.value = 'success'
     closeCourseActionDialog()
@@ -1932,6 +1945,12 @@ async function submitCreation() {
       description: creationForm.value.description.trim() || undefined,
       status: creationForm.value.status,
       accessPolicy: creationForm.value.accessPolicy,
+      category: creationForm.value.category?.trim() || undefined,
+      tags: creationForm.value.tags?.length ? creationForm.value.tags : undefined,
+      objectives: creationForm.value.objectives?.filter(Boolean).length ? creationForm.value.objectives.filter(Boolean) : undefined,
+      audience: creationForm.value.audience?.filter(Boolean).length ? creationForm.value.audience.filter(Boolean) : undefined,
+      difficulty: creationForm.value.difficulty || undefined,
+      estimatedHours: creationForm.value.estimatedHours || undefined,
     }
     const course = await createCourse(payload)
     const courseId = course?.courseId
@@ -3225,6 +3244,38 @@ onBeforeUnmount(() => {
               />
             </el-select>
           </el-form-item>
+          <el-form-item class="creation-field" label="课程分类">
+            <el-input v-model.trim="creationForm.category" maxlength="64" placeholder="如：计算机基础、人工智能" show-word-limit />
+          </el-form-item>
+          <el-form-item class="creation-field" label="难度级别">
+            <el-select v-model="creationForm.difficulty" name="difficulty" clearable placeholder="选择难度">
+              <el-option v-for="opt in DIFFICULTY_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item class="creation-field" label="预计学时（小时）">
+            <el-input-number v-model="creationForm.estimatedHours" :min="1" :max="999" placeholder="如 64" controls-position="right" />
+          </el-form-item>
+          <el-form-item class="creation-field creation-form__wide" label="课程标签">
+            <el-select v-model="creationForm.tags" multiple filterable allow-create default-first-option :reserve-keyword="false" placeholder="输入后回车添加（最多 20 个）" />
+          </el-form-item>
+          <el-form-item class="creation-field creation-form__wide" label="学习目标">
+            <div v-for="(_, idx) in creationForm.objectives" :key="idx" class="multi-row-field">
+              <el-input v-model="creationForm.objectives[idx]" maxlength="200" placeholder="输入一条学习目标" />
+              <el-button text type="danger" @click="creationForm.objectives.splice(idx, 1)">删除</el-button>
+            </div>
+            <el-button text type="primary" :disabled="creationForm.objectives.length >= 12" @click="creationForm.objectives.push('')">
+              + 添加目标（{{ creationForm.objectives.length }}/12）
+            </el-button>
+          </el-form-item>
+          <el-form-item class="creation-field creation-form__wide" label="适合人群">
+            <div v-for="(_, idx) in creationForm.audience" :key="idx" class="multi-row-field">
+              <el-input v-model="creationForm.audience[idx]" maxlength="100" placeholder="输入一条适合人群" />
+              <el-button text type="danger" @click="creationForm.audience.splice(idx, 1)">删除</el-button>
+            </div>
+            <el-button text type="primary" :disabled="creationForm.audience.length >= 10" @click="creationForm.audience.push('')">
+              + 添加人群（{{ creationForm.audience.length }}/10）
+            </el-button>
+          </el-form-item>
         </template>
 
         <template v-else>
@@ -3420,6 +3471,38 @@ onBeforeUnmount(() => {
             maxlength="2000"
             show-word-limit
           />
+        </el-form-item>
+        <el-form-item class="creation-field" label="课程分类">
+          <el-input v-model.trim="courseEditForm.category" maxlength="64" placeholder="如：计算机基础" show-word-limit />
+        </el-form-item>
+        <el-form-item class="creation-field" label="难度级别">
+          <el-select v-model="courseEditForm.difficulty" clearable placeholder="选择难度">
+            <el-option v-for="opt in DIFFICULTY_OPTIONS" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item class="creation-field" label="预计学时（小时）">
+          <el-input-number v-model="courseEditForm.estimatedHours" :min="1" :max="999" controls-position="right" />
+        </el-form-item>
+        <el-form-item class="creation-field creation-form__wide" label="课程标签">
+          <el-select v-model="courseEditForm.tags" multiple filterable allow-create default-first-option :reserve-keyword="false" placeholder="输入后回车添加（最多 20 个）" />
+        </el-form-item>
+        <el-form-item class="creation-field creation-form__wide" label="学习目标">
+          <div v-for="(_, idx) in courseEditForm.objectives" :key="idx" class="multi-row-field">
+            <el-input v-model="courseEditForm.objectives[idx]" maxlength="200" placeholder="输入一条学习目标" />
+            <el-button text type="danger" @click="courseEditForm.objectives.splice(idx, 1)">删除</el-button>
+          </div>
+          <el-button text type="primary" :disabled="courseEditForm.objectives.length >= 12" @click="courseEditForm.objectives.push('')">
+            + 添加目标（{{ courseEditForm.objectives.length }}/12）
+          </el-button>
+        </el-form-item>
+        <el-form-item class="creation-field creation-form__wide" label="适合人群">
+          <div v-for="(_, idx) in courseEditForm.audience" :key="idx" class="multi-row-field">
+            <el-input v-model="courseEditForm.audience[idx]" maxlength="100" placeholder="输入一条适合人群" />
+            <el-button text type="danger" @click="courseEditForm.audience.splice(idx, 1)">删除</el-button>
+          </div>
+          <el-button text type="primary" :disabled="courseEditForm.audience.length >= 10" @click="courseEditForm.audience.push('')">
+            + 添加人群（{{ courseEditForm.audience.length }}/10）
+          </el-button>
         </el-form-item>
         <p v-if="courseActionError" class="inline-error creation-form__wide">{{ courseActionError.message }}</p>
         <div class="creation-form__actions">
@@ -4322,6 +4405,59 @@ onBeforeUnmount(() => {
           <dd>{{ renderFactValue(field) }}</dd>
         </div>
       </dl>
+    </article>
+
+    <article v-if="courseBlock.item?.category || courseBlock.item?.tags?.length || courseBlock.item?.objectives?.length || courseBlock.item?.audience?.length || courseBlock.item?.difficulty || courseBlock.item?.estimatedHours" class="panel course-info-panel course-metadata-panel">
+      <div class="panel-heading">
+        <h2>课程元数据</h2>
+      </div>
+      <div class="course-metadata-grid">
+        <!-- 第一行：分类、难度、预计学时（短字段并排） -->
+        <div class="course-metadata-row course-metadata-row--short">
+          <div v-if="courseBlock.item.category" class="course-meta-card">
+            <div class="course-meta-card__label">分类</div>
+            <div class="course-meta-card__value">
+              <el-tag type="primary" effect="plain">{{ courseBlock.item.category }}</el-tag>
+            </div>
+          </div>
+          <div v-if="courseBlock.item.difficulty" class="course-meta-card">
+            <div class="course-meta-card__label">难度</div>
+            <div class="course-meta-card__value">
+              <el-tag :type="{ beginner: 'success', intermediate: 'warning', advanced: 'danger' }[courseBlock.item.difficulty] || 'info'" effect="plain">{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</el-tag>
+            </div>
+          </div>
+          <div v-if="courseBlock.item.estimatedHours" class="course-meta-card">
+            <div class="course-meta-card__label">预计学时</div>
+            <div class="course-meta-card__value">
+              <el-tag effect="plain">约 {{ courseBlock.item.estimatedHours }} 小时</el-tag>
+            </div>
+          </div>
+        </div>
+        <!-- 第二行：标签（独占一行） -->
+        <div v-if="courseBlock.item.tags?.length" class="course-metadata-row course-metadata-row--full">
+          <div class="course-meta-card">
+            <div class="course-meta-card__label">标签</div>
+            <div class="course-meta-card__chips">
+              <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag>
+            </div>
+          </div>
+        </div>
+        <!-- 第三行：学习目标 + 适合人群（并排） -->
+        <div class="course-metadata-row course-metadata-row--split">
+          <div v-if="courseBlock.item.objectives?.length" class="course-meta-card">
+            <div class="course-meta-card__label">学习目标</div>
+            <ol class="course-meta-card__list">
+              <li v-for="(obj, idx) in courseBlock.item.objectives" :key="idx">{{ obj }}</li>
+            </ol>
+          </div>
+          <div v-if="courseBlock.item.audience?.length" class="course-meta-card">
+            <div class="course-meta-card__label">适合人群</div>
+            <div class="course-meta-card__chips">
+              <el-tag v-for="(aud, idx) in courseBlock.item.audience" :key="idx" size="small" type="info" effect="plain">{{ aud }}</el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
     </article>
 
     <article class="panel course-teachers-panel">

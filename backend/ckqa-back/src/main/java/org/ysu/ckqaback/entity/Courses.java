@@ -60,6 +60,42 @@ public class Courses implements Serializable {
     private String description;
 
     /**
+     * 课程分类（自由输入），如：人工智能/前端开发
+     */
+    @TableField("category")
+    private String category;
+
+    /**
+     * 课程标签 JSON 数组（最多 20 个，DTO 校验）
+     */
+    @TableField("tags")
+    private String tags;
+
+    /**
+     * 学习目标 JSON 数组（最多 12 条，DTO 校验）
+     */
+    @TableField("objectives")
+    private String objectives;
+
+    /**
+     * 适合人群 JSON 数组（最多 10 条，DTO 校验）
+     */
+    @TableField("audience")
+    private String audience;
+
+    /**
+     * 难度级别：beginner / intermediate / advanced
+     */
+    @TableField("difficulty")
+    private String difficulty;
+
+    /**
+     * 预计学习时长（小时），完整 LMS 上线前由教师手填
+     */
+    @TableField("estimated_hours")
+    private Integer estimatedHours;
+
+    /**
      * 课程封面访问地址
      */
     @TableField("cover_url")

@@ -17,6 +17,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@antv/g6": "5.0.50",
     "@element-plus/icons-vue": "^2.3.2",
     "@fontsource/manrope": "^5.2.8",
     "@fontsource/noto-sans-sc": "^5.2.9",

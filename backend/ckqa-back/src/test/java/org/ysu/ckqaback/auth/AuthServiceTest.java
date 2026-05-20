@@ -126,6 +126,132 @@ class AuthServiceTest {
         verify(authIdentitiesService).save(any(AuthIdentities.class));
     }
 
+    @Test
+    void shouldBindEmailWhenRegisterWithVerifiedCode() {
+        Roles role = new Roles();
+        role.setId(8L);
+        role.setRoleCode("student");
+        // 第一次 count 检查 username（0），第二次 count 检查 email 是否被占用（0）
+        when(usersService.count(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        when(rolesService.getOne(any(LambdaQueryWrapper.class))).thenReturn(role);
+        when(usersService.save(any(Users.class))).thenAnswer(invocation -> {
+            Users saved = invocation.getArgument(0);
+            saved.setId(101L);
+            return true;
+        });
+        when(usersService.getRoleCodes(101L)).thenReturn(List.of("student"));
+        when(usersService.getPermissionCodes(101L)).thenReturn(List.of("course:read"));
+
+        AuthRegisterRequest request = new AuthRegisterRequest();
+        request.setUsername("student.new");
+        request.setDisplayName("新同学");
+        request.setPassword("Ckqa@2026");
+        request.setEmail(" Demo@Example.com ");
+        request.setEmailCode("123456");
+
+        AuthResponse response = service.registerStudent(request);
+
+        // 邮箱验证码必须按 register scene 一次性消费
+        verify(emailCodeService).verifyAndConsume("demo@example.com", "123456", EmailCodeService.SCENE_REGISTER);
+        assertThat(response.getUser().getEmail()).isEqualTo("demo@example.com");
+    }
+
+    @Test
+    void shouldRejectRegisterWhenEmailAlreadyBound() {
+        Roles role = new Roles();
+        role.setId(8L);
+        role.setRoleCode("student");
+        when(rolesService.getOne(any(LambdaQueryWrapper.class))).thenReturn(role);
+        // 第一次 username count = 0, 第二次 email count = 1
+        when(usersService.count(any(LambdaQueryWrapper.class))).thenReturn(0L, 1L);
+
+        AuthRegisterRequest request = new AuthRegisterRequest();
+        request.setUsername("student.new");
+        request.setDisplayName("新同学");
+        request.setPassword("Ckqa@2026");
+        request.setEmail("dup@example.com");
+        request.setEmailCode("123456");
+
+        assertThatThrownBy(() -> service.registerStudent(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("邮箱");
+    }
+
+    @Test
+    void shouldRequireCodeWhenEmailProvidedDuringRegister() {
+        Roles role = new Roles();
+        role.setId(8L);
+        role.setRoleCode("student");
+        when(rolesService.getOne(any(LambdaQueryWrapper.class))).thenReturn(role);
+        when(usersService.count(any(LambdaQueryWrapper.class))).thenReturn(0L);
+
+        AuthRegisterRequest request = new AuthRegisterRequest();
+        request.setUsername("student.new");
+        request.setDisplayName("新同学");
+        request.setPassword("Ckqa@2026");
+        request.setEmail("foo@example.com");
+        // 故意不提供 emailCode
+        assertThatThrownBy(() -> service.registerStudent(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("验证码");
+    }
+
+    @Test
+    void shouldResetPasswordByVerifiedEmailCode() {
+        Users existing = user(7L, "STU2026010", "student.bob", "鲍勃", passwordService.hash("OldPass123"));
+        existing.setEmail("bob@example.com");
+        when(usersService.getOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
+
+        service.resetPasswordByEmail("Bob@Example.com", "654321", "FreshPass2026");
+
+        verify(emailCodeService).verifyAndConsume("bob@example.com", "654321", EmailCodeService.SCENE_RESET_PASSWORD);
+        assertThat(passwordService.matches("FreshPass2026", existing.getPasswordHash())).isTrue();
+        verify(usersService).updateById(existing);
+    }
+
+    @Test
+    void shouldRejectResetWhenEmailNotRegistered() {
+        when(usersService.getOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        assertThatThrownBy(() -> service.resetPasswordByEmail("ghost@example.com", "111111", "FreshPass2026"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("尚未绑定");
+    }
+
+    @Test
+    void shouldRejectWeakPasswordOnReset() {
+        Users existing = user(7L, "STU2026010", "student.bob", "鲍勃", passwordService.hash("OldPass123"));
+        existing.setEmail("bob@example.com");
+        when(usersService.getOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
+
+        // 不含字母
+        assertThatThrownBy(() -> service.resetPasswordByEmail("bob@example.com", "654321", "1234567890"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("字母");
+    }
+
+    @Test
+    void shouldReturnAvailabilityForUnusedUsername() {
+        when(usersService.count(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        var result = service.checkAvailability("username", "fresh.user");
+        assertThat(result.isAvailable()).isTrue();
+        assertThat(result.getField()).isEqualTo("username");
+    }
+
+    @Test
+    void shouldReturnUnavailableForTakenEmail() {
+        when(usersService.count(any(LambdaQueryWrapper.class))).thenReturn(1L);
+        var result = service.checkAvailability("email", "taken@example.com");
+        assertThat(result.isAvailable()).isFalse();
+        assertThat(result.getField()).isEqualTo("email");
+    }
+
+    @Test
+    void shouldRejectAvailabilityWithUnknownField() {
+        assertThatThrownBy(() -> service.checkAvailability("phone", "13800001111"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("field");
+    }
+
     private AuthLoginRequest login(String username, String password) {
         AuthLoginRequest request = new AuthLoginRequest();
         request.setUsername(username);

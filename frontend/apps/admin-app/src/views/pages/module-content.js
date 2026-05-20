@@ -86,7 +86,7 @@ const configs = {
   },
   'course-detail': {
     variant: 'overview',
-    dataSource: 'mock',
+    dataSource: 'live',
     eyebrow: 'Course Detail',
     summary: '详情页聚焦课程摘要、快捷操作和授课教师信息，课程域维护入口集中在详情卡片内。',
     primaryAction: null,
@@ -177,6 +177,20 @@ const configs = {
     ],
     columns: ['课程资料', '资料类型', '解析状态', '文件大小', '上传时间', '更新时间'],
     rows: [],
+  },
+  'course-chapters': {
+    variant: 'overview',
+    dataSource: 'mock',
+    eyebrow: 'Course Chapters',
+    summary: '章节管理功能即将开放，用于维护课程的章节与课时结构。',
+    primaryAction: null,
+    secondaryAction: null,
+    facts: ['功能即将开放'],
+    timeline: [
+      { label: '功能定义', state: 'ready', detail: '已在 PR 1 设计稿规划' },
+      { label: 'DB 表结构', state: 'pending', detail: 'course_chapters / course_lessons 待创建' },
+      { label: '后台管理', state: 'pending', detail: 'PR 3 落地' },
+    ],
   },
   'material-detail': {
     variant: 'overview',

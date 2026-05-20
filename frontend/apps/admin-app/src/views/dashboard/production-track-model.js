@@ -9,11 +9,20 @@ export const PRODUCTION_STEPS = [
 
 const ORDERED_KEYS = ['failed', 'running', 'done', 'pending', 'blocked']
 
+// 状态 key → 中文标签映射
+const STATE_LABELS = {
+  failed: '失败',
+  running: '运行中',
+  done: '已完成',
+  pending: '待处理',
+  blocked: '未配置',
+}
+
 export function deriveTrackNodeState(counts = {}) {
   const visible = Object.keys(counts)
     .filter((key) => ORDERED_KEYS.includes(key))
     .filter((key) => Number(counts[key]) > 0)
-    .map((key) => `${counts[key]} ${key}`)
+    .map((key) => `${counts[key]} ${STATE_LABELS[key] || key}`)
 
   if (counts.failed > 0) return { tone: 'danger', label: visible.join(' / '), priority: 5 }
   if (counts.running > 0) return { tone: 'running', label: visible.join(' / '), priority: 4 }

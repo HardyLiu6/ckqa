@@ -273,11 +273,18 @@ function mapCourseRow(course) {
   const courseId = course.courseId ?? course.id
   const encodedCourseId = courseId ? encodeURIComponent(courseId) : ''
 
+  // 副标题：课程 ID + 分类 + 难度
+  const subtitleParts = []
+  if (courseId) subtitleParts.push(`#${courseId}`)
+  if (course.category) subtitleParts.push(course.category)
+  const difficultyMap = { beginner: '入门', intermediate: '进阶', advanced: '高级' }
+  if (course.difficulty && difficultyMap[course.difficulty]) subtitleParts.push(difficultyMap[course.difficulty])
+
   return {
     id: courseId ?? course.courseName,
     raw: course,
     to: encodedCourseId ? `/app/courses/${encodedCourseId}` : '',
-    subtitle: courseId ? `#${courseId}` : '',
+    subtitle: subtitleParts.join(' · '),
     thumbnailUrl: resolveCourseCoverUrl(course),
     actions: encodedCourseId ? createCourseRowActions(course, encodedCourseId) : [],
     cells: [

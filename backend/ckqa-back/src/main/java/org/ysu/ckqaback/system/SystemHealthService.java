@@ -26,6 +26,7 @@ public class SystemHealthService {
     private final JdbcTemplate jdbcTemplate;
     private final CkqaIntegrationProperties properties;
     private final RestClient.Builder restClientBuilder;
+    private final org.ysu.ckqaback.graph.GraphService graphService;
     private StudentRedisCacheService studentRedisCacheService;
 
     @Autowired(required = false)
@@ -41,7 +42,8 @@ public class SystemHealthService {
                 checkPath("graphrag-root", properties.getGraphrag().getRoot()),
                 checkPath("graphrag-build-runs-root", resolveBuildRunsRoot()),
                 checkApiReachable(),
-                checkApiReady()
+                checkApiReady(),
+                checkNeo4j()
         );
         boolean up = items.stream().allMatch(SystemHealthItemResponse::isReachable);
         return new SystemHealthResponse(up, items);
@@ -115,6 +117,15 @@ public class SystemHealthService {
             return SystemHealthItemResponse.of("graphrag-ready", true, true, "HTTP /v1/models reachable");
         } catch (Exception exception) {
             return SystemHealthItemResponse.of("graphrag-ready", false, false, exception.getMessage());
+        }
+    }
+
+    private SystemHealthItemResponse checkNeo4j() {
+        try {
+            org.ysu.ckqaback.graph.GraphService.Neo4jHealth health = graphService.pingForHealth();
+            return SystemHealthItemResponse.of("neo4j", health.reachable(), health.reachable(), health.message());
+        } catch (Exception exception) {
+            return SystemHealthItemResponse.of("neo4j", false, false, exception.getMessage());
         }
     }
 

@@ -21,6 +21,14 @@ public class CourseSummaryResponse {
     private final String coverUrl;
     private final String status;
     private final String accessPolicy;
+    private final String category;
+    private final List<String> tags;
+    private final String difficulty;
+    private final Integer estimatedHours;
+    /**
+     * 当前调用者（学生）与该课程的关系：member / public_visitor / null（未登录或未提供 user code）。
+     */
+    private final String memberStatus;
     private final Long materialCount;
     private final Long parsedMaterialCount;
     private final Long failedMaterialCount;
@@ -42,6 +50,11 @@ public class CourseSummaryResponse {
             @JsonProperty("coverUrl") String coverUrl,
             @JsonProperty("status") String status,
             @JsonProperty("accessPolicy") String accessPolicy,
+            @JsonProperty("category") String category,
+            @JsonProperty("tags") List<String> tags,
+            @JsonProperty("difficulty") String difficulty,
+            @JsonProperty("estimatedHours") Integer estimatedHours,
+            @JsonProperty("memberStatus") String memberStatus,
             @JsonProperty("materialCount") Long materialCount,
             @JsonProperty("parsedMaterialCount") Long parsedMaterialCount,
             @JsonProperty("failedMaterialCount") Long failedMaterialCount,
@@ -60,6 +73,11 @@ public class CourseSummaryResponse {
         this.coverUrl = coverUrl;
         this.status = status;
         this.accessPolicy = accessPolicy;
+        this.category = category;
+        this.tags = tags == null ? List.of() : List.copyOf(tags);
+        this.difficulty = difficulty;
+        this.estimatedHours = estimatedHours;
+        this.memberStatus = memberStatus;
         this.materialCount = materialCount;
         this.parsedMaterialCount = parsedMaterialCount;
         this.failedMaterialCount = failedMaterialCount;

@@ -1,199 +1,377 @@
-<!-- 知识图谱 · SVG 交互式视觉稿 -->
+<!-- 知识图谱浏览页 -->
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+
+import GraphCanvas from '@/components/knowledge/GraphCanvas.vue'
+import GraphLegend from '@/components/knowledge/GraphLegend.vue'
+import EntityDetailPanel from '@/components/knowledge/EntityDetailPanel.vue'
 import GlassCard from '@/components/common/GlassCard.vue'
 import GlowButton from '@/components/common/GlowButton.vue'
-import ModuleTag from '@/components/common/ModuleTag.vue'
-import kgData from '@/mock/knowledge.json'
-import { ArrowRight, Plus, Minus } from '@element-plus/icons-vue'
+import { useGraphStore, GRAPH_STATE } from '@/stores/graph'
 
+const route = useRoute()
 const router = useRouter()
+const store = useGraphStore()
 
-const nodes = ref([...kgData.nodes])
-const edges = ref([...kgData.edges])
-const selectedId = ref('os')
+const expandMode = ref('merge')
+const focusNodeId = ref(null)
 
-const selected = computed(() => {
-  const base = nodes.value.find((n) => n.id === selectedId.value)
-  const detail = kgData.details[selectedId.value] || null
-  return { ...base, detail }
+// ========== 颜色 ==========
+const COLORS = [
+  '#0d9488', '#6366f1', '#f97316', '#0ea5e9', '#a855f7',
+  '#14b8a6', '#ef4444', '#22c55e', '#eab308', '#ec4899',
+]
+function pickColor(communityId) {
+  if (communityId == null) return '#0d9488'
+  return COLORS[Math.abs(Number(communityId)) % COLORS.length]
+}
+function clampLabel(raw, max = 16) {
+  if (!raw) return ''
+  return raw.length > max ? raw.slice(0, max - 1) + '…' : raw
+}
+
+// ========== 坐标计算 ==========
+// 所有节点坐标由这里计算好，GraphCanvas 只负责渲染
+const renderedNodes = ref([])
+const renderedEdges = ref([])
+
+// 章节节点坐标：circular 布局
+function layoutCommunities(communities, cx = 400, cy = 300, radius = 250) {
+  const n = communities.length
+  return communities.map((c, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    const rank = Number(c.rank) || 1
+    const maxRank = Math.max(...communities.map((x) => Number(x.rank) || 1), 1)
+    const size = 30 + (rank / maxRank) * 40
+    return {
+      id: `community-${c.communityId}`,
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      size,
+      color: pickColor(c.communityId),
+      stroke: '#ffffff',
+      lineWidth: 2.5,
+      label: clampLabel(c.title || `社区 ${c.communityId}`, 16),
+      labelFontSize: 12,
+      labelFontWeight: 600,
+      __isCommunity: true,
+      __raw: c,
+    }
+  })
+}
+
+// 子节点坐标：围绕父节点极坐标分布
+function layoutChildrenAround(parentNode, children, radiusOffset = 120) {
+  const n = children.length
+  const px = parentNode.x
+  const py = parentNode.y
+  return children.map((child, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2
+    return {
+      id: child.id,
+      x: px + Math.cos(angle) * radiusOffset,
+      y: py + Math.sin(angle) * radiusOffset,
+      size: 22,
+      color: pickColor(child.communityId ?? parentNode.__raw?.communityId),
+      stroke: '#ffffff',
+      lineWidth: 1.5,
+      label: clampLabel(child.name || child.id, 14),
+      labelFontSize: 11,
+      labelFontWeight: 400,
+    }
+  })
+}
+
+function buildInitialView() {
+  const communities = store.communities ?? []
+  if (communities.length === 0) {
+    renderedNodes.value = []
+    renderedEdges.value = []
+    return
+  }
+  renderedNodes.value = layoutCommunities(communities)
+  renderedEdges.value = []
+  focusNodeId.value = null
+}
+
+function expandCommunityNode(communityNodeId) {
+  const cid = Number(communityNodeId.replace('community-', ''))
+  const community = (store.communities ?? []).find((c) => c.communityId === cid)
+  if (!community) return
+
+  const topEntities = community.topEntities ?? []
+  if (topEntities.length === 0) return
+
+  const parentNode = renderedNodes.value.find((n) => n.id === communityNodeId)
+  if (!parentNode) return
+
+  if (expandMode.value === 'replace') {
+    // 聚焦模式：只显示该章节 + 子节点
+    const children = layoutChildrenAround(parentNode, topEntities)
+    renderedNodes.value = [parentNode, ...children]
+    renderedEdges.value = children.map((child) => ({
+      id: `edge-${communityNodeId}-${child.id}`,
+      source: communityNodeId,
+      target: child.id,
+      color: '#94a3b8',
+    }))
+  } else {
+    // 叠加模式：在现有图上追加子节点
+    const existingIds = new Set(renderedNodes.value.map((n) => n.id))
+    const newChildren = topEntities.filter((e) => !existingIds.has(e.id))
+    if (newChildren.length === 0) return
+    const children = layoutChildrenAround(parentNode, newChildren)
+    renderedNodes.value = [...renderedNodes.value, ...children]
+    const newEdges = children.map((child) => ({
+      id: `edge-${communityNodeId}-${child.id}`,
+      source: communityNodeId,
+      target: child.id,
+      color: '#94a3b8',
+    }))
+    renderedEdges.value = [...renderedEdges.value, ...newEdges]
+  }
+  focusNodeId.value = communityNodeId
+}
+
+async function expandEntityNode(entityId) {
+  if (!store.activeKnowledgeBase) return
+  const data = await store.fetchNeighborhoodRaw(entityId, { limit: 30 })
+  if (!data) return
+
+  const parentNode = renderedNodes.value.find((n) => n.id === entityId)
+  if (!parentNode) return
+
+  const neighbors = (data.nodes ?? []).filter((n) => n.id !== entityId)
+
+  if (expandMode.value === 'replace') {
+    const children = layoutChildrenAround(parentNode, neighbors)
+    renderedNodes.value = [parentNode, ...children]
+    renderedEdges.value = (data.edges ?? []).map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      color: '#94a3b8',
+    }))
+  } else {
+    const existingIds = new Set(renderedNodes.value.map((n) => n.id))
+    const newNeighbors = neighbors.filter((n) => !existingIds.has(n.id))
+    const children = layoutChildrenAround(parentNode, newNeighbors)
+    renderedNodes.value = [...renderedNodes.value, ...children]
+    const existingEdgeIds = new Set(renderedEdges.value.map((e) => e.id))
+    const newEdges = (data.edges ?? [])
+      .filter((e) => !existingEdgeIds.has(e.id))
+      .map((e) => ({ id: e.id, source: e.source, target: e.target, color: '#94a3b8' }))
+    renderedEdges.value = [...renderedEdges.value, ...newEdges]
+  }
+  focusNodeId.value = entityId
+}
+
+// ========== 事件处理 ==========
+function onSelectNode(id) {
+  if (!id) return
+  if (id.startsWith('community-')) {
+    const cid = Number(id.replace('community-', ''))
+    const community = (store.communities ?? []).find((c) => c.communityId === cid)
+    if (community) {
+      store.selectedNodeId = id
+      store.entityDetail = {
+        id,
+        name: community.title,
+        type: '章节',
+        description: community.summary || '该章节暂无摘要。',
+        communityPath: [{ level: 0, communityId: cid, title: community.title }],
+        chunkCount: community.topEntities?.length ?? 0,
+      }
+    }
+    return
+  }
+  store.loadEntityDetail(id)
+}
+
+async function onExpandNode(id) {
+  if (!id) return
+  if (id.startsWith('community-')) {
+    expandCommunityNode(id)
+    return
+  }
+  await expandEntityNode(id)
+}
+
+function onAskQuestion(entity) {
+  if (!entity?.name) {
+    ElMessage.warning('当前节点缺少名称，无法跳转问答。')
+    return
+  }
+  router.push({ path: '/qa/ask', query: { topic: entity.name } })
+}
+
+function onBackToOverview() {
+  buildInitialView()
+  store.selectedNodeId = null
+  store.entityDetail = null
+}
+
+// ========== 课程选择 ==========
+const preferredCourseId = computed(() => {
+  const raw = route.query.courseId
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : ''
 })
 
-// 视口变换
-const scale = ref(1)
-const offsetX = ref(0)
-const offsetY = ref(0)
-
-// 拖拽状态
-const isDragging = ref(false)
-let lastX = 0
-let lastY = 0
-
-function onMouseDown(e) {
-  isDragging.value = true
-  lastX = e.clientX
-  lastY = e.clientY
-}
-function onMouseMove(e) {
-  if (!isDragging.value) return
-  offsetX.value += e.clientX - lastX
-  offsetY.value += e.clientY - lastY
-  lastX = e.clientX
-  lastY = e.clientY
-}
-function onMouseUp() { isDragging.value = false }
-
-function onWheel(e) {
-  e.preventDefault()
-  const factor = e.deltaY > 0 ? 0.9 : 1.1
-  scale.value = Math.max(0.5, Math.min(2.5, scale.value * factor))
+async function loadGraphForCourse(courseId) {
+  if (!courseId) return
+  const ok = await store.selectKnowledgeBaseForCourse(courseId)
+  if (!ok) return
+  await store.loadOverview({ level: 0, topN: 20 })
+  buildInitialView()
 }
 
-function zoom(factor) {
-  scale.value = Math.max(0.5, Math.min(2.5, scale.value * factor))
-}
-function reset() {
-  scale.value = 1
-  offsetX.value = 0
-  offsetY.value = 0
-}
-
-function selectNode(id) {
-  selectedId.value = id
+async function bootstrap() {
+  store.reset()
+  renderedNodes.value = []
+  renderedEdges.value = []
+  const chosen = await store.loadAvailableCourses(preferredCourseId.value)
+  if (chosen && chosen !== preferredCourseId.value) {
+    router.replace({ query: { ...route.query, courseId: chosen } })
+  }
+  await loadGraphForCourse(chosen)
 }
 
-function nodeColor(type) {
-  if (type === 'root') return '#0d9488'
-  if (type === 'concept') return '#14b8a6'
-  if (type === 'instance') return '#2dd4bf'
-  if (type === 'error') return '#f59e0b'
-  return '#64748b'
+async function onCourseChange(courseId) {
+  if (!courseId) return
+  store.selectedCourseId = courseId
+  router.replace({ query: { ...route.query, courseId } })
+  store.activeKnowledgeBase = null
+  store.entityDetail = null
+  store.selectedNodeId = null
+  renderedNodes.value = []
+  renderedEdges.value = []
+  await loadGraphForCourse(courseId)
 }
 
-function goQA() {
-  if (!selected.value?.label) return
-  router.push({ path: '/qa/ask', query: { topic: selected.value.label } })
-}
+watch(() => store.errorMessage, (msg) => {
+  if (msg && store.state !== GRAPH_STATE.ERROR) ElMessage.warning(msg)
+})
+
+onMounted(bootstrap)
+
+// ========== 图例数据 ==========
+const legendCommunities = computed(() => {
+  return (store.communities ?? []).map((c) => ({
+    name: clampLabel(c.title || `社区 ${c.communityId}`, 20),
+    color: pickColor(c.communityId),
+  }))
+})
+
+// ========== 状态 ==========
+const showCanvas = computed(() => store.state === GRAPH_STATE.READY || store.state === GRAPH_STATE.LOADING)
+const showEmpty = computed(() => store.state === GRAPH_STATE.EMPTY)
+const showNoActive = computed(() => store.state === GRAPH_STATE.NO_ACTIVE_INDEX)
+const showError = computed(() => store.state === GRAPH_STATE.ERROR)
+const noCoursesAvailable = computed(() => !store.coursesLoading && store.availableCourses.length === 0)
+const courseNotChosen = computed(() => store.availableCourses.length > 0 && !store.selectedCourseId)
+const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommunity))
 </script>
 
 <template>
   <div class="kg-page">
-    <!-- 画布 -->
-    <div
-      class="canvas"
-      @mousedown="onMouseDown"
-      @mousemove="onMouseMove"
-      @mouseup="onMouseUp"
-      @mouseleave="onMouseUp"
-      @wheel="onWheel"
-    >
-      <svg class="canvas-svg" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <radialGradient id="nodeHalo">
-            <stop offset="0%" stop-color="#5eead4" stop-opacity="0.7" />
-            <stop offset="100%" stop-color="#0d9488" stop-opacity="0" />
-          </radialGradient>
-        </defs>
-
-        <g :transform="`translate(${offsetX}, ${offsetY}) scale(${scale})`">
-          <!-- 连线 -->
-          <line
-            v-for="(e, i) in edges"
-            :key="i"
-            :x1="nodes.find(n => n.id === e.from).x"
-            :y1="nodes.find(n => n.id === e.from).y"
-            :x2="nodes.find(n => n.id === e.to).x"
-            :y2="nodes.find(n => n.id === e.to).y"
-            stroke="rgba(13, 148, 136, 0.35)"
-            stroke-width="1.2"
-          />
-          <!-- 节点 -->
-          <g
-            v-for="n in nodes"
-            :key="n.id"
-            class="node-group"
-            :class="{ selected: selectedId === n.id }"
-            @click.stop="selectNode(n.id)"
+    <main class="kg-main">
+      <header class="kg-head">
+        <div class="kg-head-left">
+          <h1 class="title">知识图谱</h1>
+          <p class="sub">
+            <template v-if="store.activeKnowledgeBase">
+              当前知识库：{{ store.activeKnowledgeBase.name }}
+            </template>
+            <template v-else>课程概念网络浏览</template>
+          </p>
+        </div>
+        <div class="kg-head-right">
+          <el-select
+            v-if="store.availableCourses.length > 0"
+            :model-value="store.selectedCourseId"
+            placeholder="请选择课程"
+            class="course-select"
+            :loading="store.coursesLoading"
+            @update:model-value="onCourseChange"
           >
-            <circle :cx="n.x" :cy="n.y" :r="n.r * 2" fill="url(#nodeHalo)" />
-            <circle
-              :cx="n.x"
-              :cy="n.y"
-              :r="n.r"
-              :fill="nodeColor(n.type)"
-              stroke="#fff"
-              stroke-width="2"
+            <el-option
+              v-for="course in store.availableCourses"
+              :key="course.courseId"
+              :label="course.courseName || course.courseId"
+              :value="course.courseId"
             />
-            <text
-              :x="n.x"
-              :y="n.y + 4"
-              text-anchor="middle"
-              fill="#fff"
-              :font-size="n.r > 12 ? 11 : 9"
-              font-weight="600"
-              font-family="Manrope"
-              style="pointer-events: none;"
-            >{{ n.label }}</text>
-          </g>
-        </g>
-      </svg>
-
-      <!-- 工具栏 -->
-      <div class="tools">
-        <button class="tool-btn" title="放大" @click="zoom(1.2)"><el-icon><Plus /></el-icon></button>
-        <button class="tool-btn" title="缩小" @click="zoom(0.8)"><el-icon><Minus /></el-icon></button>
-        <button class="tool-btn" title="重置" @click="reset">⊕</button>
-      </div>
-    </div>
-
-    <!-- 右侧详情面板 -->
-    <GlassCard tier="base" padding="md" class="detail-panel">
-      <div v-if="selected" class="detail-content">
-        <div class="detail-head">
-          <span class="detail-dot" :style="{ background: nodeColor(selected.type) }"></span>
-          <h3 class="detail-name">{{ selected.label }}</h3>
+          </el-select>
+          <el-radio-group v-model="expandMode" size="small" class="expand-mode-toggle">
+            <el-radio-button value="merge">叠加</el-radio-button>
+            <el-radio-button value="replace">聚焦</el-radio-button>
+          </el-radio-group>
+          <GlowButton v-if="isExploring" size="sm" variant="ghost" @click="onBackToOverview">
+            返回章节
+          </GlowButton>
+          <GlowButton size="sm" :disabled="!store.selectedCourseId" @click="bootstrap">
+            重新加载
+          </GlowButton>
         </div>
-        <div class="detail-tags">
-          <ModuleTag module="knowledge" size="sm">{{ selected.type }}</ModuleTag>
-          <ModuleTag v-if="selected.detail?.errorCount" module="analysis" size="sm">
-            {{ selected.detail.errorCount }} 个错题
-          </ModuleTag>
-        </div>
-        <p class="detail-desc">
-          {{ selected.detail?.desc || '该节点暂无详细描述。' }}
-        </p>
+      </header>
 
-        <div v-if="selected.detail?.related?.length" class="related">
-          <div class="related-label">关联知识点</div>
-          <div class="related-list">
-            <div
-              v-for="r in selected.detail.related"
-              :key="r"
-              class="related-item"
-            >{{ r }}</div>
-          </div>
+      <GlassCard tier="base" padding="md" class="canvas-card">
+        <div v-if="noCoursesAvailable" class="state-block">
+          <h3>暂无可见课程</h3>
+          <p>当前账户尚未加入任何课程。</p>
+          <GlowButton size="sm" @click="$router.push('/course/list')">去课程列表</GlowButton>
+        </div>
+        <div v-else-if="courseNotChosen" class="state-block">
+          <h3>请先选择课程</h3>
+          <p>从右上角选择一门课程开始浏览图谱。</p>
+        </div>
+        <div v-else-if="showNoActive" class="state-block">
+          <h3>所选课程暂无可用知识库</h3>
+          <p>等管理员构建并激活索引后再来浏览。</p>
+        </div>
+        <div v-else-if="showError" class="state-block error">
+          <h3>加载失败</h3>
+          <p>{{ store.errorMessage || '请稍后重试。' }}</p>
+          <GlowButton size="sm" @click="bootstrap">重试</GlowButton>
+        </div>
+        <div v-else-if="showEmpty" class="state-block">
+          <h3>当前社区暂无可视节点</h3>
         </div>
 
-        <GlowButton size="md" block @click="goQA">
-          去问答
-          <template #suffix><el-icon><ArrowRight /></el-icon></template>
-        </GlowButton>
-      </div>
-    </GlassCard>
+        <div v-show="showCanvas" class="canvas-wrap">
+          <div v-if="store.state === GRAPH_STATE.LOADING" class="loading-mask">加载中…</div>
+          <GraphCanvas
+            :nodes="renderedNodes"
+            :edges="renderedEdges"
+            :selected-id="store.selectedNodeId"
+            :focus-node-id="focusNodeId"
+            @select="onSelectNode"
+            @expand="onExpandNode"
+          />
+          <GraphLegend :communities="legendCommunities" />
+        </div>
+      </GlassCard>
+    </main>
+
+    <aside class="kg-aside">
+      <EntityDetailPanel
+        :entity="store.entityDetail"
+        @ask-question="onAskQuestion"
+        @expand="(entity) => onExpandNode(entity?.id)"
+      />
+    </aside>
   </div>
 </template>
 
 <style scoped lang="scss">
 @use '@/styles/tokens/radius' as *;
-@use '@/styles/tokens/motion' as *;
 @use '@/styles/tokens/breakpoints' as *;
 
 .kg-page {
   --module-color-500: #0d9488;
-  --module-color-700: #0f766e;
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: 1fr 360px;
   gap: 16px;
   padding: 16px;
   height: calc(100vh - 64px - 32px);
@@ -204,122 +382,93 @@ function goQA() {
   }
 }
 
-.canvas {
-  position: relative;
-  background: linear-gradient(180deg, #f0fdfa, #fff);
-  border: 1px solid rgba(13, 148, 136, 0.1);
-  border-radius: $radius-xl;
-  overflow: hidden;
-  cursor: grab;
-
-  &:active { cursor: grabbing; }
-
-  .canvas-svg {
-    width: 100%;
-    height: 100%;
-    user-select: none;
-  }
-}
-
-.node-group {
-  cursor: pointer;
-
-  &:hover circle:last-of-type {
-    filter: brightness(1.1);
-  }
-  &.selected circle:last-of-type {
-    filter: drop-shadow(0 0 12px rgba(45, 212, 191, 0.8));
-  }
-}
-
-.tools {
-  position: absolute;
-  top: 16px; right: 16px;
+.kg-main {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
+  min-height: 0;
 }
 
-.tool-btn {
-  width: 32px; height: 32px;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(13, 148, 136, 0.2);
-  border-radius: $radius-md;
-  color: #0d9488;
-  font-family: inherit;
-  font-size: 14px;
-  cursor: pointer;
+.kg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #f0fdfa 0%, #f8fafc 100%);
+  border-radius: $radius-xl;
+  border: 1px solid rgba(13, 148, 136, 0.12);
+
+  .kg-head-left { flex: 1; min-width: 0; }
+  .kg-head-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .course-select { width: 200px; }
+
+  .expand-mode-toggle {
+    :deep(.el-radio-button__inner) {
+      padding: 7px 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
+
+  .title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+  }
+  .sub { margin: 2px 0 0; font-size: 12px; color: #64748b; }
+}
+
+.canvas-card {
+  flex: 1;
+  display: flex;
+  min-height: 420px;
+  border-color: rgba(13, 148, 136, 0.2) !important;
+  position: relative;
+}
+
+.canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+}
+
+.loading-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
-
-  &:hover {
-    background: #fff;
-    box-shadow: 0 2px 8px rgba(13, 148, 136, 0.2);
-  }
+  color: #0d9488;
+  font-size: 13px;
+  z-index: 5;
 }
 
-.detail-panel {
-  border-color: rgba(13, 148, 136, 0.2) !important;
-  height: fit-content;
+.state-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  h3 { margin: 0; color: #0f172a; font-size: 16px; }
+  p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.6; }
+  &.error h3 { color: #b91c1c; }
+}
+
+.kg-aside {
   position: sticky;
   top: 80px;
-}
-
-.detail-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-
-  .detail-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    box-shadow: 0 0 8px currentColor;
-  }
-  .detail-name {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-  }
-}
-
-.detail-tags {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.detail-desc {
-  font-size: 13px;
-  color: #475569;
-  line-height: 1.65;
-  margin-bottom: 16px;
-}
-
-.related {
-  margin-bottom: 16px;
-
-  .related-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #475569;
-    margin-bottom: 6px;
-  }
-  .related-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .related-item {
-    padding: 6px 10px;
-    background: rgba(13, 148, 136, 0.05);
-    border-left: 2px solid #14b8a6;
-    border-radius: 0 $radius-md $radius-md 0;
-    font-size: 12px;
-    color: #0f172a;
-  }
+  align-self: flex-start;
 }
 </style>
