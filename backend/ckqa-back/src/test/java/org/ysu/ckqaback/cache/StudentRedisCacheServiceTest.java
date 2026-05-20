@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.ysu.ckqaback.config.JacksonConfig;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +62,29 @@ class StudentRedisCacheServiceTest {
     }
 
     @Test
+    void shouldSerializeJavaTimeValuesWithConfiguredObjectMapper() {
+        StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
+        ValueOperations<String, String> valueOperations = mockValueOperations(redisTemplate);
+        StudentRedisCacheService service = new StudentRedisCacheService(
+                redisTemplate,
+                new JacksonConfig().objectMapper(),
+                new StudentRedisCacheProperties()
+        );
+
+        service.put(
+                "cache-key",
+                new TimePayload(LocalDateTime.of(2026, 5, 20, 18, 53, 33)),
+                Duration.ofMinutes(1)
+        );
+
+        then(valueOperations).should().set(
+                eq("cache-key"),
+                eq("{\"updatedAt\":\"2026-05-20T18:53:33\"}"),
+                eq(Duration.ofMinutes(1))
+        );
+    }
+
+    @Test
     void shouldFailOpenWhenRedisReadFails() {
         StringRedisTemplate redisTemplate = mock(StringRedisTemplate.class);
         ValueOperations<String, String> valueOperations = mockValueOperations(redisTemplate);
@@ -93,5 +118,8 @@ class StudentRedisCacheServiceTest {
     }
 
     private record CachePayload(String value) {
+    }
+
+    private record TimePayload(LocalDateTime updatedAt) {
     }
 }
