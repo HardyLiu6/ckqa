@@ -2679,4 +2679,3 @@ PR 描述应包含：
 | Element Plus 版本差异：`el-drawer` 默认 size 单位 | 使用字符串 `"480px"` 与 admin-app 既有抽屉保持一致 |
 | `CourseChaptersResponse` 兼容包装可能成为噪声 | PR 3 内保留 `featureStatus`/`message` 字段以兼容 student-app 已有占位渲染；后续 PR 视情况清理 |
 | admin-app shell 测试断言 status/componentKey | 修改路由后需要在 `app-shell.test.js` 等单测里同步断言（详见 Task 11 Step 4） |
-
