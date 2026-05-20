@@ -2233,42 +2233,58 @@ textarea.text-input {
   order: 99;
 }
 
-.course-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.course-meta-list {
-  margin: 0;
-  padding-left: 1.2em;
-  line-height: 1.8;
-}
-
-.course-metadata-panel .course-info-block {
+.course-metadata-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
+}
 
-  .course-info-row {
-    padding: 0;
+.course-metadata-row {
+  display: grid;
+  gap: 16px;
+  &--short { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  &--full { grid-template-columns: 1fr; }
+  &--split { grid-template-columns: 1fr 1fr; }
+
+  @media (max-width: 768px) {
+    &--split { grid-template-columns: 1fr; }
+  }
+}
+
+.course-meta-card {
+  padding: 14px 16px;
+  background: var(--ckqa-surface-muted, #f8fafc);
+  border-radius: 10px;
+  border: 1px solid var(--ckqa-border-light, #f1f5f9);
+
+  &__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ckqa-text-muted, #64748b);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__value {
+    font-size: 14px;
+    color: var(--ckqa-text, #0f172a);
+    line-height: 1.6;
+  }
+
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  &__list {
     margin: 0;
-    background: none;
-    border: none;
-    border-radius: 0;
+    padding-left: 1.2em;
+    line-height: 1.85;
 
-    dt {
-      color: var(--ckqa-text-muted, #64748b);
-      font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
-
-    dd {
-      margin: 0;
-      font-size: 14px;
-      color: var(--ckqa-text, #0f172a);
-    }
+    li { color: var(--ckqa-text, #0f172a); }
   }
 }
 

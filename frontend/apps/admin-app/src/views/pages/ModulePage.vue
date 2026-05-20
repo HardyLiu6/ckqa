@@ -4411,40 +4411,53 @@ onBeforeUnmount(() => {
       <div class="panel-heading">
         <h2>课程元数据</h2>
       </div>
-      <dl class="course-info-block course-info-block--compact">
-        <div v-if="courseBlock.item.category" class="course-info-row">
-          <dt>分类</dt>
-          <dd><el-tag type="primary" effect="plain">{{ courseBlock.item.category }}</el-tag></dd>
+      <div class="course-metadata-grid">
+        <!-- 第一行：分类、难度、预计学时（短字段并排） -->
+        <div class="course-metadata-row course-metadata-row--short">
+          <div v-if="courseBlock.item.category" class="course-meta-card">
+            <div class="course-meta-card__label">分类</div>
+            <div class="course-meta-card__value">
+              <el-tag type="primary" effect="plain">{{ courseBlock.item.category }}</el-tag>
+            </div>
+          </div>
+          <div v-if="courseBlock.item.difficulty" class="course-meta-card">
+            <div class="course-meta-card__label">难度</div>
+            <div class="course-meta-card__value">
+              <el-tag :type="{ beginner: 'success', intermediate: 'warning', advanced: 'danger' }[courseBlock.item.difficulty] || 'info'" effect="plain">{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</el-tag>
+            </div>
+          </div>
+          <div v-if="courseBlock.item.estimatedHours" class="course-meta-card">
+            <div class="course-meta-card__label">预计学时</div>
+            <div class="course-meta-card__value">
+              <el-tag effect="plain">约 {{ courseBlock.item.estimatedHours }} 小时</el-tag>
+            </div>
+          </div>
         </div>
-        <div v-if="courseBlock.item.difficulty" class="course-info-row">
-          <dt>难度</dt>
-          <dd><el-tag :type="{ beginner: 'success', intermediate: 'warning', advanced: 'danger' }[courseBlock.item.difficulty] || 'info'" effect="plain">{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</el-tag></dd>
+        <!-- 第二行：标签（独占一行） -->
+        <div v-if="courseBlock.item.tags?.length" class="course-metadata-row course-metadata-row--full">
+          <div class="course-meta-card">
+            <div class="course-meta-card__label">标签</div>
+            <div class="course-meta-card__chips">
+              <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag>
+            </div>
+          </div>
         </div>
-        <div v-if="courseBlock.item.estimatedHours" class="course-info-row">
-          <dt>预计学时</dt>
-          <dd><el-tag effect="plain">约 {{ courseBlock.item.estimatedHours }} 小时</el-tag></dd>
-        </div>
-        <div v-if="courseBlock.item.tags?.length" class="course-info-row">
-          <dt>标签</dt>
-          <dd class="course-tags-row">
-            <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small" effect="plain">{{ tag }}</el-tag>
-          </dd>
-        </div>
-        <div v-if="courseBlock.item.objectives?.length" class="course-info-row">
-          <dt>学习目标</dt>
-          <dd>
-            <ol class="course-meta-list">
+        <!-- 第三行：学习目标 + 适合人群（并排） -->
+        <div class="course-metadata-row course-metadata-row--split">
+          <div v-if="courseBlock.item.objectives?.length" class="course-meta-card">
+            <div class="course-meta-card__label">学习目标</div>
+            <ol class="course-meta-card__list">
               <li v-for="(obj, idx) in courseBlock.item.objectives" :key="idx">{{ obj }}</li>
             </ol>
-          </dd>
+          </div>
+          <div v-if="courseBlock.item.audience?.length" class="course-meta-card">
+            <div class="course-meta-card__label">适合人群</div>
+            <div class="course-meta-card__chips">
+              <el-tag v-for="(aud, idx) in courseBlock.item.audience" :key="idx" size="small" type="info" effect="plain">{{ aud }}</el-tag>
+            </div>
+          </div>
         </div>
-        <div v-if="courseBlock.item.audience?.length" class="course-info-row">
-          <dt>适合人群</dt>
-          <dd class="course-tags-row">
-            <el-tag v-for="(aud, idx) in courseBlock.item.audience" :key="idx" size="small" type="info" effect="plain">{{ aud }}</el-tag>
-          </dd>
-        </div>
-      </dl>
+      </div>
     </article>
 
     <article class="panel course-teachers-panel">
