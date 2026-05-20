@@ -1,6 +1,6 @@
 <!-- 知识图谱浏览页：拉真实接口 + G6 画布 + 实体详情抽屉 -->
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -13,6 +13,56 @@ import { useGraphStore, GRAPH_STATE } from '@/stores/graph'
 const route = useRoute()
 const router = useRouter()
 const store = useGraphStore()
+
+// 邻域扩展模式：merge 把新邻居叠加到当前画布；replace 只看中心节点+邻居
+const expandMode = ref('merge')
+
+// 章节视图节点 / 边（基于 communities 数组合成）
+const overviewGraph = computed(() => {
+  const list = store.communities ?? []
+  // 按 rank 排序，rank 越大节点越大
+  const ranks = list.map((c) => Number(c.rank) || 0)
+  const maxRank = Math.max(1, ...ranks)
+  const nodes = list.map((c) => ({
+    id: `community-${c.communityId}`,
+    name: c.title || `社区 ${c.communityId}`,
+    type: '章节',
+    communityId: c.communityId,
+    // degree 字段被画布用来调节点大小：用归一化 rank 占位
+    degree: Math.round(((Number(c.rank) || 0) / maxRank) * 60),
+    __isCommunity: true,
+    __raw: c,
+  }))
+  // 章节之间不画边（避免乱）
+  return { nodes, edges: [] }
+})
+
+// 钻入某社区后的子图：取该社区的 topEntities + 内部 edges
+const focusedGraph = computed(() => {
+  const cid = store.focusedCommunityId
+  if (cid === null || cid === undefined) return null
+  const community = (store.communities ?? []).find((c) => c.communityId === cid)
+  if (!community) return null
+  const topEntities = community.topEntities ?? []
+  const idSet = new Set(topEntities.map((e) => e.id))
+  // 取后端 nodes 中属于该社区的实体（更稳）
+  const entityNodes = (store.nodes ?? []).filter(
+    (n) => n.communityId === cid || idSet.has(n.id),
+  )
+  // 边只保留两端都在该社区的
+  const entityIds = new Set(entityNodes.map((n) => n.id))
+  const edges = (store.edges ?? []).filter(
+    (e) => entityIds.has(e.source) && entityIds.has(e.target),
+  )
+  return { nodes: entityNodes, edges, community }
+})
+
+const canvasNodes = computed(() => {
+  return focusedGraph.value ? focusedGraph.value.nodes : overviewGraph.value.nodes
+})
+const canvasEdges = computed(() => {
+  return focusedGraph.value ? focusedGraph.value.edges : overviewGraph.value.edges
+})
 
 // 知识图谱页支持两种入口：
 //   1. 课程详情 / 卡片 / 我的课程 → 带 ?courseId= 进
@@ -64,21 +114,47 @@ async function onCourseChange(courseId) {
   if (!courseId) return
   store.selectedCourseId = courseId
   syncCourseToUrl(courseId)
-  // 仅刷新图谱数据，保留课程选择器列表
   store.activeKnowledgeBase = null
   store.entityDetail = null
   store.selectedNodeId = null
+  store.focusedCommunityId = null
   await loadGraphForCourse(courseId)
 }
 
 function onSelectNode(id) {
   if (!id) return
+  // 章节视图：单击社区节点 → 显示社区简介，但不钻入
+  if (id.startsWith('community-')) {
+    const cid = Number(id.slice('community-'.length))
+    const community = (store.communities ?? []).find((c) => c.communityId === cid)
+    if (community) {
+      store.selectedNodeId = id
+      store.entityDetail = {
+        id,
+        name: community.title,
+        type: '章节',
+        description: community.summary || '该章节暂无摘要。',
+        communityPath: [{ level: 0, communityId: cid, title: community.title }],
+        chunkCount: community.topEntities?.length ?? 0,
+        __isCommunity: true,
+      }
+    }
+    return
+  }
+  // 子图视图：点实体 → 拉详情
   store.loadEntityDetail(id)
 }
 
 async function onExpandNode(id) {
   if (!id) return
-  await store.expandNeighborhood(id, { limit: 50 })
+  // 章节视图：双击社区 → 钻入
+  if (id.startsWith('community-')) {
+    const cid = Number(id.slice('community-'.length))
+    store.focusCommunity(cid)
+    return
+  }
+  // 子图视图：双击实体 → 邻域扩展
+  await store.expandNeighborhood(id, { limit: 50, mode: expandMode.value })
 }
 
 function onAskQuestion(entity) {
@@ -87,6 +163,10 @@ function onAskQuestion(entity) {
     return
   }
   router.push({ path: '/qa/ask', query: { topic: entity.name } })
+}
+
+function onBackToOverview() {
+  store.backToCommunityOverview()
 }
 
 watch(
@@ -98,7 +178,6 @@ watch(
   },
 )
 
-// URL ?courseId= 由外部链接变化时也同步刷新（极少触发，但保证行为一致）
 watch(preferredCourseId, async (next) => {
   if (next && next !== store.selectedCourseId) {
     await onCourseChange(next)
@@ -119,6 +198,21 @@ const noCoursesAvailable = computed(
 const courseNotChosen = computed(
   () => store.availableCourses.length > 0 && !store.selectedCourseId,
 )
+
+const focusedCommunityTitle = computed(() => {
+  if (!focusedGraph.value) return ''
+  return focusedGraph.value.community.title || `社区 ${focusedGraph.value.community.communityId}`
+})
+
+const breadcrumbHint = computed(() => {
+  if (focusedGraph.value) {
+    return `章节视图 › ${focusedCommunityTitle.value}`
+  }
+  if (store.communities?.length) {
+    return `章节视图（${store.communities.length} 个章节，双击节点进入）`
+  }
+  return ''
+})
 </script>
 
 <template>
@@ -133,6 +227,16 @@ const courseNotChosen = computed(
               #{{ store.activeKnowledgeBase.activeIndexRunId }}）
             </template>
             <template v-else>课程概念网络浏览</template>
+          </p>
+          <p v-if="breadcrumbHint" class="breadcrumb">
+            <span
+              :class="['crumb', { clickable: focusedGraph }]"
+              @click="onBackToOverview"
+            >全部章节</span>
+            <template v-if="focusedGraph">
+              <span class="sep">›</span>
+              <span class="crumb current">{{ focusedCommunityTitle }}</span>
+            </template>
           </p>
         </div>
         <div class="kg-head-right">
@@ -155,6 +259,23 @@ const courseNotChosen = computed(
               <span v-else-if="course.accessPolicy === 'public'" class="course-badge alt">公开</span>
             </el-option>
           </el-select>
+          <GlowButton
+            v-if="focusedGraph"
+            size="md"
+            variant="ghost"
+            @click="onBackToOverview"
+          >
+            返回章节
+          </GlowButton>
+          <el-radio-group
+            v-model="expandMode"
+            size="default"
+            class="expand-mode-toggle"
+            :disabled="!focusedGraph"
+          >
+            <el-radio-button value="merge">叠加</el-radio-button>
+            <el-radio-button value="replace">聚焦</el-radio-button>
+          </el-radio-group>
           <GlowButton size="md" :disabled="!store.selectedCourseId" @click="bootstrap">
             重新加载
           </GlowButton>
@@ -188,8 +309,8 @@ const courseNotChosen = computed(
         <div v-show="showCanvas" class="canvas-wrap">
           <div v-if="store.state === GRAPH_STATE.LOADING" class="loading-mask">加载中…</div>
           <GraphCanvas
-            :nodes="store.nodes"
-            :edges="store.edges"
+            :nodes="canvasNodes"
+            :edges="canvasEdges"
             :selected-id="store.selectedNodeId"
             @select="onSelectNode"
             @expand="onExpandNode"
@@ -244,6 +365,23 @@ const courseNotChosen = computed(
     min-width: 0;
   }
 
+  .breadcrumb {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .crumb.clickable {
+      cursor: pointer;
+      color: #0d9488;
+      &:hover { text-decoration: underline; }
+    }
+    .crumb.current { color: #0f172a; font-weight: 500; }
+    .sep { color: #94a3b8; }
+  }
+
   .kg-head-right {
     display: flex;
     align-items: center;
@@ -253,6 +391,10 @@ const courseNotChosen = computed(
 
   .course-select {
     width: 240px;
+  }
+
+  .expand-mode-toggle {
+    margin: 0 4px;
   }
 
   .title {

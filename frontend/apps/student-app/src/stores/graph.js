@@ -31,6 +31,10 @@ export const useGraphStore = defineStore('graph', () => {
   const knowledgeBases = ref([])
   const activeKnowledgeBase = ref(null)
 
+  // 章节级社区（默认视图）+ 当前钻入的社区 id
+  const communities = ref([])
+  const focusedCommunityId = ref(null)
+
   // 画布数据：以 id 为键去重，避免 G6 changeData 时把同一节点重复加入
   const nodesById = ref(new Map())
   const edgesById = ref(new Map())
@@ -50,6 +54,8 @@ export const useGraphStore = defineStore('graph', () => {
     coursesLoading.value = false
     knowledgeBases.value = []
     activeKnowledgeBase.value = null
+    communities.value = []
+    focusedCommunityId.value = null
     nodesById.value = new Map()
     edgesById.value = new Map()
     selectedNodeId.value = null
@@ -147,9 +153,11 @@ export const useGraphStore = defineStore('graph', () => {
     errorMessage.value = ''
     try {
       const data = await fetchGraphOverview(activeKnowledgeBase.value.id, { level, topN })
+      communities.value = Array.isArray(data?.communities) ? data.communities : []
+      focusedCommunityId.value = null
       mergeNodes(data?.nodes ?? [], { replace: true })
       mergeEdges(data?.edges ?? [], { replace: true })
-      if (nodesById.value.size === 0) {
+      if (communities.value.length === 0 && nodesById.value.size === 0) {
         state.value = GRAPH_STATE.EMPTY
       } else {
         state.value = GRAPH_STATE.READY
@@ -157,6 +165,25 @@ export const useGraphStore = defineStore('graph', () => {
     } catch (err) {
       setError(err, '加载知识图谱失败')
     }
+  }
+
+  /**
+   * 钻入指定社区，让画布只展示这个社区下的实体子图。
+   * 不发新请求，直接基于已有 nodes/edges 过滤。
+   */
+  function focusCommunity(communityId) {
+    focusedCommunityId.value = communityId
+    selectedNodeId.value = null
+    entityDetail.value = null
+  }
+
+  /**
+   * 退出社区视图，回到顶层章节视图。
+   */
+  function backToCommunityOverview() {
+    focusedCommunityId.value = null
+    selectedNodeId.value = null
+    entityDetail.value = null
   }
 
   /**
@@ -178,8 +205,11 @@ export const useGraphStore = defineStore('graph', () => {
 
   /**
    * 双击节点扩展邻域，把新节点 / 新边并入画布。
+   * @param {{ limit?: number, mode?: 'merge' | 'replace' }} options
+   *   mode='merge'  默认，新邻居叠加到已有图上
+   *   mode='replace' 只显示中心节点 + 邻居，旧节点全部清空
    */
-  async function expandNeighborhood(entityId, { limit } = {}) {
+  async function expandNeighborhood(entityId, { limit, mode = 'merge' } = {}) {
     if (!activeKnowledgeBase.value || !entityId) {
       return
     }
@@ -189,8 +219,9 @@ export const useGraphStore = defineStore('graph', () => {
         entityId,
         { depth: 1, limit },
       )
-      mergeNodes(data?.nodes ?? [])
-      mergeEdges(data?.edges ?? [])
+      const replace = mode === 'replace'
+      mergeNodes(data?.nodes ?? [], { replace })
+      mergeEdges(data?.edges ?? [], { replace })
     } catch (err) {
       errorMessage.value = err?.message || '扩展邻域失败'
     }
@@ -228,6 +259,8 @@ export const useGraphStore = defineStore('graph', () => {
     coursesLoading,
     knowledgeBases,
     activeKnowledgeBase,
+    communities,
+    focusedCommunityId,
     selectedNodeId,
     entityDetail,
     state,
@@ -240,5 +273,7 @@ export const useGraphStore = defineStore('graph', () => {
     loadOverview,
     loadEntityDetail,
     expandNeighborhood,
+    focusCommunity,
+    backToCommunityOverview,
   }
 })

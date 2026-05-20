@@ -41,7 +41,7 @@ public final class GraphCypher {
             UNWIND $communityIds AS communityId
             MATCH (c:`__Community__` { community: communityId })
             MATCH (c)<-[:IN_COMMUNITY]-(e:`__Entity__`)
-            WITH communityId, e, size((e)-[:RELATED]-()) AS degree
+            WITH communityId, e, COUNT { (e)-[:RELATED]-() } AS degree
             ORDER BY communityId, degree DESC
             WITH communityId, collect({entity: e, degree: degree})[..$perCommunity] AS topItems
             UNWIND topItems AS item
@@ -81,7 +81,7 @@ public final class GraphCypher {
             RETURN e.id                                    AS centerId,
                    coalesce(e.name, e.title, '')            AS centerName,
                    coalesce(e.type, '')                     AS centerType,
-                   size((e)-[:RELATED]-())                  AS centerDegree,
+                   COUNT { (e)-[:RELATED]-() }              AS centerDegree,
                    r.id                                    AS edgeId,
                    coalesce(startNode(r).id, '')            AS sourceId,
                    coalesce(endNode(r).id, '')              AS targetId,
@@ -90,7 +90,7 @@ public final class GraphCypher {
                    n.id                                    AS neighborId,
                    coalesce(n.name, n.title, '')            AS neighborName,
                    coalesce(n.type, '')                     AS neighborType,
-                   CASE WHEN n IS NULL THEN 0 ELSE size((n)-[:RELATED]-()) END AS neighborDegree
+                   CASE WHEN n IS NULL THEN 0 ELSE COUNT { (n)-[:RELATED]-() } END AS neighborDegree
             """;
 
     /**
