@@ -1,0 +1,489 @@
+{
+  "live": true,
+  "generatedAt": "20260519-213001",
+  "graphragVersion": "3.0.9",
+  "dataDirUri": "user_12/kb_5/build_20/index/output",
+  "historyPocConfig": {
+    "enabled": true,
+    "max_turns": 5,
+    "max_history_chars": 2500,
+    "max_context_tokens": 5000,
+    "top_k_entities": 6,
+    "top_k_relationships": 6,
+    "return_context": false
+  },
+  "caseCount": 5,
+  "cases": [
+    {
+      "id": "Q2001",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "什么是操作系统？请从“资源管理”和“用户接口”两个角度进行说明。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "操作系统是位于硬件与应用程序之间的系统软件。一方面，它负责管理处理机、内存、文件和外设等资源；另一方面，它通过命令接口、图形接口、系统调用或库接口，为用户和程序提供使用计算机的方式。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和操作系统有什么关系？",
+        "generationContextChars": 114,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.6667,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.3333
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "在计算机操作系统的知识体系中，**“操作系统的目标和作用”是构成操作系统概述的核心章节**。它系统地阐明了操作系统存在的根本目的，以及它在计算机系统运行和用户使用过程中所扮演的角色。如果将《第一章 操作系统引论》看作是对操作系统这门学科的总览，那么1.1节“操作系统的目标和作用”就是总览中最基础的纲要，它直接回答了“为何需要操作系统”以及“操作系统能带来什么”这两个本源问题 [来源 1]。\n\n具体而言，**操作系统的目标**定义了设计操作系统时追求的理想特性，而**操作系统的作用**则描述了操作系统在软硬件之间承担的实际职能，二者共同将抽象的操作系统概念具象化。在课程结构中，这一节不仅自身独立成章，还进一步划分为“操作系统的目标”和“操作系统的作用”两个子节，内容层层递进。例如，操作系统追求方便性、有效性、可扩充性和开放性这四大目标，其中方便性与有效性是设计时最主要的考量 [来源 2]。这些目标并非凭空设定，而是紧密依赖于应用环境：在查询系统中，操作系统需提供良好的人机交互性；在工业控制、武器控制及多媒体环境中，实时性成为刚性要求；在微机上，使用的方便性则被放在首位 [来源 1]。由此可见，操作系统的目标直接决定了操作系统的功能取舍和形态差异，将用户需求与底层设计连接起来。\n\n而从作用角度看，操作系统被描述为“铺设在计算机硬件上的多层软件的集合”，它通过抽象隐藏硬件细节，为用户和应用程序提供功能更强的虚拟机器 [来源 3]。这种承上启下的作用，与操作系统的接口、存储管理、处理器管理等具体功能一脉相承。因此，这一节并不是孤立的知识点，而是贯穿整个第一章乃至后续章节的纲领——它既为理解操作系统的功能（如处理器管理、存储器管理等）提供了动机解释，也为掌握接口设计、发展历程等后续内容奠定了价值基础 [已参考课程知识库]。简言之，**“操作系统的目标和作用”就是操作系统概念的心脏**，它让学习者从一开始就明白，操作系统从何而来、为何而生、往何而去。\n\n参考来源：\n[来源 1] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 · p9\n[来源 2] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.1 操作系统的目标 · p9-10\n[来源 3] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用 · p10-11",
+        "rawAnswer": "在计算机操作系统的知识体系中，**“操作系统的目标和作用”是构成操作系统概述的核心章节**。它系统地阐明了操作系统存在的根本目的，以及它在计算机系统运行和用户使用过程中所扮演的角色。如果将《第一章 操作系统引论》看作是对操作系统这门学科的总览，那么1.1节“操作系统的目标和作用”就是总览中最基础的纲要，它直接回答了“为何需要操作系统”以及“操作系统能带来什么”这两个本源问题 [Data: Sources (2); Entities (53, 54); Relationships (69, 70)]。\n\n具体而言，**操作系统的目标**定义了设计操作系统时追求的理想特性，而**操作系统的作用**则描述了操作系统在软硬件之间承担的实际职能，二者共同将抽象的操作系统概念具象化。在课程结构中，这一节不仅自身独立成章，还进一步划分为“操作系统的目标”和“操作系统的作用”两个子节，内容层层递进。例如，操作系统追求方便性、有效性、可扩充性和开放性这四大目标，其中方便性与有效性是设计时最主要的考量 [Data: Sources (3)]。这些目标并非凭空设定，而是紧密依赖于应用环境：在查询系统中，操作系统需提供良好的人机交互性；在工业控制、武器控制及多媒体环境中，实时性成为刚性要求；在微机上，使用的方便性则被放在首位 [Data: Sources (2); Relationships (71, 72, 74, 75, 76, 77, 73)]。由此可见，操作系统的目标直接决定了操作系统的功能取舍和形态差异，将用户需求与底层设计连接起来。\n\n而从作用角度看，操作系统被描述为“铺设在计算机硬件上的多层软件的集合”，它通过抽象隐藏硬件细节，为用户和应用程序提供功能更强的虚拟机器 [Data: Sources (5)]。这种承上启下的作用，与操作系统的接口、存储管理、处理器管理等具体功能一脉相承。因此，这一节并不是孤立的知识点，而是贯穿整个第一章乃至后续章节的纲领——它既为理解操作系统的功能（如处理器管理、存储器管理等）提供了动机解释，也为掌握接口设计、发展历程等后续内容奠定了价值基础 [Data: Entities (23, 21); Relationships (7, 5)]。简言之，**“操作系统的目标和作用”就是操作系统概念的心脏**，它让学习者从一开始就明白，操作系统从何而来、为何而生、往何而去。",
+        "sources": [
+          {
+            "rank": 1,
+            "kind": "graphrag_citation",
+            "ref": "2",
+            "chunk_id": "f55c02f070617c322e91fb4f86348eea3bc266f35a5451d6d7a61af1a297490803f1109a317018b71cf08e5b09dfb55b7e16d3c6614ba78700693d7fb0e6eef1",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用",
+            "page_start": 9,
+            "page_end": 9,
+            "snippet": "document_type: textbook. chapter: 第一章 操作系统引论. section: 1.1 操作系统的目标和作用. heading_level: 2. heading_path_text: 第一章 操作系统引论 > 1.1 操作系统的目标和作用. page_start: 9. page_end: 9. section_level: 2. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 1.1 操作系统的目标和作用 操作系统的目标与应用环境有关。例如在查询系统中所用…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 2,
+            "kind": "graphrag_citation",
+            "ref": "3",
+            "chunk_id": "6ce5eb6c812b5da2e6ef96eddf65f17f9e3118c1da4ed0a322d0a133376f2b01f4e50e331aa45339d0a7b63e6ffae0d24668584302dbe42c4aab8246cae8d84b",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.1 操作系统的目标",
+            "page_start": 9,
+            "page_end": 10,
+            "snippet": "方便性 一个未配置OS的计算机系统是极难使用的。用户如果想直接在计算机硬件(裸机)上运行自己所编写的程序，就必须用机器语言书写程序。但如果在计算机硬件上配置了OS，系统便可以使用编译命令将用户采用高级语言书写的程序翻译成机器代码，或者直接通过OS所提供的各种命令操纵计算机系统，极大地方便了用户，使计算机变得易学易用。 2. 有效性 有效性所包含的第一层含义是提高系统资源的利用率。在早期未配置OS的计算机系统中，诸如处理机、I/O设备等都经常处于空闲状态，各种资源无法得到充分利用，所以在当时，提高系统资源利用率是推动OS发展最主要的动力。有效性的另一层含…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 3,
+            "kind": "graphrag_citation",
+            "ref": "5",
+            "chunk_id": "769fc023aaceec50afa6784476b0f4e71f2f655d2431f5948f7cca62d3c2a7fe062e6c8300f0df1ad13da86ec6ab01ac8daeb847085858e7c3a5d8353522390b",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用",
+            "page_start": 10,
+            "page_end": 11,
+            "snippet": "document_type: textbook. chapter: 第一章 操作系统引论. section: 1.1 操作系统的目标和作用. subsection: 1.1.2 操作系统的作用. heading_level: 3. heading_path_text: 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用. page_start: 10. page_end: 11. section_level: 3. source_file: 计算机操作系统教材. course_id: crs-20260506-r4s…",
+            "source_type": "graphrag_citation"
+          }
+        ],
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 54067,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true,
+          "maxContextTokens": 5000,
+          "topKEntities": 6,
+          "topKRelationships": 6,
+          "rawDataCitationPresent": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2002",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "为什么说并发性是现代操作系统的重要特征？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "并发性指多个活动在同一时间段内交替推进。操作系统通过中断、时钟和调度机制，让多个程序共享处理机与其他资源，从而提升系统利用率和交互能力。并发不等同于在同一时刻物理上同时执行。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和操作系统有什么关系？",
+        "generationContextChars": 110,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.6667,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "## 操作系统概述\n\n操作系统（OS）是计算机系统中最基本的系统软件，负责对计算机的硬件与软件资源进行统一的管理、控制和调度 [已参考课程知识库]。在《计算机操作系统》教材中，第一章“操作系统引论”作为课程的绪论，系统性地介绍了操作系统的基本概念、发展历程、目标和作用 [已参考课程知识库]。该章涵盖了OS从早期到现代的发展脉络 [已参考课程知识库]，阐述了操作系统的核心功能（如处理器管理、存储器管理、设备管理和文件管理） [已参考课程知识库]，也概述了操作系统为用户和应用程序提供的接口及结构设计思路 [已参考课程知识库]。这一章为后续各章节的学习奠定了整体框架。\n\n### 1.1 操作系统的目标和作用\n\n第一章中的第一节“1.1 操作系统的目标和作用”是整个引论的开篇重点 [已参考课程知识库]。该节首先指出，操作系统的目标与它所服务应用环境紧密相关：在查询系统中，OS需要提供良好的人‑机交互性；在工业控制、武器控制及多媒体环境中，实时性成为关键要求；而在微机上配置的OS，使用方便性则更受重视 [来源 1]。\n\n1.1.1 小节将操作系统的目标明确归纳为四个方面：方便性、有效性、可扩充性和开放性 [来源 2]。方便性让用户无需直接面对裸机，可通过高级语言和各种命令简便地操纵计算机 [来源 2]；有效性既包含了提高CPU、I/O设备等资源的利用率，也意味着通过合理组织工作流程来提升系统吞吐量 [来源 2]；可扩充性是为了适应硬件、体系结构和应用发展的需求，推动OS从无结构逐渐演化为模块化、层次化乃至微内核结构 [来源 2]；开放性则要求系统遵循世界标准规范（如OSI），使不同厂商的软硬件能够彼此兼容、方便互连 [来源 2]。\n\n随后的 1.1.2 小节进一步揭示了操作系统的作用：OS 是铺设在计算机硬件上的多层软件集合，它不仅增强了系统功能，还隐藏了底层硬件的操作细节，通过逐层抽象最终向用户呈现出一台功能更强、更易使用的虚拟机器 [来源 3]。\n\n### 1.1 节与操作系统的关系\n\n上述1.1节的内容与操作系统整体之间存在着“设计哲学”与“具体实现”的深层关系 [已参考课程知识库]。从知识体系来看，1.1节是“操作系统引论”的逻辑起点，它回答了“为什么需要操作系统”以及“操作系统应该达成什么目标”这些根本问题。其后继章节所展开的全部功能——无论是进程调度、内存虚拟化管理，还是文件系统的组织、网络通信支持——本质上都是围绕这四个目标进行设计和优化的 [已参考课程知识库]。例如，方便性目标促成了图形用户界面和丰富系统调用的出现；有效性目标推动多道程序设计与虚拟存储技术的发展；可扩充性目标催生了现代OS的微内核架构；开放性目标则直接支撑了网络操作系统和分布式系统的演进 [来源 2、3]。因此，1.1节所阐述的目标与作用构成了理解整个操作系统理论体系的基石，它为读者提供了宏观的价值判断标准，而在后续各章中学到的具体机制，正是这些目标在不同模块中的落地体现 [已参考课程知识库]。\n\n参考来源：\n[来源 1] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 · p9\n[来源 2] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.1 操作系统的目标 · p9-10\n[来源 3] 计算机操作系统教材 · 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用 · p10-11",
+        "rawAnswer": "## 操作系统概述\n\n操作系统（OS）是计算机系统中最基本的系统软件，负责对计算机的硬件与软件资源进行统一的管理、控制和调度 [Data: Entities (62)]。在《计算机操作系统》教材中，第一章“操作系统引论”作为课程的绪论，系统性地介绍了操作系统的基本概念、发展历程、目标和作用 [Data: Entities (1)]。该章涵盖了OS从早期到现代的发展脉络 [Data: Entities (21); Relationships (5)]，阐述了操作系统的核心功能（如处理器管理、存储器管理、设备管理和文件管理） [Data: Entities (23); Relationships (7)]，也概述了操作系统为用户和应用程序提供的接口及结构设计思路 [Data: Entities (52); Relationships (68)]。这一章为后续各章节的学习奠定了整体框架。\n\n### 1.1 操作系统的目标和作用\n\n第一章中的第一节“1.1 操作系统的目标和作用”是整个引论的开篇重点 [Data: Entities (53); Relationships (69)]。该节首先指出，操作系统的目标与它所服务应用环境紧密相关：在查询系统中，OS需要提供良好的人‑机交互性；在工业控制、武器控制及多媒体环境中，实时性成为关键要求；而在微机上配置的OS，使用方便性则更受重视 [Data: Sources (2); Relationships (71, 72, 73, 74, 75, +more)]。\n\n1.1.1 小节将操作系统的目标明确归纳为四个方面：方便性、有效性、可扩充性和开放性 [Data: Sources (3)]。方便性让用户无需直接面对裸机，可通过高级语言和各种命令简便地操纵计算机 [Data: Sources (3)]；有效性既包含了提高CPU、I/O设备等资源的利用率，也意味着通过合理组织工作流程来提升系统吞吐量 [Data: Sources (3)]；可扩充性是为了适应硬件、体系结构和应用发展的需求，推动OS从无结构逐渐演化为模块化、层次化乃至微内核结构 [Data: Sources (3)]；开放性则要求系统遵循世界标准规范（如OSI），使不同厂商的软硬件能够彼此兼容、方便互连 [Data: Sources (3)]。\n\n随后的 1.1.2 小节进一步揭示了操作系统的作用：OS 是铺设在计算机硬件上的多层软件集合，它不仅增强了系统功能，还隐藏了底层硬件的操作细节，通过逐层抽象最终向用户呈现出一台功能更强、更易使用的虚拟机器 [Data: Sources (5)]。\n\n### 1.1 节与操作系统的关系\n\n上述1.1节的内容与操作系统整体之间存在着“设计哲学”与“具体实现”的深层关系 [Data: Entities (54); Relationships (70)]。从知识体系来看，1.1节是“操作系统引论”的逻辑起点，它回答了“为什么需要操作系统”以及“操作系统应该达成什么目标”这些根本问题。其后继章节所展开的全部功能——无论是进程调度、内存虚拟化管理，还是文件系统的组织、网络通信支持——本质上都是围绕这四个目标进行设计和优化的 [Data: Entities (23, 62)]。例如，方便性目标促成了图形用户界面和丰富系统调用的出现；有效性目标推动多道程序设计与虚拟存储技术的发展；可扩充性目标催生了现代OS的微内核架构；开放性目标则直接支撑了网络操作系统和分布式系统的演进 [Data: Sources (3, 5)]。因此，1.1节所阐述的目标与作用构成了理解整个操作系统理论体系的基石，它为读者提供了宏观的价值判断标准，而在后续各章中学到的具体机制，正是这些目标在不同模块中的落地体现 [Data: Entities (1)]。",
+        "sources": [
+          {
+            "rank": 1,
+            "kind": "graphrag_citation",
+            "ref": "2",
+            "chunk_id": "f55c02f070617c322e91fb4f86348eea3bc266f35a5451d6d7a61af1a297490803f1109a317018b71cf08e5b09dfb55b7e16d3c6614ba78700693d7fb0e6eef1",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用",
+            "page_start": 9,
+            "page_end": 9,
+            "snippet": "document_type: textbook. chapter: 第一章 操作系统引论. section: 1.1 操作系统的目标和作用. heading_level: 2. heading_path_text: 第一章 操作系统引论 > 1.1 操作系统的目标和作用. page_start: 9. page_end: 9. section_level: 2. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 1.1 操作系统的目标和作用 操作系统的目标与应用环境有关。例如在查询系统中所用…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 2,
+            "kind": "graphrag_citation",
+            "ref": "3",
+            "chunk_id": "6ce5eb6c812b5da2e6ef96eddf65f17f9e3118c1da4ed0a322d0a133376f2b01f4e50e331aa45339d0a7b63e6ffae0d24668584302dbe42c4aab8246cae8d84b",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.1 操作系统的目标",
+            "page_start": 9,
+            "page_end": 10,
+            "snippet": "方便性 一个未配置OS的计算机系统是极难使用的。用户如果想直接在计算机硬件(裸机)上运行自己所编写的程序，就必须用机器语言书写程序。但如果在计算机硬件上配置了OS，系统便可以使用编译命令将用户采用高级语言书写的程序翻译成机器代码，或者直接通过OS所提供的各种命令操纵计算机系统，极大地方便了用户，使计算机变得易学易用。 2. 有效性 有效性所包含的第一层含义是提高系统资源的利用率。在早期未配置OS的计算机系统中，诸如处理机、I/O设备等都经常处于空闲状态，各种资源无法得到充分利用，所以在当时，提高系统资源利用率是推动OS发展最主要的动力。有效性的另一层含…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 3,
+            "kind": "graphrag_citation",
+            "ref": "5",
+            "chunk_id": "769fc023aaceec50afa6784476b0f4e71f2f655d2431f5948f7cca62d3c2a7fe062e6c8300f0df1ad13da86ec6ab01ac8daeb847085858e7c3a5d8353522390b",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用",
+            "page_start": 10,
+            "page_end": 11,
+            "snippet": "document_type: textbook. chapter: 第一章 操作系统引论. section: 1.1 操作系统的目标和作用. subsection: 1.1.2 操作系统的作用. heading_level: 3. heading_path_text: 第一章 操作系统引论 > 1.1 操作系统的目标和作用 > 1.1.2 操作系统的作用. page_start: 10. page_end: 11. section_level: 3. source_file: 计算机操作系统教材. course_id: crs-20260506-r4s…",
+            "source_type": "graphrag_citation"
+          }
+        ],
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 61646,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true,
+          "maxContextTokens": 5000,
+          "topKEntities": 6,
+          "topKRelationships": 6,
+          "rawDataCitationPresent": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2003",
+      "question": "它和用户态有什么关系？",
+      "sourceQuestion": "请比较用户态与内核态，并说明为什么需要区分这两种执行状态。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "用户态权限受限，不能直接执行特权指令或访问关键硬件资源；内核态拥有更高权限，可执行中断控制、内存管理和设备管理等操作。区分两者有助于隔离应用错误，保护系统安全与稳定。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和用户态有什么关系？",
+        "generationContextChars": 106,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.6667,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "## 操作系统与用户态的关系\n\n用户态（又称目态）是 CPU 的一种低特权执行模式，应用程序、用户进程和用户级线程均在此模式下运行。在该状态下，可执行的指令集和可访问的存储器、寄存器都受到严格限制，无法直接触及关键系统资源，从而避免用户程序破坏操作系统的稳定性。用户态正是操作系统实现保护与隔离的基础机制之一 [已参考课程知识库]。\n\n当用户程序需要申请系统服务时，必须通过系统调用从用户态切换至系统态（即内核态或核心态）。这一转换过程涉及上下文的保存与恢复，处理机状态由用户态变为系统态，然后由内核完成请求的服务，最后再返回用户态继续执行。系统调用的实现和处理步骤都高度依赖于用户态与内核态之间的切换 [已参考课程知识库]。\n\n在微内核操作系统架构中，为了隔离错误并增强健壮性，所有服务器进程同样被置于用户态下运行；只有微内核本身和少数关键服务器运行在内核态。这种设计使得用户态成为隔离普通服务和关键内核服务的天然界限 [已参考课程知识库]。与此同时，用户级线程的调度和信号处理也都在用户态环境中完成，不需要内核的直接干预 [已参考课程知识库]。\n\n以 Windows 为例，其 Win32 API 的实现清晰体现了用户态的角色：应用程序运行在用户态，当调用操作系统服务时，通过 `int 2E` 指令触发陷入，硬件捕捉信号后从用户态切换到核心态，由系统服务调度程序接管并最终交给执行体中的系统服务程序处理。整个过程确保了普通应用程序只能通过受控的接口访问内核资源 [来源 1]。\n\n综上，用户态是操作系统隔离应用程序与内核的关键屏障。操作系统通过人为划分用户态和内核态，既向用户和应用程序提供了方便、安全的接口，又保障了系统核心资源不会被随意破坏，从而实现了良好的人机交互性和系统的整体稳定性 [已参考课程知识库]。\n\n参考来源：\n[来源 1] 计算机操作系统教材 · 第九章 操作系统接口 > 9.6 系统调用的实现 > 9.6.6 Win32的应用程序接口 · p313-314",
+        "rawAnswer": "## 操作系统与用户态的关系\n\n用户态（又称目态）是 CPU 的一种低特权执行模式，应用程序、用户进程和用户级线程均在此模式下运行。在该状态下，可执行的指令集和可访问的存储器、寄存器都受到严格限制，无法直接触及关键系统资源，从而避免用户程序破坏操作系统的稳定性。用户态正是操作系统实现保护与隔离的基础机制之一 [Data: Entities (389); Relationships (625, 5328)]。\n\n当用户程序需要申请系统服务时，必须通过系统调用从用户态切换至系统态（即内核态或核心态）。这一转换过程涉及上下文的保存与恢复，处理机状态由用户态变为系统态，然后由内核完成请求的服务，最后再返回用户态继续执行。系统调用的实现和处理步骤都高度依赖于用户态与内核态之间的切换 [Data: Relationships (5228, 5264, 5328); Entities (429, 588)]。\n\n在微内核操作系统架构中，为了隔离错误并增强健壮性，所有服务器进程同样被置于用户态下运行；只有微内核本身和少数关键服务器运行在内核态。这种设计使得用户态成为隔离普通服务和关键内核服务的天然界限 [Data: Relationships (600, 607, 617)]。与此同时，用户级线程的调度和信号处理也都在用户态环境中完成，不需要内核的直接干预 [Data: Relationships (5324, 5412)]。\n\n以 Windows 为例，其 Win32 API 的实现清晰体现了用户态的角色：应用程序运行在用户态，当调用操作系统服务时，通过 `int 2E` 指令触发陷入，硬件捕捉信号后从用户态切换到核心态，由系统服务调度程序接管并最终交给执行体中的系统服务程序处理。整个过程确保了普通应用程序只能通过受控的接口访问内核资源 [Data: Sources (397)]。\n\n综上，用户态是操作系统隔离应用程序与内核的关键屏障。操作系统通过人为划分用户态和内核态，既向用户和应用程序提供了方便、安全的接口，又保障了系统核心资源不会被随意破坏，从而实现了良好的人机交互性和系统的整体稳定性 [Data: Entities (54, 30); Relationships (625, 5379)]。",
+        "sources": [
+          {
+            "rank": 1,
+            "kind": "graphrag_citation",
+            "ref": "397",
+            "chunk_id": "95549d40a73fb9dd8c66beb9e504e106ab676d49ac9472bda63bdb6f4b432ed5dda621acb6dd8d757638c34107492fed616127bbfcd31d961bd174e9d42aadda",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第九章 操作系统接口 > 9.6 系统调用的实现 > 9.6.6 Win32的应用程序接口",
+            "page_start": 313,
+            "page_end": 314,
+            "snippet": "document_type: textbook. chapter: 第九章 操作系统接口. section: 9.6 系统调用的实现. subsection: 9.6.6 Win32的应用程序接口. heading_level: 3. heading_path_text: 第九章 操作系统接口 > 9.6 系统调用的实现 > 9.6.6 Win32的应用程序接口. page_start: 313. page_end: 314. section_level: 3. source_file: 计算机操作系统教材. course_id: crs-202605…",
+            "source_type": "graphrag_citation"
+          }
+        ],
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 26674,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true,
+          "maxContextTokens": 5000,
+          "topKEntities": 6,
+          "topKRelationships": 6,
+          "rawDataCitationPresent": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2004",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "系统调用与普通函数调用有什么本质区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统接口。"
+        },
+        {
+          "role": "assistant",
+          "content": "普通函数调用通常在同一特权级内完成；系统调用会触发受控的陷入机制，使程序从用户态进入内核态，请求操作系统完成文件、进程、设备等受保护服务。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统接口」：它和操作系统有什么关系？",
+        "generationContextChars": 92,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.6667,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "## 操作系统接口与操作系统的关系\n\n操作系统接口是操作系统不可分割的组成部分，是操作系统面向用户和应用程序的“门面”。**操作系统**作为计算机系统资源的管理者，负责统一管理和操纵所有硬件与软件资源，而**操作系统接口**正是操作系统为方便用户和程序使用这些资源而提供的交互途径 [来源 1、2]。从系统结构看，操作系统直接运行在硬件之上，而操作系统接口则位于操作系统与上层应用或用户之间，负责将用户请求转换为操作系统内核可执行的服务调用。没有操作系统接口，用户便无法与操作系统进行有效的通信，整个计算机系统将变得难以使用。\n\n从功能上讲，操作系统通过接口将自身的管理能力和服务能力向外暴露。常见的接口方式包括**用户接口**和**程序接口**，在互联网环境下还衍生出**网络用户接口** [来源 2]。其中，用户接口使得用户能以命令交互、图形操作、批处理等方式直接操纵计算机；程序接口（即系统调用）则为应用程序提供了一套进入内核、请求服务的标准函数；网络用户接口则支持联网计算机之间的通信与浏览。这些接口共同构成了操作系统与外部世界的交互层，也反映了操作系统“资源管理者”和“服务提供者”的双重角色。\n\n总之，操作系统接口与操作系统之间是**包含与被包含、提供与使用**的紧密关系。操作系统是接口的载体和实现者，接口则是操作系统功能的外在表现和用户可用性的保障。两者相辅相成，共同完成了“方便用户使用计算机，高效管理资源”这一操作系统设计目标 [来源 1、2]。\n\n参考来源：\n[来源 1] 计算机操作系统教材 · 第一章 操作系统引论 · p9\n[来源 2] 计算机操作系统教材 · 第九章 操作系统接口 · p286",
+        "rawAnswer": "## 操作系统接口与操作系统的关系\n\n操作系统接口是操作系统不可分割的组成部分，是操作系统面向用户和应用程序的“门面”。**操作系统**作为计算机系统资源的管理者，负责统一管理和操纵所有硬件与软件资源，而**操作系统接口**正是操作系统为方便用户和程序使用这些资源而提供的交互途径 [Data: Entities (30); Relationships (4825, 68); Sources (1, 361)]。从系统结构看，操作系统直接运行在硬件之上，而操作系统接口则位于操作系统与上层应用或用户之间，负责将用户请求转换为操作系统内核可执行的服务调用。没有操作系统接口，用户便无法与操作系统进行有效的通信，整个计算机系统将变得难以使用。\n\n从功能上讲，操作系统通过接口将自身的管理能力和服务能力向外暴露。常见的接口方式包括**用户接口**和**程序接口**，在互联网环境下还衍生出**网络用户接口** [Data: Entities (30, 213, 1667); Relationships (4822, 4823, 4824); Sources (361)]。其中，用户接口使得用户能以命令交互、图形操作、批处理等方式直接操纵计算机；程序接口（即系统调用）则为应用程序提供了一套进入内核、请求服务的标准函数；网络用户接口则支持联网计算机之间的通信与浏览。这些接口共同构成了操作系统与外部世界的交互层，也反映了操作系统“资源管理者”和“服务提供者”的双重角色。\n\n总之，操作系统接口与操作系统之间是**包含与被包含、提供与使用**的紧密关系。操作系统是接口的载体和实现者，接口则是操作系统功能的外在表现和用户可用性的保障。两者相辅相成，共同完成了“方便用户使用计算机，高效管理资源”这一操作系统设计目标 [Data: Entities (52); Relationships (68); Sources (1, 361)]。",
+        "sources": [
+          {
+            "rank": 1,
+            "kind": "graphrag_citation",
+            "ref": "1",
+            "chunk_id": "81d99ad61e36b8d45bc6265e303c143cf555bd3d07a0e74911e9e023861c51321a712f413cedfb0c2be1781915ba704c48444e47942c438d6a21c078516367eb",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第一章 操作系统引论",
+            "page_start": 9,
+            "page_end": 9,
+            "snippet": "document_type: textbook. chapter: 第一章 操作系统引论. heading_level: 1. heading_path_text: 第一章 操作系统引论. page_start: 9. page_end: 9. section_level: 1. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 第一章 操作系统引论 操作系统(Operating System，OS)是配置在计算机硬件上的第一层软件，是对硬件系统的首次扩充。其主要作用是管理好这些设备，提高它…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 2,
+            "kind": "graphrag_citation",
+            "ref": "361",
+            "chunk_id": "74a5d66045ce2ab3a164bd7fec15fbc699f2a0b1d277fca33a15974a6331635ca356f47cfb339da806edc61b8eb8babc87754accbf840e080219d4508df3dbd6",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第九章 操作系统接口",
+            "page_start": 286,
+            "page_end": 286,
+            "snippet": "document_type: textbook. chapter: 第九章 操作系统接口. heading_level: 1. heading_path_text: 第九章 操作系统接口. page_start: 286. page_end: 286. section_level: 1. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 第九章 操作系统接口 操作系统作为计算机系统资源的管理者，对系统中的所有硬件和软件资源进行统一的管理和操纵。无论是用户(程序)或OS的外层软件，凡是涉及到系…",
+            "source_type": "graphrag_citation"
+          }
+        ],
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 32001,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true,
+          "maxContextTokens": 5000,
+          "topKEntities": 6,
+          "topKRelationships": 6,
+          "rawDataCitationPresent": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2005",
+      "question": "它和系统调用有什么关系？",
+      "sourceQuestion": "中断、异常和系统调用三者之间有什么联系与区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释中断与异常。"
+        },
+        {
+          "role": "assistant",
+          "content": "三者都可能导致控制流进入内核。中断一般由外部设备或时钟异步触发；异常通常由当前指令执行过程中的错误或特殊事件同步触发；系统调用则是程序主动发起的受控内核服务请求。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「中断与异常」：它和系统调用有什么关系？",
+        "generationContextChars": 103,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 1.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "## 中断与异常\n\n**中断**是由硬件或软件发出的信号，它可以在CPU执行指令期间暂停当前任务，转而去处理一个特定的事件。这种机制是操作系统支持异步事件的基础，也是实现多道程序设计和设备管理的硬件基石。中断的类型包括：由I/O设备在操作完成时向CPU发送的硬件信号，用于唤醒设备驱动程序、实现进程切换以及让CPU与外设并行工作；也包括由程序自身非法操作（例如写入只读存储块）引发的**异常**（Exception）[来源 1]。因此，异常可以被视为一种特殊的中断，通常是由程序内部错误或特殊条件（如缺页、除零、非法指令等）所触发的事件。高级操作系统利用这种统一的中断/陷入框架来对软硬件异常做出响应。\n\n## 中断与系统调用的关系\n\n系统调用是应用程序向操作系统内核请求服务的接口，而这一接口的底层实现完全依赖于中断机制。\n\n1. **实现原理**  \n   系统调用不是普通的函数调用，它必须使处理器从用户态切换到内核态。当用户程序执行一条系统调用指令（如`int 0x80`在Linux中）时，CPU会触发一次软件中断，并将控制权转交给操作系统的中断/陷入处理程序。该处理程序根据系统调用号分派到对应的内核函数，完成服务后再返回用户态。因此可以说，**系统调用本质上就是一次通过特定中断号发起的软中断请求** [来源 2、3]。\n\n2. **中断号作为标识**  \n   每个操作系统都会为系统调用分配一个或几个专门的中断号。例如，早期MS‑DOS使用`INT 21H`，Linux为应用层授权了`80h`作为系统调用的中断入口。同一个中断入口会处理所有的系统调用，并通过调用号（一般放在寄存器中）来区分具体功能。应用程序只能使用已经授权的那些中断号，否则将触发保护异常而被操作系统中止 [来源 2]。\n\n3. **保护机制的作用**  \n   操作系统会对中断机制本身施加保护。在具有保护模式的系统中（如Intel架构下的保护模式），只有被授权给应用程序的中断号才可以被调用。例如，Linux只为用户态程序授权了3、4、5及`80h`这四个中断号，其中前三个用于调试，`80h`专门用于系统调用。任何未授权的调用都会引发保护异常，从而导致进程终止。这保证了用户程序只能通过规定的入口进入内核，维护了系统的安全性 [来源 2]。\n\n综上，中断是操作系统响应异步事件（包括外部设备中断和内部异常）的统一机制，而系统调用则是利用这一机制为用户程序提供可控的内核服务入口。正是通过中断/陷入硬件机构，用户态程序得以跨越保护边界，安全地请求操作系统服务，这也是现代操作系统用户接口的核心设计 [来源 3]。\n\n参考来源：\n[来源 1] 计算机操作系统教材 · 第六章 输入输出系统 > 6.3 中断机构和中断处理程序 · p197\n[来源 2] 计算机操作系统教材 · 第九章 操作系统接口 > 9.4 系统调用的概念和类型 > 9.4.1 系统调用的基本概念 · p302-304\n[来源 3] 计算机操作系统教材 · 第九章 操作系统接口 > 9.6 系统调用的实现 · p308",
+        "rawAnswer": "## 中断与异常\n\n**中断**是由硬件或软件发出的信号，它可以在CPU执行指令期间暂停当前任务，转而去处理一个特定的事件。这种机制是操作系统支持异步事件的基础，也是实现多道程序设计和设备管理的硬件基石。中断的类型包括：由I/O设备在操作完成时向CPU发送的硬件信号，用于唤醒设备驱动程序、实现进程切换以及让CPU与外设并行工作；也包括由程序自身非法操作（例如写入只读存储块）引发的**异常**（Exception）[Data: Entities (1301); Sources (249)]。因此，异常可以被视为一种特殊的中断，通常是由程序内部错误或特殊条件（如缺页、除零、非法指令等）所触发的事件。高级操作系统利用这种统一的中断/陷入框架来对软硬件异常做出响应。\n\n## 中断与系统调用的关系\n\n系统调用是应用程序向操作系统内核请求服务的接口，而这一接口的底层实现完全依赖于中断机制。\n\n1. **实现原理**  \n   系统调用不是普通的函数调用，它必须使处理器从用户态切换到内核态。当用户程序执行一条系统调用指令（如`int 0x80`在Linux中）时，CPU会触发一次软件中断，并将控制权转交给操作系统的中断/陷入处理程序。该处理程序根据系统调用号分派到对应的内核函数，完成服务后再返回用户态。因此可以说，**系统调用本质上就是一次通过特定中断号发起的软中断请求** [Data: Entities (2715, 2860); Relationships (5090); Sources (384, 391)]。\n\n2. **中断号作为标识**  \n   每个操作系统都会为系统调用分配一个或几个专门的中断号。例如，早期MS‑DOS使用`INT 21H`，Linux为应用层授权了`80h`作为系统调用的中断入口。同一个中断入口会处理所有的系统调用，并通过调用号（一般放在寄存器中）来区分具体功能。应用程序只能使用已经授权的那些中断号，否则将触发保护异常而被操作系统中止 [Data: Entities (2728); Sources (384)]。\n\n3. **保护机制的作用**  \n   操作系统会对中断机制本身施加保护。在具有保护模式的系统中（如Intel架构下的保护模式），只有被授权给应用程序的中断号才可以被调用。例如，Linux只为用户态程序授权了3、4、5及`80h`这四个中断号，其中前三个用于调试，`80h`专门用于系统调用。任何未授权的调用都会引发保护异常，从而导致进程终止。这保证了用户程序只能通过规定的入口进入内核，维护了系统的安全性 [Data: Entities (2720); Relationships (5094); Sources (384)]。\n\n综上，中断是操作系统响应异步事件（包括外部设备中断和内部异常）的统一机制，而系统调用则是利用这一机制为用户程序提供可控的内核服务入口。正是通过中断/陷入硬件机构，用户态程序得以跨越保护边界，安全地请求操作系统服务，这也是现代操作系统用户接口的核心设计 [Data: Entities (68, 2714, 2803); Sources (391)]。",
+        "sources": [
+          {
+            "rank": 1,
+            "kind": "graphrag_citation",
+            "ref": "249",
+            "chunk_id": "6453da8d633ccea4d25e9513ffcfac4c466e4219918a8c253edd460b49d676ee30a85dbe8a9827986b0474c87fe991490a6bff0bc3cbdf7ca82d13c505aab34b",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第六章 输入输出系统 > 6.3 中断机构和中断处理程序",
+            "page_start": 197,
+            "page_end": 197,
+            "snippet": "document_type: textbook. chapter: 第六章 输入输出系统. section: 6.3 中断机构和中断处理程序. heading_level: 2. heading_path_text: 第六章 输入输出系统 > 6.3 中断机构和中断处理程序. page_start: 197. page_end: 197. section_level: 2. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 6.3 中断机构和中断处理程序 对于操作系统中的I/O系统，本章采取…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 2,
+            "kind": "graphrag_citation",
+            "ref": "384",
+            "chunk_id": "40a5fc62ed89d9021152f8b3559df3965ba18f2c67256a5074d26d5564b842a85d2cfa3a8a1220130c58f18428ebdfdb9805d389deeb400a37f2b1220e133ebf",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第九章 操作系统接口 > 9.4 系统调用的概念和类型 > 9.4.1 系统调用的基本概念",
+            "page_start": 302,
+            "page_end": 304,
+            "snippet": "中断机制 系统调用是通过中断机制实现的，并且一个操作系统的所有系统调用，都通过同一个中断入口来实现。如MS-DOS提供了INT21H，应用程序通过该中断获取操作系统的服务。 对于拥有保护机制的OS来说，中断机制本身也是受保护的，在IBMPC上，Intel提供了多达255个中断号，但只有授权给应用程序保护等级的中断号，才是可以被应用程序 调用的。对于未被授权的中断号，如果应用程序进行调用，同样会引起保护异常，而导致自己被操作系统停止。如Linux仅仅给应用程序授权了4个中断号：3，4，5，以及80h。前三个中断号是提供给应用程序调试所使用的，而80h正是…",
+            "source_type": "graphrag_citation"
+          },
+          {
+            "rank": 3,
+            "kind": "graphrag_citation",
+            "ref": "391",
+            "chunk_id": "e43e08b8dc8a9782fc5a4a299cc5f713fac1030cac90de96e489abacc15360c7bc48bfe0e5e38abc0e7fdf2635684e37099dcc7247f312cf28d12e6e9b3fb0e8",
+            "document_key": "计算机操作系统教材",
+            "source_file": "计算机操作系统教材",
+            "heading_path": "第九章 操作系统接口 > 9.6 系统调用的实现",
+            "page_start": 308,
+            "page_end": 308,
+            "snippet": "document_type: textbook. chapter: 第九章 操作系统接口. section: 9.6 系统调用的实现. heading_level: 2. heading_path_text: 第九章 操作系统接口 > 9.6 系统调用的实现. page_start: 308. page_end: 308. section_level: 2. source_file: 计算机操作系统教材. course_id: crs-20260506-r4slkr. 9.6 系统调用的实现 系统调用的实现与一般过程调用的实现相比，两者间有很大差异。对…",
+            "source_type": "graphrag_citation"
+          }
+        ],
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 34908,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true,
+          "maxContextTokens": 5000,
+          "topKEntities": 6,
+          "topKRelationships": 6,
+          "rawDataCitationPresent": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    }
+  ]
+}

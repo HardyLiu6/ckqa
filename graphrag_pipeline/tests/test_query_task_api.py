@@ -28,7 +28,15 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from main import HybridWarmupRequest, QueryTaskCreateRequest, _build_query_cmd, _resolve_query_response, create_app, format_response
+from main import (
+    HybridWarmupRequest,
+    QueryEngineHistoryRequest,
+    QueryTaskCreateRequest,
+    _build_query_cmd,
+    _resolve_query_response,
+    create_app,
+    format_response,
+)
 from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot
 
 
@@ -301,6 +309,35 @@ class TestQueryTaskApi(unittest.TestCase):
             asyncio.run(readiness_endpoint(dataDirUri="../outside"))
 
         self.assertEqual(context.exception.status_code, 400)
+
+    def test_history_poc_readiness_returns_disabled_by_default(self):
+        app = create_app(task_manager=_FakeQueryTaskManager())
+        readiness_endpoint = _get_route_endpoint(app, "/v1/experiments/query-engine-history/readiness", "GET")
+
+        response = asyncio.run(readiness_endpoint(dataDirUri=None))
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body)
+        self.assertFalse(payload["enabled"])
+        self.assertFalse(payload["supported"])
+        self.assertEqual(payload["method"], "local_history_poc")
+        self.assertEqual(payload["status"], "disabled")
+
+    def test_history_poc_query_rejects_when_disabled(self):
+        app = create_app(task_manager=_FakeQueryTaskManager())
+        query_endpoint = _get_route_endpoint(app, "/v1/experiments/query-engine-history/query", "POST")
+
+        with self.assertRaises(HTTPException) as context:
+            asyncio.run(
+                query_endpoint(
+                    QueryEngineHistoryRequest(
+                        query="它和资源分配图有什么关系？",
+                        conversationHistory=[{"role": "user", "content": "什么是死锁？"}],
+                    )
+                )
+            )
+
+        self.assertEqual(context.exception.status_code, 403)
 
     def test_query_command_uses_current_python_module_invocation(self):
         cmd = _build_query_cmd(

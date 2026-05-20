@@ -1,0 +1,214 @@
+{
+  "live": true,
+  "generatedAt": "20260519-210729",
+  "graphragVersion": "3.0.9",
+  "dataDirUri": "user_12/kb_5/build_20/index/output",
+  "caseCount": 5,
+  "cases": [
+    {
+      "id": "Q2001",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "什么是操作系统？请从“资源管理”和“用户接口”两个角度进行说明。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "操作系统是位于硬件与应用程序之间的系统软件。一方面，它负责管理处理机、内存、文件和外设等资源；另一方面，它通过命令接口、图形接口、系统调用或库接口，为用户和程序提供使用计算机的方式。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "由于对话历史中仅有一条消息，且未提供前一轮的回复内容，我无法确定“它”具体指代什么。但根据您先问“请解释操作系统概述”，紧接着问“它和操作系统有什么关系”，推测“它”很可能就是指**操作系统概述**这一概念本身。下面将以此为基础，结合数据表中的资料进行解释。\n\n---\n\n## 操作系统概述是什么\n\n操作系统概述是对计算机操作系统的纲要性介绍，通常作为操作系统教材或课程的第一章出现，例如《计算机操作系统》教材的 **第一章 操作系统引论** [Data: Sources (0; 1); Entities (1)]。该章系统性地阐述了操作系统的定义、发展、特征、功能及结构等基础知识，为后续深入学习建立整体框架。其中，**1.1 节“操作系统的目标和作用”** 是概述的核心组成部分，它明确指出操作系统的目标与应用环境密切相关，例如在查询系统中需要良好的人机交互性，在工业控制、武器控制及多媒体环境下要求实时性，而微机上则更注重使用的方便性 [Data: Sources (2); Entities (53; 54); Relationships (69; 72; 73; 74; 75; 76; 77)]。\n\n具体来说，操作系统的目标可归纳为**方便性**、**有效性**、**可扩充性**和**开放性** [Data: Sources (3); Entities (54)]。其中，方便性指通过提供编译命令和各种操作指令，使用户无需直接面向裸机编程；有效性一方面提高系统资源利用率，另一方面提升系统吞吐量；可扩充性要求操作系统能适应硬件和应用的发展，推动其结构从无结构向模块化、层次化乃至微内核结构演进；开放性则强调遵循国际标准，以实现不同厂家软硬件的互联兼容 [Data: Sources (3)]。与此同时，操作系统的作用可从三个角度理解：**作为用户与计算机硬件系统之间的接口**（提供命令、系统调用、图标‑窗口等多种交互方式），**作为计算机系统资源的管理者**（负责处理机、存储器、I/O 设备及文件的管理），以及**实现对计算机资源的抽象**（通过层层铺设设备管理、文件管理等软件，隐藏硬件操作细节，向用户呈现功能更强的虚机器）[Data: Sources (4; 5); Entities (442; 52; 30); Relationships (68)]。\n\n---\n\n## 操作系统概述与操作系统的关系\n\n操作系统概述与操作系统之间是**总结与本体**的关系。操作系统（Operating System, OS）本身是配置在计算机硬件上的第一层软件，属于最基础、最重要的系统软件，负责管理设备、提高资源利用率和系统吞吐量，并为用户及应用程序提供简单接口 [Data: Sources (1); Entities (41; 62)]。操作系统概述则是对这一系统软件所涉及的概念、原理、发展历程和功能特征的**系统化梳理与介绍**。它不独立于操作系统之外，而是依附于操作系统的客观存在，将操作系统的全貌以理论化、结构化的方式呈现出来，帮助学习者建立起对操作系统完整的认知地图 [Data: Entities (1; 109); Relationships (5; 7)]。\n\n换句话说，操作系统是实际运行在计算机中的系统软件，而操作系统概述是教材或课堂上对该软件的**知识组织与表述**。第一章引论中的各个小节——如 1.1 节的目标与作用、1.4 节的接口等——都是围绕操作系统这一中心展开的，它们共同回答了“操作系统是什么、能做什么、如何发展而来”等基本问题 [Data: Sources (0); Entities (276); Relationships (69)]。因此，操作系统概述是学习操作系统的入口和提纲，它与操作系统本身密不可分，是对操作系统整个学科内容的浓缩和引导。",
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 93818,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2002",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "为什么说并发性是现代操作系统的重要特征？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "并发性指多个活动在同一时间段内交替推进。操作系统通过中断、时钟和调度机制，让多个程序共享处理机与其他资源，从而提升系统利用率和交互能力。并发不等同于在同一时刻物理上同时执行。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "操作系统概述通常是指计算机操作系统教材的第一章“操作系统引论”，它系统地介绍操作系统的基本概念、发展历程、目标与作用，是学习操作系统的起点和纲领 [Data: Entities (1); Sources (1, 2, 3, 4); Relationships (5, 7, 69)]。这一章节与操作系统本身的关系极其紧密，主要体现在以下几个方面：\n\n首先，操作系统概述本身就是对操作系统（OS）的总体描述和抽象。它开篇即明确操作系统的定义——配置在计算机硬件上的第一层软件，负责管理各类资源并为用户提供接口 [Data: Sources (1)]。通过概述，读者能够在进入具体技术细节之前，建立对操作系统地位、功能和设计理念的整体认知。\n\n其次，概述章详细阐释了操作系统的目标（方便性、有效性、可扩充性、开放性）及作用（作为用户接口、资源管理者、资源抽象层），这些内容直接定义了操作系统存在的意义和核心价值 [Data: Sources (2, 3, 4)]。例如，方便性和有效性是设计操作系统时最重要的两个目标，而资源管理、抽象隐藏硬件细节等作用则贯穿于操作系统所有子系统的设计中 [Data: Sources (3, 4)]。因此，概述为后续章节如进程管理、存储管理、I/O 管理、文件系统等提供了理论背景和设计动机。\n\n再次，概述章涵盖了操作系统的发展历程和基本特征（如并发、并行等），并引出操作系统的多种类型（如批处理系统、分时系统、实时系统、网络操作系统等），这帮助理解不同场景下操作系统形态的演化 [Data: Entities (1); Sources (5)]。这些内容实际上是操作系统历史与现状的缩影，将抽象的操作系统概念具体化到不同技术世代中。\n\n最后，综述章还简要介绍了操作系统的结构设计思想（如微内核结构）和现代操作系统的新增功能，这些内容直接连接操作系统理论与实践，为高层次的学习（如分布式系统、安全系统）铺垫 [Data: Sources (0, 3)]。因此，操作系统概述不仅是操作系统知识体系的入口，更是后续章节和整个课程的核心逻辑线索。\n\n综上所述，操作系统概述与操作系统之间是“总体引导”与“被引导对象”的关系。它提炼了操作系统的核心思想和主要脉络，使学习者先见森林再识树木。没有这一概述，对操作系统的理解将缺乏全局视角，各章节的知识点也容易变成孤立的碎片。",
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 42086,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2003",
+      "question": "它和用户态有什么关系？",
+      "sourceQuestion": "请比较用户态与内核态，并说明为什么需要区分这两种执行状态。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "用户态权限受限，不能直接执行特权指令或访问关键硬件资源；内核态拥有更高权限，可执行中断控制、内存管理和设备管理等操作。区分两者有助于隔离应用错误，保护系统安全与稳定。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "**用户态与操作系统核心态的关系**  \n\n操作系统的运行通常依赖 CPU 提供的两种特权级别：**用户态**（目态）和**核心态**（亦称内核态、系统态或管态）。用户态是一种低权限的执行模式，普通应用程序、用户进程以及许多系统服务器均在此模式下运行，能访问的指令和内存区域受到严格限制，以防止对系统核心造成破坏 [Data: Entities (389); Relationships (5362, 5412)]。而核心态则是操作系统内核及其关键服务运行的高权限模式，可以执行特权指令、直接管理全部硬件资源 [Data: Entities (429, 588, 866)]。  \n\n二者最直接的关系体现在**系统调用的过程**中。用户程序需要请求操作系统服务（如读写文件、创建进程）时，不能直接从用户态完成，而必须通过系统调用将 CPU 从用户态切换到核心态。典型流程是：应用程序发起系统调用 -> 硬件产生陷入（trap） -> CPU 从用户态切换到核心态 -> 内核执行相应服务 -> 完成后从核心态返回用户态 [Data: Sources (397); Relationships (5228, 5264, 5265)]。在 UNIX 系统中这一过程还包括参数传递、查找系统调用表、计算进程优先级等步骤，并且在进程处于系统态时，即使收到信号也不予理睬，仅当返回用户态时才检查并处理信号，以保证内核操作的原子性 [Data: Sources (395); Relationships (5324, 5323)]。  \n\n在**微内核结构**的操作系统中，这种用户态与核心态的交互更为频繁。微内核本身运行在核心态，负责最基础的机制（如进程通信、中断处理），而文件系统、网络协议栈等绝大部分操作系统功能则以普通用户进程的形式运行在用户态，称为服务器 [Data: Sources (38, 40); Entities (389, 429); Relationships (607, 608, 617, 618)]。当一个客户进程请求服务时，需要多次在用户态和核心态之间切换：客户 -> 微内核（用户态到核心态），微内核 -> 服务器（核心态到用户态），服务器完成后再经内核返回给客户，从而至少发生四次上下文切换，这也是微内核系统运行效率有所降低的主要原因之一 [Data: Sources (40); Relationships (619, 620)]。  \n\n用户态和核心态的**模式切换**（亦称上下文切换）本质上是将 CPU 的现场信息（如程序计数器、栈指针、状态字等）进行保存和恢复，使控制权能够在不同的特权级别和不同的进程之间安全转移 [Data: Entities (389, 429); Relationships (625, 5328, 1448, 5379)]。这种切换是操作系统实现保护机制和多任务并发的基础：用户程序在受限的用户态下运行，操作系统通过系统调用、中断和异常等手段接管控制权，保证了整个系统稳定可靠。  \n\n综上所述，用户态与核心态是操作系统最基本的运行环境划分，二者相互配合，既为用户程序提供了安全受限的执行空间，又使操作系统内核能够以最高权限管理所有资源，并通过受控的模式切换为上层应用提供各类服务。",
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 24982,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2004",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "系统调用与普通函数调用有什么本质区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统接口。"
+        },
+        {
+          "role": "assistant",
+          "content": "普通函数调用通常在同一特权级内完成；系统调用会触发受控的陷入机制，使程序从用户态进入内核态，请求操作系统完成文件、进程、设备等受保护服务。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "## 操作系统接口的定义与分类\n\n操作系统接口是操作系统向用户和应用程序提供的交互途径，是连接用户、程序与系统资源的关键桥梁[Data: Entities (30); Sources (361)]。根据教材第九章和第一章的说明，这些接口通常被分为两大类：**用户接口**和**程序接口**，在互联网普及后又增加了**网络用户接口**[Data: Sources (361); Relationships (4824)]。\n\n### 用户接口\n用户接口面向操作人员，目的是让使用者能够方便地控制计算机完成作业。它又可细分为三种形式[Data: Sources (29)]：\n- **联机用户接口（交互式命令接口）**：由一组键盘命令及其解释程序组成，用户在终端逐条输入命令，系统立即解释执行，适用于分时系统下的交互作业控制[Data: Sources (29); Entities (278)]。\n- **脱机用户接口（批处理接口）**：用户事先用作业控制语言编写作业说明书，与程序一同提交，系统运行时自动逐条解释，适用于批处理作业[Data: Sources (29); Entities (213)]。\n- **图形用户接口（GUI）**：采用窗口、图标、菜单等可视化元素，通过鼠标选择操作，降低使用门槛，将用户从繁琐的命令记忆中解放出来[Data: Sources (29); Relationships (379)]。\n\n### 程序接口（系统调用）\n程序接口是操作系统提供给程序员在程序运行时访问系统资源的唯一途径。它由一组**系统调用**组成，每一个系统调用都是一个能完成特定功能的子程序（或内核函数）[Data: Entities (277); Sources (29); Relationships (380)]。在高级语言中，通常通过库函数来间接调用这些系统调用，而在现代UNIX等系统中，系统调用本身也以C函数形式提供，可直接在C程序中使用[Data: Sources (29)]。程序接口是用户程序获取操作系统服务（如文件操作、进程控制、设备管理）的唯一入口[Data: Entities (277)]。\n\n### 网络用户接口\n随着互联网的发展，操作系统又增加了一类面向网络的接口，使计算机能够通过网络与其他计算机通信或进行上网浏览，这成为现代操作系统接口的新组成部分[Data: Entities (1667); Sources (361); Relationships (4824)]。\n\n## 操作系统与接口的关系\n\n操作系统作为计算机系统资源的管理者，其核心职责之一就是为用户和应用程序提供一个简洁、高效的接口，以便他们能够方便、安全、可靠地使用计算机中的各类资源[Data: Sources (361); Relationships (68, 4825)]。\n\n- **接口是操作系统的功能延伸与抽象层**  \n  操作系统位于硬件之上、应用软件之下，它对硬件进行首次扩充，并向上提供一个统一的抽象界面。无论是用户直接操作，还是程序请求服务，都必须通过操作系统提供的接口来完成。换言之，操作系统接口是操作系统向外暴露的服务边界，没有接口，用户程序就无法利用操作系统的任何功能[Data: Sources (361); Relationships (4825)]。\n\n- **接口直接影响操作系统的设计目标**  \n  操作系统的目标之一是提高用户体验的**方便性**和**人机交互性**，这些目标正是通过友好的用户接口来实现的，例如图形用户接口显著降低了操作难度[Data: Entities (54); Relationships (71, 73)]。在工业控制、武器控制等环境中，**实时性**目标同样依赖于高效的程序接口（系统调用）来保证快速响应[Data: Entities (54); Relationships (71)]。因此，接口的设计和实现是操作系统目标能否达成的关键。\n\n- **接口构成操作系统的完整交互层**  \n  从系统架构看，操作系统接口不仅包括面向最终用户的用户接口和程序接口，还包含与I/O系统相关的内部接口，如I/O系统接口、软件/硬件接口等，它们构成了一个自上而下的交互层次。例如，文件系统和虚拟存储器系统都依赖I/O系统接口来获取抽象I/O命令，从而操作设备[Data: Entities (1658, 1659); Relationships (3130, 3131)]。这些底层接口支撑了上层接口的实现，共同完成操作系统对硬件资源的管理和向用户的呈现。\n\n- **接口在教材体系中的重要地位**  \n  在教材《计算机操作系统》（第四版）中，第九章专门详细介绍了操作系统接口，包括接口方式和实现方法，并与第一章1.4.5节“操作系统与用户之间的接口”相互呼应，构成了一个完整的知识链条[Data: Sources (0, 29, 361); Relationships (13, 14, 15)]。课后习题也要求列举用户接口类型并说明其适用场景，进一步印证了接口是理解操作系统整体功能不可或缺的部分[Data: Sources (398)]。\n\n综上，操作系统接口既是操作系统的门户，也是操作系统内部功能管理的通道。它使操作系统能够向外界隐藏复杂的硬件细节，同时为用户和程序提供统一、便捷的服务调用方式，是操作系统设计中“方便性”与“可管理性”目标的集中体现。",
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 39634,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    },
+    {
+      "id": "Q2005",
+      "question": "它和系统调用有什么关系？",
+      "sourceQuestion": "中断、异常和系统调用三者之间有什么联系与区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释中断与异常。"
+        },
+        {
+          "role": "assistant",
+          "content": "三者都可能导致控制流进入内核。中断一般由外部设备或时钟异步触发；异常通常由当前指令执行过程中的错误或特殊事件同步触发；系统调用则是程序主动发起的受控内核服务请求。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "localHistory": {
+        "enabled": true,
+        "supported": true,
+        "method": "local_history_poc",
+        "answer": "中断与系统调用之间存在着密不可分的联系：**系统调用本质上是借助中断机制实现的**。当用户程序需要操作系统提供服务时，并不是直接调用内核函数，而是执行一条特殊的“系统调用指令”。这条指令会触发一个软中断，CPU 在响应这个中断时会将控制权从用户态切换到内核态，从而安全地进入操作系统内核去执行相应的服务例程 [Data: Entities (1301, 68, 2715); Sources (384, 391); Relationships (5090, 5224, 5232)].\n\n具体来说，每个系统调用都对应一个唯一的**中断号**，例如在 MS‑DOS 中系统调用使用 `INT 21H`，而在 Linux 中则使用 `int 80h` 指令触发 `80H` 中断 [Data: Entities (2728, 2797, 2717, 2715); Sources (384)]. 应用程序在发起系统调用时需要将**系统调用号**和参数通过寄存器或堆栈传递给内核；随后 CPU 执行该软中断指令，硬件会自动保存当前的程序状态字（PSW）和程序计数器（PC）等现场信息，并转向系统预定义的**中断和陷入总控程序** [Data: Entities (2803, 2786, 2830, 2810); Sources (391); Relationships (5106, 5263)].\n\n操作系统的**保护机制**会严格限制应用程序能够使用的中断号，只有事先授权的号码才允许被调用；如果应用程序试图调用未授权的中断号，就会引发**保护异常**并被操作系统强制终止 [Data: Entities (2720, 2722); Sources (384); Relationships (5094, 5107)]. 这正是现代操作系统保证安全与稳定的一块基石。\n\n从前文的描述可以看出，**异常**同样是通过中断机构来处理的——无论是程序执行非法操作（如写只读存储块）还是硬件缺页等情况，都会产生相应的**中断信号**，由操作系统统一捕获并处理 [Data: Entities (1301, 1324); Sources (187, 251); Relationships (5233, 5235)]. 因此，系统调用可以看作是一种由用户程序主动发出的、受保护的特殊软中断，它使得用户态程序能够以一种统一、安全的方式请求内核服务。可以说，“一切内核入口皆中断”，而系统调用正是其中最重要、最高频的入口之一。",
+        "historyApplied": true,
+        "historyTurnsUsed": 2,
+        "elapsedMs": 37926,
+        "diagnostics": {
+          "graphragVersion": "3.0.9",
+          "adapter": "LocalSearch",
+          "dataDirUri": "user_12/kb_5/build_20/index/output",
+          "userTurnsOnly": true
+        },
+        "candidateContextSummary": null,
+        "errorMessage": null,
+        "status": "success"
+      }
+    }
+  ]
+}

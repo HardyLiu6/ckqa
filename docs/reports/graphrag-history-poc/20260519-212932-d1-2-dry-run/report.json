@@ -1,0 +1,225 @@
+{
+  "live": false,
+  "generatedAt": "20260519-212932",
+  "graphragVersion": "3.0.9",
+  "dataDirUri": null,
+  "historyPocConfig": null,
+  "caseCount": 5,
+  "cases": [
+    {
+      "id": "Q2001",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "什么是操作系统？请从“资源管理”和“用户接口”两个角度进行说明。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "操作系统是位于硬件与应用程序之间的系统软件。一方面，它负责管理处理机、内存、文件和外设等资源；另一方面，它通过命令接口、图形接口、系统调用或库接口，为用户和程序提供使用计算机的方式。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和操作系统有什么关系？",
+        "generationContextChars": 114,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "status": "dry_run_skipped",
+        "historyTurns": 2,
+        "note": "设置 CKQA_HISTORY_POC_LIVE=1 后才执行真实 GraphRAG LocalSearch history。"
+      }
+    },
+    {
+      "id": "Q2002",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "为什么说并发性是现代操作系统的重要特征？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "并发性指多个活动在同一时间段内交替推进。操作系统通过中断、时钟和调度机制，让多个程序共享处理机与其他资源，从而提升系统利用率和交互能力。并发不等同于在同一时刻物理上同时执行。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和操作系统有什么关系？",
+        "generationContextChars": 110,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "status": "dry_run_skipped",
+        "historyTurns": 2,
+        "note": "设置 CKQA_HISTORY_POC_LIVE=1 后才执行真实 GraphRAG LocalSearch history。"
+      }
+    },
+    {
+      "id": "Q2003",
+      "question": "它和用户态有什么关系？",
+      "sourceQuestion": "请比较用户态与内核态，并说明为什么需要区分这两种执行状态。",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统概述。"
+        },
+        {
+          "role": "assistant",
+          "content": "用户态权限受限，不能直接执行特权指令或访问关键硬件资源；内核态拥有更高权限，可执行中断控制、内存管理和设备管理等操作。区分两者有助于隔离应用错误，保护系统安全与稳定。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统概述」：它和用户态有什么关系？",
+        "generationContextChars": 106,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "status": "dry_run_skipped",
+        "historyTurns": 2,
+        "note": "设置 CKQA_HISTORY_POC_LIVE=1 后才执行真实 GraphRAG LocalSearch history。"
+      }
+    },
+    {
+      "id": "Q2004",
+      "question": "它和操作系统有什么关系？",
+      "sourceQuestion": "系统调用与普通函数调用有什么本质区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释操作系统接口。"
+        },
+        {
+          "role": "assistant",
+          "content": "普通函数调用通常在同一特权级内完成；系统调用会触发受控的陷入机制，使程序从用户态进入内核态，请求操作系统完成文件、进程、设备等受保护服务。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「操作系统接口」：它和操作系统有什么关系？",
+        "generationContextChars": 92,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "status": "dry_run_skipped",
+        "historyTurns": 2,
+        "note": "设置 CKQA_HISTORY_POC_LIVE=1 后才执行真实 GraphRAG LocalSearch history。"
+      }
+    },
+    {
+      "id": "Q2005",
+      "question": "它和系统调用有什么关系？",
+      "sourceQuestion": "中断、异常和系统调用三者之间有什么联系与区别？",
+      "conversationHistory": [
+        {
+          "role": "user",
+          "content": "请解释中断与异常。"
+        },
+        {
+          "role": "assistant",
+          "content": "三者都可能导致控制流进入内核。中断一般由外部设备或时钟异步触发；异常通常由当前指令执行过程中的错误或特殊事件同步触发；系统调用则是程序主动发起的受控内核服务请求。"
+        }
+      ],
+      "cliLocal": {
+        "status": "not_executed",
+        "note": "当前 CLI local 不接收 conversation history；正式链路依赖 Java retrievalQuery 改写。"
+      },
+      "ckqaDoubleInput": {
+        "status": "not_executed",
+        "note": "当前 CKQA 双输入会保存 generationContext，但 basic/local/global/drift CLI 仍只查询 retrievalQuery。"
+      },
+      "ckqaFormalHybrid": {
+        "status": "not_executed",
+        "mode": "hybrid_v0",
+        "retrievalQuery": "关于上一轮主题「中断与异常」：它和系统调用有什么关系？",
+        "generationContextChars": 103,
+        "note": "本报告先固化与正式 CKQA rewrite/hybrid 可对齐的输入；真实 hybrid baseline 需单独授权后执行。"
+      },
+      "qualitySignals": {
+        "localHistory": {
+          "mustCiteHit": 0.0,
+          "negativeHit": 0.0,
+          "sourceRecallAt3": 0.0
+        },
+        "ckqaFormalHybrid": null
+      },
+      "localHistory": {
+        "status": "dry_run_skipped",
+        "historyTurns": 2,
+        "note": "设置 CKQA_HISTORY_POC_LIVE=1 后才执行真实 GraphRAG LocalSearch history。"
+      }
+    }
+  ]
+}

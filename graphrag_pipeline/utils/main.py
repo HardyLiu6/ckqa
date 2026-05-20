@@ -30,6 +30,11 @@ from pydantic import BaseModel, Field
 from api_runtime_config import load_api_runtime_config
 from runtime_defaults import PROJECT_ROOT, PROJECT_VERSION, TARGET_GRAPHRAG_VERSION
 from query_task_manager import QueryTaskManager, QueryTaskRequest
+from query_engine_history_poc import (
+    QueryEngineHistoryPocAdapter,
+    query_in_thread,
+    load_history_poc_config_from_env,
+)
 
 
 logging.basicConfig(
@@ -392,6 +397,20 @@ class QueryTaskCreateRequest(BaseModel):
         return (self.retrievalQuery or self.prompt or "").strip()
 
 
+class QueryEngineHistoryTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class QueryEngineHistoryRequest(BaseModel):
+    dataDirUri: str | None = None
+    query: str = Field(min_length=1)
+    conversationHistory: List[QueryEngineHistoryTurn] = Field(default_factory=list)
+    maxTurns: int | None = Field(default=None, ge=1, le=20)
+    userTurnsOnly: bool = True
+    returnCandidateContext: bool | None = None
+
+
 class HybridWarmupRequest(BaseModel):
     dataDirUri: str | None = None
 
@@ -539,6 +558,34 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
         if snapshot is None:
             raise HTTPException(status_code=404, detail="Query task not found")
         return JSONResponse(content=_serialize_task_snapshot(snapshot))
+
+    def history_poc_adapter() -> QueryEngineHistoryPocAdapter:
+        return QueryEngineHistoryPocAdapter(
+            root_dir=GRAPHRAG_ROOT,
+            output_dir=OUTPUT_DIR,
+            build_runs_root=BUILD_RUNS_ROOT,
+            config=load_history_poc_config_from_env(),
+        )
+
+    @app.get("/v1/experiments/query-engine-history/readiness")
+    async def get_query_engine_history_readiness(dataDirUri: str | None = None):
+        """实验性 GraphRAG LocalSearch conversation history readiness。"""
+        readiness = history_poc_adapter().readiness(dataDirUri)
+        return JSONResponse(content=readiness.to_dict())
+
+    @app.post("/v1/experiments/query-engine-history/query")
+    async def query_with_engine_history(request: QueryEngineHistoryRequest):
+        """实验性 GraphRAG LocalSearch conversation history 查询。"""
+        result = await query_in_thread(
+            history_poc_adapter(),
+            data_dir_uri=request.dataDirUri,
+            query=request.query,
+            conversation_history=[turn.model_dump() for turn in request.conversationHistory],
+            max_turns=request.maxTurns,
+            user_turns_only=request.userTurnsOnly,
+            return_candidate_context=request.returnCandidateContext,
+        )
+        return JSONResponse(content=result.to_dict())
 
     @app.post("/v1/hybrid-v0/warmup")
     async def warmup_hybrid_v0(request: HybridWarmupRequest):

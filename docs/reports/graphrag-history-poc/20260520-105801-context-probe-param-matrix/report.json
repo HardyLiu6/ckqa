@@ -1,0 +1,269 @@
+{
+  "mode": "offline_context_probe",
+  "generatedAt": "20260520-105801",
+  "dataDirUri": "user_12/kb_5/build_20/index/output",
+  "note": "No answer generation, no query embedding; uses gold_entities anchors and local parquet only.",
+  "variants": [
+    {
+      "label": "current-5k-6x6-turn5",
+      "maxContextTokens": 5000,
+      "topKEntities": 6,
+      "topKRelationships": 6,
+      "maxTurns": 5,
+      "cases": [
+        {
+          "caseId": "Q2001",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "资源管理"
+          ],
+          "status": "success",
+          "elapsedMs": 5,
+          "contextCharsAsTokens": 3849,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 12,
+            "claims": 0,
+            "entities": 2,
+            "sources": 2
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2002",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "中断"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 2911,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 12,
+            "claims": 0,
+            "entities": 2,
+            "sources": 3
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2003",
+          "question": "它和用户态有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "用户态",
+            "内核态"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 3142,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 13,
+            "claims": 0,
+            "entities": 2,
+            "sources": 1
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        }
+      ],
+      "summary": {
+        "caseCount": 3,
+        "failedCount": 0,
+        "tokenLimitWarningCount": 0,
+        "avgContextCharsAsTokens": 3300.67,
+        "avgElapsedMs": 3.67
+      }
+    },
+    {
+      "label": "candidate-12k-4x4-turn3",
+      "maxContextTokens": 12000,
+      "topKEntities": 4,
+      "topKRelationships": 4,
+      "maxTurns": 3,
+      "cases": [
+        {
+          "caseId": "Q2001",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "资源管理"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 4079,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 8,
+            "claims": 0,
+            "entities": 2,
+            "sources": 3
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2002",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "中断"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 6342,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 8,
+            "claims": 0,
+            "entities": 2,
+            "sources": 6
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2003",
+          "question": "它和用户态有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "用户态",
+            "内核态"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 6362,
+          "recordCounts": {
+            "conversation history": 1,
+            "relationships": 9,
+            "claims": 0,
+            "entities": 2,
+            "sources": 3
+          },
+          "warningMessages": [
+            "Warning: No community records added when building community context."
+          ],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        }
+      ],
+      "summary": {
+        "caseCount": 3,
+        "failedCount": 0,
+        "tokenLimitWarningCount": 0,
+        "avgContextCharsAsTokens": 5594.33,
+        "avgElapsedMs": 3.0
+      }
+    },
+    {
+      "label": "candidate-24k-4x4-turn3",
+      "maxContextTokens": 24000,
+      "topKEntities": 4,
+      "topKRelationships": 4,
+      "maxTurns": 3,
+      "cases": [
+        {
+          "caseId": "Q2001",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "资源管理"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 6690,
+          "recordCounts": {
+            "conversation history": 1,
+            "reports": 1,
+            "relationships": 8,
+            "claims": 0,
+            "entities": 2,
+            "sources": 3
+          },
+          "warningMessages": [],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2002",
+          "question": "它和操作系统有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "操作系统",
+            "中断"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 10135,
+          "recordCounts": {
+            "conversation history": 1,
+            "reports": 1,
+            "relationships": 8,
+            "claims": 0,
+            "entities": 2,
+            "sources": 7
+          },
+          "warningMessages": [],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        },
+        {
+          "caseId": "Q2003",
+          "question": "它和用户态有什么关系？",
+          "goldEntities": [
+            "操作系统概述",
+            "用户态",
+            "内核态"
+          ],
+          "status": "success",
+          "elapsedMs": 3,
+          "contextCharsAsTokens": 14293,
+          "recordCounts": {
+            "conversation history": 1,
+            "reports": 1,
+            "relationships": 9,
+            "claims": 0,
+            "entities": 2,
+            "sources": 6
+          },
+          "warningMessages": [],
+          "tokenLimitWarningCount": 0,
+          "errorMessage": null
+        }
+      ],
+      "summary": {
+        "caseCount": 3,
+        "failedCount": 0,
+        "tokenLimitWarningCount": 0,
+        "avgContextCharsAsTokens": 10372.67,
+        "avgElapsedMs": 3.0
+      }
+    }
+  ]
+}
