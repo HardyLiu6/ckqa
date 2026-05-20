@@ -4407,6 +4407,48 @@ onBeforeUnmount(() => {
       </dl>
     </article>
 
+    <article v-if="courseBlock.item?.category || courseBlock.item?.tags?.length || courseBlock.item?.objectives?.length || courseBlock.item?.audience?.length || courseBlock.item?.difficulty || courseBlock.item?.estimatedHours" class="panel course-info-panel">
+      <div class="panel-heading">
+        <h2>课程元数据</h2>
+      </div>
+      <dl class="course-info-block course-info-block--compact">
+        <div v-if="courseBlock.item.category" class="course-info-row">
+          <dt>分类</dt>
+          <dd>{{ courseBlock.item.category }}</dd>
+        </div>
+        <div v-if="courseBlock.item.difficulty" class="course-info-row">
+          <dt>难度</dt>
+          <dd>{{ { beginner: '入门', intermediate: '进阶', advanced: '高级' }[courseBlock.item.difficulty] || courseBlock.item.difficulty }}</dd>
+        </div>
+        <div v-if="courseBlock.item.estimatedHours" class="course-info-row">
+          <dt>预计学时</dt>
+          <dd>约 {{ courseBlock.item.estimatedHours }} 小时</dd>
+        </div>
+        <div v-if="courseBlock.item.tags?.length" class="course-info-row">
+          <dt>标签</dt>
+          <dd class="course-tags-row">
+            <el-tag v-for="tag in courseBlock.item.tags" :key="tag" size="small" type="info">{{ tag }}</el-tag>
+          </dd>
+        </div>
+        <div v-if="courseBlock.item.objectives?.length" class="course-info-row">
+          <dt>学习目标</dt>
+          <dd>
+            <ol class="course-meta-list">
+              <li v-for="(obj, idx) in courseBlock.item.objectives" :key="idx">{{ obj }}</li>
+            </ol>
+          </dd>
+        </div>
+        <div v-if="courseBlock.item.audience?.length" class="course-info-row">
+          <dt>适合人群</dt>
+          <dd>
+            <ul class="course-meta-list">
+              <li v-for="(aud, idx) in courseBlock.item.audience" :key="idx">{{ aud }}</li>
+            </ul>
+          </dd>
+        </div>
+      </dl>
+    </article>
+
     <article class="panel course-teachers-panel">
       <div class="panel-heading">
         <h2>授课教师</h2>

@@ -86,7 +86,7 @@ const configs = {
   },
   'course-detail': {
     variant: 'overview',
-    dataSource: 'mock',
+    dataSource: 'live',
     eyebrow: 'Course Detail',
     summary: '详情页聚焦课程摘要、快捷操作和授课教师信息，课程域维护入口集中在详情卡片内。',
     primaryAction: null,
