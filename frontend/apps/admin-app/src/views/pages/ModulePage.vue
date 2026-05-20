@@ -4407,7 +4407,7 @@ onBeforeUnmount(() => {
       </dl>
     </article>
 
-    <article v-if="courseBlock.item?.category || courseBlock.item?.tags?.length || courseBlock.item?.objectives?.length || courseBlock.item?.audience?.length || courseBlock.item?.difficulty || courseBlock.item?.estimatedHours" class="panel course-info-panel">
+    <article v-if="courseBlock.item?.category || courseBlock.item?.tags?.length || courseBlock.item?.objectives?.length || courseBlock.item?.audience?.length || courseBlock.item?.difficulty || courseBlock.item?.estimatedHours" class="panel course-info-panel course-metadata-panel">
       <div class="panel-heading">
         <h2>课程元数据</h2>
       </div>

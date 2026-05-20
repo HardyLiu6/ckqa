@@ -2228,6 +2228,29 @@ textarea.text-input {
   align-self: start;
 }
 
+.course-metadata-panel {
+  grid-column: 1 / -1;
+}
+
+.course-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-meta-list {
+  margin: 0;
+  padding-left: 1.2em;
+  line-height: 1.8;
+}
+
+.multi-row-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .course-detail-stage {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
