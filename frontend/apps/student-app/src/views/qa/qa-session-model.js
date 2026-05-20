@@ -202,6 +202,68 @@ export function normalizeQaSession(session = {}) {
   }
 }
 
+export function normalizeQaSessionList(payload) {
+  const list = Array.isArray(payload) ? payload : payload?.items ?? payload?.records ?? []
+  return list
+    .map((session) => normalizeQaSession(session))
+    .filter((session) => session.id != null)
+}
+
+export function toQaSideNavSession(session, activeSessionId = '', now = new Date()) {
+  const normalized = normalizeQaSession(session)
+  const referenceTime = normalized.lastMessageAt || normalized.createdAt || normalized.indexLockedAt || ''
+  return {
+    ...normalized,
+    active: String(activeSessionId || '') === String(normalized.id ?? ''),
+    meta: sideNavSessionMeta(normalized, referenceTime, now),
+  }
+}
+
+export function sideNavSessionMeta(session, referenceTime = '', now = new Date()) {
+  const status = String(session?.status ?? '').toLowerCase()
+  const prefix = status === 'archived'
+    ? '已归档'
+    : (session?.isLegacy ? '旧会话' : '最近更新')
+  return `${prefix} · ${formatRelativeSessionTime(referenceTime, now)}`
+}
+
+export function formatRelativeSessionTime(value, now = new Date()) {
+  if (!value) {
+    return '暂无消息'
+  }
+  const date = new Date(value)
+  const base = now instanceof Date ? now : new Date(now)
+  if (Number.isNaN(date.getTime()) || Number.isNaN(base.getTime())) {
+    return String(value).replace('T', ' ').slice(0, 16)
+  }
+
+  const diffMs = Math.max(0, base.getTime() - date.getTime())
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diffMs < minute) {
+    return '刚刚'
+  }
+  if (diffMs < hour) {
+    return `${Math.floor(diffMs / minute)} 分钟前`
+  }
+  if (diffMs < day) {
+    return `${Math.floor(diffMs / hour)} 小时前`
+  }
+  if (diffMs < 2 * day) {
+    return '昨天'
+  }
+  if (diffMs < 7 * day) {
+    return `${Math.floor(diffMs / day)} 天前`
+  }
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export function isLegacyReadOnlySession(session) {
   return Boolean(session && session.id != null && session.indexRunId == null)
 }
@@ -262,6 +324,16 @@ export function normalizeLearningMemory(item = {}) {
   }
 }
 
+export function learningMemoryTypeLabel(memoryType) {
+  const type = String(memoryType ?? '').trim()
+  const labels = {
+    learning_topic: '关注点',
+    explanation_preference: '解释偏好',
+    unresolved_focus: '待关注',
+  }
+  return labels[type] ?? type
+}
+
 export function resolveMemoryStatusText(task = {}) {
   const mode = String(task.mode ?? task.searchMode ?? '').toLowerCase()
   if (mode && mode !== 'local') {
@@ -272,9 +344,14 @@ export function resolveMemoryStatusText(task = {}) {
   }
 
   const strategy = task.memoryStrategy || 'auto'
+  const strategyLabel = {
+    local_history_short_only: '短期会话',
+    local_history_preference_only: '偏好辅助',
+    local_history_relevant_memory: '关注点辅助',
+  }[strategy] ?? strategy
   const sourceCount = Number(task.memorySourceCount ?? 0)
   const chars = Number(task.memorySizeEstimate?.chars ?? task.memorySizeEstimateChars ?? 0)
-  return `本次使用学习记忆：${strategy}，${Number.isFinite(sourceCount) ? sourceCount : 0} 条，约 ${Number.isFinite(chars) ? chars : 0} 字`
+  return `本次按问题动态使用学习记忆：${strategyLabel}，${Number.isFinite(sourceCount) ? sourceCount : 0} 条，约 ${Number.isFinite(chars) ? chars : 0} 字`
 }
 
 export function upsertQaMessage(messages, message) {

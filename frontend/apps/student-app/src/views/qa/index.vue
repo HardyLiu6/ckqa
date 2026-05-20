@@ -54,6 +54,7 @@ import {
   isArchivedReadOnlySession,
   isLegacyReadOnlySession,
   matchCourseForQuestion,
+  learningMemoryTypeLabel,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeLearningMemory,
@@ -130,13 +131,18 @@ const memoryStatusText = computed(() => {
   }
   return memoryEnabled.value ? '已开启跨对话学习记忆' : '已关闭跨对话学习记忆'
 })
-const memorySendStatusText = computed(() => resolveMemoryStatusText({
-  mode: modePreview.value.mode,
-  memoryApplied: modePreview.value.mode === 'local' && memoryEnabled.value,
-  memoryStrategy: memoryEnabled.value ? 'auto' : 'off',
-  memorySourceCount: learningMemoryItems.value.length,
-  memorySizeEstimate: { chars: estimateLearningMemoryChars() },
-}))
+const memorySendStatusText = computed(() => {
+  if (modePreview.value.mode === 'local' && memoryEnabled.value) {
+    return 'Local 问答会按问题动态使用学习记忆'
+  }
+  return resolveMemoryStatusText({
+    mode: modePreview.value.mode,
+    memoryApplied: false,
+    memoryStrategy: 'off',
+    memorySourceCount: learningMemoryItems.value.length,
+    memorySizeEstimate: { chars: estimateLearningMemoryChars() },
+  })
+})
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -666,6 +672,9 @@ async function pollTask(sessionId, taskId) {
       } else {
         await refreshAssistantAfterEmptySuccess(sessionId, taskId)
       }
+      if (memoryScopeReady.value) {
+        await loadMemoryState(selectedCourseId.value, selectedKnowledgeBaseId.value)
+      }
       statusMessage.value = `回答已生成。${resolveContextStatusText(detail)}。${resolveMemoryStatusText(detail)}`
       pendingTask.value = null
       await scrollToBottom()
@@ -965,11 +974,11 @@ function sourceTypeLabel(source) {
           <summary>清除学习记忆</summary>
           <div v-if="!memoryScopeReady" class="memory-empty">请先选择课程和知识库</div>
           <div v-else-if="loadingMemory" class="memory-empty">正在读取学习记忆</div>
-          <div v-else-if="!learningMemoryItems.length" class="memory-empty">暂无学习记忆</div>
+          <div v-else-if="!learningMemoryItems.length" class="memory-empty">开启后，系统会从你的学习追问中自动沉淀关注点和解释偏好</div>
           <ul v-else class="memory-list">
             <li v-for="memory in learningMemoryItems" :key="memory.id" class="memory-item">
               <div class="memory-item-main">
-                <span class="memory-type">{{ memory.memoryType || 'memory' }}</span>
+                <span class="memory-type">{{ learningMemoryTypeLabel(memory.memoryType) || 'memory' }}</span>
                 <span class="memory-created">{{ memory.createdAt || '时间未记录' }}</span>
                 <span class="memory-preview">{{ memory.memoryText || '内容为空' }}</span>
               </div>

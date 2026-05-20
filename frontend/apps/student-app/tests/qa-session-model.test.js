@@ -7,9 +7,12 @@ import {
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeQaMessage,
+  normalizeQaSessionList,
   normalizeQaSources,
   normalizeQaSession,
+  formatRelativeSessionTime,
   normalizeLearningMemory,
+  learningMemoryTypeLabel,
   normalizeMemoryPreference,
   resolvePollingDelaySeconds,
   resolveContextStatusText,
@@ -19,6 +22,7 @@ import {
   isLegacyReadOnlySession,
   resolveSessionLifecycleStatusText,
   selectReadyKnowledgeBase,
+  toQaSideNavSession,
 } from '../src/views/qa/qa-session-model.js'
 
 test('课程列表兼容数组和分页 items 形态', () => {
@@ -206,6 +210,55 @@ test('会话模型保留固化索引和可恢复状态', () => {
   )
 })
 
+test('会话列表兼容分页响应并过滤缺少 id 的脏数据', () => {
+  assert.deepEqual(
+    normalizeQaSessionList({
+      items: [
+        { id: 20, courseId: 'os', title: '死锁问答', indexRunId: 17 },
+        { courseId: 'os', title: '无效会话' },
+      ],
+    }),
+    [
+      {
+        id: 20,
+        sessionCode: '',
+        courseId: 'os',
+        knowledgeBaseId: null,
+        indexRunId: 17,
+        indexLockedAt: '',
+        title: '死锁问答',
+        status: 'active',
+        lastMessageAt: '',
+        createdAt: '',
+        isLegacy: false,
+      },
+    ],
+  )
+})
+
+test('问答侧栏会话卡片使用真实 session 时间和当前路由高亮', () => {
+  const now = new Date('2026-05-20T10:30:00+08:00')
+  const card = toQaSideNavSession({
+    id: 20,
+    courseId: 'os',
+    title: '死锁问答',
+    indexRunId: 17,
+    lastMessageAt: '2026-05-20T10:20:00+08:00',
+  }, 20, now)
+
+  assert.equal(card.active, true)
+  assert.equal(card.meta, '最近更新 · 10 分钟前')
+})
+
+test('问答侧栏相对时间兼容空值和旧日期', () => {
+  const now = new Date('2026-05-20T10:30:00+08:00')
+
+  assert.equal(formatRelativeSessionTime('', now), '暂无消息')
+  assert.equal(formatRelativeSessionTime('2026-05-20T10:30:00+08:00', now), '刚刚')
+  assert.equal(formatRelativeSessionTime('2026-05-19T10:30:00+08:00', now), '昨天')
+  assert.equal(formatRelativeSessionTime('not-a-date', now), 'not-a-date')
+})
+
 test('旧会话与 active index 差异状态可被前端识别', () => {
   const legacy = normalizeQaSession({ id: 21, courseId: 'os', knowledgeBaseId: 3, indexRunId: null })
   const oldIndexSession = normalizeQaSession({ id: 22, courseId: 'os', knowledgeBaseId: 3, indexRunId: 17 })
@@ -269,16 +322,23 @@ test('学习记忆条目规范化不要求后端返回完整字段', () => {
   assert.equal(normalizeLearningMemory({}).memoryText, '')
 })
 
+test('学习记忆类型标签覆盖自动生成的 Beta 类型', () => {
+  assert.equal(learningMemoryTypeLabel('learning_topic'), '关注点')
+  assert.equal(learningMemoryTypeLabel('explanation_preference'), '解释偏好')
+  assert.equal(learningMemoryTypeLabel('unresolved_focus'), '待关注')
+  assert.equal(learningMemoryTypeLabel('custom_type'), 'custom_type')
+})
+
 test('学习记忆状态文案区分使用、未使用和非 Local 模式', () => {
   assert.equal(
     resolveMemoryStatusText({
       mode: 'local',
       memoryApplied: true,
-      memoryStrategy: 'auto',
+      memoryStrategy: 'local_history_preference_only',
       memorySourceCount: 2,
       memorySizeEstimate: { chars: 320 },
     }),
-    '本次使用学习记忆：auto，2 条，约 320 字',
+    '本次按问题动态使用学习记忆：偏好辅助，2 条，约 320 字',
   )
   assert.equal(
     resolveMemoryStatusText({ mode: 'local', memoryApplied: false, memoryStrategy: 'off' }),

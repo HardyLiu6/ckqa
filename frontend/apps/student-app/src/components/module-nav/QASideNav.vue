@@ -1,17 +1,22 @@
 <!-- 问答模块副导航 · 紫色系 · 顶部"新建对话"按钮 + 会话列表 -->
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Plus, Clock } from '@element-plus/icons-vue'
+import { listQaSessions } from '@/api/qa'
+import { normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
 
 const router = useRouter()
+const route = useRoute()
 
-// mock 会话列表
-const sessions = ref([
-  { id: 1, title: 'OS · 进程调度', messageCount: 5, lastTime: '10 分钟前', active: true },
-  { id: 2, title: '死锁检测', messageCount: 3, lastTime: '昨天', active: false },
-  { id: 3, title: '虚拟内存', messageCount: 8, lastTime: '3 天前', active: false },
-])
+const rawSessions = ref([])
+const loading = ref(false)
+const errorMessage = ref('')
+
+const activeSessionId = computed(() => String(route.query.sessionId ?? ''))
+const sessions = computed(() => rawSessions.value.map((session) => (
+  toQaSideNavSession(session, activeSessionId.value)
+)))
 
 function createNew() {
   router.push('/qa/ask')
@@ -22,9 +27,33 @@ function viewHistory() {
 }
 
 function selectSession(session) {
-  sessions.value.forEach((s) => (s.active = s.id === session.id))
-  router.push('/qa/ask')
+  router.push({ path: '/qa/ask', query: { sessionId: session.id } })
 }
+
+async function loadRecentSessions() {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const payload = await listQaSessions({ status: 'active', page: 1, size: 5 })
+    rawSessions.value = normalizeQaSessionList(payload)
+  } catch (error) {
+    rawSessions.value = []
+    errorMessage.value = error?.message || '历史会话加载失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadRecentSessions)
+
+watch(
+  () => route.query.sessionId,
+  () => {
+    if (route.path.startsWith('/qa')) {
+      loadRecentSessions()
+    }
+  },
+)
 </script>
 
 <template>
@@ -36,16 +65,21 @@ function selectSession(session) {
 
     <div class="session-label">历史会话</div>
     <div class="session-list">
-      <div
-        v-for="session in sessions"
-        :key="session.id"
-        class="session-item"
-        :class="{ active: session.active }"
-        @click="selectSession(session)"
-      >
-        <div class="session-title">{{ session.title }}</div>
-        <div class="session-meta">{{ session.messageCount }} 条 · {{ session.lastTime }}</div>
-      </div>
+      <div v-if="loading" class="session-state">正在加载...</div>
+      <div v-else-if="errorMessage" class="session-state error">{{ errorMessage }}</div>
+      <div v-else-if="!sessions.length" class="session-state">暂无历史会话</div>
+      <template v-else>
+        <div
+          v-for="session in sessions"
+          :key="session.id"
+          class="session-item"
+          :class="{ active: session.active }"
+          @click="selectSession(session)"
+        >
+          <div class="session-title">{{ session.title }}</div>
+          <div class="session-meta">{{ session.meta }}</div>
+        </div>
+      </template>
     </div>
 
     <button class="btn-history" @click="viewHistory">
@@ -138,6 +172,17 @@ function selectSession(session) {
     font-size: 10px;
     color: #94a3b8;
     margin-top: 2px;
+  }
+}
+
+.session-state {
+  padding: 8px 10px;
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.5;
+
+  &.error {
+    color: #b91c1c;
   }
 }
 
