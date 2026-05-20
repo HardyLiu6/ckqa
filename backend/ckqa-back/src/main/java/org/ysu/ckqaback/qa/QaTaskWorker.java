@@ -19,6 +19,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.memory.QaLearningMemoryCaptureService;
 import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
@@ -58,6 +59,7 @@ public class QaTaskWorker {
     private final Clock clock;
     private QaSessionSummaryService qaSessionSummaryService;
     private QaRetrievalHitsService qaRetrievalHitsService;
+    private QaLearningMemoryCaptureService qaLearningMemoryCaptureService;
 
     @Autowired
     public QaTaskWorker(
@@ -170,6 +172,11 @@ public class QaTaskWorker {
         this.qaRetrievalHitsService = qaRetrievalHitsService;
     }
 
+    @Autowired(required = false)
+    public void setQaLearningMemoryCaptureService(QaLearningMemoryCaptureService qaLearningMemoryCaptureService) {
+        this.qaLearningMemoryCaptureService = qaLearningMemoryCaptureService;
+    }
+
     public void processTask(Long sessionId, Long taskId) {
         GraphRagTaskSnapshot latestSnapshot = null;
         try {
@@ -197,6 +204,7 @@ public class QaTaskWorker {
                     persistSources(taskId, snapshot);
                     qaRetrievalLogsService.markSuccess(taskId, assistant.getId(), joinLatestLogs(snapshot.latestLogs()), "success");
                     triggerSummaryRefresh(sessionId);
+                    triggerLearningMemoryCapture(task, assistant);
                     return;
                 }
 
@@ -256,6 +264,17 @@ public class QaTaskWorker {
             qaSessionSummaryService.checkAndSummarizeAsync(sessionId);
         } catch (RuntimeException ignored) {
             // 摘要是旁路增强，不能影响主问答任务成功。
+        }
+    }
+
+    private void triggerLearningMemoryCapture(QaRetrievalLogs task, QaMessages assistant) {
+        if (qaLearningMemoryCaptureService == null) {
+            return;
+        }
+        try {
+            qaLearningMemoryCaptureService.captureAfterAssistantSuccess(task, assistant);
+        } catch (RuntimeException ignored) {
+            // 长期记忆是旁路增强，不能影响主问答任务成功。
         }
     }
 

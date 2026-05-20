@@ -348,7 +348,14 @@ public class QaWorkflowService {
         QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
         QaMemoryContextResult memoryContext = qaMemoryContextService == null
                 ? QaMemoryContextResult.notApplied("service_unavailable")
-                : qaMemoryContextService.buildContext(request.getMode(), request.getMemoryPolicy(), session, history);
+                : qaMemoryContextService.buildContext(
+                        request.getMode(),
+                        request.getMemoryPolicy(),
+                        session,
+                        history,
+                        request.getContent(),
+                        context.latestTopic()
+                );
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),

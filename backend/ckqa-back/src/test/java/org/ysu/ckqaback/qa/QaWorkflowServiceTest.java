@@ -555,10 +555,17 @@ class QaWorkflowServiceTest {
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
-        given(memoryContextService.buildContext("local", "auto", session, List.of(previousUser, previousAssistant)))
+        given(memoryContextService.buildContext(
+                "local",
+                "auto",
+                session,
+                List.of(previousUser, previousAssistant),
+                "它为什么影响响应时间？",
+                "时间片轮转"
+        ))
                 .willReturn(new QaMemoryContextResult(
                         true,
-                        "local_history",
+                        "local_history_preference_only",
                         "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
                         2,
                         66,
@@ -574,7 +581,7 @@ class QaWorkflowServiceTest {
                 eq("local"),
                 eq("关于上一轮主题「时间片轮转」：它为什么影响响应时间？"),
                 argThat(context -> context.memoryApplied()
-                        && "local_history".equals(context.queryEngineStrategy())
+                        && "local_history_preference_only".equals(context.queryEngineStrategy())
                         && context.memoryHistoryJson().contains("学习记忆")
                         && context.memorySourceCount() == 2)
         )).willReturn(task);
@@ -584,7 +591,7 @@ class QaWorkflowServiceTest {
         QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
 
         assertThat(response.getMemoryApplied()).isTrue();
-        assertThat(response.getMemoryStrategy()).isEqualTo("local_history");
+        assertThat(response.getMemoryStrategy()).isEqualTo("local_history_preference_only");
         assertThat(response.getMemoryScope()).contains("indexRunId=23");
         assertThat(response.getMemorySourceCount()).isEqualTo(2);
         assertThat(response.getMemorySizeEstimate()).isEqualTo(66);
@@ -614,7 +621,7 @@ class QaWorkflowServiceTest {
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
-        given(memoryContextService.buildContext("local", "off", session, List.of())).willReturn(QaMemoryContextResult.notApplied("policy_off"));
+        given(memoryContextService.buildContext("local", "off", session, List.of(), "问题", "")).willReturn(QaMemoryContextResult.notApplied("policy_off"));
         given(qaMessagesService.appendUserMessage(5L, "问题")).willReturn(userMessage);
         given(qaRetrievalLogsService.createPendingTask(
                 eq(5L), eq("os"), eq(23L), eq(103L), eq("local"), eq("问题"),
@@ -653,7 +660,7 @@ class QaWorkflowServiceTest {
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
-        given(memoryContextService.buildContext("basic", "auto", session, List.of())).willReturn(QaMemoryContextResult.notApplied("mode_not_local"));
+        given(memoryContextService.buildContext("basic", "auto", session, List.of(), "问题", "")).willReturn(QaMemoryContextResult.notApplied("mode_not_local"));
         given(qaMessagesService.appendUserMessage(5L, "问题")).willReturn(userMessage);
         given(qaRetrievalLogsService.createPendingTask(
                 eq(5L), eq("os"), eq(23L), eq(103L), eq("basic"), eq("问题"),

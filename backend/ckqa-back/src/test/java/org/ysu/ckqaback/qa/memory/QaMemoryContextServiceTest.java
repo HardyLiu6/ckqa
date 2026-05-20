@@ -47,7 +47,7 @@ class QaMemoryContextServiceTest {
     void shouldApplyAutoOnlyWhenPreferenceIsEnabled() {
         QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
         QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
-        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService);
+        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService, new QaMemoryInjectionRouter());
         QaSessions session = session();
         given(preferencesService.findByScope(7L, "os", 3L, 17L)).willReturn(enabledPreference());
         given(memoriesService.listActiveByScope(7L, "os", 3L, 17L, 3)).willReturn(List.of(memory(101L, "偏好用步骤化解释调度算法。")));
@@ -55,14 +55,14 @@ class QaMemoryContextServiceTest {
         QaMemoryContextResult result = service.buildContext("local", "auto", session, List.of(
                 message(1L, "user", 1, "什么是时间片轮转？"),
                 message(2L, "assistant", 2, "时间片轮转是一种抢占式调度。")
-        ));
+        ), "它为什么影响响应时间？", "时间片轮转");
 
         assertThat(result.memoryApplied()).isTrue();
-        assertThat(result.strategy()).isEqualTo("local_history");
+        assertThat(result.strategy()).isEqualTo("local_history_preference_only");
         assertThat(result.scope()).isEqualTo("userId=7;courseId=os;knowledgeBaseId=3;indexRunId=17");
         assertThat(result.sourceCount()).isEqualTo(3);
         assertThat(result.conversationHistory()).extracting(GraphRagConversationMessage::content)
-                .contains("学习记忆：偏好用步骤化解释调度算法。");
+                .contains("学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：偏好用步骤化解释调度算法。");
     }
 
     @Test
@@ -84,7 +84,7 @@ class QaMemoryContextServiceTest {
     void shouldTrimMessagesAndMemoriesWithinBudget() {
         QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
         QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
-        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService);
+        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService, new QaMemoryInjectionRouter());
         QaSessions session = session();
         given(preferencesService.findByScope(7L, "os", 3L, 17L)).willReturn(enabledPreference());
         given(memoriesService.listActiveByScope(7L, "os", 3L, 17L, 3)).willReturn(List.of(
@@ -101,12 +101,58 @@ class QaMemoryContextServiceTest {
                 message(5L, "user", 5, "u5"),
                 message(6L, "assistant", 6, "a6"),
                 message(7L, "user", 7, "u7")
-        ));
+        ), "请继续复习我之前关注的内容", "");
 
         assertThat(result.conversationHistory()).hasSizeLessThanOrEqualTo(9);
         assertThat(result.sizeEstimate()).isLessThanOrEqualTo(3000);
-        assertThat(result.conversationHistory().stream().filter(item -> item.content().startsWith("学习记忆：")).count())
+        assertThat(result.conversationHistory().stream().filter(item -> item.content().startsWith("学习记忆（")).count())
                 .isLessThanOrEqualTo(2);
+    }
+
+    @Test
+    void shouldIgnoreDeletedMemoriesEvenIfRepositoryReturnsThem() {
+        QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
+        QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
+        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService, new QaMemoryInjectionRouter());
+        QaSessions session = session();
+        QaLearningMemories deleted = memory(101L, "已删除的解释偏好");
+        deleted.setStatus("deleted");
+        given(preferencesService.findByScope(7L, "os", 3L, 17L)).willReturn(enabledPreference());
+        given(memoriesService.listActiveByScope(7L, "os", 3L, 17L, 3)).willReturn(List.of(deleted));
+
+        QaMemoryContextResult result = service.buildContext("local", "default", session, List.of(
+                message(1L, "user", 1, "什么是死锁？")
+        ));
+
+        assertThat(result.memoryApplied()).isTrue();
+        assertThat(result.conversationHistory()).extracting(GraphRagConversationMessage::content)
+                .doesNotContain("学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：已删除的解释偏好");
+    }
+
+    @Test
+    void shouldFilterLearningTopicThatConflictsWithCurrentSessionTopic() {
+        QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
+        QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
+        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService, new QaMemoryInjectionRouter());
+        QaSessions session = session();
+        given(preferencesService.findByScope(7L, "os", 3L, 17L)).willReturn(enabledPreference());
+        given(memoriesService.listActiveByScope(7L, "os", 3L, 17L, 3)).willReturn(List.of(
+                memory("learning_topic", "学生关注：进程"),
+                memory("explanation_preference", "偏好步骤化解释")
+        ));
+
+        QaMemoryContextResult result = service.buildContext("local", "default", session, List.of(
+                message(1L, "user", 1, "什么是线程？"),
+                message(2L, "assistant", 2, "线程是 CPU 调度的基本单位。")
+        ), "它的实际作用是什么？", "线程");
+
+        assertThat(result.memoryApplied()).isTrue();
+        assertThat(result.strategy()).isEqualTo("local_history_preference_only");
+        assertThat(result.conversationHistory()).extracting(GraphRagConversationMessage::content)
+                .doesNotContain("学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：学生关注：进程")
+                .contains("学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：偏好步骤化解释");
+        assertThat(result.conversationHistory().get(result.conversationHistory().size() - 2).content()).isEqualTo("什么是线程？");
+        assertThat(result.conversationHistory().get(result.conversationHistory().size() - 1).content()).contains("线程");
     }
 
     @Test
@@ -157,8 +203,15 @@ class QaMemoryContextServiceTest {
     private QaLearningMemories memory(Long id, String text) {
         QaLearningMemories memory = new QaLearningMemories();
         memory.setId(id);
+        memory.setMemoryType("explanation_preference");
         memory.setMemoryText(text);
         memory.setStatus("active");
+        return memory;
+    }
+
+    private QaLearningMemories memory(String type, String text) {
+        QaLearningMemories memory = memory(101L, text);
+        memory.setMemoryType(type);
         return memory;
     }
 }

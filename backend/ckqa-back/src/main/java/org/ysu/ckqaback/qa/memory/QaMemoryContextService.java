@@ -1,6 +1,6 @@
 package org.ysu.ckqaback.qa.memory;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.entity.QaLearningMemories;
@@ -19,18 +19,45 @@ import java.util.List;
  * 组装 local 模式可选使用的长期记忆上下文。
  */
 @Service
-@RequiredArgsConstructor
 public class QaMemoryContextService {
 
     private static final int MAX_RECENT_MESSAGES = 6;
     private static final int MAX_MEMORY_ITEMS = 3;
     private static final int MAX_MEMORY_CHARS = 1000;
     private static final int MAX_HISTORY_CHARS = 3000;
+    private static final String MEMORY_PREFIX = "学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：";
 
     private final QaMemoryPreferencesService preferencesService;
     private final QaLearningMemoriesService memoriesService;
+    private final QaMemoryInjectionRouter injectionRouter;
+
+    public QaMemoryContextService(QaMemoryPreferencesService preferencesService, QaLearningMemoriesService memoriesService) {
+        this(preferencesService, memoriesService, new QaMemoryInjectionRouter());
+    }
+
+    @Autowired
+    public QaMemoryContextService(
+            QaMemoryPreferencesService preferencesService,
+            QaLearningMemoriesService memoriesService,
+            QaMemoryInjectionRouter injectionRouter
+    ) {
+        this.preferencesService = preferencesService;
+        this.memoriesService = memoriesService;
+        this.injectionRouter = injectionRouter;
+    }
 
     public QaMemoryContextResult buildContext(String mode, String memoryPolicy, QaSessions session, List<QaMessages> sessionMessages) {
+        return buildContext(mode, memoryPolicy, session, sessionMessages, "", "");
+    }
+
+    public QaMemoryContextResult buildContext(
+            String mode,
+            String memoryPolicy,
+            QaSessions session,
+            List<QaMessages> sessionMessages,
+            String question,
+            String latestTopic
+    ) {
         String policy = normalizePolicy(memoryPolicy);
         if (!"local".equals(mode)) {
             return QaMemoryContextResult.notApplied("mode_not_local");
@@ -53,15 +80,8 @@ public class QaMemoryContextService {
             return QaMemoryContextResult.notApplied("preference_disabled");
         }
 
-        List<GraphRagConversationMessage> history = new ArrayList<>();
-        for (QaMessages message : recentMessages(sessionMessages)) {
-            if (!isHistoryRole(message.getRole()) || !StringUtils.hasText(message.getContent())) {
-                continue;
-            }
-            history.add(new GraphRagConversationMessage(message.getRole(), message.getContent().trim()));
-        }
-
-        int historyChars = charCount(history);
+        QaMemoryInjectionDecision decision = injectionRouter.decide(question, latestTopic);
+        List<GraphRagConversationMessage> longMemory = new ArrayList<>();
         int memoryChars = 0;
         for (QaLearningMemories memory : memoriesService.listActiveByScope(
                 session.getUserId(),
@@ -70,26 +90,40 @@ public class QaMemoryContextService {
                 session.getIndexRunId(),
                 MAX_MEMORY_ITEMS
         )) {
-            if (!StringUtils.hasText(memory.getMemoryText())) {
+            if (!"active".equals(memory.getStatus()) || !StringUtils.hasText(memory.getMemoryText())) {
                 continue;
             }
-            String content = "学习记忆：" + memory.getMemoryText().trim();
+            if (!injectionRouter.shouldInclude(decision, memory, question, latestTopic)) {
+                continue;
+            }
+            String content = MEMORY_PREFIX + memory.getMemoryText().trim();
             int contentChars = content.length();
-            if (memoryChars + contentChars > MAX_MEMORY_CHARS || historyChars + contentChars > MAX_HISTORY_CHARS) {
+            if (memoryChars + contentChars > MAX_MEMORY_CHARS) {
                 continue;
             }
-            history.add(new GraphRagConversationMessage("assistant", content));
+            longMemory.add(new GraphRagConversationMessage("assistant", content));
             memoryChars += contentChars;
-            historyChars += contentChars;
         }
+
+        List<GraphRagConversationMessage> recentHistory = new ArrayList<>();
+        for (QaMessages message : recentMessages(sessionMessages)) {
+            if (!isHistoryRole(message.getRole()) || !StringUtils.hasText(message.getContent())) {
+                continue;
+            }
+            recentHistory.add(new GraphRagConversationMessage(message.getRole(), message.getContent().trim()));
+        }
+
+        List<GraphRagConversationMessage> history = new ArrayList<>(longMemory);
+        history.addAll(recentHistory);
 
         history = trimToBudget(history);
         if (history.isEmpty()) {
             return QaMemoryContextResult.notApplied("history_empty");
         }
+        String strategy = resolveStrategy(decision, longMemory);
         return new QaMemoryContextResult(
                 true,
-                "local_history",
+                strategy,
                 scope(session),
                 history.size(),
                 charCount(history),
@@ -100,6 +134,16 @@ public class QaMemoryContextService {
 
     private String normalizePolicy(String memoryPolicy) {
         return StringUtils.hasText(memoryPolicy) ? memoryPolicy.trim() : "default";
+    }
+
+    private String resolveStrategy(QaMemoryInjectionDecision decision, List<GraphRagConversationMessage> longMemory) {
+        if (longMemory == null || longMemory.isEmpty()) {
+            return "local_history_short_only";
+        }
+        if (decision != null && "relevant_memory".equals(decision.longMemoryMode())) {
+            return "local_history_relevant_memory";
+        }
+        return "local_history_preference_only";
     }
 
     private List<QaMessages> recentMessages(List<QaMessages> messages) {

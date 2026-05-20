@@ -9,6 +9,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagSourceSnapshot;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.memory.QaLearningMemoryCaptureService;
 import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
 import org.ysu.ckqaback.service.QaMessagesService;
@@ -418,6 +419,117 @@ class QaTaskWorkerTest {
 
         worker.processTask(5L, 9001L);
 
+        then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
+    }
+
+    @Test
+    void shouldTriggerLearningMemoryCaptureAfterAssistantMessageSucceeds() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        QaLearningMemoryCaptureService captureService = mock(QaLearningMemoryCaptureService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+        worker.setQaLearningMemoryCaptureService(captureService);
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("local");
+        task.setQueryText("什么是死锁？请用步骤解释");
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("local", "什么是死锁？请用步骤解释", null, null, null))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260520_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260520_001"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260520_001",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "死锁是多个进程相互等待资源。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "死锁是多个进程相互等待资源。")).willReturn(assistant);
+
+        worker.processTask(5L, 9001L);
+
+        then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
+        then(captureService).should().captureAfterAssistantSuccess(task, assistant);
+    }
+
+    @Test
+    void shouldKeepTaskSuccessWhenLearningMemoryCaptureFails() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        QaLearningMemoryCaptureService captureService = mock(QaLearningMemoryCaptureService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+        worker.setQaLearningMemoryCaptureService(captureService);
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("local");
+        task.setQueryText("什么是死锁？");
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("local", "什么是死锁？", null, null, null))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260520_002", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260520_002"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260520_002",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "死锁是多个进程相互等待资源。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "死锁是多个进程相互等待资源。")).willReturn(assistant);
+        doThrow(new RuntimeException("memory down")).when(captureService).captureAfterAssistantSuccess(task, assistant);
+
+        worker.processTask(5L, 9001L);
+
+        then(captureService).should().captureAfterAssistantSuccess(task, assistant);
         then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
     }
 
