@@ -6,6 +6,8 @@
 - `prompt_tuning/` 还包含候选 Prompt 最终固化脚本，用于把选中的候选写入 `prompts/final/` 并更新 `.env`；material 编排入口会在 full gate 通过后用 scoring artifact hash 绑定本次固化。
 - `extraction_eval/`：候选 Prompt 抽取执行、结构化解析、规则化评测、endpoint 诊断、关系结构化后处理诊断与 top-k scoring artifact 生成。
 - `qa_eval/`：GraphRAG 四模式 baseline、规则/算法增强评分、bootstrap 显著性报告与第三方评测导出。
+- `extract_course_profile_hints.py`：从 `section_docs.json` / `text_units.parquet` 抽取课程画像章节来源和关键词 hints，供 Java 课程路由画像生成复用。
+- `cleanup_course_router_profiles.py`：清理课程画像路由独立 LanceDB 表中的历史画像向量；必须显式传入当前要保留的 `vector_id`，默认只 dry-run。
 
 ## qa_eval 脚本速查
 
@@ -22,6 +24,8 @@
 | `qa_eval/ragas_exporter.py` | 导出 RAGAS 兼容数据集。 |
 | `qa_eval/factuality_extra_exporter.py` | 导出 SummaC / AlignScore / SCALE 兼容数据集。 |
 | `backfill_qa_answer_citations.py` | dry-run 或显式执行历史问答回答中的 GraphRAG `[Data: Sources (...)]` 引用清理。 |
+| `extract_course_profile_hints.py` | 通用课程画像 hints 抽取入口，只读取 `section_docs.json` / `text_units.parquet`，不读取 entities/community reports。 |
+| `cleanup_course_router_profiles.py` | 通用课程画像 LanceDB 清理入口，按 `--keep-vector-id` / `--course-id` 删除旧画像；不传 `--execute` 时只输出 dry-run 报告。 |
 
 兼容性约定：
 

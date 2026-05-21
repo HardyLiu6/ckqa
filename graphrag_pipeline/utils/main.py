@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -36,6 +37,12 @@ from query_engine_history_poc import (
     QueryEngineHistoryPocAdapter,
     query_in_thread,
     load_history_poc_config_from_env,
+)
+from course_routing import (
+    CourseProfileInput as CourseProfileRouteItem,
+    ProfileHintsRequest as CourseRoutingProfileHintsRouteRequest,
+    CourseRoutingService,
+    RecommendRequest as CourseRoutingRecommendRouteRequest,
 )
 
 
@@ -449,6 +456,10 @@ class HybridWarmupRequest(BaseModel):
     dataDirUri: str | None = None
 
 
+class CourseRoutingUpsertRouteRequest(BaseModel):
+    profiles: List[CourseProfileRouteItem] = Field(default_factory=list, min_length=1)
+
+
 class ChatCompletionResponseChoice(BaseModel):
     index: int
     message: Message
@@ -552,9 +563,13 @@ def _hybrid_readiness_payload(data_dir, data_dir_uri: str | None) -> dict[str, o
     }
 
 
-def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
+def create_app(
+    task_manager: QueryTaskManager | None = None,
+    course_routing_service: CourseRoutingService | None = None,
+) -> FastAPI:
     """创建 FastAPI 应用，允许测试注入任务管理器。"""
     active_task_manager = task_manager or QUERY_TASK_MANAGER
+    active_course_routing_service = course_routing_service or CourseRoutingService.from_env()
 
     app = FastAPI(
         title="GraphRAG API Server",
@@ -704,6 +719,38 @@ def create_app(task_manager: QueryTaskManager | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return JSONResponse(content=_hybrid_readiness_payload(data_dir, dataDirUri))
+
+    @app.get("/v1/internal/course-routing/readiness")
+    async def get_course_routing_readiness():
+        """Java 内部使用的课程画像路由可用性检查，不返回 API key。"""
+        return JSONResponse(content=active_course_routing_service.readiness())
+
+    @app.post("/v1/internal/course-routing/profiles/upsert")
+    async def upsert_course_routing_profiles(request: CourseRoutingUpsertRouteRequest):
+        """写入或更新课程画像向量。"""
+        try:
+            result = await active_course_routing_service.upsert_profiles(request.profiles)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content=jsonable_encoder(result))
+
+    @app.post("/v1/internal/course-routing/profile-hints")
+    async def extract_course_routing_profile_hints(request: CourseRoutingProfileHintsRouteRequest):
+        """抽取课程画像章节来源和关键词 hints。"""
+        try:
+            result = await active_course_routing_service.extract_profile_hints(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content=jsonable_encoder(result))
+
+    @app.post("/v1/internal/course-routing/recommend")
+    async def recommend_course_routing(request: CourseRoutingRecommendRouteRequest):
+        """根据问题推荐候选课程，阈值与分差判断由 Java 侧负责。"""
+        try:
+            result = await active_course_routing_service.recommend(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return JSONResponse(content=jsonable_encoder(result))
 
     @app.post("/v1/chat/completions")
     async def chat_completions(request: ChatCompletionRequest):

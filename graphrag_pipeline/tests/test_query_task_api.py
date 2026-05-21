@@ -29,6 +29,10 @@ if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
 from main import (
+    CourseProfileRouteItem,
+    CourseRoutingProfileHintsRouteRequest,
+    CourseRoutingRecommendRouteRequest,
+    CourseRoutingUpsertRouteRequest,
     HybridWarmupRequest,
     QueryEngineHistoryRequest,
     QueryTaskCreateRequest,
@@ -134,6 +138,58 @@ class _FakeQueryTaskManager:
         return replay, asyncio.Queue(), lambda: None
 
 
+class _FakeCourseRoutingService:
+    def readiness(self):
+        return {
+            "ready": True,
+            "status": "ready",
+            "embeddingModel": "text-embedding-v4",
+            "embeddingDimension": 1024,
+            "lancedbUri": "/tmp/course-router/lancedb",
+            "tableName": "course_profiles_text_embedding_v4",
+        }
+
+    async def upsert_profiles(self, profiles):
+        return SimpleNamespace(
+            items=[
+                SimpleNamespace(
+                    courseId=item.courseId,
+                    courseName=item.courseName,
+                    profileHash=item.profileHash,
+                    vectorId=f"{item.courseId}:text_embedding_v4:{item.profileHash}",
+                )
+                for item in profiles
+            ]
+        )
+
+    async def recommend(self, request):
+        return SimpleNamespace(
+            candidates=[
+                SimpleNamespace(
+                    courseId="course-os",
+                    courseName="操作系统",
+                    confidence=0.98,
+                    reason=f"课程画像相似度 0.980，问题：{request.question}",
+                    profileHash="hash-os",
+                )
+            ]
+        )
+
+    async def extract_profile_hints(self, request):
+        return SimpleNamespace(
+            items=[
+                SimpleNamespace(
+                    heading="第六章 输入输出系统 > 6.3 中断机构和中断处理程序",
+                    keywords=["I/O", "设备驱动程序", "中断", "轮询"],
+                    sourceType="text_units",
+                    sourceRef="249",
+                    score=4.0,
+                )
+            ],
+            sourceCounts={"text_units": 1},
+        )
+
+
 def _get_route_endpoint(app, path: str, method: str):
     for route in app.routes:
         if getattr(route, "path", None) == path and method in getattr(route, "methods", []):
@@ -142,6 +198,62 @@ def _get_route_endpoint(app, path: str, method: str):
 
 
 class TestQueryTaskApi(unittest.TestCase):
+    def test_internal_course_routing_endpoints_use_injected_service(self):
+        app = create_app(task_manager=_FakeQueryTaskManager(), course_routing_service=_FakeCourseRoutingService())
+        readiness_endpoint = _get_route_endpoint(app, "/v1/internal/course-routing/readiness", "GET")
+        hints_endpoint = _get_route_endpoint(app, "/v1/internal/course-routing/profile-hints", "POST")
+        upsert_endpoint = _get_route_endpoint(app, "/v1/internal/course-routing/profiles/upsert", "POST")
+        recommend_endpoint = _get_route_endpoint(app, "/v1/internal/course-routing/recommend", "POST")
+
+        readiness_response = asyncio.run(readiness_endpoint())
+        readiness_payload = json.loads(readiness_response.body)
+        self.assertTrue(readiness_payload["ready"])
+        self.assertEqual(readiness_payload["embeddingModel"], "text-embedding-v4")
+        self.assertNotIn("embeddingApiKey", readiness_payload)
+
+        upsert_response = asyncio.run(
+            upsert_endpoint(
+                CourseRoutingUpsertRouteRequest(
+                    profiles=[
+                        CourseProfileRouteItem(
+                            courseId="course-os",
+                            courseName="操作系统",
+                            profileText="操作系统：进程 调度 死锁 内存",
+                            profileHash="hash-os",
+                            metadata={"teacher": "张老师"},
+                        )
+                    ]
+                )
+            )
+        )
+        upsert_payload = json.loads(upsert_response.body)
+        self.assertEqual(upsert_payload["items"][0]["vectorId"], "course-os:text_embedding_v4:hash-os")
+
+        hints_response = asyncio.run(
+            hints_endpoint(
+                CourseRoutingProfileHintsRouteRequest(
+                    courseId="course-os",
+                    dataDirUris=["user_0/kb_5/build_19/index/output"],
+                    maxHints=3,
+                )
+            )
+        )
+        hints_payload = json.loads(hints_response.body)
+        self.assertEqual(hints_payload["items"][0]["heading"], "第六章 输入输出系统 > 6.3 中断机构和中断处理程序")
+        self.assertEqual(hints_payload["items"][0]["keywords"], ["I/O", "设备驱动程序", "中断", "轮询"])
+
+        recommend_response = asyncio.run(
+            recommend_endpoint(
+                CourseRoutingRecommendRouteRequest(
+                    question="死锁是什么？",
+                    courseIds=["course-os"],
+                    limit=1,
+                )
+            )
+        )
+        recommend_payload = json.loads(recommend_response.body)
+        self.assertEqual(recommend_payload["candidates"][0]["courseId"], "course-os")
+
     def test_submit_and_get_query_task(self):
         task_manager = _FakeQueryTaskManager()
         app = create_app(task_manager=task_manager)

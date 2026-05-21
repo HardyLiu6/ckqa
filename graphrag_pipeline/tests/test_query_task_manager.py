@@ -25,6 +25,21 @@ def _python_cmd(code: str) -> list[str]:
     return [sys.executable, "-c", code]
 
 
+async def _wait_for_task_status(
+    manager: QueryTaskManager,
+    task_id: str,
+    expected_status: str,
+    *,
+    timeout_seconds: float = 2.0,
+):
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    snapshot = manager.get_snapshot(task_id)
+    while snapshot.task_status != expected_status and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.02)
+        snapshot = manager.get_snapshot(task_id)
+    return snapshot
+
+
 class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
     async def test_refreshes_heartbeat_until_process_finishes(self):
         manager = QueryTaskManager(
@@ -44,8 +59,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(running.progress_stage, "running")
         self.assertIsNotNone(running.last_heartbeat_at)
 
-        await asyncio.sleep(0.15)
-        finished = manager.get_snapshot(created.python_task_id)
+        finished = await _wait_for_task_status(manager, created.python_task_id, "success")
         self.assertEqual(finished.task_status, "success")
         self.assertEqual(finished.progress_stage, "done")
         self.assertIn("started", finished.latest_logs)
@@ -119,9 +133,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         )
 
         created = await manager.create_task("global", "图谱主题")
-        await asyncio.sleep(0.25)
-
-        snapshot = manager.get_snapshot(created.python_task_id)
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(snapshot.result_text, "  section\n    detail")
 
