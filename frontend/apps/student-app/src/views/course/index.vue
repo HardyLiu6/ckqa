@@ -32,38 +32,50 @@
       <div class="filter-container">
         <!-- 搜索框 -->
         <div class="search-box">
-          <el-input v-model="searchKeyword" placeholder="搜索课程名称、关键词..." size="large" clearable
-            @keyup.enter="onSearch">
-            <template #prefix>
-              <el-icon>
-                <Search />
-              </el-icon>
-            </template>
-            <template #append>
-              <el-button type="primary" @click="onSearch">搜索</el-button>
-            </template>
-          </el-input>
+          <div class="search-inner">
+            <el-icon class="search-icon"><Search /></el-icon>
+            <input
+              v-model="searchKeyword"
+              class="search-input"
+              placeholder="搜索课程名称、关键词..."
+              @keyup.enter="onSearch"
+            />
+          </div>
+          <button class="search-btn" type="button" @click="onSearch">搜索</button>
         </div>
 
         <!-- 分类筛选 -->
         <div class="category-filter" v-if="allCategories.length > 1">
           <span class="filter-label">课程分类：</span>
-          <div class="category-tags">
-            <el-tag v-for="cat in allCategories" :key="cat" :type="selectedCategory === cat ? '' : 'info'"
-              :effect="selectedCategory === cat ? 'dark' : 'plain'" class="category-tag"
-              @click="selectedCategory = cat">
-              {{ cat }}
-            </el-tag>
+          <div class="filter-pills">
+            <button
+              v-for="cat in allCategories"
+              :key="cat"
+              class="filter-pill"
+              :class="{ active: selectedCategory === cat }"
+              type="button"
+              @click="selectedCategory = cat"
+            >{{ cat }}</button>
           </div>
         </div>
 
         <!-- 我加入的 / 全部可见 -->
         <div class="sort-filter">
           <span class="filter-label">范围：</span>
-          <el-radio-group v-model="scope">
-            <el-radio-button value="all">全部可见</el-radio-button>
-            <el-radio-button value="member">我加入的</el-radio-button>
-          </el-radio-group>
+          <div class="filter-pills">
+            <button
+              class="filter-pill"
+              :class="{ active: scope === 'all' }"
+              type="button"
+              @click="scope = 'all'"
+            >全部可见</button>
+            <button
+              class="filter-pill"
+              :class="{ active: scope === 'member' }"
+              type="button"
+              @click="scope = 'member'"
+            >我加入的</button>
+          </div>
         </div>
       </div>
     </div>
@@ -325,39 +337,61 @@ $radius: 16px;
 
   .search-box {
     margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
 
-    :deep(.el-input) {
-      max-width: 100%;
+  .search-inner {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: 999px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 
-      .el-input__wrapper {
-        border-radius: 999px 0 0 999px;
-        padding: 4px 16px;
-        box-shadow: 0 0 0 1px $border inset;
-
-        &:hover { box-shadow: 0 0 0 1px rgba($course-primary, 0.35) inset; }
-        &.is-focus { box-shadow: 0 0 0 1px $course-primary inset, 0 0 0 3px rgba($course-primary, 0.08); }
-      }
+    &:focus-within {
+      border-color: rgba($course-primary, 0.5);
+      box-shadow: 0 0 0 3px rgba($course-primary, 0.08);
     }
 
-    :deep(.el-input-group__append) {
-      background: $course-primary;
-      border: 1px solid $course-primary;
-      border-left: 0;
-      border-radius: 0 999px 999px 0;
-      padding: 0;
-      box-shadow: none;
+    .search-icon { color: #94a3b8; font-size: 15px; flex-shrink: 0; }
+  }
 
-      .el-button {
-        background: transparent;
-        border: 0;
-        border-radius: 0 999px 999px 0;
-        padding: 0 22px;
-        color: #fff;
-        font-weight: 600;
-        height: 100%;
+  .search-input {
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 14px;
+    color: #0f172a;
+    font-family: inherit;
 
-        &:hover { background: rgba(0, 0, 0, 0.1); }
-      }
+    &::placeholder { color: #94a3b8; }
+  }
+
+  .search-btn {
+    height: 42px;
+    padding: 0 24px;
+    border-radius: 999px;
+    border: 0;
+    background: $course-primary;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba($course-primary, 0.3);
+
+    &:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba($course-primary, 0.4);
     }
   }
 
@@ -374,51 +408,40 @@ $radius: 16px;
   .filter-label {
     font-size: 13px;
     font-weight: 700;
-    color: $text-secondary;
+    color: #475569;
     white-space: nowrap;
   }
 
-  .category-tags {
+  .filter-pills {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
   }
 
-  .category-tag {
-    cursor: pointer;
+  .filter-pill {
+    height: 34px;
+    padding: 0 16px;
     border-radius: 999px;
-    padding: 7px 16px;
+    border: 1px solid $border;
+    background: $bg-card;
+    color: #475569;
     font-size: 13px;
     font-weight: 600;
-    transition: all 0.2s ease;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s ease;
 
     &:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba($course-primary, 0.15);
+      border-color: rgba($course-primary, 0.4);
+      color: $course-primary;
     }
-  }
 
-  :deep(.el-radio-group) {
-    --el-radio-button-checked-bg-color: #{$course-primary};
-    --el-radio-button-checked-border-color: #{$course-primary};
-    --el-radio-button-checked-text-color: #fff;
-  }
-
-  :deep(.el-radio-button__inner) {
-    border-radius: 999px !important;
-    border-color: $border;
-    font-weight: 600;
-    font-size: 13px;
-    padding: 7px 16px;
-  }
-
-  :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius: 999px !important; }
-  :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius: 999px !important; }
-
-  :deep(.el-radio-button.is-active .el-radio-button__inner) {
-    background: $course-primary;
-    border-color: $course-primary;
-    box-shadow: -1px 0 0 0 $course-primary;
+    &.active {
+      background: $course-primary;
+      border-color: $course-primary;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba($course-primary, 0.25);
+    }
   }
 }
 
