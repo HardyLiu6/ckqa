@@ -63,6 +63,37 @@ export function matchCourseForQuestion(question, courses, selectedCourseId = '')
   return { status: 'matched', course: scoredCourses[0].course }
 }
 
+const COURSE_ROUTING_STATUSES = new Set(['matched', 'needs_confirmation', 'no_match'])
+
+export function normalizeCourseRoutingRecommendation(payload = {}) {
+  const status = COURSE_ROUTING_STATUSES.has(payload?.status) ? payload.status : 'no_match'
+  const candidates = normalizeCourseRoutingCandidates(payload?.candidates)
+  const selectedCourseId = String(payload?.selectedCourseId ?? '').trim()
+  return {
+    status,
+    selectedCourseId: status === 'matched' ? selectedCourseId : '',
+    confidence: normalizeScore(payload?.confidence),
+    margin: normalizeScore(payload?.margin),
+    candidates,
+  }
+}
+
+export function normalizeCourseRoutingCandidates(candidates = []) {
+  const list = Array.isArray(candidates) ? candidates : []
+  return list
+    .map((candidate) => ({
+      courseId: String(candidate?.courseId ?? '').trim(),
+      name: candidate?.courseName ?? candidate?.name ?? '',
+      confidence: normalizeScore(candidate?.confidence),
+      reason: candidate?.reason ?? '',
+    }))
+    .filter((candidate) => candidate.courseId)
+}
+
+export function shouldRequestCourseRouting({ selectedCourseId = '', sessionCourseId = '' } = {}) {
+  return !String(selectedCourseId || '').trim() && !String(sessionCourseId || '').trim()
+}
+
 function scoreCourseMatch(normalizedQuestion, course) {
   const courseId = normalizeText(course.courseId)
   const name = normalizeText(course.name)
@@ -101,6 +132,14 @@ function extractKeywords(text) {
 
 function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase().replace(/\s+/g, '')
+}
+
+function normalizeScore(value) {
+  const score = Number(value)
+  if (!Number.isFinite(score)) {
+    return 0
+  }
+  return Math.max(0, Math.min(1, score))
 }
 
 export function selectReadyKnowledgeBase(knowledgeBases, selectedKnowledgeBaseId = '') {

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   isTerminalTaskStatus,
   matchCourseForQuestion,
+  normalizeCourseRoutingRecommendation,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeQaMessage,
@@ -22,6 +23,7 @@ import {
   isLegacyReadOnlySession,
   resolveSessionLifecycleStatusText,
   selectReadyKnowledgeBase,
+  shouldRequestCourseRouting,
   toQaSideNavSession,
 } from '../src/views/qa/qa-session-model.js'
 
@@ -74,6 +76,38 @@ test('智能匹配无法确定课程时要求用户选择', () => {
 
   assert.equal(result.status, 'needs_selection')
   assert.equal(result.course, null)
+})
+
+test('课程画像路由响应规范化候选与状态', () => {
+  const result = normalizeCourseRoutingRecommendation({
+    status: 'needs_confirmation',
+    selectedCourseId: 'os',
+    confidence: 1.2,
+    margin: 0.04,
+    candidates: [
+      { courseId: 'os', courseName: '操作系统', confidence: 0.7, reason: '课程画像相似度 0.700' },
+      { courseId: '', courseName: '无效课程', confidence: 0.5 },
+    ],
+  })
+
+  assert.equal(result.status, 'needs_confirmation')
+  assert.equal(result.selectedCourseId, '')
+  assert.equal(result.confidence, 1)
+  assert.equal(result.margin, 0.04)
+  assert.deepEqual(result.candidates, [
+    {
+      courseId: 'os',
+      name: '操作系统',
+      confidence: 0.7,
+      reason: '课程画像相似度 0.700',
+    },
+  ])
+})
+
+test('显式课程或历史会话课程存在时不触发语义课程路由', () => {
+  assert.equal(shouldRequestCourseRouting({ selectedCourseId: 'os' }), false)
+  assert.equal(shouldRequestCourseRouting({ sessionCourseId: 'ds' }), false)
+  assert.equal(shouldRequestCourseRouting({}), true)
 })
 
 test('知识库选择只接受已有 activeIndexRunId 的知识库', () => {

@@ -26,6 +26,7 @@ import {
   listQaMemoryItems,
   getQaTask,
   listQaMessages,
+  recommendCourse,
   recommendQaMode,
   sendQaMessage,
   streamQaTaskEvents,
@@ -59,8 +60,8 @@ import {
   hasActiveIndexChanged,
   isArchivedReadOnlySession,
   isLegacyReadOnlySession,
-  matchCourseForQuestion,
   learningMemoryTypeLabel,
+  normalizeCourseRoutingRecommendation,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeLearningMemory,
@@ -73,6 +74,7 @@ import {
   resolveMemoryStatusText,
   resolvePollingDelaySeconds,
   selectReadyKnowledgeBase,
+  shouldRequestCourseRouting,
   upsertQaMessage,
 } from './qa-session-model'
 
@@ -104,6 +106,8 @@ const savingMemoryPreference = ref(false)
 const deletingMemoryItemId = ref(null)
 const restoringSession = ref(false)
 const sending = ref(false)
+const courseRoutingLoading = ref(false)
+const courseRouteConfirmation = ref(null)
 const feedbackSubmittingMessageId = ref(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
@@ -164,6 +168,8 @@ const activeIndexChanged = computed(() => hasActiveIndexChanged(activeSession.va
 const canSend = computed(() => Boolean(
   input.value.trim()
   && !sending.value
+  && !courseRoutingLoading.value
+  && !courseRouteConfirmation.value
   && !pendingTask.value
   && !activeSessionReadOnlyMessage.value,
 ))
@@ -217,6 +223,12 @@ watch(
     }
   },
 )
+
+watch(input, (value) => {
+  if (courseRouteConfirmation.value && value.trim() !== courseRouteConfirmation.value.question) {
+    clearCourseRouteConfirmation()
+  }
+})
 
 onBeforeUnmount(() => {
   clearPollTimer()
@@ -305,6 +317,7 @@ async function syncCourseScopeFromQuery(courseId) {
 }
 
 async function handleCourseChange(courseId) {
+  clearCourseRouteConfirmation()
   resetConversation()
   resetMemoryState()
   selectedKnowledgeBaseId.value = ''
@@ -419,12 +432,18 @@ async function send() {
 
   sending.value = true
   errorMessage.value = ''
+  if (courseRouteConfirmation.value?.question !== text) {
+    clearCourseRouteConfirmation()
+  }
 
   try {
     if (!courses.value.length) {
       await loadCourses()
     }
     const course = await resolveCourse(text)
+    if (!course) {
+      return
+    }
     const nextKnowledgeBases = knowledgeBases.value.length
       ? knowledgeBases.value
       : await loadKnowledgeBases(course.courseId)
@@ -635,21 +654,97 @@ async function ensureHybridWarmup(course, knowledgeBase) {
 }
 
 async function resolveCourse(question) {
-  if (selectedCourse.value) {
-    return selectedCourse.value
+  if (!shouldRequestCourseRouting({
+    selectedCourseId: selectedCourseId.value,
+    sessionCourseId: activeSession.value?.courseId,
+  })) {
+    if (selectedCourse.value) {
+      return selectedCourse.value
+    }
+    throw new Error('当前课程不可用，请刷新课程或重新选择')
   }
 
-  const result = matchCourseForQuestion(question, courses.value)
-  if (result.status !== 'matched') {
-    throw new Error(result.status === 'ambiguous'
-      ? '问题可匹配多个课程，请先手动选择课程'
-      : '暂未识别到课程，请先选择课程后提问')
-  }
+  courseRoutingLoading.value = true
+  try {
+    const recommendation = normalizeCourseRoutingRecommendation(await recommendCourse({
+      question,
+      userId: userStore.user.id,
+      limit: 3,
+    }))
 
-  selectedCourseId.value = result.course.courseId
-  statusMessage.value = `已根据问题识别课程：${result.course.name}`
-  await loadKnowledgeBases(result.course.courseId)
-  return result.course
+    if (recommendation.status === 'matched') {
+      const course = resolveCourseById(recommendation.selectedCourseId, recommendation.candidates[0])
+      if (!course) {
+        throw new Error('已识别课程，但当前课程列表不可用，请刷新课程后重试')
+      }
+      selectedCourseId.value = course.courseId
+      clearCourseRouteConfirmation()
+      statusMessage.value = `已根据课程画像识别课程：${course.name}`
+      await loadKnowledgeBases(course.courseId)
+      return course
+    }
+
+    if (recommendation.status === 'needs_confirmation' && recommendation.candidates.length) {
+      courseRouteConfirmation.value = {
+        question,
+        candidates: recommendation.candidates,
+        confidence: recommendation.confidence,
+        margin: recommendation.margin,
+      }
+      statusMessage.value = '课程画像匹配不够确定，请确认候选课程'
+      return null
+    }
+
+    throw new Error('暂未识别到课程，请先选择课程后提问')
+  } catch (error) {
+    throw new Error(error?.message || '课程识别暂不可用，请先手动选择课程')
+  } finally {
+    courseRoutingLoading.value = false
+  }
+}
+
+async function handleCourseRouteCandidateConfirm(candidate) {
+  const course = resolveCourseById(candidate?.courseId, candidate)
+  if (!course) {
+    errorMessage.value = '候选课程不可用，请刷新课程后重试'
+    return
+  }
+  selectedCourseId.value = course.courseId
+  clearCourseRouteConfirmation()
+  statusMessage.value = `已确认课程：${course.name}`
+  await loadKnowledgeBases(course.courseId)
+  if (input.value.trim()) {
+    await send()
+  }
+}
+
+function resolveCourseById(courseId, fallback = null) {
+  const normalizedCourseId = String(courseId || '')
+  if (!normalizedCourseId) {
+    return null
+  }
+  return courses.value.find((course) => course.courseId === normalizedCourseId) ?? (
+    fallback
+      ? {
+          id: normalizedCourseId,
+          courseId: normalizedCourseId,
+          name: fallback.name || fallback.courseName || normalizedCourseId,
+          description: '',
+          activeKnowledgeBaseCount: 0,
+          latestIndexRunId: null,
+          status: '',
+        }
+      : null
+  )
+}
+
+function clearCourseRouteConfirmation() {
+  courseRouteConfirmation.value = null
+}
+
+function formatConfidence(value) {
+  const score = Number(value)
+  return Number.isFinite(score) ? `${Math.round(score * 100)}%` : '0%'
 }
 
 async function ensureSession(course, knowledgeBase, firstQuestion) {
@@ -1392,7 +1487,27 @@ function sourceTypeLabel(source) {
     </div>
 
     <div class="qa-input-wrap">
-      <div v-if="errorMessage" class="qa-alert error-alert" role="alert">
+      <div v-if="courseRouteConfirmation" class="course-route-confirmation">
+        <div class="course-route-head">
+          <el-icon><Search /></el-icon>
+          <span>请选择要继续提问的课程</span>
+          <button class="inline-action" type="button" @click="clearCourseRouteConfirmation">重新输入</button>
+        </div>
+        <div class="course-route-candidates">
+          <button
+            v-for="candidate in courseRouteConfirmation.candidates"
+            :key="candidate.courseId"
+            class="course-route-candidate"
+            type="button"
+            @click="handleCourseRouteCandidateConfirm(candidate)"
+          >
+            <strong>{{ candidate.name || candidate.courseId }}</strong>
+            <span>{{ formatConfidence(candidate.confidence) }}</span>
+            <small>{{ candidate.reason || '课程画像候选' }}</small>
+          </button>
+        </div>
+      </div>
+      <div v-else-if="errorMessage" class="qa-alert error-alert" role="alert">
         <el-icon><WarningFilled /></el-icon>
         <span>{{ errorMessage }}</span>
       </div>
@@ -1418,12 +1533,12 @@ function sourceTypeLabel(source) {
         <input
           v-model="input"
           class="qa-input"
-          :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
+          :disabled="sending || courseRoutingLoading || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
           :placeholder="activeSessionReadOnlyMessage || '输入课程问题，或点上方手动选择课程与模式'"
           @keyup.enter="send"
         />
         <button class="qa-send" :disabled="!canSend" type="button" aria-label="发送问题" @click="send">
-          <el-icon v-if="sending" class="is-loading" :size="18"><Loading /></el-icon>
+          <el-icon v-if="sending || courseRoutingLoading" class="is-loading" :size="18"><Loading /></el-icon>
           <el-icon v-else :size="18"><Position /></el-icon>
         </button>
       </GlassCard>
@@ -1989,6 +2104,62 @@ function sourceTypeLabel(source) {
   background: #fff;
   font-size: 13px;
   font-weight: 700;
+}
+
+.course-route-confirmation {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(13, 148, 136, 0.24);
+  border-radius: $radius-lg;
+  background: #fff;
+  color: #115e59;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.course-route-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.course-route-candidates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.course-route-candidate {
+  display: grid;
+  min-height: 78px;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  border-radius: $radius-md;
+  background: rgba(240, 253, 250, 0.72);
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+
+  strong,
+  span,
+  small {
+    overflow-wrap: anywhere;
+  }
+
+  span {
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  small {
+    color: #475569;
+    font-size: 12px;
+    line-height: 1.35;
+  }
 }
 
 .inline-action {

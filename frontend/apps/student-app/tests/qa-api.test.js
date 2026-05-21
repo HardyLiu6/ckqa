@@ -90,6 +90,11 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
     betaHybridEnabled: true,
     userId: 999,
   })
+  await api.recommendCourse({
+    question: '什么是进程？',
+    userId: 3,
+    limit: 3,
+  })
   await api.warmupHybrid({ courseId: 'os', knowledgeBaseId: 2 })
   await api.submitQaFeedback({
     messageId: 33,
@@ -158,6 +163,12 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
         question: '它和资源分配图有什么关系？',
         betaHybridEnabled: true,
       },
+      config: { timeout: QA_ROUTING_TIMEOUT_MS },
+    },
+    {
+      method: 'post',
+      url: '/course-routing/recommend',
+      data: { question: '什么是进程？', userId: 3, limit: 3 },
       config: { timeout: QA_ROUTING_TIMEOUT_MS },
     },
     {
