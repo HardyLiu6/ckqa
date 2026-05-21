@@ -255,8 +255,8 @@ $radius: 16px;
   position: relative;
   padding: 48px 40px 80px;
   background:
-    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.08), transparent 70%),
-    $bg;
+    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.12), transparent 70%),
+    linear-gradient(180deg, #eff6ff 0%, $bg 100%);
   text-align: center;
 
   .header-content {
@@ -314,7 +314,7 @@ $radius: 16px;
   z-index: 10;
 
   .filter-container {
-    max-width: 900px;
+    max-width: 1100px;
     margin: 0 auto;
     background: $bg-card;
     border: 1px solid $border;
@@ -344,8 +344,15 @@ $radius: 16px;
         background: $course-primary;
         border-color: $course-primary;
         color: #fff;
+        border-left: 0;
 
-        &:hover { background: darken($course-primary, 8%); }
+        &:hover { background: darken($course-primary, 8%); border-color: darken($course-primary, 8%); }
+      }
+
+      .el-input-group__append {
+        background: $course-primary;
+        border-color: $course-primary;
+        box-shadow: none;
       }
     }
   }
