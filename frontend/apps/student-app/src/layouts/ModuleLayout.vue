@@ -80,7 +80,7 @@ const moduleStyle = computed(() => ({
 
   &.collapsed {
     width: 52px;
-    overflow: hidden;
+    overflow: visible;
   }
 
   @media (max-width: $bp-laptop) {

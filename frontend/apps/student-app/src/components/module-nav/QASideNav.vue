@@ -148,6 +148,15 @@ watch(
         </div>
       </Transition>
     </div>
+
+    <span class="collapsed-spacer"></span>
+
+    <!-- 底部：查看全部历史 -->
+    <button class="icon-btn" title="查看全部历史" @click="viewHistory">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+      </svg>
+    </button>
   </nav>
 
   <!-- ===== 展开态：完整侧边栏 ===== -->
@@ -276,6 +285,10 @@ watch(
 
 .icon-btn-wrap {
   position: relative;
+}
+
+.collapsed-spacer {
+  flex: 1;
 }
 
 /* 最近聊天 popover */

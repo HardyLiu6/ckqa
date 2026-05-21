@@ -1293,7 +1293,7 @@ function sourceTypeLabel(source) {
             @click="send"
           >
             <el-icon v-if="sending" class="is-loading" :size="16"><Loading /></el-icon>
-            <span v-else>➤</span>
+            <span v-else class="send-arrow">↑</span>
           </button>
         </div>
       </div>
@@ -1816,6 +1816,12 @@ function sourceTypeLabel(source) {
 
   &:hover:not(:disabled) { transform: translateY(-1px) scale(1.04); box-shadow: 0 16px 36px rgba(147, 51, 234, 0.46); }
   &.disabled, &:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; opacity: 0.7; }
+}
+
+.send-arrow {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .composer-hint {
