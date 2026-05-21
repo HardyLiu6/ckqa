@@ -380,6 +380,64 @@ $radius: 14px;
 .qa-history-page {
   min-height: 100vh;
   background: $bg;
+
+  /* Element Plus 组件主题覆盖 */
+  :deep(.el-button--primary) {
+    background: linear-gradient(135deg, $primary, #6366f1);
+    border-color: transparent;
+    border-radius: 999px;
+    font-weight: 700;
+    box-shadow: 0 4px 14px rgba(147, 51, 234, 0.25);
+
+    &:hover, &:focus { background: linear-gradient(135deg, $primary-dark, #4f46e5); border-color: transparent; }
+  }
+
+  :deep(.el-input) {
+    --el-input-border-radius: 999px;
+    --el-input-border-color: #{$border};
+    --el-input-hover-border-color: rgba(147, 51, 234, 0.35);
+    --el-input-focus-border-color: #{$primary};
+  }
+
+  :deep(.el-input__wrapper) {
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px $border inset;
+    padding: 4px 14px;
+
+    &:hover { box-shadow: 0 0 0 1px rgba(147, 51, 234, 0.35) inset; }
+    &.is-focus { box-shadow: 0 0 0 1px $primary inset, 0 0 0 3px rgba(147, 51, 234, 0.08); }
+  }
+
+  :deep(.el-select) {
+    --el-select-border-color-hover: rgba(147, 51, 234, 0.35);
+  }
+
+  :deep(.el-select .el-input__wrapper) {
+    border-radius: 10px;
+  }
+
+  :deep(.el-radio-group) {
+    --el-radio-button-checked-bg-color: #{$primary};
+    --el-radio-button-checked-border-color: #{$primary};
+    --el-radio-button-checked-text-color: #fff;
+  }
+
+  :deep(.el-radio-button__inner) {
+    border-radius: 999px !important;
+    border-color: $border;
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 7px 14px;
+  }
+
+  :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius: 999px !important; }
+  :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius: 999px !important; }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background: $primary;
+    border-color: $primary;
+    box-shadow: -1px 0 0 0 $primary;
+  }
 }
 
 .page-header {
@@ -407,7 +465,8 @@ $radius: 14px;
     .back-btn {
       border: 1px solid $border;
       background: $bg-card;
-      &:hover { border-color: rgba($primary, 0.3); color: $primary; }
+      border-radius: 10px;
+      &:hover { border-color: rgba($primary, 0.3); color: $primary; background: rgba($primary, 0.04); }
     }
 
     .header-title {
@@ -426,7 +485,7 @@ $radius: 14px;
     gap: 10px;
 
     .search-input { width: 200px; }
-    .more-btn { border: 1px solid $border; background: $bg-card; &:hover { border-color: rgba($primary, 0.3); color: $primary; } }
+    .more-btn { border: 1px solid $border; background: $bg-card; border-radius: 10px; &:hover { border-color: rgba($primary, 0.3); color: $primary; background: rgba($primary, 0.04); } }
   }
 }
 
