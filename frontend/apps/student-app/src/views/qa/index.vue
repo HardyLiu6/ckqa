@@ -1293,7 +1293,7 @@ function sourceTypeLabel(source) {
             @click="send"
           >
             <el-icon v-if="sending" class="is-loading" :size="16"><Loading /></el-icon>
-            <span v-else class="send-arrow">↑</span>
+            <span v-else class="send-arrow">➤</span>
           </button>
         </div>
       </div>
@@ -1822,6 +1822,8 @@ function sourceTypeLabel(source) {
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
+  display: inline-block;
+  transform: rotate(-90deg);
 }
 
 .composer-hint {
