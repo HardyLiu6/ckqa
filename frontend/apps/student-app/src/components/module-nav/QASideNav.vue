@@ -16,6 +16,27 @@ const loading = ref(false)
 const errorMessage = ref('')
 const searchKeyword = ref('')
 const recentPopoverOpen = ref(false)
+const recentBtnRef = ref(null)
+const recentPopoverPos = ref({ top: 0, left: 0 })
+
+function toggleRecentPopover() {
+  if (recentPopoverOpen.value) {
+    recentPopoverOpen.value = false
+    return
+  }
+  const rect = recentBtnRef.value?.getBoundingClientRect?.()
+  if (rect) {
+    recentPopoverPos.value = {
+      top: rect.top,
+      left: rect.right + 8,
+    }
+  }
+  recentPopoverOpen.value = true
+}
+
+function closeRecentPopover() {
+  recentPopoverOpen.value = false
+}
 
 const activeSessionId = computed(() => String(route.query.sessionId ?? ''))
 
@@ -121,32 +142,38 @@ watch(
     </button>
 
     <div class="icon-btn-wrap">
-      <button class="icon-btn" title="最近聊天" @click="recentPopoverOpen = !recentPopoverOpen">
+      <button ref="recentBtnRef" class="icon-btn" title="最近聊天" @click="toggleRecentPopover">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </button>
 
-      <!-- 最近聊天 popover -->
-      <Transition name="pop">
-        <div v-if="recentPopoverOpen" class="recent-popover">
-          <div class="recent-pop-head">最近聊天</div>
-          <div class="recent-pop-list">
-            <div
-              v-for="session in recentTen"
-              :key="session.id"
-              class="recent-pop-item"
-              :class="{ active: session.active }"
-              @click="selectSession(session)"
-            >
-              <svg class="recent-pop-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              <span class="recent-pop-title">{{ session.title }}</span>
+      <!-- 最近聊天 popover · Teleport 到 body 避开父容器约束 -->
+      <Teleport to="body">
+        <Transition name="pop">
+          <div
+            v-if="recentPopoverOpen"
+            class="recent-popover"
+            :style="{ top: recentPopoverPos.top + 'px', left: recentPopoverPos.left + 'px' }"
+          >
+            <div class="recent-pop-head">最近聊天</div>
+            <div class="recent-pop-list">
+              <div
+                v-for="session in recentTen"
+                :key="session.id"
+                class="recent-pop-item"
+                :class="{ active: session.active }"
+                @click="selectSession(session)"
+              >
+                <svg class="recent-pop-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span class="recent-pop-title">{{ session.title }}</span>
+              </div>
             </div>
           </div>
-        </div>
-      </Transition>
+        </Transition>
+      </Teleport>
     </div>
 
     <span class="collapsed-spacer"></span>
@@ -289,64 +316,6 @@ watch(
 
 .collapsed-spacer {
   flex: 1;
-}
-
-/* 最近聊天 popover */
-.recent-popover {
-  position: fixed;
-  top: auto;
-  left: 60px;
-  width: 280px;
-  background: #fff;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 14px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
-  padding: 6px;
-  z-index: 1000;
-}
-
-.recent-pop-head {
-  padding: 10px 12px 6px;
-  font-size: 13px;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.recent-pop-list {
-  max-height: 360px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.recent-pop-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background $duration-fast $ease-out;
-
-  &:hover { background: rgba(148, 163, 184, 0.08); }
-  &.active { background: rgba(147, 51, 234, 0.08); }
-  &.active .recent-pop-title { color: #7e22ce; font-weight: 700; }
-}
-
-.recent-pop-ico {
-  flex-shrink: 0;
-  color: #94a3b8;
-}
-
-.recent-pop-title {
-  font-size: 13px;
-  color: #334155;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
 }
 
 /* ===== 展开态 ===== */
@@ -586,4 +555,62 @@ watch(
 /* Transition */
 .pop-enter-active, .pop-leave-active { transition: opacity $duration-fast $ease-out, transform $duration-fast $ease-out; }
 .pop-enter-from, .pop-leave-to { opacity: 0; transform: translateX(-4px) scale(0.96); }
+</style>
+
+<style lang="scss">
+/* 非 scoped：Teleport 到 body 的 popover 样式 */
+.recent-popover {
+  position: fixed;
+  width: 280px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  z-index: 9999;
+}
+
+.recent-pop-head {
+  padding: 10px 12px 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.recent-pop-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.recent-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover { background: rgba(148, 163, 184, 0.08); }
+  &.active { background: rgba(147, 51, 234, 0.08); }
+  &.active .recent-pop-title { color: #7e22ce; font-weight: 700; }
+}
+
+.recent-pop-ico {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.recent-pop-title {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 </style>
