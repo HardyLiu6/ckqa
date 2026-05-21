@@ -1144,24 +1144,8 @@ function sourceTypeLabel(source) {
       </div>
 
       <div class="composer" :class="{ focused: composerFocused, expanded: isComposerExpanded }">
-        <!-- textarea 区域 -->
-        <div class="composer-body">
-          <textarea
-            ref="composerInputRef"
-            v-model="input"
-            class="composer-input"
-            :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
-            :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
-            rows="1"
-            @focus="composerFocused = true"
-            @blur="composerFocused = false"
-            @keydown.enter.exact.prevent="send"
-            @input="autoResizeInput"
-          ></textarea>
-        </div>
-
-        <!-- 底部工具栏：始终在 textarea 下方 -->
-        <div class="composer-toolbar">
+        <!-- 主行：＋ | textarea | 模式 | 发送（单行胶囊） -->
+        <div class="composer-main-row">
           <div class="plus-ring-wrap">
             <button
               class="plus-ring"
@@ -1197,7 +1181,18 @@ function sourceTypeLabel(source) {
             </Transition>
           </div>
 
-          <span class="toolbar-spacer"></span>
+          <textarea
+            ref="composerInputRef"
+            v-model="input"
+            class="composer-input"
+            :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
+            :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
+            rows="1"
+            @focus="composerFocused = true"
+            @blur="composerFocused = false"
+            @keydown.enter.exact.prevent="send"
+            @input="autoResizeInput"
+          ></textarea>
 
           <!-- 模式 chip -->
           <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
@@ -1205,7 +1200,7 @@ function sourceTypeLabel(source) {
           </button>
 
           <!-- 学习记忆（开启后才显示） -->
-          <button v-if="memoryEnabled" class="chip memory-chip" type="button">
+          <button v-if="memoryEnabled && !isComposerExpanded" class="chip memory-chip" type="button">
             🧠 {{ learningMemoryItems.length }}
           </button>
 
@@ -1223,50 +1218,40 @@ function sourceTypeLabel(source) {
           </button>
         </div>
 
+        <!-- 展开态底部工具栏（多行时才显示） -->
+        <Transition name="toolbar-slide">
+          <div v-if="isComposerExpanded" class="composer-expanded-bar">
+            <button v-if="memoryEnabled" class="chip memory-chip" type="button">
+              🧠 学习记忆 · {{ learningMemoryItems.length }}
+            </button>
+          </div>
+        </Transition>
+
         <!-- Popovers -->
         <div class="composer-popovers">
           <Transition name="pop">
             <div v-if="courseSelectOpen" class="scope-popover">
-              <div class="scope-pop-head">
-                <span>选择课程</span>
-                <button class="scope-pop-close" type="button" @click="courseSelectOpen = false">✕</button>
-              </div>
+              <div class="scope-pop-head"><span>选择课程</span><button class="scope-pop-close" type="button" @click="courseSelectOpen = false">✕</button></div>
               <div class="scope-pop-list">
-                <div class="scope-pop-item" :class="{ active: !selectedCourseId }" @click="handleCourseChange(''); courseSelectOpen = false">
-                  <span>自动识别</span>
-                  <span class="scope-pop-hint">根据问题内容自动匹配</span>
-                </div>
-                <div v-for="course in courses" :key="course.courseId" class="scope-pop-item" :class="{ active: selectedCourseId === course.courseId }" @click="selectedCourseId = course.courseId; handleCourseChange(course.courseId); courseSelectOpen = false">
-                  <span>{{ course.name }}</span>
-                </div>
+                <div class="scope-pop-item" :class="{ active: !selectedCourseId }" @click="handleCourseChange(''); courseSelectOpen = false"><span>自动识别</span><span class="scope-pop-hint">根据问题内容自动匹配</span></div>
+                <div v-for="course in courses" :key="course.courseId" class="scope-pop-item" :class="{ active: selectedCourseId === course.courseId }" @click="selectedCourseId = course.courseId; handleCourseChange(course.courseId); courseSelectOpen = false"><span>{{ course.name }}</span></div>
               </div>
             </div>
           </Transition>
           <Transition name="pop">
             <div v-if="kbSelectOpen" class="scope-popover">
-              <div class="scope-pop-head">
-                <span>选择知识库</span>
-                <button class="scope-pop-close" type="button" @click="kbSelectOpen = false">✕</button>
-              </div>
+              <div class="scope-pop-head"><span>选择知识库</span><button class="scope-pop-close" type="button" @click="kbSelectOpen = false">✕</button></div>
               <div v-if="!selectedCourseId" class="scope-pop-empty">请先选择课程</div>
               <div v-else-if="!knowledgeBases.length" class="scope-pop-empty">该课程暂无知识库</div>
               <div v-else class="scope-pop-list">
-                <div v-for="kb in knowledgeBases" :key="kb.id" class="scope-pop-item" :class="{ active: String(selectedKnowledgeBaseId) === String(kb.id), disabled: kb.activeIndexRunId == null }" @click="kb.activeIndexRunId != null && (selectedKnowledgeBaseId = String(kb.id), handleKnowledgeBaseChange(), kbSelectOpen = false)">
-                  <span>{{ kb.name }}</span>
-                  <span class="scope-pop-hint">{{ kb.activeIndexRunId == null ? '未激活索引' : '索引 #' + kb.activeIndexRunId }}</span>
-                </div>
+                <div v-for="kb in knowledgeBases" :key="kb.id" class="scope-pop-item" :class="{ active: String(selectedKnowledgeBaseId) === String(kb.id), disabled: kb.activeIndexRunId == null }" @click="kb.activeIndexRunId != null && (selectedKnowledgeBaseId = String(kb.id), handleKnowledgeBaseChange(), kbSelectOpen = false)"><span>{{ kb.name }}</span><span class="scope-pop-hint">{{ kb.activeIndexRunId == null ? '未激活索引' : '索引 #' + kb.activeIndexRunId }}</span></div>
               </div>
             </div>
           </Transition>
           <Transition name="pop">
             <div v-if="modeMenuOpen" class="mode-popover">
-              <div v-for="mode in QA_MODE_OPTIONS" :key="mode.value" class="mode-pop-item" :class="{ active: selectedMode === mode.value }" @click="handleModeSelect(mode.value); modeMenuOpen = false">
-                <span class="mode-pop-label">{{ mode.label }}</span>
-                <span class="mode-pop-desc">{{ mode.description }}</span>
-              </div>
-              <div class="mode-pop-foot">
-                <label><input v-model="allowHybridSmartBeta" type="checkbox" @change="handleHybridBetaToggle" /> 允许智能推荐使用混合检索 Beta</label>
-              </div>
+              <div v-for="mode in QA_MODE_OPTIONS" :key="mode.value" class="mode-pop-item" :class="{ active: selectedMode === mode.value }" @click="handleModeSelect(mode.value); modeMenuOpen = false"><span class="mode-pop-label">{{ mode.label }}</span><span class="mode-pop-desc">{{ mode.description }}</span></div>
+              <div class="mode-pop-foot"><label><input v-model="allowHybridSmartBeta" type="checkbox" @change="handleHybridBetaToggle" /> 允许智能推荐使用混合检索 Beta</label></div>
             </div>
           </Transition>
         </div>
@@ -1336,7 +1321,7 @@ function sourceTypeLabel(source) {
   background-clip: text;
   color: transparent;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 32px;
 }
 
 .suggest-row {
@@ -1487,7 +1472,7 @@ function sourceTypeLabel(source) {
   margin: 0 auto;
   background: #fff;
   border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 26px;
+  border-radius: 999px;
   box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
   overflow: visible;
   position: relative;
@@ -1498,23 +1483,29 @@ function sourceTypeLabel(source) {
     box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08), 0 0 0 3px rgba(147, 51, 234, 0.06);
   }
 
+  /* 多行展开态：从胶囊变为圆角矩形 */
   &.expanded {
-    border-radius: 18px;
+    border-radius: 20px;
   }
 }
 
-/* textarea 容器 */
-.composer-body {
-  padding: 14px 18px 0;
+/* 主行：单行胶囊布局 */
+.composer-main-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
 }
 
 .composer-input {
   display: block;
-  width: 100%;
-  min-height: 24px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 8px;
+  min-height: 32px;
   max-height: 200px;
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: #0f172a;
   border: 0;
   outline: 0;
@@ -1531,13 +1522,12 @@ function sourceTypeLabel(source) {
   &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
-/* 底部工具栏 */
-.composer-toolbar {
+/* 展开态额外工具栏 */
+.composer-expanded-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px 10px;
-  position: relative;
+  padding: 0 12px 8px;
 }
 
 .composer-popovers {
@@ -1545,6 +1535,20 @@ function sourceTypeLabel(source) {
 }
 
 .toolbar-spacer { flex: 1; }
+
+/* 工具栏滑入动画 */
+.toolbar-slide-enter-active, .toolbar-slide-leave-active {
+  transition: opacity $duration-fast $ease-out, max-height $duration-fast $ease-out;
+  overflow: hidden;
+}
+.toolbar-slide-enter-from, .toolbar-slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+.toolbar-slide-enter-to, .toolbar-slide-leave-from {
+  opacity: 1;
+  max-height: 40px;
+}
 
 /* 推荐 chips 在 composer 下方 */
 .suggest-row.below-composer {
