@@ -14,6 +14,7 @@ public final class ApiPaths {
     public static final String AUTHORIZATION_AUDIT_LOGS = API_V1 + "/authorization-audit-logs";
     public static final String COURSE_MEMBERSHIP_EVENTS = API_V1 + "/course-membership-events";
     public static final String COURSE_MEMBERSHIPS = API_V1 + "/course-memberships";
+    public static final String COURSE_ROUTING = API_V1 + "/course-routing";
     public static final String COURSES = API_V1 + "/courses";
     public static final String INDEX_ARTIFACTS = API_V1 + "/index-artifacts";
     public static final String INDEX_RUNS = API_V1 + "/index-runs";

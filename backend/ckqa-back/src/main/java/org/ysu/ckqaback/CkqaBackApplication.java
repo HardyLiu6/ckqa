@@ -11,6 +11,7 @@ import org.ysu.ckqaback.auth.config.CkqaSecurityProperties;
 import org.ysu.ckqaback.cache.StudentRedisCacheProperties;
 import org.ysu.ckqaback.course.CourseMaterialProperties;
 import org.ysu.ckqaback.course.CourseCoverProperties;
+import org.ysu.ckqaback.course.routing.CourseRoutingProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.stream.QaTaskStreamProperties;
 import org.ysu.ckqaback.user.UserAvatarProperties;
@@ -24,7 +25,8 @@ import org.ysu.ckqaback.user.UserAvatarProperties;
         CkqaSecurityProperties.class,
         CkqaEmailProperties.class,
         StudentRedisCacheProperties.class,
-        QaTaskStreamProperties.class
+        QaTaskStreamProperties.class,
+        CourseRoutingProperties.class
 })
 @SpringBootApplication
 public class CkqaBackApplication {

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.ysu.ckqaback.mapper.CourseRouteDecisionsMapper">
+    <resultMap id="BaseResultMap" type="org.ysu.ckqaback.entity.CourseRouteDecisions">
+        <id column="id" property="id" />
+        <result column="user_id" property="userId" />
+        <result column="question_hash" property="questionHash" />
+        <result column="question_text" property="questionText" />
+        <result column="status" property="status" />
+        <result column="selected_course_id" property="selectedCourseId" />
+        <result column="confidence" property="confidence" />
+        <result column="margin" property="margin" />
+        <result column="candidates_json" property="candidatesJson" />
+        <result column="embedding_model" property="embeddingModel" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, user_id, question_hash, question_text, status, selected_course_id,
+        confidence, margin, candidates_json, embedding_model, created_at, updated_at
+    </sql>
+</mapper>

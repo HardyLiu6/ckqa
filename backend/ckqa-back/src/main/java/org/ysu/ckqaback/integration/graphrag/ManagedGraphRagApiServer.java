@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
@@ -42,6 +43,7 @@ public class ManagedGraphRagApiServer implements ApplicationRunner, DisposableBe
 
     private final CkqaIntegrationProperties properties;
     private final RestClient.Builder restClientBuilder;
+    private final Environment springEnvironment;
     private final ExecutorService logExecutor = Executors.newFixedThreadPool(2);
 
     private Process process;
@@ -98,8 +100,25 @@ public class ManagedGraphRagApiServer implements ApplicationRunner, DisposableBe
         environment.put("GRAPHRAG_OUTPUT_DIR", outputDir.toString());
         environment.put("GRAPHRAG_STORAGE_DIR", storageDir.toString());
         environment.put("GRAPHRAG_LANCEDB_URI", lancedbUri.toString());
+        copyConfiguredValue(environment, "GRAPHRAG_API_BASE");
+        copyConfiguredValue(environment, "GRAPHRAG_BUILD_RUNS_ROOT");
+        copyConfiguredValue(environment, "GRAPHRAG_CHAT_API_KEY");
+        copyConfiguredValue(environment, "GRAPHRAG_EMBEDDING_API_KEY");
+        copyConfiguredValue(environment, "GRAPHRAG_EMBEDDING_MODEL");
+        copyConfiguredValue(environment, "GRAPHRAG_EMBEDDING_DIMENSION");
+        copyConfiguredValue(environment, "GRAPHRAG_EMBEDDING_DIMENSIONS");
+        copyConfiguredValue(environment, "GRAPHRAG_EMBEDDING_OUTPUT_TYPE");
+        copyConfiguredValue(environment, "GRAPHRAG_COURSE_ROUTER_TABLE");
+        copyConfiguredValue(environment, "GRAPHRAG_COURSE_ROUTER_LANCEDB_URI");
 
         return new StartPlan(command, root, environment);
+    }
+
+    private void copyConfiguredValue(Map<String, String> target, String key) {
+        String value = springEnvironment.getProperty(key);
+        if (hasText(value)) {
+            target.put(key, value.trim());
+        }
     }
 
     private Path resolvePath(Path root, String configured, String defaultValue) {

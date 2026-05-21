@@ -2,6 +2,7 @@ package org.ysu.ckqaback.integration.graphrag;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 
@@ -22,7 +23,12 @@ class ManagedGraphRagApiServerTest {
         properties.getGraphrag().getManagedApi().setEnabled(true);
         properties.getGraphrag().getManagedApi().setPort(18012);
 
-        ManagedGraphRagApiServer server = new ManagedGraphRagApiServer(properties, RestClient.builder());
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("GRAPHRAG_API_BASE", "http://127.0.0.1:3301/v1")
+                .withProperty("GRAPHRAG_EMBEDDING_MODEL", "text-embedding-v4")
+                .withProperty("GRAPHRAG_BUILD_RUNS_ROOT", graphRagRoot.resolve("runtime/kb-build-runs").toString())
+                .withProperty("GRAPHRAG_COURSE_ROUTER_TABLE", "course_profiles_text_embedding_v4");
+        ManagedGraphRagApiServer server = new ManagedGraphRagApiServer(properties, RestClient.builder(), environment);
 
         ManagedGraphRagApiServer.StartPlan plan = server.buildStartPlan();
 
@@ -40,7 +46,11 @@ class ManagedGraphRagApiServerTest {
                 .containsEntry("GRAPHRAG_API_PORT", "18012")
                 .containsEntry("GRAPHRAG_OUTPUT_DIR", graphRagRoot.resolve("output").toString())
                 .containsEntry("GRAPHRAG_STORAGE_DIR", graphRagRoot.resolve("output").toString())
-                .containsEntry("GRAPHRAG_LANCEDB_URI", graphRagRoot.resolve("output/lancedb").toString());
+                .containsEntry("GRAPHRAG_LANCEDB_URI", graphRagRoot.resolve("output/lancedb").toString())
+                .containsEntry("GRAPHRAG_API_BASE", "http://127.0.0.1:3301/v1")
+                .containsEntry("GRAPHRAG_EMBEDDING_MODEL", "text-embedding-v4")
+                .containsEntry("GRAPHRAG_BUILD_RUNS_ROOT", graphRagRoot.resolve("runtime/kb-build-runs").toString())
+                .containsEntry("GRAPHRAG_COURSE_ROUTER_TABLE", "course_profiles_text_embedding_v4");
     }
 
     @Test
@@ -50,7 +60,11 @@ class ManagedGraphRagApiServerTest {
         properties.getGraphrag().setPython("/opt/conda/envs/graphrag-oneapi/bin/python");
         properties.getGraphrag().getManagedApi().setEnabled(true);
 
-        ManagedGraphRagApiServer server = new ManagedGraphRagApiServer(properties, RestClient.builder());
+        ManagedGraphRagApiServer server = new ManagedGraphRagApiServer(
+                properties,
+                RestClient.builder(),
+                new MockEnvironment()
+        );
 
         ManagedGraphRagApiServer.StartPlan plan = server.buildStartPlan();
 

@@ -1,0 +1,19 @@
+{"id":"os_process_001","question":"什么是进程，和程序有什么区别？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","stanford_cs140"],"tags":["os","process"]}
+{"id":"os_thread_001","question":"进程和线程的区别是什么？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081","stanford_cs140"],"tags":["os","thread"]}
+{"id":"os_scheduling_001","question":"CPU 调度算法如何影响响应时间和吞吐量？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","stanford_cs140"],"tags":["os","scheduling"]}
+{"id":"os_context_switch_001","question":"什么是上下文切换，为什么会有开销？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["mit_6s081","stanford_cs140"],"tags":["os","context-switch"]}
+{"id":"os_virtual_memory_001","question":"虚拟内存主要解决了什么问题？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081","stanford_cs140"],"tags":["os","virtual-memory"]}
+{"id":"os_paging_001","question":"分页机制和页面置换算法有什么关系？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","stanford_cs140"],"tags":["os","paging"]}
+{"id":"os_tlb_001","question":"TLB 为什么能加速地址转换？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081"],"tags":["os","memory"]}
+{"id":"os_deadlock_001","question":"死锁产生需要满足哪些必要条件？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["stanford_cs140","nyu_os_syllabus"],"tags":["os","deadlock"]}
+{"id":"os_sync_001","question":"信号量和互斥锁分别适合什么场景？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081","stanford_cs140"],"tags":["os","synchronization"]}
+{"id":"os_filesystem_001","question":"文件系统如何组织目录和文件元数据？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081","stanford_cs140"],"tags":["os","filesystem"]}
+{"id":"os_io_001","question":"I/O 中断和轮询有什么区别？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081"],"tags":["os","io"]}
+{"id":"os_fork_001","question":"fork 创建子进程后父进程和子进程的地址空间有什么关系？","expectedStatus":"matched","expectedCourseId":"crs-20260506-r4slkr","sources":["ostep","mit_6s081"],"tags":["os","process-api"]}
+{"id":"local_smoke_001","question":"GraphRAG build-run isolation smoke course 如何验证构建运行隔离？","expectedStatus":"needs_confirmation","expectedCourseId":null,"sources":["local-db"],"tags":["local-demo","graphrag","internal-excluded"]}
+{"id":"local_member_001","question":"课程成员列表如何验证教师数据范围？","expectedStatus":"matched","expectedCourseId":"crs-20260506-113000","sources":["local-db"],"tags":["local-demo","membership"]}
+{"id":"local_public_001","question":"公开访问演示课不依赖成员关系也能访问吗？","expectedStatus":"matched","expectedCourseId":"crs-20260506-113500","sources":["local-db"],"tags":["local-demo","public-course"]}
+{"id":"no_match_food_001","question":"今天晚上食堂有什么菜？","expectedStatus":"no_match","expectedCourseId":null,"sources":["synthetic-negative"],"tags":["negative","campus-life"]}
+{"id":"no_match_poem_001","question":"帮我写一首关于春天的短诗。","expectedStatus":"no_match","expectedCourseId":null,"sources":["synthetic-negative"],"tags":["negative","creative-writing"]}
+{"id":"no_match_avatar_001","question":"我的头像应该怎么换？","expectedStatus":"no_match","expectedCourseId":null,"sources":["synthetic-negative"],"tags":["negative","profile"]}
+{"id":"no_match_exam_001","question":"这门课什么时候期末考试？","expectedStatus":"no_match","expectedCourseId":null,"sources":["synthetic-negative"],"tags":["negative","administrivia"]}
