@@ -1275,8 +1275,9 @@ function sourceTypeLabel(source) {
 
   position: relative;
   display: flex;
-  min-height: calc(100vh - 64px);
+  height: calc(100vh - 64px - 48px);
   flex-direction: column;
+  overflow: hidden;
   background:
     radial-gradient(1200px 600px at 80% -10%, rgba(168, 85, 247, 0.06), transparent 60%),
     radial-gradient(900px 500px at -5% 110%, rgba(99, 102, 241, 0.04), transparent 60%),
