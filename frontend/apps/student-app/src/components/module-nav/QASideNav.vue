@@ -1,12 +1,15 @@
 <!-- 问答模块副导航 · V2 胶囊风格 · 新建对话 + 搜索 + 时间分组 + 活跃指示条 -->
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listQaSessions } from '@/api/qa'
 import { normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
 
 const router = useRouter()
 const route = useRoute()
+
+const sidebarCollapsed = inject('sidebarCollapsed', ref(false))
+const toggleSidebar = inject('toggleSidebar', () => {})
 
 const rawSessions = ref([])
 const loading = ref(false)
@@ -85,11 +88,16 @@ watch(
 
 <template>
   <nav class="qa-sidebar">
-    <!-- 新建对话 · 胶囊按钮 -->
-    <button class="btn-new" @click="createNew">
-      <span class="btn-new-icon">＋</span>
-      <span>新建对话</span>
-    </button>
+    <!-- 顶部：新建对话 + 折叠按钮 -->
+    <div class="sidebar-head">
+      <button class="btn-new" @click="createNew">
+        <span class="btn-new-icon">＋</span>
+        <span>新建对话</span>
+      </button>
+      <button class="btn-collapse" type="button" title="收起侧边栏" @click="toggleSidebar">
+        <span class="collapse-icon">◂</span>
+      </button>
+    </div>
 
     <!-- 搜索 · 胶囊 -->
     <div class="search-wrap">
@@ -186,12 +194,19 @@ watch(
 }
 
 /* 新建对话 · 胶囊 */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .btn-new {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  width: 100%;
+  flex: 1;
   height: 42px;
   border-radius: 999px;
   border: 0;
@@ -202,12 +217,38 @@ watch(
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(147, 51, 234, 0.28);
   transition: transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
-  margin-bottom: 12px;
 
   &:hover {
     transform: translateY(-1px);
     box-shadow: 0 12px 28px rgba(147, 51, 234, 0.38);
   }
+}
+
+.btn-collapse {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: background $duration-fast $ease-out, border-color $duration-fast $ease-out, color $duration-fast $ease-out;
+
+  &:hover {
+    background: #fff;
+    border-color: rgba(147, 51, 234, 0.32);
+    color: #7e22ce;
+  }
+}
+
+.collapse-icon {
+  display: block;
+  line-height: 1;
 }
 
 .btn-new-icon {

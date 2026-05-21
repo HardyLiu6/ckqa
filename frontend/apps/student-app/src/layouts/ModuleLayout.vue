@@ -1,13 +1,22 @@
 <!-- 模块壳：顶栏 + 左侧副导航 + 主内容 -->
 <!-- 副导航组件按 route.meta.moduleNav 动态装载 -->
 <script setup>
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, provide, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import NavHeader from '@/components/NavHeader.vue'
 import { useCurrentModule } from '@/composables/useCurrentModule'
 
 const route = useRoute()
 const { moduleKey, colors } = useCurrentModule()
+
+// 侧边栏折叠状态
+const sidebarCollapsed = ref(false)
+provide('sidebarCollapsed', sidebarCollapsed)
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+provide('toggleSidebar', toggleSidebar)
 
 // 按模块懒加载副导航
 const sideNavMap = {
@@ -31,7 +40,7 @@ const moduleStyle = computed(() => ({
   <div class="module-layout" :style="moduleStyle">
     <NavHeader />
     <div class="module-body">
-      <aside class="module-sidebar">
+      <aside class="module-sidebar" :class="{ collapsed: sidebarCollapsed }">
         <component :is="SideNav" v-if="SideNav" />
       </aside>
       <main class="module-main">
@@ -61,19 +70,24 @@ const moduleStyle = computed(() => ({
 }
 
 .module-sidebar {
-  width: 220px;
+  width: 280px;
   flex-shrink: 0;
   position: sticky;
   top: 64px;
   height: calc(100vh - 64px);
   overflow-y: auto;
+  transition: width $duration-base $ease-out;
+
+  &.collapsed {
+    width: 0;
+    overflow: hidden;
+  }
 
   @media (max-width: $bp-laptop) {
-    width: 60px; // 只显示图标
+    width: 240px;
   }
 
   @media (max-width: $bp-tablet) {
-    // 改为抽屉，实际抽屉交互在 NavHeader 里触发
     display: none;
   }
 }

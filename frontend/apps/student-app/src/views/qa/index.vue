@@ -1,6 +1,6 @@
 <!-- frontend/apps/student-app/src/views/qa/index.vue -->
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -79,6 +79,11 @@ const composerInputRef = ref(null)
 const composerFocused = ref(false)
 const plusMenuOpen = ref(false)
 const modeMenuOpen = ref(false)
+const courseSelectOpen = ref(false)
+const kbSelectOpen = ref(false)
+
+const sidebarCollapsed = inject('sidebarCollapsed', ref(false))
+const toggleSidebar = inject('toggleSidebar', () => {})
 
 const courses = ref([])
 const knowledgeBases = ref([])
@@ -1014,6 +1019,15 @@ function sourceTypeLabel(source) {
 
 <template>
   <div class="qa-ask-page">
+    <!-- 侧边栏展开按钮（收起时显示） -->
+    <button
+      v-if="sidebarCollapsed"
+      class="expand-sidebar-btn"
+      type="button"
+      title="展开侧边栏"
+      @click="toggleSidebar"
+    >▸</button>
+
     <!-- 主对话区 -->
     <div ref="mainRef" class="qa-main" aria-live="polite">
       <!-- 空态欢迎 -->
@@ -1179,15 +1193,15 @@ function sourceTypeLabel(source) {
                   <span class="pm-toggle" :class="memoryEnabled ? 'on' : 'off'"></span>
                 </div>
                 <div class="plus-menu-sep"></div>
-                <div class="plus-menu-item" @click="plusMenuOpen = false">
+                <div class="plus-menu-item" @click="courseSelectOpen = !courseSelectOpen; plusMenuOpen = false">
                   <span class="pm-ico">📚</span>
                   <span>课程</span>
-                  <span class="pm-value">{{ selectedCourse?.name || '自动识别' }}</span>
+                  <span class="pm-value">{{ selectedCourse?.name || '自动识别' }} ›</span>
                 </div>
-                <div class="plus-menu-item" @click="plusMenuOpen = false">
+                <div class="plus-menu-item" @click="kbSelectOpen = !kbSelectOpen; plusMenuOpen = false">
                   <span class="pm-ico">🗂️</span>
                   <span>知识库</span>
-                  <span class="pm-value">{{ selectedKnowledgeBase?.name || '自动选择' }}</span>
+                  <span class="pm-value">{{ selectedKnowledgeBase?.name || '自动选择' }} ›</span>
                 </div>
               </div>
             </Transition>
@@ -1198,6 +1212,59 @@ function sourceTypeLabel(source) {
             ✨ {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }}
             <span class="chip-arrow">▾</span>
           </button>
+
+          <!-- 课程选择 popover -->
+          <Transition name="pop">
+            <div v-if="courseSelectOpen" class="scope-popover">
+              <div class="scope-pop-head">
+                <span>选择课程</span>
+                <button class="scope-pop-close" type="button" @click="courseSelectOpen = false">✕</button>
+              </div>
+              <div class="scope-pop-list">
+                <div
+                  class="scope-pop-item"
+                  :class="{ active: !selectedCourseId }"
+                  @click="handleCourseChange(''); courseSelectOpen = false"
+                >
+                  <span>自动识别</span>
+                  <span class="scope-pop-hint">根据问题内容自动匹配</span>
+                </div>
+                <div
+                  v-for="course in courses"
+                  :key="course.courseId"
+                  class="scope-pop-item"
+                  :class="{ active: selectedCourseId === course.courseId }"
+                  @click="selectedCourseId = course.courseId; handleCourseChange(course.courseId); courseSelectOpen = false"
+                >
+                  <span>{{ course.name }}</span>
+                </div>
+              </div>
+            </div>
+          </Transition>
+
+          <!-- 知识库选择 popover -->
+          <Transition name="pop">
+            <div v-if="kbSelectOpen" class="scope-popover">
+              <div class="scope-pop-head">
+                <span>选择知识库</span>
+                <button class="scope-pop-close" type="button" @click="kbSelectOpen = false">✕</button>
+              </div>
+              <div v-if="!selectedCourseId" class="scope-pop-empty">请先选择课程</div>
+              <div v-else-if="!knowledgeBases.length" class="scope-pop-empty">该课程暂无知识库</div>
+              <div v-else class="scope-pop-list">
+                <div
+                  v-for="kb in knowledgeBases"
+                  :key="kb.id"
+                  class="scope-pop-item"
+                  :class="{ active: String(selectedKnowledgeBaseId) === String(kb.id), disabled: kb.activeIndexRunId == null }"
+                  @click="kb.activeIndexRunId != null && (selectedKnowledgeBaseId = String(kb.id), handleKnowledgeBaseChange(), kbSelectOpen = false)"
+                >
+                  <span>{{ kb.name }}</span>
+                  <span class="scope-pop-hint">{{ kb.activeIndexRunId == null ? '未激活索引' : '索引 #' + kb.activeIndexRunId }}</span>
+                </div>
+              </div>
+            </div>
+          </Transition>
 
           <!-- 模式选择 popover -->
           <Transition name="pop">
@@ -1272,6 +1339,34 @@ function sourceTypeLabel(source) {
 }
 
 /* ===== 主对话区 ===== */
+.expand-sidebar-btn {
+  position: fixed;
+  left: 12px;
+  top: 80px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #7e22ce;
+  font-size: 16px;
+  font-family: inherit;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  transition: background $duration-fast $ease-out, border-color $duration-fast $ease-out, transform $duration-fast $ease-out;
+
+  &:hover {
+    background: #fff;
+    border-color: rgba(147, 51, 234, 0.4);
+    transform: scale(1.08);
+  }
+}
+
 .qa-main {
   display: flex;
   flex: 1;
@@ -1667,6 +1762,79 @@ function sourceTypeLabel(source) {
 
   input { accent-color: #9333ea; width: 13px; height: 13px; }
   label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+}
+
+/* 课程/知识库选择 popover */
+.scope-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 48px;
+  width: 300px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  z-index: 12;
+}
+
+.scope-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.scope-pop-close {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: inherit;
+
+  &:hover { color: #475569; }
+}
+
+.scope-pop-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scope-pop-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+  transition: background $duration-fast $ease-out;
+
+  &:hover { background: rgba(147, 51, 234, 0.06); }
+  &.active { background: rgba(147, 51, 234, 0.1); color: #7e22ce; }
+  &.disabled { opacity: 0.5; cursor: not-allowed; &:hover { background: transparent; } }
+}
+
+.scope-pop-hint {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.scope-pop-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12.5px;
 }
 
 /* 发送按钮 */
