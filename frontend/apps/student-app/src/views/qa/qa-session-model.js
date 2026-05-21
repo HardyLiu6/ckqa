@@ -255,6 +255,8 @@ export function toQaSideNavSession(session, activeSessionId = '', now = new Date
     ...normalized,
     active: String(activeSessionId || '') === String(normalized.id ?? ''),
     meta: sideNavSessionMeta(normalized, referenceTime, now),
+    relativeTime: formatRelativeSessionTime(referenceTime, now),
+    dateStr: String(referenceTime || '').slice(0, 10) || now.toISOString().slice(0, 10),
   }
 }
 
