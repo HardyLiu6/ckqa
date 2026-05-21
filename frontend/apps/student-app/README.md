@@ -13,7 +13,7 @@
 - 技术栈：Vue 3、Vite、Element Plus、Pinia、Vue Router、Sass
 - 动效与体验依赖：AOS、GSAP、Lenis
 - 当前角色：学员端页面与交互原型，不是完整正式业务前端
-- 当前数据状态：登录注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；社区、学习分析和部分用户中心页面仍是占位或本地原型
+- 当前数据状态：登录注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、无显式课程时的课程画像路由、模式推荐和知识图谱浏览已走 Java `/api/v1`；社区、学习分析和部分用户中心页面仍是占位或本地原型
 - 当前工程形态：已纳入 CKQA 根仓库直接管理，依赖锁文件以 `pnpm-lock.yaml` 为准，生成依赖和构建产物继续通过本目录 `.gitignore` 忽略
 
 这意味着它更适合做：
@@ -125,6 +125,7 @@ http://127.0.0.1:5174
 - 路由、菜单、页面结构已经初步成型
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
 - 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `delta`，不可用时自动回退到 task 轮询或最终答案分段
+- 问答页在没有 URL、手动选择或历史会话 `courseId` 时，会先调用 Java `/api/v1/course-routing/recommend`；高置信 `matched` 自动选课，分数够但分差不足的 `needs_confirmation` 展示候选课程，确认后保留当前 QA mode 并继续发送原问题；明显非课程问题会得到 `no_match`，前端提示先选择课程，不直接发送正式问答
 - 问答页会把 `courseId`、`sessionId`、`mode`、`topic` 写入路由 query；从图谱节点、问答侧栏、刷新页面返回时可以恢复课程与会话上下文
 - 顶栏会在首屏稳定后预加载课程、问答、知识图谱模块和副导航，G6 图谱画布也改为进入图谱页后再延迟加载
 - 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在

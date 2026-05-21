@@ -525,6 +525,47 @@ Content-Type: application/json
 - `dataDirUri` 是相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的后端内部路径，Python 会拒绝绝对路径、`..` 逃逸和反斜杠路径。
 - 旧调用不传 `dataDirUri` 时，Python 仍会回退到共享 `output/`，该路径只作为 CLI 调试和兼容保留。
 
+### 抽取课程画像 hints
+
+```http
+POST http://127.0.0.1:8012/v1/internal/course-routing/profile-hints
+Content-Type: application/json
+```
+
+该端点只供 Java 内部课程路由画像生成使用。Python 会从 `section_docs.json` / `text_units.parquet` 抽取章节来源和关键词 hints，不读取 `entities` / `community_reports` 派生产物。
+
+请求体：
+
+```json
+{
+  "courseId": "crs-20260506-r4slkr",
+  "dataDirUris": ["user_0/kb_5/build_19/index/output"],
+  "seedKeywords": ["操作系统2026春", "操作系统"],
+  "maxHints": 24
+}
+```
+
+响应：
+
+```json
+{
+  "items": [
+    {
+      "heading": "第六章 输入输出系统 > 6.3 中断机构和中断处理程序",
+      "keywords": ["I/O", "设备驱动程序", "中断", "轮询"],
+      "sourceType": "text_units",
+      "sourceRef": "249",
+      "score": 4.0
+    }
+  ],
+  "sourceCounts": {
+    "text_units": 1
+  }
+}
+```
+
+`dataDirUris` 仍必须是相对 `GRAPHRAG_BUILD_RUNS_ROOT` 的安全路径；Python 会拒绝绝对路径、`..` 逃逸和解析后落到根目录外的路径。
+
 ### 查询 Python 任务快照
 
 ```http

@@ -14,7 +14,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 - `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
 - `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
-- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话/任务事件流、学习记忆和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
+- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话/任务事件流、学习记忆、无显式课程时的课程画像路由和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
 - `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、资料详情解析进度、解析结果详情、知识库、构建向导、QA 冒烟验证和统一错误页。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
@@ -28,7 +28,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
 | `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程只读和知识图谱基础浏览已接 Java `/api/v1`，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程画像路由、课程只读和知识图谱基础浏览已接 Java `/api/v1`，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，资料详情已展示解析进度并支持进入解析结果详情，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
