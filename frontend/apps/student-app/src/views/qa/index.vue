@@ -1143,20 +1143,8 @@ function sourceTypeLabel(source) {
       </div>
 
       <div class="composer" :class="{ focused: composerFocused, expanded: isComposerExpanded }">
-        <textarea
-          ref="composerInputRef"
-          v-model="input"
-          class="composer-input"
-          :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
-          :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
-          rows="1"
-          @focus="composerFocused = true"
-          @blur="composerFocused = false"
-          @keydown.enter.exact.prevent="send"
-          @input="autoResizeInput"
-        ></textarea>
-        <div class="composer-toolbar">
-          <!-- 左侧 Codex 圆环 -->
+        <!-- 单行态：＋ 按钮 + input + 模式 + 发送 在同一行 -->
+        <div class="composer-row">
           <div class="plus-ring-wrap">
             <button
               class="plus-ring"
@@ -1192,11 +1180,45 @@ function sourceTypeLabel(source) {
             </Transition>
           </div>
 
-          <!-- 模式 chip -->
+          <textarea
+            ref="composerInputRef"
+            v-model="input"
+            class="composer-input"
+            :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
+            :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
+            rows="1"
+            @focus="composerFocused = true"
+            @blur="composerFocused = false"
+            @keydown.enter.exact.prevent="send"
+            @input="autoResizeInput"
+          ></textarea>
+
+          <!-- 模式 chip（单行内） -->
           <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
             {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }} ▾
           </button>
 
+          <!-- 学习记忆（开启后才显示） -->
+          <button v-if="memoryEnabled" class="chip memory-chip" type="button">
+            🧠 {{ learningMemoryItems.length }}
+          </button>
+
+          <!-- 发送 -->
+          <button
+            class="send-btn"
+            :class="{ active: canSend }"
+            :disabled="!canSend"
+            type="button"
+            aria-label="发送问题"
+            @click="send"
+          >
+            <el-icon v-if="sending" class="is-loading" :size="16"><Loading /></el-icon>
+            <span v-else class="send-arrow">➤</span>
+          </button>
+        </div>
+
+        <!-- 展开态底部工具栏（多行时显示 popovers） -->
+        <div class="composer-popovers">
           <!-- 课程选择 popover -->
           <Transition name="pop">
             <div v-if="courseSelectOpen" class="scope-popover">
@@ -1271,26 +1293,6 @@ function sourceTypeLabel(source) {
               </div>
             </div>
           </Transition>
-
-          <span class="toolbar-spacer"></span>
-
-          <!-- 学习记忆（开启后才显示） -->
-          <button v-if="memoryEnabled" class="chip memory-chip" type="button">
-            🧠 学习记忆 · {{ learningMemoryItems.length }}
-          </button>
-
-          <!-- 发送 -->
-          <button
-            class="send-btn"
-            :class="{ active: canSend }"
-            :disabled="!canSend"
-            type="button"
-            aria-label="发送问题"
-            @click="send"
-          >
-            <el-icon v-if="sending" class="is-loading" :size="16"><Loading /></el-icon>
-            <span v-else class="send-arrow">➤</span>
-          </button>
         </div>
       </div>
 
@@ -1514,6 +1516,7 @@ function sourceTypeLabel(source) {
   border-radius: 26px;
   box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
   overflow: visible;
+  position: relative;
   transition: border-radius $duration-base $ease-out, border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
   &.focused {
@@ -1527,14 +1530,23 @@ function sourceTypeLabel(source) {
   }
 }
 
+/* 单行布局：＋ | textarea | 模式 | 记忆 | 发送 */
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 10px 8px 8px;
+}
+
 .composer-input {
   display: block;
-  width: 100%;
-  padding: 14px 20px 4px;
-  min-height: 44px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px;
+  min-height: 36px;
   max-height: 200px;
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: #0f172a;
   border: 0;
   outline: 0;
@@ -1544,7 +1556,6 @@ function sourceTypeLabel(source) {
   overflow-y: auto;
   transition: min-height $duration-fast $ease-out;
 
-  /* 滚动条 */
   &::-webkit-scrollbar { width: 6px; }
   &::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
   &::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
@@ -1553,12 +1564,7 @@ function sourceTypeLabel(source) {
   &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
-.composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px 10px;
-  flex-wrap: wrap;
+.composer-popovers {
   position: relative;
 }
 
