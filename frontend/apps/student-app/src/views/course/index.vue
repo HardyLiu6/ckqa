@@ -91,7 +91,8 @@
         </el-empty>
       </div>
       <div v-else class="course-grid">
-        <div v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goToDetail(course.id)">
+        <TransitionGroup name="card" tag="div" class="course-grid-inner">
+          <div v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goToDetail(course.id)">
           <!-- 课程封面 -->
           <div class="card-cover">
             <img :src="course.cover || defaultCover" :alt="course.title" />
@@ -163,6 +164,7 @@
             </div>
           </div>
         </div>
+        </TransitionGroup>
       </div>
 
       <!-- 空状态 -->
@@ -454,8 +456,32 @@ $radius: 16px;
 
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 20px;
+}
+
+.course-grid-inner {
+  display: contents;
+}
+
+/* TransitionGroup 动画 */
+.card-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.card-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  position: absolute;
+}
+.card-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+}
+.card-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+.card-move {
+  transition: transform 0.4s ease;
 }
 
 // 课程卡片
