@@ -234,79 +234,73 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+$course-primary: #2563eb;
+$course-light: #3b82f6;
+$course-50: #eff6ff;
+$text: #0f172a;
+$text-secondary: #475569;
+$text-muted: #94a3b8;
+$border: rgba(226, 232, 240, 0.9);
+$bg: #f8fafc;
+$bg-card: #fff;
+$radius: 16px;
+
 .course-list-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+  background: $bg;
 }
 
-// 页面头部
+// 页面头部 · 轻量白底
 .page-header {
   position: relative;
-  padding: 60px 40px 100px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -10%;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-    border-radius: 50%;
-  }
+  padding: 48px 40px 80px;
+  background:
+    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.08), transparent 70%),
+    $bg;
+  text-align: center;
 
   .header-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 32px;
   }
 
   .page-title {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    font-size: 42px;
-    font-weight: 700;
-    color: #fff;
-    margin: 0 0 16px;
+    gap: 12px;
+    font-size: 28px;
+    font-weight: 800;
+    color: $text;
+    margin: 0 0 10px;
 
-    .el-icon {
-      font-size: 48px;
-    }
+    .el-icon { font-size: 32px; color: $course-primary; }
   }
 
   .page-subtitle {
-    font-size: 18px;
-    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+    color: $text-muted;
     margin: 0;
-    letter-spacing: 2px;
   }
 
   .header-stats {
-    position: relative;
-    z-index: 2;
     display: flex;
     justify-content: center;
-    gap: 60px;
+    gap: 48px;
 
     .stat-item {
       text-align: center;
 
       .stat-num {
         display: block;
-        font-size: 36px;
-        font-weight: 700;
-        color: #fff;
-        margin-bottom: 8px;
+        font-size: 28px;
+        font-weight: 800;
+        color: $course-primary;
+        margin-bottom: 4px;
       }
 
       .stat-label {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.8);
+        font-size: 12.5px;
+        color: $text-muted;
       }
     }
   }
@@ -314,34 +308,44 @@ onMounted(() => {
 
 // 筛选区域
 .filter-section {
-  margin-top: -50px;
+  margin-top: -40px;
   padding: 0 40px;
   position: relative;
   z-index: 10;
 
   .filter-container {
-    max-width: 1200px;
+    max-width: 900px;
     margin: 0 auto;
-    background: #fff;
-    border-radius: 20px;
-    padding: 32px;
-    box-shadow: 0 10px 60px rgba(102, 126, 234, 0.15);
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: $radius;
+    padding: 24px 28px;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
   }
 
   .search-box {
-    margin-bottom: 28px;
+    margin-bottom: 20px;
 
     :deep(.el-input) {
-      max-width: 700px;
+      max-width: 100%;
 
       .el-input__wrapper {
-        border-radius: 12px;
+        border-radius: 999px;
         padding: 4px 16px;
+        box-shadow: 0 0 0 1px $border inset;
+
+        &:hover { box-shadow: 0 0 0 1px rgba($course-primary, 0.35) inset; }
+        &.is-focus { box-shadow: 0 0 0 1px $course-primary inset, 0 0 0 3px rgba($course-primary, 0.08); }
       }
 
       .el-input-group__append .el-button {
-        border-radius: 0 12px 12px 0;
-        padding: 0 24px;
+        border-radius: 0 999px 999px 0;
+        padding: 0 20px;
+        background: $course-primary;
+        border-color: $course-primary;
+        color: #fff;
+
+        &:hover { background: darken($course-primary, 8%); }
       }
     }
   }
@@ -350,144 +354,163 @@ onMounted(() => {
   .sort-filter {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 14px;
 
-    &:last-child {
-      margin-bottom: 0;
-    }
+    &:last-child { margin-bottom: 0; }
   }
 
   .filter-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: #606266;
+    font-size: 13px;
+    font-weight: 700;
+    color: $text-secondary;
     white-space: nowrap;
   }
 
   .category-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
   }
 
   .category-tag {
     cursor: pointer;
-    transition: all 0.3s ease;
-    border-radius: 20px;
-    padding: 8px 20px;
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: 12.5px;
+    transition: all 0.2s ease;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba($course-primary, 0.15);
     }
+  }
+
+  :deep(.el-radio-group) {
+    --el-radio-button-checked-bg-color: #{$course-primary};
+    --el-radio-button-checked-border-color: #{$course-primary};
+    --el-radio-button-checked-text-color: #fff;
+  }
+
+  :deep(.el-radio-button__inner) {
+    border-radius: 999px !important;
+    border-color: $border;
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 7px 14px;
+  }
+
+  :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius: 999px !important; }
+  :deep(.el-radio-button:last-child .el-radio-button__inner) { border-radius: 999px !important; }
+
+  :deep(.el-radio-button.is-active .el-radio-button__inner) {
+    background: $course-primary;
+    border-color: $course-primary;
+    box-shadow: -1px 0 0 0 $course-primary;
   }
 }
 
 // 课程列表
 .course-section {
-  max-width: 1400px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 50px 40px;
+  padding: 40px;
 }
 
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 28px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 
 // 课程卡片
 .course-card {
-  background: #fff;
-  border-radius: 20px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 
   &:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 24px 50px rgba(102, 126, 234, 0.18);
+    transform: translateY(-4px);
+    border-color: rgba($course-primary, 0.3);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 
-    .card-cover img {
-      transform: scale(1.08);
-    }
-
-    .cover-overlay {
-      opacity: 1;
-    }
+    .card-cover img { transform: scale(1.04); }
+    .cover-overlay { opacity: 1; }
   }
 
   .card-cover {
     position: relative;
-    height: 190px;
+    height: 170px;
     overflow: hidden;
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transition: transform 0.6s ease;
+      transition: transform 0.4s ease;
     }
 
     .cover-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.85), rgba(118, 75, 162, 0.85));
+      background: rgba(37, 99, 235, 0.7);
       display: flex;
       align-items: center;
       justify-content: center;
       opacity: 0;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.3s ease;
     }
 
     .card-tags {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 12px;
+      left: 12px;
 
       .el-tag {
         font-weight: 600;
-        padding: 6px 14px;
-        border-radius: 20px;
+        padding: 4px 12px;
+        border-radius: 999px;
       }
     }
 
     .card-category {
       position: absolute;
-      top: 16px;
-      right: 16px;
-      background: rgba(0, 0, 0, 0.6);
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.5);
       color: #fff;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
     }
   }
 
   .card-content {
-    padding: 24px;
+    padding: 20px;
   }
 
   .course-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1a1a2e;
-    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: $text;
+    margin: 0 0 8px;
     line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: 54px;
+    min-height: 48px;
   }
 
   .course-desc {
-    font-size: 14px;
-    color: #8c8c8c;
-    margin: 0 0 18px;
-    line-height: 1.7;
+    font-size: 13px;
+    color: $text-muted;
+    margin: 0 0 14px;
+    line-height: 1.6;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -497,56 +520,39 @@ onMounted(() => {
   .teacher-info {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 18px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid #f5f5f5;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.7);
 
-    .teacher-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .teacher-name {
-      font-size: 14px;
-      color: #303133;
-      font-weight: 500;
-    }
-
-    .teacher-title {
-      font-size: 12px;
-      color: #909399;
-    }
+    .teacher-text { display: flex; flex-direction: column; gap: 1px; }
+    .teacher-name { font-size: 13px; color: $text; font-weight: 600; }
+    .teacher-title { font-size: 11.5px; color: $text-muted; }
   }
 
   .course-meta {
     display: flex;
-    gap: 20px;
-    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 12px;
 
     .meta-item {
       display: flex;
       align-items: center;
-      gap: 5px;
-      font-size: 13px;
-      color: #909399;
-
-      &.rating {
-        color: #f7ba2a;
-        font-weight: 600;
-      }
+      gap: 4px;
+      font-size: 12px;
+      color: $text-muted;
     }
   }
 
   .course-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
 
     .el-tag {
-      border-radius: 6px;
-      font-size: 12px;
+      border-radius: 999px;
+      font-size: 11px;
     }
   }
 }
@@ -554,42 +560,19 @@ onMounted(() => {
 // 响应式
 @media (max-width: 768px) {
   .page-header {
-    padding: 40px 20px 80px;
-
-    .page-title {
-      font-size: 28px;
-    }
-
-    .header-stats {
-      gap: 30px;
-
-      .stat-num {
-        font-size: 28px;
-      }
-    }
+    padding: 32px 20px 60px;
+    .page-title { font-size: 22px; }
+    .header-stats { gap: 24px; .stat-num { font-size: 22px; } }
   }
 
   .filter-section {
     padding: 0 16px;
-    margin-top: -40px;
-
-    .filter-container {
-      padding: 24px 20px;
-    }
-
-    .category-filter,
-    .sort-filter {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+    margin-top: -30px;
+    .filter-container { padding: 18px 16px; }
+    .category-filter, .sort-filter { flex-direction: column; align-items: flex-start; }
   }
 
-  .course-section {
-    padding: 30px 16px;
-  }
-
-  .course-grid {
-    grid-template-columns: 1fr;
-  }
+  .course-section { padding: 24px 16px; }
+  .course-grid { grid-template-columns: 1fr; }
 }
 </style>
