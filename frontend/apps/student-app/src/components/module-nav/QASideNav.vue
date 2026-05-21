@@ -66,6 +66,13 @@ async function loadRecentSessions() {
   try {
     const payload = await listQaSessions({ status: 'active', page: 1, size: 20 })
     rawSessions.value = normalizeQaSessionList(payload)
+    // 只保留近一个月的会话，更早的通过「查看全部历史」获取
+    const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    rawSessions.value = rawSessions.value.filter((s) => {
+      const ref = s.lastMessageAt || s.createdAt || ''
+      if (!ref) return true
+      return new Date(ref) >= oneMonthAgo
+    })
   } catch (error) {
     rawSessions.value = []
     errorMessage.value = error?.message || '历史会话加载失败'
@@ -95,7 +102,10 @@ watch(
         <span>新建对话</span>
       </button>
       <button class="btn-collapse" type="button" title="收起侧边栏" @click="toggleSidebar">
-        <span class="collapse-icon">◂</span>
+        <svg class="collapse-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="4" />
+          <line x1="9" y1="3" x2="9" y2="21" />
+        </svg>
       </button>
     </div>
 
@@ -247,8 +257,9 @@ watch(
 }
 
 .collapse-icon {
-  display: block;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-new-icon {
