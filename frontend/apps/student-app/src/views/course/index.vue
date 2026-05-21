@@ -32,38 +32,50 @@
       <div class="filter-container">
         <!-- 搜索框 -->
         <div class="search-box">
-          <el-input v-model="searchKeyword" placeholder="搜索课程名称、关键词..." size="large" clearable
-            @keyup.enter="onSearch">
-            <template #prefix>
-              <el-icon>
-                <Search />
-              </el-icon>
-            </template>
-            <template #append>
-              <el-button type="primary" @click="onSearch">搜索</el-button>
-            </template>
-          </el-input>
+          <div class="search-inner">
+            <el-icon class="search-icon"><Search /></el-icon>
+            <input
+              v-model="searchKeyword"
+              class="search-input"
+              placeholder="搜索课程名称、关键词..."
+              @keyup.enter="onSearch"
+            />
+          </div>
+          <button class="search-btn" type="button" @click="onSearch">搜索</button>
         </div>
 
         <!-- 分类筛选 -->
         <div class="category-filter" v-if="allCategories.length > 1">
           <span class="filter-label">课程分类：</span>
-          <div class="category-tags">
-            <el-tag v-for="cat in allCategories" :key="cat" :type="selectedCategory === cat ? '' : 'info'"
-              :effect="selectedCategory === cat ? 'dark' : 'plain'" class="category-tag"
-              @click="selectedCategory = cat">
-              {{ cat }}
-            </el-tag>
+          <div class="filter-pills">
+            <button
+              v-for="cat in allCategories"
+              :key="cat"
+              class="filter-pill"
+              :class="{ active: selectedCategory === cat }"
+              type="button"
+              @click="selectedCategory = cat"
+            >{{ cat }}</button>
           </div>
         </div>
 
         <!-- 我加入的 / 全部可见 -->
         <div class="sort-filter">
           <span class="filter-label">范围：</span>
-          <el-radio-group v-model="scope">
-            <el-radio-button value="all">全部可见</el-radio-button>
-            <el-radio-button value="member">我加入的</el-radio-button>
-          </el-radio-group>
+          <div class="filter-pills">
+            <button
+              class="filter-pill"
+              :class="{ active: scope === 'all' }"
+              type="button"
+              @click="scope = 'all'"
+            >全部可见</button>
+            <button
+              class="filter-pill"
+              :class="{ active: scope === 'member' }"
+              type="button"
+              @click="scope = 'member'"
+            >我加入的</button>
+          </div>
         </div>
       </div>
     </div>
@@ -79,7 +91,8 @@
         </el-empty>
       </div>
       <div v-else class="course-grid">
-        <div v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goToDetail(course.id)">
+        <TransitionGroup name="card" tag="div" class="course-grid-inner">
+          <div v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goToDetail(course.id)">
           <!-- 课程封面 -->
           <div class="card-cover">
             <img :src="course.cover || defaultCover" :alt="course.title" />
@@ -151,6 +164,7 @@
             </div>
           </div>
         </div>
+        </TransitionGroup>
       </div>
 
       <!-- 空状态 -->
@@ -234,79 +248,73 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+$course-primary: #2563eb;
+$course-light: #3b82f6;
+$course-50: #eff6ff;
+$text: #0f172a;
+$text-secondary: #475569;
+$text-muted: #94a3b8;
+$border: rgba(226, 232, 240, 0.9);
+$bg: #f8fafc;
+$bg-card: #fff;
+$radius: 16px;
+
 .course-list-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+  background: $bg;
 }
 
-// 页面头部
+// 页面头部 · 轻量白底
 .page-header {
   position: relative;
-  padding: 60px 40px 100px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    right: -10%;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-    border-radius: 50%;
-  }
+  padding: 48px 40px 80px;
+  background:
+    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.18), transparent 70%),
+    linear-gradient(180deg, #dbeafe 0%, $bg 100%);
+  text-align: center;
 
   .header-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 32px;
   }
 
   .page-title {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    font-size: 42px;
-    font-weight: 700;
-    color: #fff;
-    margin: 0 0 16px;
+    gap: 12px;
+    font-size: 28px;
+    font-weight: 800;
+    color: $text;
+    margin: 0 0 10px;
 
-    .el-icon {
-      font-size: 48px;
-    }
+    .el-icon { font-size: 32px; color: $course-primary; }
   }
 
   .page-subtitle {
-    font-size: 18px;
-    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+    color: $text-muted;
     margin: 0;
-    letter-spacing: 2px;
   }
 
   .header-stats {
-    position: relative;
-    z-index: 2;
     display: flex;
     justify-content: center;
-    gap: 60px;
+    gap: 48px;
 
     .stat-item {
       text-align: center;
 
       .stat-num {
         display: block;
-        font-size: 36px;
-        font-weight: 700;
-        color: #fff;
-        margin-bottom: 8px;
+        font-size: 28px;
+        font-weight: 800;
+        color: $course-primary;
+        margin-bottom: 4px;
       }
 
       .stat-label {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.8);
+        font-size: 12.5px;
+        color: $text-muted;
       }
     }
   }
@@ -314,35 +322,78 @@ onMounted(() => {
 
 // 筛选区域
 .filter-section {
-  margin-top: -50px;
+  margin-top: -40px;
   padding: 0 40px;
   position: relative;
   z-index: 10;
 
   .filter-container {
-    max-width: 1200px;
+    max-width: 1100px;
     margin: 0 auto;
-    background: #fff;
-    border-radius: 20px;
-    padding: 32px;
-    box-shadow: 0 10px 60px rgba(102, 126, 234, 0.15);
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: $radius;
+    padding: 24px 28px;
+    box-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
   }
 
   .search-box {
-    margin-bottom: 28px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
 
-    :deep(.el-input) {
-      max-width: 700px;
+  .search-inner {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: 999px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 
-      .el-input__wrapper {
-        border-radius: 12px;
-        padding: 4px 16px;
-      }
+    &:focus-within {
+      border-color: rgba($course-primary, 0.5);
+      box-shadow: 0 0 0 3px rgba($course-primary, 0.08);
+    }
 
-      .el-input-group__append .el-button {
-        border-radius: 0 12px 12px 0;
-        padding: 0 24px;
-      }
+    .search-icon { color: #94a3b8; font-size: 15px; flex-shrink: 0; }
+  }
+
+  .search-input {
+    flex: 1;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    font-size: 14px;
+    color: #0f172a;
+    font-family: inherit;
+
+    &::placeholder { color: #94a3b8; }
+  }
+
+  .search-btn {
+    height: 42px;
+    padding: 0 24px;
+    border-radius: 999px;
+    border: 0;
+    background: $course-primary;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba($course-primary, 0.3);
+
+    &:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba($course-primary, 0.4);
     }
   }
 
@@ -350,144 +401,177 @@ onMounted(() => {
   .sort-filter {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 14px;
 
-    &:last-child {
-      margin-bottom: 0;
-    }
+    &:last-child { margin-bottom: 0; }
   }
 
   .filter-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: #606266;
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
     white-space: nowrap;
   }
 
-  .category-tags {
+  .filter-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
   }
 
-  .category-tag {
+  .filter-pill {
+    height: 34px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid $border;
+    background: $bg-card;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
     cursor: pointer;
-    transition: all 0.3s ease;
-    border-radius: 20px;
-    padding: 8px 20px;
+    transition: all 0.18s ease;
 
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      border-color: rgba($course-primary, 0.4);
+      color: $course-primary;
+    }
+
+    &.active {
+      background: $course-primary;
+      border-color: $course-primary;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba($course-primary, 0.25);
     }
   }
 }
 
 // 课程列表
 .course-section {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 50px 40px;
+  padding: 40px;
 }
 
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 28px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.course-grid-inner {
+  display: contents;
+}
+
+/* TransitionGroup 动画 */
+.card-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.card-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  position: absolute;
+}
+.card-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+}
+.card-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+.card-move {
+  transition: transform 0.4s ease;
 }
 
 // 课程卡片
 .course-card {
-  background: #fff;
-  border-radius: 20px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 
   &:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 24px 50px rgba(102, 126, 234, 0.18);
+    transform: translateY(-4px);
+    border-color: rgba($course-primary, 0.3);
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 
-    .card-cover img {
-      transform: scale(1.08);
-    }
-
-    .cover-overlay {
-      opacity: 1;
-    }
+    .card-cover img { transform: scale(1.04); }
+    .cover-overlay { opacity: 1; }
   }
 
   .card-cover {
     position: relative;
-    height: 190px;
+    height: 170px;
     overflow: hidden;
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transition: transform 0.6s ease;
+      transition: transform 0.4s ease;
     }
 
     .cover-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.85), rgba(118, 75, 162, 0.85));
+      background: rgba(37, 99, 235, 0.7);
       display: flex;
       align-items: center;
       justify-content: center;
       opacity: 0;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.3s ease;
     }
 
     .card-tags {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 12px;
+      left: 12px;
 
       .el-tag {
         font-weight: 600;
-        padding: 6px 14px;
-        border-radius: 20px;
+        padding: 4px 12px;
+        border-radius: 999px;
       }
     }
 
     .card-category {
       position: absolute;
-      top: 16px;
-      right: 16px;
-      background: rgba(0, 0, 0, 0.6);
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.5);
       color: #fff;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
     }
   }
 
   .card-content {
-    padding: 24px;
+    padding: 20px;
   }
 
   .course-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1a1a2e;
-    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: $text;
+    margin: 0 0 8px;
     line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    min-height: 54px;
+    min-height: 48px;
   }
 
   .course-desc {
-    font-size: 14px;
-    color: #8c8c8c;
-    margin: 0 0 18px;
-    line-height: 1.7;
+    font-size: 13px;
+    color: $text-muted;
+    margin: 0 0 14px;
+    line-height: 1.6;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -497,56 +581,39 @@ onMounted(() => {
   .teacher-info {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 18px;
-    padding-bottom: 18px;
-    border-bottom: 1px solid #f5f5f5;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.7);
 
-    .teacher-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .teacher-name {
-      font-size: 14px;
-      color: #303133;
-      font-weight: 500;
-    }
-
-    .teacher-title {
-      font-size: 12px;
-      color: #909399;
-    }
+    .teacher-text { display: flex; flex-direction: column; gap: 1px; }
+    .teacher-name { font-size: 13px; color: $text; font-weight: 600; }
+    .teacher-title { font-size: 11.5px; color: $text-muted; }
   }
 
   .course-meta {
     display: flex;
-    gap: 20px;
-    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 12px;
 
     .meta-item {
       display: flex;
       align-items: center;
-      gap: 5px;
-      font-size: 13px;
-      color: #909399;
-
-      &.rating {
-        color: #f7ba2a;
-        font-weight: 600;
-      }
+      gap: 4px;
+      font-size: 12px;
+      color: $text-muted;
     }
   }
 
   .course-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
 
     .el-tag {
-      border-radius: 6px;
-      font-size: 12px;
+      border-radius: 999px;
+      font-size: 11px;
     }
   }
 }
@@ -554,42 +621,19 @@ onMounted(() => {
 // 响应式
 @media (max-width: 768px) {
   .page-header {
-    padding: 40px 20px 80px;
-
-    .page-title {
-      font-size: 28px;
-    }
-
-    .header-stats {
-      gap: 30px;
-
-      .stat-num {
-        font-size: 28px;
-      }
-    }
+    padding: 32px 20px 60px;
+    .page-title { font-size: 22px; }
+    .header-stats { gap: 24px; .stat-num { font-size: 22px; } }
   }
 
   .filter-section {
     padding: 0 16px;
-    margin-top: -40px;
-
-    .filter-container {
-      padding: 24px 20px;
-    }
-
-    .category-filter,
-    .sort-filter {
-      flex-direction: column;
-      align-items: flex-start;
-    }
+    margin-top: -30px;
+    .filter-container { padding: 18px 16px; }
+    .category-filter, .sort-filter { flex-direction: column; align-items: flex-start; }
   }
 
-  .course-section {
-    padding: 30px 16px;
-  }
-
-  .course-grid {
-    grid-template-columns: 1fr;
-  }
+  .course-section { padding: 24px 16px; }
+  .course-grid { grid-template-columns: 1fr; }
 }
 </style>
