@@ -578,7 +578,7 @@ watch(
 }
 
 .recent-pop-list {
-  max-height: 360px;
+  max-height: 480px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
