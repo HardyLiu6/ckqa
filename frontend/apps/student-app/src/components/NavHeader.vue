@@ -247,14 +247,14 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 12px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid #e5e7eb;
-    border-radius: $radius-lg;
-    min-width: 240px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 999px;
+    min-width: 220px;
     transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-    .search-icon { color: #9ca3af; font-size: 14px; }
+    .search-icon { color: #94a3b8; font-size: 14px; }
 
     input {
       flex: 1;
@@ -265,52 +265,53 @@ onBeforeUnmount(() => {
       color: #0f172a;
       font-family: inherit;
 
-      &::placeholder { color: #9ca3af; }
+      &::placeholder { color: #94a3b8; }
     }
 
     .shortcut {
       font-size: 10px;
       padding: 2px 6px;
       background: #f1f5f9;
-      border-radius: $radius-sm;
+      border-radius: 4px;
       color: #64748b;
       font-family: 'JetBrains Mono', monospace;
     }
 
     &:focus-within {
-      border-color: var(--module-color-500, #6366f1);
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+      border-color: rgba(147, 51, 234, 0.4);
+      box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.08);
     }
 
     @media (max-width: $bp-laptop) {
-      min-width: 180px;
+      min-width: 160px;
     }
   }
 
   .icon-btn {
     width: 36px;
     height: 36px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid #e5e7eb;
-    border-radius: $radius-lg;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #64748b;
-    transition: background $duration-fast $ease-out, color $duration-fast $ease-out;
+    transition: background $duration-fast $ease-out, color $duration-fast $ease-out, border-color $duration-fast $ease-out;
 
     &:hover {
       background: #fff;
       color: #0f172a;
+      border-color: rgba(147, 51, 234, 0.3);
     }
   }
 
   .avatar {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, #6366f1, #818cf8);
-    border-radius: $radius-lg;
+    background: linear-gradient(135deg, #6366f1, #06b6d4);
+    border-radius: 50%;
     color: #fff;
     font-weight: 700;
     font-size: 13px;
