@@ -1218,15 +1218,6 @@ function sourceTypeLabel(source) {
           </button>
         </div>
 
-        <!-- 展开态底部工具栏（多行时才显示） -->
-        <Transition name="toolbar-slide">
-          <div v-if="isComposerExpanded" class="composer-expanded-bar">
-            <button v-if="memoryEnabled" class="chip memory-chip" type="button">
-              🧠 学习记忆 · {{ learningMemoryItems.length }}
-            </button>
-          </div>
-        </Transition>
-
         <!-- Popovers -->
         <div class="composer-popovers">
           <Transition name="pop">
@@ -1427,7 +1418,7 @@ function sourceTypeLabel(source) {
   &.centered {
     position: absolute;
     bottom: auto;
-    top: 50%;
+    top: 42%;
     left: 50%;
     transform: translate(-50%, -50%);
     width: 100%;
@@ -1492,9 +1483,23 @@ function sourceTypeLabel(source) {
 /* 主行：单行胶囊布局 */
 .composer-main-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   padding: 6px 8px;
+  transition: flex-direction $duration-base $ease-out, padding $duration-base $ease-out;
+}
+
+/* 展开态：变为纵向布局（文字上，工具栏下） */
+.expanded .composer-main-row {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 12px 14px 8px;
+}
+
+.expanded .composer-input {
+  flex: 1 1 100%;
+  order: -1;
+  padding: 4px 4px 10px;
 }
 
 .composer-input {
@@ -1513,6 +1518,7 @@ function sourceTypeLabel(source) {
   resize: none;
   font-family: inherit;
   overflow-y: auto;
+  transition: padding $duration-fast $ease-out;
 
   &::-webkit-scrollbar { width: 6px; }
   &::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
@@ -1522,33 +1528,17 @@ function sourceTypeLabel(source) {
   &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
-/* 展开态额外工具栏 */
-.composer-expanded-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 8px;
-}
+/* 展开态：＋ 在左，spacer 推模式和发送到右 */
+.expanded .plus-ring-wrap { order: 0; }
+.expanded .mode-chip { order: 1; margin-left: auto; }
+.expanded .memory-chip { order: 2; }
+.expanded .send-btn { order: 3; }
 
 .composer-popovers {
   position: relative;
 }
 
 .toolbar-spacer { flex: 1; }
-
-/* 工具栏滑入动画 */
-.toolbar-slide-enter-active, .toolbar-slide-leave-active {
-  transition: opacity $duration-fast $ease-out, max-height $duration-fast $ease-out;
-  overflow: hidden;
-}
-.toolbar-slide-enter-from, .toolbar-slide-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-.toolbar-slide-enter-to, .toolbar-slide-leave-from {
-  opacity: 1;
-  max-height: 40px;
-}
 
 /* 推荐 chips 在 composer 下方 */
 .suggest-row.below-composer {
