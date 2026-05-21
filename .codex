@@ -4,7 +4,7 @@
 
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
 - `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API。
-- `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，已有最小 Axios 请求层，但尚未接入稳定业务契约。
+- `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，登录注册、课程只读入口、问答会话/任务事件流、学习记忆、模式推荐和知识图谱浏览已部分接入 Java `/api/v1`。
 - `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、资料详情解析进度、解析结果详情、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
 - `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、课程资料、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
 - `infra/`：仓库根目录统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j。
@@ -38,7 +38,7 @@
 - `graphrag_pipeline/utils/main.py` 当前已经收口为纯 GraphRAG CLI 查询包装层，不再尝试 2.x 风格的内部 API。
 - `pdf_ingest` 导出时会同时生成标准化中间结果 `normalized_docs.json`，以及面向 GraphRAG 的 `section_docs.json` / `page_docs.json`。
 - 本地完整重抽取前，旧版课程 ID 的 MySQL / MinIO 数据可用 `pdf_ingest/scripts/cleanup_legacy_course_data.py` 先 dry-run 后执行清理；不要默认假设 `os`、`ds` 仍是当前可用课程。
-- `frontend/apps/admin-app/` 仍不是主业务链路；`backend/ckqa-back/` 已经承担 Java 编排，但真实解析、索引和问答能力仍由两个 Python 模块提供。
+- `frontend/apps/admin-app/` 仍不是主业务链路；`frontend/apps/student-app/` 已开始消费 Java `/api/v1` 的真实问答与图谱接口，但真实解析、索引和问答能力仍由两个 Python 模块提供，`backend/ckqa-back/` 负责业务编排。
 
 ## 仓库级工作规则
 
@@ -135,14 +135,17 @@
 ### 3. `frontend/apps/student-app/`
 
 - 当前是学员端 Vue 3 + Vite 原型，技术栈包含 Element Plus、Pinia、Vue Router、Sass。
-- 已有 `src/axios/index.js` 最小请求层，环境变量见 `.env.example`。
+- `src/axios/index.js` 会从 Pinia 用户会话注入 `Authorization` 与 `X-CKQA-User-Code`；Java `/api/v1` 请求封装分布在 `src/api/auth.js`、`src/api/courses.js`、`src/api/qa.js`、`src/api/graph.js`。
+- 问答页使用 `src/views/qa/qa-route-query-model.js` 保持 `courseId/sessionId/mode/topic` 路由状态；切换 query 不应强制重挂整个模块视图。
+- 问答任务优先消费 `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` 事件流，不可用时回退到任务轮询。
+- 顶栏会预加载常用模块与副导航 chunk；新增或移动模块入口时，同步维护 `src/router/routes.js` 与 `src/layouts/moduleSideNavLoaders.js`。
 - 常用命令：
   - `cd frontend/apps/student-app`
   - `pnpm install`
   - `pnpm dev`
   - `pnpm build`
   - `node --test tests/*.test.js`
-- 当前页面仍以本地 store、静态内容和显式“未开放”路由为主，不要假设已经接入稳定后端契约。
+- 当前课程、问答和知识图谱已经有部分真实接口接入；社区、学习分析和部分用户中心页面仍以显式“未开放”路由兜底。
 
 ### 4. `frontend/apps/admin-app/`
 

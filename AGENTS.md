@@ -24,7 +24,7 @@ This repository currently has seven notable areas, with the two Python modules a
 3. `frontend/apps/student-app/`
    - Student-facing Vue 3 + Vite prototype managed directly inside the CKQA root repository.
    - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
-   - Still not part of the production workflow; many routes are placeholders and the minimal Axios layer is not wired into a stable business contract.
+   - Auth, course read APIs, QA sessions/task events, learning memory, mode recommendation, and knowledge graph browsing are now partially wired to Java `/api/v1`; community, analysis, and some user flows remain explicit placeholders.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
    - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, unified 403/404/500 pages, and Playwright browser fault-injection tests.
@@ -190,7 +190,9 @@ Notes:
 - Treat `node_modules/` as generated dependencies, not source.
 - Treat this directory as part of the main CKQA repository, not as a separate nested Git repository.
 - Current route tree is broader than the actual implemented views; unopened routes should use the explicit "未开放" status page rather than blank pages.
-- `src/axios/index.js` now contains a minimal Axios wrapper and env-based runtime config, but there is still no stable business API contract wired into the views.
+- `src/axios/index.js` injects JWT auth headers from the Pinia user store; `src/api/auth.js`, `src/api/courses.js`, `src/api/qa.js`, and `src/api/graph.js` are the current Java `/api/v1` browser boundary.
+- The QA page should preserve `courseId`, `sessionId`, `mode`, and `topic` in route query via `src/views/qa/qa-route-query-model.js`; avoid remounting the whole module view for query-only changes.
+- QA task streaming prefers `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` and must keep task polling as the fallback path.
 
 ### `frontend/apps/admin-app/`
 

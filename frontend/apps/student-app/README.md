@@ -1,6 +1,6 @@
 # student-app
 
-`frontend/apps/student-app/` 是 CKQA 仓库里当前更完整的学员端前端原型。它已经包含首页、课程、问答等页面骨架，以及 Vue Router、Pinia、Element Plus 等基础设施；账号登录注册已接入 Java 后端 `/api/v1/auth/student/*`，课程与问答等业务页仍在逐步接入真实接口。
+`frontend/apps/student-app/` 是 CKQA 仓库里的学员端前端原型。它已经包含首页、课程、问答、知识图谱等页面骨架，以及 Vue Router、Pinia、Element Plus 等基础设施；账号登录注册、课程只读入口、问答会话/任务事件流、学习记忆、模式推荐和知识图谱浏览已开始接入 Java 后端 `/api/v1`。
 
 如果你当前目标是跑通 CKQA 真实问答流程，请优先查看：
 
@@ -12,19 +12,19 @@
 
 - 技术栈：Vue 3、Vite、Element Plus、Pinia、Vue Router、Sass
 - 动效与体验依赖：AOS、GSAP、Lenis
-- 当前角色：学员端页面与交互原型，不是正式业务前端
-- 当前数据状态：登录注册走 Java `/api/v1`，其余页面仍以本地 store 和静态内容为主；后续联调可直接复用 `src/axios/index.js`
+- 当前角色：学员端页面与交互原型，不是完整正式业务前端
+- 当前数据状态：登录注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；社区、学习分析和部分用户中心页面仍是占位或本地原型
 - 当前工程形态：已纳入 CKQA 根仓库直接管理，依赖锁文件以 `pnpm-lock.yaml` 为准，生成依赖和构建产物继续通过本目录 `.gitignore` 忽略
 
 这意味着它更适合做：
 
 - 学员端信息架构和页面流程演示
 - Vue 3 + Element Plus 技术方案验证
-- 后续接入问答、课程、知识图谱界面的视觉与交互基础
+- 后续继续补齐课程、问答、知识图谱和学习分析的正式学生端体验
 
 暂时不适合假设：
 
-- 除认证外已经存在稳定的后端接口层
+- 全部页面都已经完成正式后端闭环
 - 用户中心、社区、知识图谱等页面已经全部可用
 - 可以直接把它当成 CKQA 当前正式前端入口
 
@@ -38,9 +38,17 @@
 | `src/views/layout/index.vue` | 落地页 / 介绍页原型 |
 | `src/views/auth/AuthAccess.vue` | 学生登录 / 注册 JWT 页面 |
 | `src/views/index.vue` | 登录后首页原型，展示热门提问、课程与知识图谱卡片 |
+| `src/api/auth.js` | 学生登录、注册、邮箱验证码、当前用户与头像上传接口 |
+| `src/api/courses.js` | 课程列表、课程详情、课程资料、知识库、章节与学习进度接口封装 |
+| `src/api/qa.js` | 问答会话、消息、任务详情、任务事件流、模式推荐、混合检索预热、学习记忆与反馈接口封装 |
+| `src/api/graph.js` | 知识图谱健康检查、知识库选择、总览、实体邻域和实体详情接口封装 |
 | `src/views/qa/` | 问答页、历史页、详情页原型 |
+| `src/views/qa/qa-route-query-model.js` | 规范化 `courseId/sessionId/mode/topic` 路由 query，支持刷新与侧栏跳转恢复上下文 |
 | `src/views/course/` | 课程列表、详情、学习页、我的课程原型 |
+| `src/views/knowledge/KnowledgeGraph.vue` | 知识图谱浏览页，按课程选择可用知识库并跳转问答时携带课程上下文 |
 | `src/components/NavHeader.vue` | 顶部导航组件 |
+| `src/layouts/moduleSideNavLoaders.js` | 模块副导航懒加载与顶栏预加载共用的 loader |
+| `src/layouts/route-view-key.js` | 控制模块视图 key，避免 query-only 变化导致整页重挂 |
 | `src/stores/` | Pinia store，包含学生 JWT 会话与本地页面状态 |
 | `vite.config.js` | Vite 配置，默认监听 `0.0.0.0:5174`，并将 `/api/v1` 代理到 Java 后端 |
 | `jsconfig.json` | `@/` 路径别名配置 |
@@ -59,7 +67,7 @@
 - `/course/learn/:id`
 - `/course/my`
 
-同时还预留了 `knowledge`、`community`、`analysis`、`user`、`auth`、`error` 等路由段。登录和注册已经开放，其余未实现页面统一收口到显式状态页，会直接提示“未开放 / 建设中”，避免演示时误以为页面损坏或接口异常。
+同时还预留了 `community`、`analysis`、`user`、`auth`、`error` 等路由段。登录、注册、问答和知识图谱主浏览已经开放；其余未实现页面统一收口到显式状态页，会直接提示“未开放 / 建设中”，避免演示时误以为页面损坏或接口异常。
 
 ## 环境准备
 
@@ -117,6 +125,8 @@ http://127.0.0.1:5174
 - 路由、菜单、页面结构已经初步成型
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
 - 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `delta`，不可用时自动回退到 task 轮询或最终答案分段
+- 问答页会把 `courseId`、`sessionId`、`mode`、`topic` 写入路由 query；从图谱节点、问答侧栏、刷新页面返回时可以恢复课程与会话上下文
+- 顶栏会在首屏稳定后预加载课程、问答、知识图谱模块和副导航，G6 图谱画布也改为进入图谱页后再延迟加载
 - 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在
 - 已形成面向学生端问答的 Java `/api/v1` 契约；浏览器不直连 `graphrag_pipeline` Python `/v1`
 
@@ -129,9 +139,9 @@ http://127.0.0.1:5174
 
 ## 后续接入前建议先补齐什么
 
-1. 以 `docs/student-backend-graphrag-api-contract.md` 为准，按 Java `/api/v1` 收口问答、课程和用户侧接口契约。
-2. 在组件里逐步把示例数据切换到 `src/axios/index.js` 导出的请求方法。
-3. 按已启用的登录态守卫，为课程、问答和知识图谱页面补齐真实接口数据。
-4. 在真正联调前补齐 API 契约、Mock 数据和请求失败恢复策略。
+1. 以 `docs/student-backend-graphrag-api-contract.md` 为准，继续补齐课程学习、用户中心、社区和学习分析接口契约。
+2. 把仍依赖本地 store 或静态内容的页面逐步迁移到 `src/api/*` 封装，并补齐失败恢复策略。
+3. 为课程、问答和知识图谱的真实接口补充更完整的浏览器级 Mock/E2E 验收。
+4. 继续优化构建体积，重点关注字体、Element Plus 与图谱相关 chunk。
 
 当前联调契约见 [../../../docs/student-backend-graphrag-api-contract.md](../../../docs/student-backend-graphrag-api-contract.md)。

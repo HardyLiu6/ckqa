@@ -1,6 +1,6 @@
 # Student App 到后端与 GraphRAG API 契约
 
-> 审查日期：2026-05-05
+> 审查日期：2026-05-21
 > 适用范围：`frontend/apps/student-app/`、`backend/ckqa-back/`、`graphrag_pipeline/`
 
 本文档定义学员端前端、Java 编排后端和 GraphRAG Python 服务之间的最小稳定契约。当前约定是：`student-app` 只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
@@ -9,17 +9,17 @@
 
 | 模块 | 角色 | 对外暴露给谁 |
 | --- | --- | --- |
-| `frontend/apps/student-app/` | 学员端页面、状态展示、轮询任务、错误提示 | 用户浏览器 |
+| `frontend/apps/student-app/` | 学员端页面、状态展示、任务事件流/轮询兜底、错误提示 | 用户浏览器 |
 | `backend/ckqa-back/` | `/api/v1` 业务 API、统一响应、MySQL 状态、Python 编排 | `student-app` |
 | `graphrag_pipeline/` | GraphRAG CLI 查询包装、异步查询任务、OpenAI 兼容调试接口 | `backend/ckqa-back` 或开发调试工具 |
 
 ### 架构决策
 
-- 项目结构：保持现有 feature-first Java 包结构，前端暂不新增业务 API 模块，本契约先作为接入依据。
+- 项目结构：保持现有 feature-first Java 包结构；前端业务 API 已按 `auth/courses/qa/graph` 拆成轻量封装，本契约作为这些封装继续演进的对齐依据。
 - API 方式：前端到 Java 使用 REST JSON；Java 到 GraphRAG 也使用 REST JSON。
-- 前端请求层：复用 `src/axios/index.js`，通过 `VITE_API_BASE_URL` 指向 Java `/api/v1`。
-- 实时方式：问答任务使用轮询，不使用 SSE 或 WebSocket。
-- 鉴权策略：当前契约不包含真实登录鉴权，`userId` 仍由前端或测试种子显式提供。
+- 前端请求层：复用 `src/axios/index.js`，通过 `VITE_API_BASE_URL` 指向 Java `/api/v1`；业务接口封装在 `src/api/auth.js`、`src/api/courses.js`、`src/api/qa.js`、`src/api/graph.js`。
+- 实时方式：问答任务优先使用 SSE 任务事件流，事件流不可用时回退到任务详情轮询。
+- 鉴权策略：学生端登录注册走 Java `/api/v1/auth/*`；Pinia user store 保存 JWT 会话，Axios 自动注入 `Authorization` 和 `X-CKQA-User-Code`。少量请求体仍保留 `userId` 兼容字段，但前端通用列表、推荐、反馈等请求会优先依赖登录态。
 - 错误处理：Java 统一返回 `ApiResponse`；前端 Axios 层会解包 `data` 并把 `message/detail` 归一成错误文案。
 
 ## 调用拓扑
@@ -27,6 +27,7 @@
 ```text
 student-app
   -> GET/POST ${VITE_API_BASE_URL}/...
+  -> GET ${VITE_API_BASE_URL}/qa-sessions/{sessionId}/tasks/{taskId}/events (SSE, 可回退轮询)
   -> backend/ckqa-back /api/v1
   -> MySQL: users / courses / course_materials / material_objects / knowledge_bases / qa_sessions / qa_messages / qa_retrieval_logs
   -> graphrag_pipeline /v1/query-tasks
@@ -41,6 +42,19 @@ VITE_API_TIMEOUT=10000
 ```
 
 如果通过 Vite 代理转发，也应把代理前缀设计到 `/api/v1`，而不是直接指向 `http://127.0.0.1:8012/v1`。
+
+## 学生端路由状态约定
+
+`/qa/ask` 会使用 query 记录可恢复的问答上下文：
+
+| query | 说明 |
+| --- | --- |
+| `courseId` | 当前课程。来自课程选择、知识图谱跳转或历史会话恢复。 |
+| `sessionId` | 当前问答会话。存在时页面会拉取会话详情和消息列表。 |
+| `mode` | 前端选择的问答模式。支持 `smart`、`basic`、`local`、`global`、`drift`、`hybrid_v0`，其中 `smart` 只在前端触发 `/qa-routing/recommend`。 |
+| `topic` | 从知识图谱节点等入口带入的预填问题，不等同于已发送消息。 |
+
+学生端通过 `src/views/qa/qa-route-query-model.js` 规范化这些字段。模块布局的 `RouterView` key 只跟路由名/路径和 params 相关，不跟 query/hash 相关；query-only 变化应由页面 watch 响应，避免整页重挂导致事件流、输入框或加载状态丢失。
 
 ## 通用 Java 响应格式
 
@@ -159,6 +173,22 @@ PDF 摘要：
 - `knowledgeBaseId` 来自知识库摘要的 `id`。
 - 只有 `activeIndexRunId != null` 的知识库才适合创建真实问答会话。
 
+### 学生端知识图谱浏览入口
+
+```http
+GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/overview
+GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/entities/{entityId}
+GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/entities/{entityId}/neighborhood
+```
+
+前端行为：
+
+- 图谱页先通过课程 query 或默认课程选择可用知识库，优先使用 `activeIndexRunId != null` 的知识库。
+- `/graph/overview` 用于顶层社区、Top-N 实体和社区间关系的初始画布。
+- `/graph/entities/{entityId}` 用于实体详情；`/neighborhood` 用于展开实体邻域。
+- 从实体详情跳转问答时，应写入 `/qa/ask?courseId=<courseId>&topic=<entityName>`，由问答页恢复课程上下文并预填问题。
+- Neo4j 不可达或图谱接口失败时，页面应显示可读错误和重试入口，不要静默回退到本地 mock。
+
 ### PDF 与索引运维入口
 
 这些接口主要用于后续课程管理或调试页面，学员端问答页面一般不需要直接触发。
@@ -259,14 +289,15 @@ Content-Type: application/json
 }
 ```
 
-`mode` 仅支持：
+发送到 Java 后端的 `mode` 支持：
 
+- `basic`
 - `local`
 - `global`
 - `drift`
-- `basic`
+- `hybrid_v0`
 
-`full` 已归档为后续扩展模式，前端不得展示为可选项。
+`smart` 是 student-app 的前端选择项，不直接作为最终查询模式提交；前端会先调用 `/api/v1/qa-routing/recommend` 获取推荐结果，再落到上述后端模式之一。`full` 已归档为后续扩展模式，前端不得展示为可选项。
 
 提交成功后的 `data`：
 
@@ -299,6 +330,29 @@ Content-Type: application/json
 - 发送成功后立即把 `userMessage` 追加到本地消息流。
 - 记录 `taskId`，按 `recommendedPollingIntervalSeconds` 调用任务详情接口。
 - 在终态前不要自行构造 assistant 消息，assistant 消息只以任务详情或消息列表返回为准。
+
+### 订阅问答任务事件流
+
+```http
+GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events
+Accept: text/event-stream
+Authorization: Bearer <token>
+```
+
+学生端当前事件处理约定：
+
+| event | 前端行为 |
+| --- | --- |
+| `open` | 标记任务进入 streaming 状态。 |
+| `status` | 更新 `pendingTask`、用户消息上的 `taskStatus/progressStage`。 |
+| `heartbeat` | 记录最近事件流心跳。 |
+| `delta` | 追加临时流式文本。 |
+| `sources` | 更新来源列表。 |
+| `message` | 使用后端返回的 assistant 消息更新消息流。 |
+| `done` | 结束事件流，必要时再拉取任务详情或消息列表补齐 assistant 消息。 |
+| `error` | 展示错误；网络错误时切回轮询。 |
+
+事件流不可用、连接关闭或浏览器环境不支持 `AbortController` 时，前端必须回退到下面的任务详情轮询接口。
 
 ### 轮询问答任务
 
@@ -411,6 +465,27 @@ GET /api/v1/qa-sessions/{id}/messages
 - 用户消息上的 `taskStatus` / `progressStage` 只表示该用户消息关联的最新问答任务摘要。
 - assistant 消息本身不携带任务状态。
 
+### 模式推荐、混合检索预热、学习记忆与反馈
+
+学生端问答页还会消费这些 Java `/api/v1` 辅助接口：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/qa-routing/recommend` | 智能模式推荐。前端传 `courseId`、`knowledgeBaseId`、`sessionId`、`question`、`betaHybridEnabled`、`hasConversationContext`，并用返回的 `recommendedMode/confidence/reasons/fallbackMode` 决定最终模式。 |
+| `POST` | `/qa-sessions/hybrid-warmup` | `hybrid_v0` 混合检索预热；未 ready 时智能模式可降级到 fallback，手动 hybrid 则保留选择并提示。 |
+| `GET` | `/qa-memory/preferences` | 查询当前课程/知识库下的学习记忆偏好。 |
+| `PUT` | `/qa-memory/preferences` | 开启或关闭学习记忆。当前前端只在 `local` 模式且用户开启记忆时提交 `memoryPolicy=auto`。 |
+| `GET` | `/qa-memory/items` | 查询学习记忆条目，用于展示和删除。 |
+| `DELETE` | `/qa-memory/items/{id}` | 删除单条学习记忆。 |
+| `POST` | `/qa-message-feedback` | 提交 assistant 消息反馈。 |
+| `DELETE` | `/qa-message-feedback/{messageId}` | 取消某条消息反馈。 |
+
+前端约束：
+
+- 这些接口仍通过 `src/api/qa.js` 统一封装，不在页面中手写 URL。
+- 推荐和反馈请求不应依赖浏览器传入的 `userId`；登录态由 Axios 统一注入。
+- 学习记忆只在已选择 `courseId` 与 `knowledgeBaseId` 后启用。
+
 ## Java 到 GraphRAG 的内部契约
 
 前端通常不直接使用本节端点。它们用于理解 Java 编排层如何和 Python 服务协作。
@@ -499,7 +574,7 @@ GET /health
 - `graphrag-drift-search:latest`
 - `graphrag-basic-search:latest`
 
-这些端点不是 student-app 的正式业务契约。正式学员端应通过 Java `/api/v1/qa-sessions` 创建会话、发送消息和轮询任务。
+这些端点不是 student-app 的正式业务契约。正式学员端应通过 Java `/api/v1/qa-sessions` 创建会话、发送消息，并优先消费任务事件流、必要时回退轮询。
 
 ## 接入顺序建议
 
@@ -508,17 +583,17 @@ GET /health
 3. 进入课程页时调用 `GET /courses/{courseId}/knowledge-bases`，选取带 `activeIndexRunId` 的知识库。
 4. 首次提问前调用 `POST /qa-sessions` 创建会话。
 5. 发送问题调用 `POST /qa-sessions/{sessionId}/messages`。
-6. 按响应里的 `recommendedPollingIntervalSeconds` 轮询 `GET /qa-sessions/{sessionId}/tasks/{taskId}`。
-7. 任务成功后使用 `assistantMessage` 更新 UI；页面刷新时用 `GET /qa-sessions/{id}/messages` 还原消息流。
+6. 优先连接 `GET /qa-sessions/{sessionId}/tasks/{taskId}/events` 消费 SSE 事件。
+7. 事件流不可用时，按响应里的 `recommendedPollingIntervalSeconds` 轮询 `GET /qa-sessions/{sessionId}/tasks/{taskId}`。
+8. 任务成功后使用 `assistantMessage` 或事件流 `message` 更新 UI；页面刷新时用 `GET /qa-sessions/{id}/messages` 还原消息流。
 
 ## 当前明确不在契约内
 
-- 登录、JWT、刷新 token、权限拦截。
 - 前端直传 PDF。
 - 前端直接触发 GraphRAG `graphrag index`。
-- WebSocket / SSE 流式问答。
 - `full` 查询模式。
-- `qa_retrieval_hits` 的引用来源展示。
+- WebSocket 双向通道。
+- `qa_retrieval_hits` 的完整引用来源管理视图。
 
 ## 最小验证命令
 
@@ -554,6 +629,14 @@ curl --noproxy '*' -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions \
 curl --noproxy '*' -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
   -H 'Content-Type: application/json' \
   -d '{"mode":"basic","content":"请概括这套图谱的主题"}'
+```
+
+如果要检查事件流，把返回的 `taskId` 替换到下面命令，并带上实际 JWT：
+
+```bash
+curl --noproxy '*' -N http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/9001/events \
+  -H 'Accept: text/event-stream' \
+  -H 'Authorization: Bearer <token>'
 ```
 
 ```bash

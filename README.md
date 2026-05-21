@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-05-07
+> 审计日期：2026-05-21
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -14,7 +14,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 - `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
 - `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
-- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册已接入 Java `/api/v1/auth/student/*`，课程/问答等业务页仍在逐步接入真实契约。
+- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话/任务事件流、学习记忆和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
 - `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、资料详情解析进度、解析结果详情、知识库、构建向导、QA 冒烟验证和统一错误页。
 - `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
@@ -28,7 +28,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
 | `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
 | `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 登录注册已接入 Java `/api/v1`，业务页继续演进 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程只读和知识图谱基础浏览已接 Java `/api/v1`，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
 | `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，资料详情已展示解析进度并支持进入解析结果详情，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
 | `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
@@ -263,7 +263,7 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
-- `frontend/apps/student-app/` 仍是学员端原型，包含落地页、首页、问答页、课程页与 Pinia/Vue Router 基础结构；登录注册已接入 Java `/api/v1`，其余业务页仍在逐步接入稳定 API。
+- `frontend/apps/student-app/` 仍是学员端原型，但已不只是静态页面：登录注册、课程只读入口、问答会话/任务事件流、模式推荐、学习记忆和知识图谱浏览都已有 Java `/api/v1` 接入；社区、学习分析、部分用户中心页面仍以“未开放”状态页兜底。
 - `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、资料上传校验、构建向导、QA 冒烟验证、统一 403/404/500 错误页和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
@@ -305,6 +305,7 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - [pdf_ingest/docs/课程文本规范与预处理流程.md](pdf_ingest/docs/课程文本规范与预处理流程.md)
 - [graphrag_pipeline/PROMPT_TUNING_PIPELINE.md](graphrag_pipeline/PROMPT_TUNING_PIPELINE.md)
 - [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
+- [docs/student-backend-graphrag-api-contract.md](docs/student-backend-graphrag-api-contract.md)
 - [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 - [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
@@ -391,7 +392,7 @@ ckqa/
 
 - 角色：学员端前端原型
 - 主入口：`src/main.js`、`src/router/index.js`
-- 当前状态：页面、路由和交互原型比 `admin-app` 更完整，但多数数据仍来自本地 store，未与主链路建立稳定契约
+- 当前状态：登录/注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；路由 query 会保留 `courseId/sessionId/mode/topic`，便于从图谱、侧栏和刷新场景恢复上下文
 - 文档入口：[frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 
 ### `frontend/apps/admin-app/`
