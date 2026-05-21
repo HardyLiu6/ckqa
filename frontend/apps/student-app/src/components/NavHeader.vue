@@ -87,9 +87,7 @@ onBeforeUnmount(() => {
       <!-- 左：Logo -->
       <div class="nav-left">
         <RouterLink to="/home" class="logo-section">
-          <div class="logo-icon">
-            <el-icon :size="20"><ChatDotRound /></el-icon>
-          </div>
+          <img class="logo-img" src="/logo.png" alt="智课问答" />
           <span class="logo-text">智课问答</span>
         </RouterLink>
       </div>
@@ -197,16 +195,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
 
-  .logo-icon {
+  .logo-img {
     width: 36px;
     height: 36px;
-    background: linear-gradient(135deg, #6366f1, #06b6d4);
     border-radius: $radius-lg;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+    object-fit: contain;
   }
 
   .logo-text {

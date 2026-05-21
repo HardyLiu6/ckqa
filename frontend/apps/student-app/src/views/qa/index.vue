@@ -1804,14 +1804,15 @@ function sourceTypeLabel(source) {
   justify-content: center;
   font-size: 16px;
   font-family: inherit;
+  flex-shrink: 0;
   transition: background $duration-fast $ease-out, transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-  /* 有内容时激活态 */
+  /* 有内容时激活态：紫色渐变 */
   &.active {
-    background: #0f172a;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
+    background: linear-gradient(135deg, #9333ea, #6366f1);
+    box-shadow: 0 6px 18px rgba(147, 51, 234, 0.3);
 
-    &:hover { transform: translateY(-1px) scale(1.04); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.28); }
+    &:hover { transform: translateY(-1px) scale(1.04); box-shadow: 0 10px 24px rgba(147, 51, 234, 0.4); }
   }
 
   &:disabled { cursor: not-allowed; }
