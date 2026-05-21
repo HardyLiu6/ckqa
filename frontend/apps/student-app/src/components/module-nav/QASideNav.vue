@@ -293,16 +293,16 @@ watch(
 
 /* 最近聊天 popover */
 .recent-popover {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
+  position: fixed;
+  top: auto;
+  left: 60px;
   width: 280px;
   background: #fff;
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 14px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
   padding: 6px;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .recent-pop-head {
