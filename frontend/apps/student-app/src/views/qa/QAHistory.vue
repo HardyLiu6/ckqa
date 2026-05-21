@@ -361,9 +361,9 @@ function formatSessionTime(value) {
 </script>
 
 <style lang="scss" scoped>
-$primary: #4f46e5;
-$primary-light: #818cf8;
-$primary-dark: #3730a3;
+$primary: #9333ea;
+$primary-light: #a78bfa;
+$primary-dark: #7e22ce;
 $success: #10b981;
 $warning: #f59e0b;
 $danger: #ef4444;
@@ -371,11 +371,11 @@ $cyan: #06b6d4;
 $purple: #8b5cf6;
 $bg: #f8fafc;
 $bg-card: #fff;
-$text: #1e293b;
-$text-secondary: #64748b;
+$text: #0f172a;
+$text-secondary: #475569;
 $text-muted: #94a3b8;
-$border: #e2e8f0;
-$radius: 12px;
+$border: rgba(226, 232, 240, 0.9);
+$radius: 14px;
 
 .qa-history-page {
   min-height: 100vh;
@@ -391,9 +391,9 @@ $radius: 12px;
   z-index: 100;
 
   .header-content {
-    max-width: 1200px;
+    max-width: 1000px;
     margin: 0 auto;
-    height: 64px;
+    height: 60px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -402,248 +402,174 @@ $radius: 12px;
   .header-left {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
 
     .back-btn {
-      border: none;
-      background: $bg;
-
-      &:hover {
-        background: rgba($primary, 0.1);
-        color: $primary;
-      }
+      border: 1px solid $border;
+      background: $bg-card;
+      &:hover { border-color: rgba($primary, 0.3); color: $primary; }
     }
 
     .header-title {
       display: flex;
-      align-items: center;
-      gap: 12px;
+      align-items: baseline;
+      gap: 10px;
 
-      h1 {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0;
-      }
-
-      .record-count {
-        font-size: 13px;
-        color: $text-muted;
-      }
+      h1 { font-size: 17px; font-weight: 700; margin: 0; color: $text; }
+      .record-count { font-size: 12.5px; color: $text-muted; }
     }
   }
 
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 
-    .search-input {
-      width: 260px;
-    }
-
-    .more-btn {
-      border: none;
-      background: $bg;
-
-      &:hover {
-        background: rgba($primary, 0.1);
-        color: $primary;
-      }
-    }
+    .search-input { width: 200px; }
+    .more-btn { border: 1px solid $border; background: $bg-card; &:hover { border-color: rgba($primary, 0.3); color: $primary; } }
   }
 }
 
+/* 统计卡片 · 轻量白底 */
 .stats-section {
-  padding: 24px;
-  background: linear-gradient(135deg, $primary, $primary-dark);
+  padding: 20px 24px;
+  background: $bg;
 
   .stats-container {
-    max-width: 1200px;
+    max-width: 1000px;
     margin: 0 auto;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
+    gap: 14px;
 
-    @media (max-width: 768px) {
-      grid-template-columns: repeat(2, 1fr);
-    }
+    @media (max-width: 768px) { grid-template-columns: repeat(2, 1fr); }
   }
 
   .stat-card {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
+    background: $bg-card;
+    border: 1px solid $border;
     border-radius: $radius;
-    padding: 20px;
+    padding: 16px 18px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+
+    &:hover { border-color: rgba($primary, 0.25); box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05); }
 
     .stat-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 8px;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      color: white;
+      font-size: 18px;
 
-      &.blue {
-        background: rgba($primary, 0.5);
-      }
-
-      &.green {
-        background: rgba($success, 0.5);
-      }
-
-      &.orange {
-        background: rgba($warning, 0.5);
-      }
-
-      &.purple {
-        background: rgba($purple, 0.5);
-      }
+      &.blue { background: rgba(99, 102, 241, 0.1); color: #6366f1; }
+      &.green { background: rgba($success, 0.1); color: $success; }
+      &.orange { background: rgba($warning, 0.1); color: #d97706; }
+      &.purple { background: rgba($primary, 0.1); color: $primary; }
     }
 
     .stat-info {
       display: flex;
       flex-direction: column;
 
-      .stat-value {
-        font-size: 28px;
-        font-weight: 700;
-        color: white;
-      }
-
-      .stat-label {
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.8);
-      }
+      .stat-value { font-size: 22px; font-weight: 800; color: $text; }
+      .stat-label { font-size: 12px; color: $text-muted; margin-top: 2px; }
     }
   }
 }
 
+/* 筛选栏 */
 .filter-section {
   background: $bg-card;
   border-bottom: 1px solid $border;
-  padding: 16px 24px;
+  padding: 14px 24px;
 
   .filter-container {
-    max-width: 1200px;
+    max-width: 1000px;
     margin: 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: 12px;
   }
 
   .filter-right {
     display: flex;
-    gap: 12px;
-
-    .course-filter {
-      width: 180px;
-    }
-
-    .sort-select {
-      width: 120px;
-    }
+    gap: 10px;
+    .course-filter { width: 160px; }
+    .sort-select { width: 110px; }
   }
 }
 
+/* 对话列表 */
 .history-main {
-  padding: 24px;
+  padding: 20px 24px;
 
-  .history-container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
+  .history-container { max-width: 1000px; margin: 0 auto; }
 }
 
 .history-group {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
 
   .group-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
     border-bottom: 1px solid $border;
 
-    .group-date {
-      font-size: 16px;
-      font-weight: 600;
-      color: $text;
-    }
-
-    .group-count {
-      font-size: 13px;
-      color: $text-muted;
-    }
+    .group-date { font-size: 14px; font-weight: 700; color: $text; }
+    .group-count { font-size: 12px; color: $text-muted; }
   }
 }
 
 .session-list {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .session-card {
   background: $bg-card;
   border: 1px solid $border;
   border-radius: $radius;
-  padding: 20px;
+  padding: 16px 18px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 
   &:hover {
-    border-color: $primary-light;
-    box-shadow: 0 4px 20px rgba($primary, 0.1);
-    transform: translateY(-2px);
+    border-color: rgba($primary, 0.3);
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
   }
 
   .card-main {
     display: flex;
-    gap: 16px;
+    gap: 14px;
     align-items: flex-start;
   }
 
   .card-icon {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: 18px;
     flex-shrink: 0;
 
-    &.blue {
-      background: rgba($primary, 0.1);
-      color: $primary;
-    }
-
-    &.green {
-      background: rgba($success, 0.1);
-      color: $success;
-    }
-
-    &.orange {
-      background: rgba($warning, 0.1);
-      color: $warning;
-    }
-
-    &.purple {
-      background: rgba($purple, 0.1);
-      color: $purple;
-    }
-
-    &.cyan {
-      background: rgba($cyan, 0.1);
-      color: $cyan;
-    }
+    &.blue { background: rgba(99, 102, 241, 0.08); color: #6366f1; }
+    &.green { background: rgba($success, 0.08); color: $success; }
+    &.orange { background: rgba($warning, 0.08); color: #d97706; }
+    &.purple { background: rgba($primary, 0.08); color: $primary; }
+    &.cyan { background: rgba($cyan, 0.08); color: $cyan; }
   }
 
   .card-content {
@@ -653,27 +579,18 @@ $radius: 12px;
     .card-header {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 8px;
+      gap: 10px;
+      margin-bottom: 6px;
       flex-wrap: wrap;
     }
 
-    .session-title {
-      font-size: 16px;
-      font-weight: 600;
-      color: $text;
-      margin: 0;
-    }
-
-    .card-tags {
-      display: flex;
-      gap: 8px;
-    }
+    .session-title { font-size: 14px; font-weight: 600; color: $text; margin: 0; }
+    .card-tags { display: flex; gap: 6px; }
 
     .session-preview {
-      font-size: 14px;
+      font-size: 13px;
       color: $text-secondary;
-      margin: 0 0 12px;
+      margin: 0 0 8px;
       line-height: 1.5;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -683,122 +600,69 @@ $radius: 12px;
 
     .card-meta {
       display: flex;
-      gap: 20px;
-
-      .meta-item {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 13px;
-        color: $text-muted;
-      }
+      gap: 16px;
+      .meta-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: $text-muted; }
     }
   }
 
   .card-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-shrink: 0;
 
     .el-button {
-      border: none;
-      background: $bg;
+      border: 1px solid $border;
+      background: $bg-card;
       color: $text-muted;
-
-      &:hover {
-        background: rgba($primary, 0.1);
-        color: $primary;
-      }
-
-      &.favorite {
-        color: $warning;
-      }
-
-      &.delete-btn:hover {
-        background: rgba($danger, 0.1);
-        color: $danger;
-      }
+      &:hover { background: rgba($primary, 0.06); color: $primary; border-color: rgba($primary, 0.25); }
+      &.delete-btn:hover { background: rgba($danger, 0.06); color: $danger; border-color: rgba($danger, 0.25); }
     }
   }
 
   .card-preview {
-    margin-top: 16px;
-    padding-top: 16px;
+    margin-top: 12px;
+    padding-top: 12px;
     border-top: 1px solid $border;
 
     .preview-message {
-      padding: 8px 12px;
+      padding: 7px 10px;
       border-radius: 8px;
-      margin-bottom: 8px;
-      font-size: 13px;
+      margin-bottom: 6px;
+      font-size: 12.5px;
 
-      &.user {
-        background: rgba($primary, 0.05);
-      }
-
-      &.assistant {
-        background: $bg;
-      }
-
-      .preview-role {
-        font-weight: 500;
-        color: $text;
-        margin-right: 8px;
-      }
-
-      .preview-text {
-        color: $text-secondary;
-      }
+      &.user { background: rgba($primary, 0.04); }
+      &.assistant { background: $bg; }
+      .preview-role { font-weight: 600; color: $text; margin-right: 6px; }
+      .preview-text { color: $text-secondary; }
     }
   }
 }
 
 .empty-state {
   text-align: center;
-  padding: 80px 20px;
+  padding: 60px 20px;
 
   .empty-icon {
-    width: 100px;
-    height: 100px;
-    background: $bg;
+    width: 80px;
+    height: 80px;
+    background: rgba($primary, 0.06);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 24px;
-    font-size: 48px;
+    margin: 0 auto 20px;
+    font-size: 36px;
     color: $text-muted;
   }
 
-  h3 {
-    font-size: 18px;
-    color: $text;
-    margin: 0 0 8px;
-  }
-
-  p {
-    font-size: 14px;
-    color: $text-secondary;
-    margin: 0 0 24px;
-  }
+  h3 { font-size: 16px; color: $text; margin: 0 0 6px; }
+  p { font-size: 13px; color: $text-secondary; margin: 0 0 20px; }
 }
 
 @media (max-width: 768px) {
-  .page-header .header-actions .search-input {
-    width: 180px;
-  }
-
-  .filter-section .filter-container {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .session-card .card-main {
-    flex-direction: column;
-  }
-
-  .session-card .card-actions {
-    align-self: flex-end;
-  }
+  .page-header .header-actions .search-input { width: 160px; }
+  .filter-section .filter-container { flex-direction: column; align-items: stretch; }
+  .session-card .card-main { flex-direction: column; }
+  .session-card .card-actions { align-self: flex-end; }
 }
 </style>
