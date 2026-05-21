@@ -1,6 +1,6 @@
 <!-- frontend/apps/student-app/src/views/qa/index.vue -->
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -48,6 +48,11 @@ import {
   resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
 } from './qa-mode-model'
+import {
+  buildQaRouteQuery,
+  normalizeQaRouteQuery,
+  withoutQaSessionQuery,
+} from './qa-route-query-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
 import {
   isTerminalTaskStatus,
@@ -75,17 +80,18 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const mainRef = ref(null)
+const initialQaRouteQuery = normalizeQaRouteQuery(route.query)
 
 const courses = ref([])
 const knowledgeBases = ref([])
 const messages = ref([])
 const selectedCourseId = ref('')
 const selectedKnowledgeBaseId = ref('')
-const selectedMode = ref(SMART_QA_MODE)
+const selectedMode = ref(initialQaRouteQuery.mode)
 const allowHybridSmartBeta = ref(false)
 const memoryPreference = ref(normalizeMemoryPreference(null))
 const learningMemoryItems = ref([])
-const input = ref(typeof route.query.topic === 'string' ? route.query.topic : '')
+const input = ref(initialQaRouteQuery.topic)
 const activeSession = ref(null)
 const pendingTask = ref(null)
 const hybridWarmupStatus = ref('idle')
@@ -104,6 +110,8 @@ const statusMessage = ref('')
 const memoryErrorMessage = ref('')
 let pollTimer = null
 let taskStreamController = null
+let knowledgeBaseLoadRequestId = 0
+let sessionRestoreRequestId = 0
 
 const FEEDBACK_ACTIONS = [
   { key: 'helpful', label: '有用', rating: 'helpful', tags: [] },
@@ -174,6 +182,42 @@ onMounted(async () => {
   await restoreSessionFromQuery()
 })
 
+watch(
+  () => {
+    const query = normalizeQaRouteQuery(route.query)
+    return [query.courseId, query.sessionId, query.mode, query.topic]
+  },
+  async ([courseId, sessionId, mode, topic], [previousCourseId, previousSessionId, previousMode, previousTopic]) => {
+    if (mode !== previousMode && selectedMode.value !== mode) {
+      selectedMode.value = mode
+    }
+
+    if (!sessionId && topic !== previousTopic && canSyncTopicPrefill(previousTopic)) {
+      input.value = topic
+    }
+
+    if (sessionId) {
+      if (String(activeSession.value?.id ?? '') !== sessionId) {
+        await restoreSessionFromQuery()
+      }
+      return
+    }
+
+    if (previousSessionId && !sessionId) {
+      resetConversation()
+      if (courseId !== selectedCourseId.value) {
+        await syncCourseScopeFromQuery(courseId)
+      }
+      return
+    }
+
+    if (courseId !== previousCourseId) {
+      resetConversation()
+      await syncCourseScopeFromQuery(courseId)
+    }
+  },
+)
+
 onBeforeUnmount(() => {
   clearPollTimer()
   clearTaskStream()
@@ -185,7 +229,7 @@ async function loadCourses() {
   try {
     const payload = await listCourses({ page: 1, size: 100, status: 'active' })
     courses.value = normalizeCourseList(payload)
-    const queryCourseId = typeof route.query.courseId === 'string' ? route.query.courseId : ''
+    const queryCourseId = normalizeQaRouteQuery(route.query).courseId
     if (queryCourseId && courses.value.some((course) => course.courseId === queryCourseId)) {
       selectedCourseId.value = queryCourseId
       await loadKnowledgeBases(queryCourseId)
@@ -198,48 +242,92 @@ async function loadCourses() {
 }
 
 async function loadKnowledgeBases(courseId, options = {}) {
+  const requestId = ++knowledgeBaseLoadRequestId
+  const requestCourseId = String(courseId || '')
+
   if (!courseId) {
     knowledgeBases.value = []
     selectedKnowledgeBaseId.value = ''
     resetMemoryState()
+    loadingKnowledgeBases.value = false
     return []
   }
 
   loadingKnowledgeBases.value = true
   errorMessage.value = ''
   try {
-    const payload = await listCourseKnowledgeBases(courseId)
+    const payload = await listCourseKnowledgeBases(requestCourseId)
+    if (
+      requestId !== knowledgeBaseLoadRequestId
+      || requestCourseId !== String(selectedCourseId.value || '')
+    ) {
+      return []
+    }
     const nextKnowledgeBases = normalizeKnowledgeBaseList(payload)
     knowledgeBases.value = nextKnowledgeBases
     const selected = selectReadyKnowledgeBase(nextKnowledgeBases, selectedKnowledgeBaseId.value)
     selectedKnowledgeBaseId.value = selected.knowledgeBase?.id ? String(selected.knowledgeBase.id) : ''
     if (options.loadMemory !== false) {
-      await loadMemoryState(courseId, selectedKnowledgeBaseId.value)
+      await loadMemoryState(requestCourseId, selectedKnowledgeBaseId.value)
     }
     return nextKnowledgeBases
   } catch (error) {
+    if (
+      requestId !== knowledgeBaseLoadRequestId
+      || requestCourseId !== String(selectedCourseId.value || '')
+    ) {
+      return []
+    }
     errorMessage.value = error?.message || '知识库列表加载失败'
     knowledgeBases.value = []
     selectedKnowledgeBaseId.value = ''
     resetMemoryState()
     return []
   } finally {
-    loadingKnowledgeBases.value = false
+    if (requestId === knowledgeBaseLoadRequestId) {
+      loadingKnowledgeBases.value = false
+    }
   }
+}
+
+async function syncCourseScopeFromQuery(courseId) {
+  if (!courseId) {
+    selectedCourseId.value = ''
+    knowledgeBases.value = []
+    selectedKnowledgeBaseId.value = ''
+    resetMemoryState()
+    return
+  }
+
+  selectedCourseId.value = courseId
+  selectedKnowledgeBaseId.value = ''
+  await loadKnowledgeBases(courseId)
 }
 
 async function handleCourseChange(courseId) {
   resetConversation()
   resetMemoryState()
-  await clearSessionQuery()
   selectedKnowledgeBaseId.value = ''
-  await loadKnowledgeBases(courseId)
+  await router.replace({
+    path: route.path,
+    query: buildQaRouteQuery(route.query, {
+      courseId,
+      sessionId: '',
+    }),
+  })
 }
 
 async function handleKnowledgeBaseChange() {
   resetConversation()
   await loadMemoryState(selectedCourseId.value, selectedKnowledgeBaseId.value)
   await clearSessionQuery()
+}
+
+function canSyncTopicPrefill(previousTopic) {
+  if (activeSession.value) {
+    return false
+  }
+  return !input.value.trim() || input.value === previousTopic
 }
 
 function resetConversation() {
@@ -446,6 +534,10 @@ async function resolveModeForSend(text, course, knowledgeBase) {
 
 async function handleModeSelect(mode) {
   selectedMode.value = mode
+  await router.replace({
+    path: route.path,
+    query: buildQaRouteQuery(route.query, { mode }),
+  })
   if (mode === 'hybrid_v0' && selectedCourse.value && selectedKnowledgeBase.value) {
     await ensureHybridWarmup(selectedCourse.value, selectedKnowledgeBase.value)
   }
@@ -578,41 +670,84 @@ async function ensureSession(course, knowledgeBase, firstQuestion) {
   activeSession.value = normalizeQaSession(createdSession)
   await router.replace({
     path: route.path,
-    query: {
-      ...route.query,
+    query: buildQaRouteQuery(route.query, {
       courseId: course.courseId,
       sessionId: String(activeSession.value.id),
-    },
+    }),
   })
   return activeSession.value
 }
 
-async function restoreSessionFromQuery() {
-  const sessionId = typeof route.query.sessionId === 'string' ? route.query.sessionId : ''
+async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(route.query).sessionId) {
+  const sessionId = String(routeSessionId || '')
   if (!sessionId) {
     return
   }
 
+  const requestId = ++sessionRestoreRequestId
   restoringSession.value = true
   errorMessage.value = ''
   try {
     const session = normalizeQaSession(await getQaSession(sessionId))
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
+    }
     activeSession.value = session
     selectedCourseId.value = session.courseId
+    await syncRestoredSessionRouteQuery(session, sessionId)
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
+    }
     if (session.courseId) {
       await loadKnowledgeBases(session.courseId, { loadMemory: false })
+    } else {
+      knowledgeBases.value = []
+      selectedKnowledgeBaseId.value = ''
+    }
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
     }
     selectedKnowledgeBaseId.value = session.knowledgeBaseId != null ? String(session.knowledgeBaseId) : ''
     await loadMemoryState(session.courseId, selectedKnowledgeBaseId.value)
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
+    }
     const list = await listQaMessages(session.id)
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
+    }
     messages.value = list.map(normalizeQaMessage)
     statusMessage.value = activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问'
     await scrollToBottom()
   } catch (error) {
-    errorMessage.value = error?.message || '历史会话恢复失败'
+    if (isCurrentSessionRestore(requestId, sessionId)) {
+      errorMessage.value = error?.message || '历史会话恢复失败'
+    }
   } finally {
-    restoringSession.value = false
+    if (requestId === sessionRestoreRequestId) {
+      restoringSession.value = false
+    }
   }
+}
+
+async function syncRestoredSessionRouteQuery(session, sessionId) {
+  if (!session.courseId || normalizeQaRouteQuery(route.query).courseId === session.courseId) {
+    return
+  }
+  await router.replace({
+    path: route.path,
+    query: buildQaRouteQuery(route.query, {
+      courseId: session.courseId,
+      sessionId,
+    }),
+  })
+}
+
+function isCurrentSessionRestore(requestId, sessionId) {
+  return (
+    requestId === sessionRestoreRequestId
+    && normalizeQaRouteQuery(route.query).sessionId === String(sessionId)
+  )
 }
 
 async function startNewIndexedSession() {
@@ -639,8 +774,11 @@ async function clearSessionQuery() {
   if (!route.query.sessionId) {
     return
   }
-  const { sessionId, ...restQuery } = route.query
-  await router.replace({ path: route.path, query: restQuery })
+  const query = withoutQaSessionQuery(route.query)
+  if (!query.courseId && selectedCourseId.value) {
+    query.courseId = selectedCourseId.value
+  }
+  await router.replace({ path: route.path, query })
 }
 
 function buildSessionTitle(question) {

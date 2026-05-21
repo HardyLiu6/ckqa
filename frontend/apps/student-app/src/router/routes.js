@@ -4,6 +4,7 @@ const routeStateView = () => import('../views/status/RouteState.vue')
 const authLoginView = () => import('../views/auth/AuthLogin.vue')
 const authRegisterView = () => import('../views/auth/AuthRegister.vue')
 const authForgotPasswordView = () => import('../views/auth/AuthForgotPassword.vue')
+const routePreloadCache = new Map()
 
 function createComingSoonDescription(title, section) {
   if (section) {
@@ -216,3 +217,64 @@ export const routes = [
 ]
 
 export const whiteList = ['/', '/login', '/register', '/forgot-password', '/403', '/404', '/500']
+
+function normalizeRoutePath(path) {
+  if (typeof path !== 'string' || path.trim() === '') return ''
+  const [pathname] = path.split(/[?#]/)
+  if (pathname === '/') return '/'
+  return pathname.replace(/\/+$/, '')
+}
+
+function resolveRedirectPath(redirect) {
+  if (typeof redirect === 'string') return redirect
+  if (redirect && typeof redirect === 'object' && typeof redirect.path === 'string') {
+    return redirect.path
+  }
+  return ''
+}
+
+function findRouteByPath(path) {
+  const normalizedPath = normalizeRoutePath(path)
+  return routes.find((route) => normalizeRoutePath(route.path) === normalizedPath)
+}
+
+/**
+ * 根据模块入口解析真实落地页，供导航预加载使用。
+ * 这里只返回路由记录，不执行动态 import，便于测试和复用。
+ */
+export function resolveRoutePreloadTargets(path, visited = new Set()) {
+  const normalizedPath = normalizeRoutePath(path)
+  if (!normalizedPath || visited.has(normalizedPath)) return []
+
+  visited.add(normalizedPath)
+  const route = findRouteByPath(normalizedPath)
+  if (!route) return []
+
+  const targets = typeof route.component === 'function' ? [route] : []
+  const redirectPath = resolveRedirectPath(route.redirect)
+  if (!redirectPath) return targets
+
+  return [...targets, ...resolveRoutePreloadTargets(redirectPath, visited)]
+}
+
+function preloadRouteComponent(route) {
+  const cacheKey = route.name || route.path
+  if (!routePreloadCache.has(cacheKey)) {
+    const preloadPromise = Promise.resolve()
+      .then(() => route.component())
+      .catch((error) => {
+        routePreloadCache.delete(cacheKey)
+        throw error
+      })
+    routePreloadCache.set(cacheKey, preloadPromise)
+  }
+  return routePreloadCache.get(cacheKey)
+}
+
+/**
+ * 预加载入口路由对应的真实页面 chunk。失败时交给调用方记录，不阻塞导航。
+ */
+export function preloadRouteComponentByPath(path) {
+  const targets = resolveRoutePreloadTargets(path)
+  return Promise.all(targets.map((route) => preloadRouteComponent(route)))
+}

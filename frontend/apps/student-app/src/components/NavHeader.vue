@@ -4,6 +4,8 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useCurrentModule, MODULE_COLORS } from '@/composables/useCurrentModule'
+import { preloadModuleSideNavByPath } from '@/layouts/moduleSideNavLoaders'
+import { preloadRouteComponentByPath } from '@/router/routes'
 import { Bell, ChatDotRound, Search } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -14,6 +16,9 @@ const globalSearch = ref('')
 const unreadCount = ref(3)
 const isScrolled = ref(false)
 const avatarLoadFailed = ref(false)
+const preloadStartedPaths = new Set()
+const warmupTimers = new Set()
+const idleCallbackIds = new Set()
 
 // 顶栏主导航项
 const modules = [
@@ -63,6 +68,49 @@ function handleUserCommand(command) {
   }
 }
 
+function logPreloadFailure(path, results) {
+  if (!import.meta.env.DEV) return
+  const rejected = results.find((result) => result.status === 'rejected')
+  if (rejected) {
+    console.warn(`[student-app] 导航预加载失败：${path}`, rejected.reason)
+  }
+}
+
+function preloadNavTarget(path) {
+  if (preloadStartedPaths.has(path)) return
+  preloadStartedPaths.add(path)
+
+  void Promise.allSettled([
+    preloadRouteComponentByPath(path),
+    preloadModuleSideNavByPath(path),
+  ]).then((results) => logPreloadFailure(path, results))
+}
+
+function scheduleIdlePreload(path, delay) {
+  const timerId = window.setTimeout(() => {
+    warmupTimers.delete(timerId)
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(() => {
+        idleCallbackIds.delete(idleId)
+        preloadNavTarget(path)
+      }, { timeout: 1500 })
+      idleCallbackIds.add(idleId)
+      return
+    }
+    preloadNavTarget(path)
+  }, delay)
+
+  warmupTimers.add(timerId)
+}
+
+function scheduleNavWarmup() {
+  // 首屏稳定后分批预热最常用模块，避免第一次点击才加载页面与副导航 chunk。
+  const warmupPaths = ['/course', '/qa', '/knowledge']
+  warmupPaths.forEach((path, index) => {
+    scheduleIdlePreload(path, 500 + index * 700)
+  })
+}
+
 // 滚动监听：scrollY > 80 时背景收浓
 function handleScroll() {
   isScrolled.value = window.scrollY > 80
@@ -74,10 +122,17 @@ watch(avatarUrl, () => {
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })
+  scheduleNavWarmup()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', handleScroll)
+  warmupTimers.forEach((timerId) => window.clearTimeout(timerId))
+  warmupTimers.clear()
+  if (typeof window.cancelIdleCallback === 'function') {
+    idleCallbackIds.forEach((idleId) => window.cancelIdleCallback(idleId))
+  }
+  idleCallbackIds.clear()
 })
 </script>
 
@@ -86,7 +141,13 @@ onBeforeUnmount(() => {
     <div class="nav-grid">
       <!-- 左：Logo -->
       <div class="nav-left">
-        <RouterLink to="/home" class="logo-section">
+        <RouterLink
+          to="/home"
+          class="logo-section"
+          @pointerenter="preloadNavTarget('/home')"
+          @focus="preloadNavTarget('/home')"
+          @touchstart.passive="preloadNavTarget('/home')"
+        >
           <div class="logo-icon">
             <el-icon :size="20"><ChatDotRound /></el-icon>
           </div>
@@ -103,6 +164,9 @@ onBeforeUnmount(() => {
           class="nav-item"
           :class="{ active: isActive(m.key) }"
           :style="itemStyle(m.key)"
+          @pointerenter="preloadNavTarget(m.path)"
+          @focus="preloadNavTarget(m.path)"
+          @touchstart.passive="preloadNavTarget(m.path)"
         >
           {{ m.label }}
         </RouterLink>

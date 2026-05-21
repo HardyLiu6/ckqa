@@ -204,7 +204,11 @@ function onAskQuestion(entity) {
     ElMessage.warning('当前节点缺少名称，无法跳转问答。')
     return
   }
-  router.push({ path: '/qa/ask', query: { topic: entity.name } })
+  const query = { topic: entity.name }
+  if (askQuestionCourseId.value) {
+    query.courseId = askQuestionCourseId.value
+  }
+  router.push({ path: '/qa/ask', query })
 }
 
 function onBackToOverview() {
@@ -213,11 +217,20 @@ function onBackToOverview() {
   store.entityDetail = null
 }
 
+function resetGraphView() {
+  store.activeKnowledgeBase = null
+  store.entityDetail = null
+  store.selectedNodeId = null
+  renderedNodes.value = []
+  renderedEdges.value = []
+}
+
 // ========== 课程选择 ==========
 const preferredCourseId = computed(() => {
   const raw = route.query.courseId
   return typeof raw === 'string' && raw.trim() ? raw.trim() : ''
 })
+const askQuestionCourseId = computed(() => store.selectedCourseId || preferredCourseId.value)
 
 async function loadGraphForCourse(courseId) {
   if (!courseId) return
@@ -233,22 +246,25 @@ async function bootstrap() {
   renderedEdges.value = []
   const chosen = await store.loadAvailableCourses(preferredCourseId.value)
   if (chosen && chosen !== preferredCourseId.value) {
-    router.replace({ query: { ...route.query, courseId: chosen } })
+    await router.replace({ query: { ...route.query, courseId: chosen } })
+    return
   }
   await loadGraphForCourse(chosen)
 }
 
 async function onCourseChange(courseId) {
   if (!courseId) return
-  store.selectedCourseId = courseId
-  router.replace({ query: { ...route.query, courseId } })
-  store.activeKnowledgeBase = null
-  store.entityDetail = null
-  store.selectedNodeId = null
-  renderedNodes.value = []
-  renderedEdges.value = []
-  await loadGraphForCourse(courseId)
+  await router.replace({ query: { ...route.query, courseId } })
 }
+
+watch(preferredCourseId, async (courseId, previousCourseId) => {
+  if (!courseId || courseId === previousCourseId) {
+    return
+  }
+  store.selectedCourseId = courseId
+  resetGraphView()
+  await loadGraphForCourse(courseId)
+})
 
 watch(() => store.errorMessage, (msg) => {
   if (msg && store.state !== GRAPH_STATE.ERROR) ElMessage.warning(msg)
@@ -339,7 +355,7 @@ const isExploring = computed(() => renderedNodes.value.some((n) => !n.__isCommun
           <h3>当前社区暂无可视节点</h3>
         </div>
 
-        <div v-show="showCanvas" class="canvas-wrap">
+        <div v-if="showCanvas" class="canvas-wrap">
           <div v-if="store.state === GRAPH_STATE.LOADING" class="loading-mask">加载中…</div>
           <GraphCanvas
             :nodes="renderedNodes"

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { routes, whiteList } from '../src/router/routes.js'
+import { resolveRoutePreloadTargets, routes, whiteList } from '../src/router/routes.js'
 
 const routeMap = new Map(routes.map((route) => [route.name, route]))
 
@@ -68,4 +68,20 @@ test('whiteList 覆盖未登录可访问的基础路径', () => {
   assert.ok(whiteList.includes('/'))
   assert.ok(whiteList.includes('/login'))
   assert.ok(whiteList.includes('/404'))
+})
+
+test('顶栏模块入口可解析到真实落地页用于预加载', () => {
+  const cases = [
+    ['/home', ['Home']],
+    ['/course', ['CourseList']],
+    ['/qa', ['QAAsk']],
+    ['/knowledge', ['KnowledgeGraph']],
+    ['/community', ['CommunityDiscuss']],
+    ['/analysis', ['WrongAnalysis']],
+  ]
+
+  for (const [path, expectedNames] of cases) {
+    const targetNames = resolveRoutePreloadTargets(path).map((route) => route.name)
+    assert.deepEqual(targetNames, expectedNames, `${path} 预加载目标不正确`)
+  }
 })

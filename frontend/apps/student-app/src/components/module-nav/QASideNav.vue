@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Plus, Clock } from '@element-plus/icons-vue'
 import { listQaSessions } from '@/api/qa'
 import { normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
+import { buildQaRouteQuery, withoutQaSessionQuery } from '@/views/qa/qa-route-query-model'
 
 const router = useRouter()
 const route = useRoute()
@@ -19,7 +20,7 @@ const sessions = computed(() => rawSessions.value.map((session) => (
 )))
 
 function createNew() {
-  router.push('/qa/ask')
+  router.push({ path: '/qa/ask', query: withoutQaSessionQuery(route.query) })
 }
 
 function viewHistory() {
@@ -27,7 +28,11 @@ function viewHistory() {
 }
 
 function selectSession(session) {
-  router.push({ path: '/qa/ask', query: { sessionId: session.id } })
+  const queryPatch = { sessionId: session.id }
+  if (session.courseId) {
+    queryPatch.courseId = session.courseId
+  }
+  router.push({ path: '/qa/ask', query: buildQaRouteQuery(route.query, queryPatch) })
 }
 
 async function loadRecentSessions() {

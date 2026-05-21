@@ -1,7 +1,6 @@
 <!-- 知识图谱画布：接收带坐标的 nodes/edges，纯渲染 + 交互事件 -->
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
-import { Graph } from '@antv/g6'
 
 const props = defineProps({
   /** 节点数组，每个节点必须有 id, x, y；可选 data.* */
@@ -19,6 +18,15 @@ const emit = defineEmits(['select', 'expand'])
 const containerRef = ref(null)
 let graph = null
 let resizeObserver = null
+let disposed = false
+let graphCtorPromise = null
+
+function loadGraphCtor() {
+  if (!graphCtorPromise) {
+    graphCtorPromise = import('@antv/g6').then((module) => module.Graph)
+  }
+  return graphCtorPromise
+}
 
 function buildGraphData(nodes, edges) {
   const nodeIds = new Set((nodes ?? []).map((n) => String(n?.id)).filter(Boolean))
@@ -67,6 +75,9 @@ onMounted(async () => {
   const height = Math.max(360, Math.round(rect.height))
 
   try {
+    const Graph = await loadGraphCtor()
+    if (disposed || !containerRef.value) return
+
     graph = new Graph({
       container: containerRef.value,
       width,
@@ -144,6 +155,7 @@ function doFocus() {
 }
 
 onBeforeUnmount(() => {
+  disposed = true
   if (resizeObserver) { try { resizeObserver.disconnect() } catch { /* */ } }
   if (graph) { try { graph.destroy() } catch { /* */ } }
   graph = null

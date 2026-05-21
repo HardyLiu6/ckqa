@@ -5,19 +5,19 @@ import { computed, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import NavHeader from '@/components/NavHeader.vue'
 import { useCurrentModule } from '@/composables/useCurrentModule'
+import { moduleSideNavLoaders } from '@/layouts/moduleSideNavLoaders'
+import { resolveRouteViewKey } from '@/layouts/route-view-key'
 
 const route = useRoute()
 const { moduleKey, colors } = useCurrentModule()
 
-// 按模块懒加载副导航
-const sideNavMap = {
-  course: defineAsyncComponent(() => import('@/components/module-nav/CourseSideNav.vue')),
-  qa: defineAsyncComponent(() => import('@/components/module-nav/QASideNav.vue')),
-  knowledge: defineAsyncComponent(() => import('@/components/module-nav/KnowledgeSideNav.vue')),
-  user: defineAsyncComponent(() => import('@/components/module-nav/UserSideNav.vue')),
-}
+// 按模块懒加载副导航；loader 同时供顶栏预加载复用。
+const sideNavMap = Object.fromEntries(
+  Object.entries(moduleSideNavLoaders).map(([key, loader]) => [key, defineAsyncComponent(loader)]),
+)
 
 const SideNav = computed(() => sideNavMap[moduleKey.value] || null)
+const routeViewKey = computed(() => resolveRouteViewKey(route))
 
 // 为主区注入模块色 CSS 变量
 const moduleStyle = computed(() => ({
@@ -37,7 +37,7 @@ const moduleStyle = computed(() => ({
       <main class="module-main">
         <RouterView v-slot="{ Component }">
           <Transition name="page" mode="out-in">
-            <component :is="Component" :key="route.fullPath" />
+            <component :is="Component" :key="routeViewKey" />
           </Transition>
         </RouterView>
       </main>
