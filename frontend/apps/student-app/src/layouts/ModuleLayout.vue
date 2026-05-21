@@ -79,7 +79,7 @@ const moduleStyle = computed(() => ({
   transition: width $duration-base $ease-out;
 
   &.collapsed {
-    width: 0;
+    width: 52px;
     overflow: hidden;
   }
 

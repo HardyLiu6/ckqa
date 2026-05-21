@@ -1,6 +1,6 @@
 <!-- frontend/apps/student-app/src/views/qa/index.vue -->
 <script setup>
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -81,9 +81,6 @@ const plusMenuOpen = ref(false)
 const modeMenuOpen = ref(false)
 const courseSelectOpen = ref(false)
 const kbSelectOpen = ref(false)
-
-const sidebarCollapsed = inject('sidebarCollapsed', ref(false))
-const toggleSidebar = inject('toggleSidebar', () => {})
 
 const courses = ref([])
 const knowledgeBases = ref([])
@@ -1019,20 +1016,6 @@ function sourceTypeLabel(source) {
 
 <template>
   <div class="qa-ask-page">
-    <!-- 侧边栏展开按钮（收起时显示） -->
-    <button
-      v-if="sidebarCollapsed"
-      class="expand-sidebar-btn"
-      type="button"
-      title="展开侧边栏"
-      @click="toggleSidebar"
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="4" />
-        <line x1="9" y1="3" x2="9" y2="21" />
-      </svg>
-    </button>
-
     <!-- 主对话区 -->
     <div ref="mainRef" class="qa-main" aria-live="polite">
       <!-- 空态欢迎 -->
@@ -1344,34 +1327,6 @@ function sourceTypeLabel(source) {
 }
 
 /* ===== 主对话区 ===== */
-.expand-sidebar-btn {
-  position: fixed;
-  left: 12px;
-  top: 80px;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #7e22ce;
-  font-size: 16px;
-  font-family: inherit;
-  z-index: 10;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  transition: background $duration-fast $ease-out, border-color $duration-fast $ease-out, transform $duration-fast $ease-out;
-
-  &:hover {
-    background: #fff;
-    border-color: rgba(147, 51, 234, 0.4);
-    transform: scale(1.08);
-  }
-}
-
 .qa-main {
   display: flex;
   flex: 1;

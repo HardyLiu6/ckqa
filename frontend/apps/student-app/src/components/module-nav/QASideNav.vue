@@ -1,4 +1,4 @@
-<!-- 问答模块副导航 · V2 胶囊风格 · 新建对话 + 搜索 + 时间分组 + 活跃指示条 -->
+<!-- 问答模块副导航 · 展开态：胶囊风格 / 折叠态：GPT 风格图标条 -->
 <script setup>
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -15,6 +15,7 @@ const rawSessions = ref([])
 const loading = ref(false)
 const errorMessage = ref('')
 const searchKeyword = ref('')
+const recentPopoverOpen = ref(false)
 
 const activeSessionId = computed(() => String(route.query.sessionId ?? ''))
 
@@ -22,7 +23,10 @@ const sessions = computed(() =>
   rawSessions.value.map((session) => toQaSideNavSession(session, activeSessionId.value)),
 )
 
-// 按时间分组
+// 最近 10 条（折叠态 popover 用）
+const recentTen = computed(() => sessions.value.slice(0, 10))
+
+// 按时间分组（展开态用）
 const groupedSessions = computed(() => {
   const filtered = searchKeyword.value
     ? sessions.value.filter((s) => s.title.toLowerCase().includes(searchKeyword.value.toLowerCase()))
@@ -58,6 +62,7 @@ function viewHistory() {
 
 function selectSession(session) {
   router.push({ path: '/qa/ask', query: { sessionId: session.id } })
+  recentPopoverOpen.value = false
 }
 
 async function loadRecentSessions() {
@@ -66,7 +71,7 @@ async function loadRecentSessions() {
   try {
     const payload = await listQaSessions({ status: 'active', page: 1, size: 20 })
     rawSessions.value = normalizeQaSessionList(payload)
-    // 只保留近一个月的会话，更早的通过「查看全部历史」获取
+    // 只保留近一个月的会话
     const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     rawSessions.value = rawSessions.value.filter((s) => {
       const ref = s.lastMessageAt || s.createdAt || ''
@@ -94,8 +99,59 @@ watch(
 </script>
 
 <template>
-  <nav class="qa-sidebar">
-    <!-- 顶部：新建对话 + 折叠按钮 -->
+  <!-- ===== 折叠态：GPT 风格图标条 ===== -->
+  <nav v-if="sidebarCollapsed" class="qa-sidebar-collapsed">
+    <button class="icon-btn" title="打开边栏" @click="toggleSidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="4" />
+        <line x1="9" y1="3" x2="9" y2="21" />
+      </svg>
+    </button>
+
+    <button class="icon-btn" title="新聊天" @click="createNew">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      </svg>
+    </button>
+
+    <button class="icon-btn" title="搜索聊天" @click="toggleSidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    </button>
+
+    <div class="icon-btn-wrap">
+      <button class="icon-btn" title="最近聊天" @click="recentPopoverOpen = !recentPopoverOpen">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </button>
+
+      <!-- 最近聊天 popover -->
+      <Transition name="pop">
+        <div v-if="recentPopoverOpen" class="recent-popover">
+          <div class="recent-pop-head">最近聊天</div>
+          <div class="recent-pop-list">
+            <div
+              v-for="session in recentTen"
+              :key="session.id"
+              class="recent-pop-item"
+              :class="{ active: session.active }"
+              @click="selectSession(session)"
+            >
+              <svg class="recent-pop-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span class="recent-pop-title">{{ session.title }}</span>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </div>
+  </nav>
+
+  <!-- ===== 展开态：完整侧边栏 ===== -->
+  <nav v-else class="qa-sidebar">
     <div class="sidebar-head">
       <button class="btn-new" @click="createNew">
         <span class="btn-new-icon">＋</span>
@@ -109,7 +165,6 @@ watch(
       </button>
     </div>
 
-    <!-- 搜索 · 胶囊 -->
     <div class="search-wrap">
       <span class="search-icon">⌕</span>
       <input
@@ -120,13 +175,11 @@ watch(
       />
     </div>
 
-    <!-- 会话列表 -->
     <div class="session-scroll">
       <div v-if="loading" class="session-state">正在加载…</div>
       <div v-else-if="errorMessage" class="session-state error">{{ errorMessage }}</div>
       <div v-else-if="!hasAnySession" class="session-state">暂无历史会话</div>
       <template v-else>
-        <!-- 今天 -->
         <template v-if="groupedSessions.today.length">
           <div class="group-label">今天</div>
           <div
@@ -144,7 +197,6 @@ watch(
           </div>
         </template>
 
-        <!-- 昨天 -->
         <template v-if="groupedSessions.yesterday.length">
           <div class="group-label">昨天</div>
           <div
@@ -162,7 +214,6 @@ watch(
           </div>
         </template>
 
-        <!-- 更早 -->
         <template v-if="groupedSessions.earlier.length">
           <div class="group-label">更早</div>
           <div
@@ -182,7 +233,6 @@ watch(
       </template>
     </div>
 
-    <!-- 底部 · 查看全部历史 · 居中胶囊 -->
     <div class="sidebar-foot">
       <button class="btn-history" @click="viewHistory">查看全部历史</button>
     </div>
@@ -193,6 +243,100 @@ watch(
 @use '@/styles/tokens/radius' as *;
 @use '@/styles/tokens/motion' as *;
 
+/* ===== 折叠态：GPT 风格图标条 ===== */
+.qa-sidebar-collapsed {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(250, 245, 255, 0.3) 0%, rgba(255, 255, 255, 0.5) 100%);
+  border-right: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #475569;
+  transition: background $duration-fast $ease-out, color $duration-fast $ease-out;
+
+  &:hover {
+    background: rgba(148, 163, 184, 0.12);
+    color: #7e22ce;
+  }
+}
+
+.icon-btn-wrap {
+  position: relative;
+}
+
+/* 最近聊天 popover */
+.recent-popover {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  width: 280px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  z-index: 100;
+}
+
+.recent-pop-head {
+  padding: 10px 12px 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.recent-pop-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.recent-pop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background $duration-fast $ease-out;
+
+  &:hover { background: rgba(148, 163, 184, 0.08); }
+  &.active { background: rgba(147, 51, 234, 0.08); }
+  &.active .recent-pop-title { color: #7e22ce; font-weight: 700; }
+}
+
+.recent-pop-ico {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.recent-pop-title {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ===== 展开态 ===== */
 .qa-sidebar {
   height: 100%;
   display: flex;
@@ -203,7 +347,6 @@ watch(
   backdrop-filter: blur(20px);
 }
 
-/* 新建对话 · 胶囊 */
 .sidebar-head {
   display: flex;
   align-items: center;
@@ -234,6 +377,18 @@ watch(
   }
 }
 
+.btn-new-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+}
+
 .btn-collapse {
   width: 36px;
   height: 36px;
@@ -245,7 +400,6 @@ watch(
   justify-content: center;
   cursor: pointer;
   color: #64748b;
-  font-size: 14px;
   flex-shrink: 0;
   transition: background $duration-fast $ease-out, border-color $duration-fast $ease-out, color $duration-fast $ease-out;
 
@@ -262,19 +416,6 @@ watch(
   justify-content: center;
 }
 
-.btn-new-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* 搜索 · 胶囊 */
 .search-wrap {
   position: relative;
   margin-bottom: 10px;
@@ -303,17 +444,10 @@ watch(
   font-family: inherit;
   transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-  &::placeholder {
-    color: #94a3b8;
-  }
-
-  &:focus {
-    border-color: rgba(147, 51, 234, 0.4);
-    box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.08);
-  }
+  &::placeholder { color: #94a3b8; }
+  &:focus { border-color: rgba(147, 51, 234, 0.4); box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.08); }
 }
 
-/* 分组标签 */
 .group-label {
   font-size: 11px;
   color: #94a3b8;
@@ -322,7 +456,6 @@ watch(
   padding: 10px 8px 5px;
 }
 
-/* 会话列表滚动区 */
 .session-scroll {
   flex: 1;
   overflow-y: auto;
@@ -332,17 +465,10 @@ watch(
   margin: 0 -2px;
   padding: 0 2px;
 
-  &::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.2);
-    border-radius: 3px;
-  }
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 3px; }
 }
 
-/* 会话条目 */
 .session-item {
   display: flex;
   align-items: center;
@@ -353,9 +479,7 @@ watch(
   transition: background $duration-fast $ease-out;
   position: relative;
 
-  &:hover {
-    background: rgba(148, 163, 184, 0.08);
-  }
+  &:hover { background: rgba(148, 163, 184, 0.08); }
 
   &.active {
     background: rgba(147, 51, 234, 0.08);
@@ -372,21 +496,12 @@ watch(
       background: linear-gradient(180deg, #9333ea, #6366f1);
     }
 
-    .session-title {
-      color: #7e22ce;
-      font-weight: 700;
-    }
-
-    .session-time {
-      color: #a78bfa;
-    }
+    .session-title { color: #7e22ce; font-weight: 700; }
+    .session-time { color: #a78bfa; }
   }
 }
 
-.session-body {
-  flex: 1;
-  min-width: 0;
-}
+.session-body { flex: 1; min-width: 0; }
 
 .session-title {
   font-size: 13px;
@@ -415,7 +530,6 @@ watch(
   margin-top: 2px;
 }
 
-/* 状态提示 */
 .session-state {
   padding: 12px 10px;
   color: #94a3b8;
@@ -423,12 +537,9 @@ watch(
   line-height: 1.5;
   text-align: center;
 
-  &.error {
-    color: #b91c1c;
-  }
+  &.error { color: #b91c1c; }
 }
 
-/* 底部 · 查看全部历史 · 居中 */
 .sidebar-foot {
   border-top: 1px solid rgba(226, 232, 240, 0.5);
   padding: 12px 2px 4px;
@@ -458,4 +569,8 @@ watch(
     color: #7e22ce;
   }
 }
+
+/* Transition */
+.pop-enter-active, .pop-leave-active { transition: opacity $duration-fast $ease-out, transform $duration-fast $ease-out; }
+.pop-enter-from, .pop-leave-to { opacity: 0; transform: translateX(-4px) scale(0.96); }
 </style>
