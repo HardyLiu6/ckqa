@@ -75,6 +75,10 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const mainRef = ref(null)
+const composerInputRef = ref(null)
+const composerFocused = ref(false)
+const plusMenuOpen = ref(false)
+const modeMenuOpen = ref(false)
 
 const courses = ref([])
 const knowledgeBases = ref([])
@@ -924,6 +928,12 @@ async function scrollToBottom() {
   mainRef.value?.scrollTo({ top: mainRef.value.scrollHeight, behavior: 'smooth' })
 }
 
+function autoResizeInput(event) {
+  const el = event.target
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+}
+
 function formatMessageTime(value) {
   if (!value) {
     return '刚刚'
@@ -1004,168 +1014,22 @@ function sourceTypeLabel(source) {
 
 <template>
   <div class="qa-ask-page">
-    <section class="qa-control-panel" aria-label="问答设置">
-      <div class="qa-scope-grid">
-        <label class="scope-field">
-          <span>课程</span>
-          <el-select
-            v-model="selectedCourseId"
-            class="scope-select"
-            clearable
-            filterable
-            :loading="loadingCourses"
-            placeholder="自动识别或选择课程"
-            @change="handleCourseChange"
-          >
-            <el-option
-              v-for="course in courses"
-              :key="course.courseId"
-              :label="course.name"
-              :value="course.courseId"
-            />
-          </el-select>
-        </label>
-
-        <label class="scope-field">
-          <span>知识库</span>
-          <el-select
-            v-model="selectedKnowledgeBaseId"
-            class="scope-select"
-            clearable
-            filterable
-            :disabled="!selectedCourseId"
-            :loading="loadingKnowledgeBases"
-            placeholder="选择可用知识库"
-            @change="handleKnowledgeBaseChange"
-          >
-            <el-option
-              v-for="knowledgeBase in knowledgeBases"
-              :key="knowledgeBase.id"
-              :disabled="knowledgeBase.activeIndexRunId == null"
-              :label="knowledgeBase.name"
-              :value="String(knowledgeBase.id)"
-            >
-              <span>{{ knowledgeBase.name }}</span>
-              <span class="kb-option-state">
-                {{ knowledgeBase.activeIndexRunId == null ? '未激活索引' : `索引 #${knowledgeBase.activeIndexRunId}` }}
-              </span>
-            </el-option>
-          </el-select>
-        </label>
-
-        <div class="scope-actions">
-          <button class="icon-action" type="button" :disabled="loadingCourses" @click="refreshScope">
-            <el-icon :size="16"><Refresh /></el-icon>
-            <span>刷新</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="mode-selector" role="radiogroup" aria-label="问答模式">
-        <button
-          v-for="mode in QA_MODE_OPTIONS"
-          :key="mode.value"
-          class="mode-button"
-          :class="{ active: selectedMode === mode.value }"
-          type="button"
-          role="radio"
-          :aria-checked="selectedMode === mode.value"
-          @click="handleModeSelect(mode.value)"
-        >
-          <span class="mode-label">{{ mode.label }}</span>
-          <span class="mode-desc">{{ mode.description }}</span>
-        </button>
-      </div>
-
-      <label class="beta-toggle">
-        <input
-          v-model="allowHybridSmartBeta"
-          type="checkbox"
-          @change="handleHybridBetaToggle"
-        />
-        <span>允许智能推荐使用混合检索 Beta</span>
-      </label>
-
-      <div class="memory-panel">
-        <label class="memory-toggle">
-          <input
-            :checked="memoryEnabled"
-            type="checkbox"
-            :disabled="!memoryScopeReady || loadingMemory || savingMemoryPreference"
-            @change="handleMemoryToggle($event.target.checked)"
-          />
-          <span>跨对话学习记忆</span>
-        </label>
-        <div class="memory-state">
-          <span>{{ loadingMemory ? '学习记忆加载中' : memoryStatusText }}</span>
-          <span>{{ memorySendStatusText }}</span>
-          <span v-if="memoryErrorMessage" class="memory-error">{{ memoryErrorMessage }}</span>
-        </div>
-        <details class="memory-cleaner">
-          <summary>清除学习记忆</summary>
-          <div v-if="!memoryScopeReady" class="memory-empty">请先选择课程和知识库</div>
-          <div v-else-if="loadingMemory" class="memory-empty">正在读取学习记忆</div>
-          <div v-else-if="!learningMemoryItems.length" class="memory-empty">开启后，系统会从你的学习追问中自动沉淀关注点和解释偏好</div>
-          <ul v-else class="memory-list">
-            <li v-for="memory in learningMemoryItems" :key="memory.id" class="memory-item">
-              <div class="memory-item-main">
-                <span class="memory-type">{{ learningMemoryTypeLabel(memory.memoryType) || 'memory' }}</span>
-                <span class="memory-created">{{ memory.createdAt || '时间未记录' }}</span>
-                <span class="memory-preview">{{ memory.memoryText || '内容为空' }}</span>
-              </div>
-              <button
-                class="memory-delete"
-                type="button"
-                :disabled="deletingMemoryItemId === memory.id"
-                @click="handleDeleteMemoryItem(memory)"
-              >
-                删除
-              </button>
-            </li>
-          </ul>
-        </details>
-      </div>
-
-      <div class="scope-status">
-        <span class="scope-pill">
-          <el-icon><Reading /></el-icon>
-          {{ selectedScopeLabel }}
-        </span>
-        <span class="scope-pill mode-pill">
-          <el-icon><Connection /></el-icon>
-          {{ getModeOption(selectedMode).shortLabel }} -> {{ activeModeOption.shortLabel }}
-        </span>
-        <span v-if="readyKnowledgeBases.length" class="scope-pill ready-pill">
-          <el-icon><CircleCheck /></el-icon>
-          {{ readyKnowledgeBases.length }} 个可用知识库
-        </span>
-        <span v-if="activeSession?.indexRunId" class="scope-pill">
-          会话索引 #{{ activeSession.indexRunId }}
-        </span>
-        <span v-if="hybridWarmupText" class="scope-pill hybrid-warmup-pill" :title="hybridWarmupMessage">
-          {{ hybridWarmupText }}
-        </span>
-        <span class="scope-pill memory-pill">
-          {{ memorySendStatusText }}
-        </span>
-      </div>
-
-      <div v-if="activeIndexChanged" class="qa-alert info-alert">
-        <el-icon><WarningFilled /></el-icon>
-        <span>当前知识库已有新索引；本会话会继续使用旧索引 #{{ activeSession.indexRunId }}。</span>
-        <button class="inline-action" type="button" @click="startNewIndexedSession">新建新索引会话</button>
-      </div>
-    </section>
-
+    <!-- 主对话区 -->
     <div ref="mainRef" class="qa-main" aria-live="polite">
+      <!-- 空态欢迎 -->
       <div v-if="isEmpty" class="empty-state">
-        <div class="empty-icon">
-          <el-icon :size="36"><ChatDotRound /></el-icon>
+        <div class="empty-icon">💬</div>
+        <h1 class="empty-title">从真实课程知识库开始提问</h1>
+        <p class="empty-desc">先写问题，系统会尝试识别课程。课程、模式、记忆等设置都在输入框左侧的 ＋ 菜单里。</p>
+        <div class="suggest-row">
+          <button class="suggest-chip" type="button" @click="input = '解释「进程」与「线程」的本质区别'">📘 解释「进程」与「线程」的本质区别</button>
+          <button class="suggest-chip" type="button" @click="input = '给我整体的知识脉络'">🧭 给我整体的知识脉络</button>
+          <button class="suggest-chip" type="button" @click="input = '第 3 章的例题怎么解？'">📍 第 3 章的例题怎么解？</button>
+          <button class="suggest-chip" type="button" @click="input = '死锁与饥饿的关联与对比'">🔗 死锁与饥饿的关联与对比</button>
         </div>
-        <div class="empty-title">从真实课程知识库开始提问</div>
-        <div class="empty-desc">可以先写问题，系统会尝试识别课程；识别不明确时再手动选择。</div>
       </div>
 
+      <!-- 消息列表 -->
       <template v-else>
         <div
           v-for="msg in messages"
@@ -1204,9 +1068,7 @@ function sourceTypeLabel(source) {
                     <span class="source-type">{{ sourceTypeLabel(source) }}</span>
                     <strong>{{ sourceTitle(source) }}</strong>
                   </div>
-                  <div v-if="sourceMeta(source)" class="source-card-meta">
-                    {{ sourceMeta(source) }}
-                  </div>
+                  <div v-if="sourceMeta(source)" class="source-card-meta">{{ sourceMeta(source) }}</div>
                   <p v-if="source.snippet" class="source-snippet">{{ source.snippet }}</p>
                 </li>
               </ol>
@@ -1228,6 +1090,7 @@ function sourceTypeLabel(source) {
           </GlassCard>
         </div>
 
+        <!-- 等待中 -->
         <div v-if="pendingTask" class="msg-row role-assistant">
           <GlassCard tier="base" padding="md" class="ai-bubble pending-bubble">
             <div class="pending-head">
@@ -1247,48 +1110,144 @@ function sourceTypeLabel(source) {
               <span v-if="pendingTask.streaming">模式 {{ pendingTask.mode }}，事件流连接中</span>
               <span v-else>模式 {{ pendingTask.mode }}，轮询间隔 {{ resolvePollingDelaySeconds(pendingTask) }} 秒</span>
             </div>
-            <div class="msg-meta">{{ resolveMemoryStatusText(pendingTask) }}</div>
           </GlassCard>
         </div>
       </template>
     </div>
 
-    <div class="qa-input-wrap">
-      <div v-if="errorMessage" class="qa-alert error-alert" role="alert">
+    <!-- 底部 Composer -->
+    <div class="composer-wrap">
+      <!-- 浮层提示 -->
+      <div v-if="errorMessage" class="toast error" role="alert">
         <el-icon><WarningFilled /></el-icon>
         <span>{{ errorMessage }}</span>
       </div>
-      <div v-else-if="activeSessionReadOnlyMessage" class="qa-alert error-alert" role="alert">
+      <div v-else-if="activeSessionReadOnlyMessage" class="toast error" role="alert">
         <el-icon><WarningFilled /></el-icon>
         <span>{{ activeSessionReadOnlyMessage }}</span>
         <button
           v-if="isArchivedReadOnlySession(activeSession)"
-          class="inline-action"
+          class="toast-action"
           type="button"
           @click="restoreActiveSession"
-        >
-          恢复会话
-        </button>
-        <button v-else class="inline-action" type="button" @click="startNewIndexedSession">新建会话</button>
+        >恢复会话</button>
+        <button v-else class="toast-action" type="button" @click="startNewIndexedSession">新建会话</button>
       </div>
-      <div v-else-if="statusMessage" class="qa-alert info-alert">
+      <div v-else-if="activeIndexChanged" class="toast warn">
+        <el-icon><WarningFilled /></el-icon>
+        <span>知识库已有新索引；本会话继续使用旧索引 #{{ activeSession.indexRunId }}。</span>
+        <button class="toast-action" type="button" @click="startNewIndexedSession">新建会话</button>
+      </div>
+      <div v-else-if="statusMessage" class="toast info">
         <el-icon><Search /></el-icon>
         <span>{{ statusMessage }}</span>
       </div>
 
-      <GlassCard tier="base" padding="none" class="qa-input-card">
-        <input
+      <div class="composer" :class="{ focused: composerFocused }">
+        <textarea
+          ref="composerInputRef"
           v-model="input"
-          class="qa-input"
+          class="composer-input"
           :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
-          :placeholder="activeSessionReadOnlyMessage || '输入课程问题，或点上方手动选择课程与模式'"
-          @keyup.enter="send"
-        />
-        <button class="qa-send" :disabled="!canSend" type="button" aria-label="发送问题" @click="send">
-          <el-icon v-if="sending" class="is-loading" :size="18"><Loading /></el-icon>
-          <el-icon v-else :size="18"><Position /></el-icon>
-        </button>
-      </GlassCard>
+          :placeholder="activeSessionReadOnlyMessage || '问点什么…'"
+          rows="1"
+          @focus="composerFocused = true"
+          @blur="composerFocused = false"
+          @keydown.enter.exact.prevent="send"
+          @input="autoResizeInput"
+        ></textarea>
+        <div class="composer-toolbar">
+          <!-- 左侧 Codex 圆环 -->
+          <div class="plus-ring-wrap">
+            <button
+              class="plus-ring"
+              :class="{ open: plusMenuOpen }"
+              type="button"
+              @click="plusMenuOpen = !plusMenuOpen"
+            >＋</button>
+            <Transition name="pop">
+              <div v-if="plusMenuOpen" class="plus-menu">
+                <div class="plus-menu-item disabled">
+                  <span class="pm-ico">📎</span>
+                  <span>添加照片和文件</span>
+                  <span class="pm-badge">占位</span>
+                </div>
+                <div class="plus-menu-sep"></div>
+                <div class="plus-menu-item" @click="handleMemoryToggle(!memoryEnabled)">
+                  <span class="pm-ico">🧠</span>
+                  <span>学习记忆</span>
+                  <span class="pm-toggle" :class="memoryEnabled ? 'on' : 'off'"></span>
+                </div>
+                <div class="plus-menu-sep"></div>
+                <div class="plus-menu-item" @click="plusMenuOpen = false">
+                  <span class="pm-ico">📚</span>
+                  <span>课程</span>
+                  <span class="pm-value">{{ selectedCourse?.name || '自动识别' }}</span>
+                </div>
+                <div class="plus-menu-item" @click="plusMenuOpen = false">
+                  <span class="pm-ico">🗂️</span>
+                  <span>知识库</span>
+                  <span class="pm-value">{{ selectedKnowledgeBase?.name || '自动选择' }}</span>
+                </div>
+              </div>
+            </Transition>
+          </div>
+
+          <!-- 模式 chip -->
+          <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
+            ✨ {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }}
+            <span class="chip-arrow">▾</span>
+          </button>
+
+          <!-- 模式选择 popover -->
+          <Transition name="pop">
+            <div v-if="modeMenuOpen" class="mode-popover">
+              <div
+                v-for="mode in QA_MODE_OPTIONS"
+                :key="mode.value"
+                class="mode-pop-item"
+                :class="{ active: selectedMode === mode.value }"
+                @click="handleModeSelect(mode.value); modeMenuOpen = false"
+              >
+                <span class="mode-pop-label">{{ mode.label }}</span>
+                <span class="mode-pop-desc">{{ mode.description }}</span>
+              </div>
+              <div class="mode-pop-foot">
+                <label>
+                  <input v-model="allowHybridSmartBeta" type="checkbox" @change="handleHybridBetaToggle" />
+                  允许智能推荐使用混合检索 Beta
+                </label>
+              </div>
+            </div>
+          </Transition>
+
+          <span class="toolbar-spacer"></span>
+
+          <!-- 学习记忆（开启后才显示） -->
+          <button v-if="memoryEnabled" class="chip memory-chip" type="button">
+            🧠 学习记忆 · {{ learningMemoryItems.length }}
+          </button>
+
+          <!-- 发送 -->
+          <button
+            class="send-btn"
+            :class="{ disabled: !canSend }"
+            :disabled="!canSend"
+            type="button"
+            aria-label="发送问题"
+            @click="send"
+          >
+            <el-icon v-if="sending" class="is-loading" :size="16"><Loading /></el-icon>
+            <span v-else>➤</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="composer-hint">
+        <span><kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行</span>
+        <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ activeModeOption.shortLabel }}</span>
+        <span v-else>可先提问，系统会尝试识别课程</span>
+      </div>
     </div>
   </div>
 </template>
@@ -1301,363 +1260,115 @@ function sourceTypeLabel(source) {
   --qa-primary: #9333ea;
   --qa-primary-strong: #7e22ce;
   --qa-teal: #0d9488;
-  --qa-blue: #2563eb;
-  --qa-border: rgba(148, 163, 184, 0.24);
 
   position: relative;
   display: flex;
   min-height: calc(100vh - 64px);
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
   background:
-    linear-gradient(180deg, rgba(250, 245, 255, 0.92), rgba(248, 250, 252, 0.96)),
-    repeating-linear-gradient(90deg, rgba(147, 51, 234, 0.05) 0 1px, transparent 1px 44px);
+    radial-gradient(1200px 600px at 80% -10%, rgba(168, 85, 247, 0.06), transparent 60%),
+    radial-gradient(900px 500px at -5% 110%, rgba(99, 102, 241, 0.04), transparent 60%),
+    #f8fafc;
 }
 
-.qa-control-panel {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--qa-border);
-  border-radius: $radius-xl;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
-}
-
-.icon-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid rgba(147, 51, 234, 0.24);
-  border-radius: $radius-lg;
-  background: #fff;
-  color: var(--qa-primary-strong);
-  cursor: pointer;
-  font-weight: 700;
-  transition: transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
-
-  &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 28px rgba(147, 51, 234, 0.16);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-}
-
-.qa-scope-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(180px, 260px) max-content;
-  align-items: end;
-  justify-content: start;
-  gap: 10px;
-}
-
-.scope-field {
-  display: grid;
-  gap: 6px;
-
-  > span {
-    color: #475569;
-    font-size: 12px;
-    font-weight: 800;
-  }
-}
-
-.scope-select {
-  width: 100%;
-}
-
-.scope-actions {
-  display: flex;
-  align-items: flex-end;
-}
-
-.kb-option-state {
-  float: right;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.mode-selector {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.mode-button {
-  display: grid;
-  min-height: 72px;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: $radius-lg;
-  background: rgba(255, 255, 255, 0.76);
-  color: #334155;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out, transform $duration-fast $ease-out;
-
-  &:hover {
-    transform: translateY(-1px);
-    border-color: rgba(147, 51, 234, 0.32);
-  }
-
-  &.active {
-    border-color: rgba(147, 51, 234, 0.62);
-    background: linear-gradient(180deg, rgba(250, 245, 255, 0.96), rgba(255, 255, 255, 0.88));
-    box-shadow: inset 0 0 0 1px rgba(147, 51, 234, 0.16), 0 12px 28px rgba(147, 51, 234, 0.12);
-  }
-}
-
-.mode-label {
-  color: #111827;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.mode-desc {
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.beta-toggle {
-  display: inline-flex;
-  width: max-content;
-  align-items: center;
-  gap: 8px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.beta-toggle input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--qa-primary);
-}
-
-.memory-panel {
-  display: grid;
-  gap: 8px;
-  border: 1px solid rgba(20, 184, 166, 0.18);
-  border-radius: $radius-lg;
-  background: rgba(240, 253, 250, 0.62);
-  padding: 10px 12px;
-}
-
-.memory-toggle {
-  display: inline-flex;
-  width: max-content;
-  align-items: center;
-  gap: 8px;
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.memory-toggle input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--qa-teal);
-}
-
-.memory-toggle input:disabled {
-  cursor: not-allowed;
-}
-
-.memory-state {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.memory-error {
-  color: #b91c1c;
-}
-
-.memory-cleaner {
-  width: max-content;
-  max-width: 100%;
-  color: #475569;
-  font-size: 12px;
-}
-
-.memory-cleaner summary {
-  cursor: pointer;
-  font-weight: 900;
-}
-
-.memory-empty {
-  margin-top: 8px;
-  color: #64748b;
-}
-
-.memory-list {
-  display: grid;
-  width: min(480px, 100%);
-  gap: 6px;
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.memory-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: $radius-md;
-  background: rgba(255, 255, 255, 0.78);
-  padding: 8px 10px;
-}
-
-.memory-item-main {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.memory-type {
-  color: #0f766e;
-  font-weight: 900;
-}
-
-.memory-created {
-  color: #64748b;
-}
-
-.memory-preview {
-  flex: 1 1 100%;
-  min-width: 0;
-  color: #334155;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.memory-delete {
-  min-height: 28px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: $radius-md;
-  background: #fff;
-  color: #b91c1c;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.memory-delete:disabled {
-  cursor: wait;
-  opacity: 0.5;
-}
-
-.scope-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.scope-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 999px;
-  background: #fff;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mode-pill {
-  color: var(--qa-primary-strong);
-}
-
-.ready-pill {
-  color: var(--qa-teal);
-}
-
-.hybrid-warmup-pill {
-  color: #7c3aed;
-}
-
-.memory-pill {
-  color: #0f766e;
-}
-
+/* ===== 主对话区 ===== */
 .qa-main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 16px 24px;
   scroll-behavior: smooth;
+
+  &::-webkit-scrollbar { width: 8px; }
+  &::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.25); border-radius: 4px; }
 }
 
+/* ===== 空态 ===== */
 .empty-state {
-  display: grid;
-  min-height: 280px;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
-  color: #334155;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  flex: 1;
+  padding: 32px 24px;
+  gap: 14px;
 }
 
 .empty-icon {
-  display: grid;
   width: 64px;
   height: 64px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(147, 51, 234, 0.1);
-  color: var(--qa-primary);
+  border-radius: 18px;
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 18px 40px rgba(147, 51, 234, 0.32);
 }
 
 .empty-title {
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 900;
+  font-family: 'Space Grotesk', inherit;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #0f172a, #7e22ce 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .empty-desc {
-  max-width: 420px;
   color: #64748b;
   font-size: 14px;
   line-height: 1.7;
+  max-width: 460px;
 }
 
-.msg-row {
+.suggest-row {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 780px;
+  margin-top: 8px;
 }
 
-.role-user {
-  justify-content: flex-end;
+.suggest-chip {
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color $duration-fast $ease-out, color $duration-fast $ease-out, transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
+  backdrop-filter: blur(10px);
+
+  &:hover {
+    border-color: rgba(147, 51, 234, 0.4);
+    color: #7e22ce;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(147, 51, 234, 0.1);
+  }
 }
 
-.role-assistant {
-  justify-content: flex-start;
-}
+/* ===== 消息气泡 ===== */
+.msg-row { display: flex; }
+.role-user { justify-content: flex-end; }
+.role-assistant { justify-content: flex-start; }
 
 .user-bubble {
   max-width: min(680px, 76%);
-  padding: 11px 14px;
-  border-radius: $radius-xl $radius-xl 3px $radius-xl;
+  padding: 12px 16px;
+  border-radius: 16px 16px 4px 16px;
   background: linear-gradient(135deg, var(--qa-primary), #a855f7);
   box-shadow: 0 12px 28px rgba(147, 51, 234, 0.22);
   color: #fff;
@@ -1665,301 +1376,347 @@ function sourceTypeLabel(source) {
 
 .ai-bubble {
   max-width: min(760px, 82%);
-  border-color: rgba(147, 51, 234, 0.24) !important;
-  border-radius: $radius-xl $radius-xl $radius-xl 3px !important;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  border-color: rgba(147, 51, 234, 0.18) !important;
+  border-radius: 16px 16px 16px 4px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
-.msg-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
+.msg-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.msg-text { font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
 
-.msg-text {
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
+.source-cards { margin-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.22); padding-top: 10px; }
+.source-cards summary { width: max-content; cursor: pointer; color: #475569; font-size: 12px; font-weight: 800; }
+.source-list { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.source-card { border: 1px solid rgba(148, 163, 184, 0.24); border-radius: $radius-md; background: rgba(248, 250, 252, 0.82); padding: 9px 10px; }
+.source-card-head { display: flex; align-items: center; gap: 8px; color: #1f2937; font-size: 12px; }
+.source-card-head strong { min-width: 0; overflow-wrap: anywhere; }
+.source-rank { flex: 0 0 auto; border-radius: 999px; background: rgba(20, 184, 166, 0.13); padding: 2px 7px; color: #0f766e; font-size: 11px; font-weight: 800; }
+.source-type { flex: 0 0 auto; border-radius: 999px; background: rgba(147, 51, 234, 0.1); padding: 2px 7px; color: #7e22ce; font-size: 11px; font-weight: 800; }
+.source-card-meta { margin-top: 5px; color: #64748b; font-size: 11px; line-height: 1.55; }
+.source-snippet { margin: 7px 0 0; color: #475569; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 
-.source-cards {
-  margin-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.22);
-  padding-top: 10px;
-}
-
-.source-cards summary {
-  width: max-content;
-  cursor: pointer;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.source-list {
-  display: grid;
-  gap: 8px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.source-card {
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: $radius-md;
-  background: rgba(248, 250, 252, 0.82);
-  padding: 9px 10px;
-}
-
-.source-card-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #1f2937;
-  font-size: 12px;
-}
-
-.source-card-head strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.source-rank {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(20, 184, 166, 0.13);
-  padding: 2px 7px;
-  color: #0f766e;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.source-type {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: rgba(147, 51, 234, 0.1);
-  padding: 2px 7px;
-  color: #7e22ce;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.source-card-meta {
-  margin-top: 5px;
-  color: #64748b;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.source-snippet {
-  margin: 7px 0 0;
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-}
-
-.message-feedback {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 12px;
-}
-
+.message-feedback { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .feedback-action {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #64748b;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-  transition: border-color $duration-fast $ease-out, color $duration-fast $ease-out, background $duration-fast $ease-out;
+  height: 26px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
+  background: rgba(248, 250, 252, 0.95); border: 1px solid rgba(226, 232, 240, 0.85);
+  color: #64748b; cursor: pointer; font-family: inherit;
+  transition: border-color $duration-fast $ease-out, color $duration-fast $ease-out;
 
-  &:hover:not(:disabled) {
-    border-color: rgba(147, 51, 234, 0.42);
-    color: var(--qa-primary-strong);
-  }
-
-  &.active {
-    border-color: rgba(20, 184, 166, 0.42);
-    background: rgba(20, 184, 166, 0.12);
-    color: #0f766e;
-  }
-
-  &:disabled {
-    cursor: wait;
-    opacity: 0.6;
-  }
+  &:hover:not(:disabled) { border-color: rgba(147, 51, 234, 0.4); color: var(--qa-primary-strong); }
+  &.active { background: rgba(20, 184, 166, 0.12); color: #0f766e; border-color: rgba(20, 184, 166, 0.32); }
+  &:disabled { cursor: wait; opacity: 0.6; }
 }
 
-.msg-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  color: #94a3b8;
-  font-size: 11px;
-}
+.msg-meta { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; color: #94a3b8; font-size: 11px; }
+.user-bubble .msg-meta { color: rgba(255, 255, 255, 0.78); }
 
-.user-bubble .msg-meta {
-  color: rgba(255, 255, 255, 0.82);
-}
+.pending-bubble { border-color: rgba(13, 148, 136, 0.28) !important; }
+.pending-head { display: inline-flex; align-items: center; gap: 8px; color: var(--qa-teal); font-size: 13px; font-weight: 800; }
+.pending-copy { margin-top: 8px; color: #475569; font-size: 13px; line-height: 1.65; }
+.pending-stream-content { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.18); }
 
-.pending-bubble {
-  border-color: rgba(13, 148, 136, 0.28) !important;
-}
+.is-loading { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.pending-head {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--qa-teal);
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.pending-copy {
-  margin-top: 8px;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.pending-stream-content {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.qa-input-wrap {
+/* ===== Composer ===== */
+.composer-wrap {
   position: sticky;
-  bottom: 12px;
-  display: grid;
-  gap: 8px;
+  bottom: 0;
+  padding: 16px 24px 20px;
+  background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.95) 30%);
 }
 
-.qa-alert {
+.toast {
+  max-width: 820px;
+  margin: 0 auto 8px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: $radius-lg;
-  background: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+
+  &.info { background: rgba(239, 246, 255, 0.88); border: 1px solid rgba(59, 130, 246, 0.28); color: #1d4ed8; }
+  &.warn { background: rgba(255, 251, 235, 0.9); border: 1px solid rgba(245, 158, 11, 0.32); color: #b45309; }
+  &.error { background: rgba(254, 242, 242, 0.92); border: 1px solid rgba(239, 68, 68, 0.32); color: #b91c1c; }
 }
 
-.inline-action {
+.toast-action {
   margin-left: auto;
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
   font: inherit;
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.error-alert {
-  border: 1px solid rgba(239, 68, 68, 0.22);
-  color: #b91c1c;
+.composer {
+  max-width: 820px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid rgba(147, 51, 234, 0.22);
+  border-radius: 24px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 22px 60px rgba(15, 23, 42, 0.08), 0 0 0 6px rgba(147, 51, 234, 0.06);
+  overflow: visible;
+  transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
+
+  &.focused {
+    border-color: rgba(147, 51, 234, 0.5);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 28px 70px rgba(147, 51, 234, 0.18), 0 0 0 6px rgba(147, 51, 234, 0.1);
+  }
 }
 
-.info-alert {
-  border: 1px solid rgba(37, 99, 235, 0.2);
-  color: #1d4ed8;
-}
-
-.qa-input-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 8px 8px 16px !important;
-  border-color: rgba(147, 51, 234, 0.34) !important;
-  box-shadow: 0 0 0 4px rgba(147, 51, 234, 0.08), 0 12px 28px rgba(15, 23, 42, 0.12);
-}
-
-.qa-input {
-  flex: 1;
-  min-width: 0;
+.composer-input {
+  display: block;
+  width: 100%;
+  padding: 18px 22px 6px;
+  min-height: 48px;
+  max-height: 200px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #0f172a;
   border: 0;
   outline: 0;
   background: transparent;
-  color: #0f172a;
+  resize: none;
   font-family: inherit;
-  font-size: 14px;
+  overflow-y: auto;
 
-  &::placeholder {
-    color: #9ca3af;
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
+  &::placeholder { color: #94a3b8; }
+  &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
-.qa-send {
+.composer-toolbar {
   display: flex;
-  width: 42px;
-  height: 42px;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.toolbar-spacer { flex: 1; }
+
+/* Codex 圆环 */
+.plus-ring-wrap { position: relative; }
+
+.plus-ring {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(147, 51, 234, 0.35);
+  background: #fff;
+  display: flex;
   align-items: center;
   justify-content: center;
-  border: 0;
-  border-radius: $radius-lg;
-  background: linear-gradient(135deg, var(--qa-primary), #3b82f6);
-  box-shadow: 0 10px 22px rgba(147, 51, 234, 0.28);
-  color: #fff;
   cursor: pointer;
+  color: #7e22ce;
+  font-size: 18px;
+  font-weight: 300;
+  font-family: inherit;
+  transition: transform $duration-fast $ease-out, border-color $duration-fast $ease-out, background $duration-fast $ease-out;
+
+  &:hover { border-color: rgba(147, 51, 234, 0.7); background: rgba(250, 245, 255, 0.6); transform: scale(1.06); }
+  &.open { border-color: #9333ea; background: rgba(250, 245, 255, 0.9); transform: rotate(45deg); }
+}
+
+.plus-menu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  width: 260px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plus-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+  transition: background $duration-fast $ease-out, color $duration-fast $ease-out;
+
+  &:hover { background: rgba(147, 51, 234, 0.06); color: #7e22ce; }
+  &.disabled { opacity: 0.5; cursor: not-allowed; &:hover { background: transparent; color: #334155; } }
+}
+
+.pm-ico { width: 20px; text-align: center; font-size: 15px; }
+.pm-badge { margin-left: auto; font-size: 11px; color: #94a3b8; font-weight: 700; }
+.pm-value { margin-left: auto; font-size: 12px; color: #0f172a; font-weight: 800; }
+
+.pm-toggle {
+  margin-left: auto;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  position: relative;
+  transition: background $duration-fast $ease-out;
+
+  &.off { background: rgba(148, 163, 184, 0.3); }
+  &.on { background: #9333ea; }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: left $duration-fast $ease-out, right $duration-fast $ease-out;
+  }
+
+  &.off::after { left: 2px; }
+  &.on::after { left: auto; right: 2px; }
+}
+
+.plus-menu-sep { height: 1px; background: rgba(226, 232, 240, 0.8); margin: 4px 8px; }
+
+/* Chip 按钮 */
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: #fff;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color $duration-fast $ease-out, color $duration-fast $ease-out, background $duration-fast $ease-out;
+
+  &:hover { border-color: rgba(147, 51, 234, 0.4); color: #7e22ce; }
+}
+
+.chip-arrow { color: #94a3b8; font-size: 10px; }
+
+.mode-chip {
+  background: linear-gradient(135deg, #faf5ff, #fff);
+  border-color: rgba(147, 51, 234, 0.32);
+  color: #7e22ce;
+}
+
+.memory-chip {
+  background: rgba(240, 253, 250, 0.6);
+  border-color: rgba(13, 148, 136, 0.28);
+  color: #0f766e;
+}
+
+/* 模式 popover */
+.mode-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 48px;
+  width: 320px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+  padding: 6px;
+  z-index: 10;
+}
+
+.mode-pop-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background $duration-fast $ease-out;
+
+  &:hover { background: rgba(147, 51, 234, 0.06); }
+  &.active { background: rgba(147, 51, 234, 0.1); }
+}
+
+.mode-pop-label { font-size: 13px; color: #0f172a; font-weight: 700; }
+.mode-pop-desc { font-size: 11.5px; color: #64748b; line-height: 1.5; }
+
+.mode-pop-foot {
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  margin-top: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  input { accent-color: #9333ea; width: 13px; height: 13px; }
+  label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+}
+
+/* 发送按钮 */
+.send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 28px rgba(147, 51, 234, 0.36);
+  font-size: 16px;
+  font-family: inherit;
   transition: transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-  &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px rgba(147, 51, 234, 0.36);
-  }
+  &:hover:not(:disabled) { transform: translateY(-1px) scale(1.04); box-shadow: 0 16px 36px rgba(147, 51, 234, 0.46); }
+  &.disabled, &:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; opacity: 0.7; }
+}
 
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.42;
+.composer-hint {
+  max-width: 820px;
+  margin: 8px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #94a3b8;
+  font-size: 11.5px;
+
+  kbd {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background: rgba(148, 163, 184, 0.16);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 10.5px;
+    color: #475569;
   }
 }
 
-.is-loading {
-  animation: spin 1s linear infinite;
-}
+/* ===== Transitions ===== */
+.pop-enter-active, .pop-leave-active { transition: opacity $duration-fast $ease-out, transform $duration-fast $ease-out; }
+.pop-enter-from, .pop-leave-to { opacity: 0; transform: translateY(6px) scale(0.96); }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
+/* ===== 响应式 ===== */
 @media (max-width: 980px) {
-  .qa-scope-grid,
-  .mode-selector {
-    grid-template-columns: 1fr;
-  }
-
-  .scope-actions,
-  .icon-action {
-    width: 100%;
-  }
-
-  .icon-action {
-    justify-content: center;
-  }
-
-  .mode-button {
-    min-height: auto;
-  }
-
-  .user-bubble,
-  .ai-bubble {
-    max-width: 100%;
-  }
+  .user-bubble, .ai-bubble { max-width: 100%; }
+  .composer { border-radius: 18px; }
 }
 </style>
+
