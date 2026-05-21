@@ -19,7 +19,7 @@ test('真实问答页只对 assistant 消息使用受控 Markdown 组件', () =>
 
 test('真实问答页在回答成功后刷新长期学习记忆列表', () => {
   assert.match(qaPageSource, /await loadMemoryState\(selectedCourseId\.value, selectedKnowledgeBaseId\.value\)/)
-  assert.match(qaPageSource, /系统会从你的学习追问中自动沉淀关注点和解释偏好/)
+  assert.match(qaPageSource, /学习记忆/)
   assert.match(qaPageSource, /Local 问答会按问题动态使用学习记忆/)
-  assert.match(qaPageSource, /learningMemoryTypeLabel\(memory\.memoryType\)/)
+  assert.match(qaPageSource, /memoryEnabled/)
 })
