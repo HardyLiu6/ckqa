@@ -933,8 +933,13 @@ async function scrollToBottom() {
 function autoResizeInput(event) {
   const el = event.target
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  const newHeight = Math.min(el.scrollHeight, 200)
+  el.style.height = newHeight + 'px'
 }
+
+const isComposerExpanded = computed(() => {
+  return input.value.includes('\n') || input.value.length > 60
+})
 
 function formatMessageTime(value) {
   if (!value) {
@@ -1020,15 +1025,7 @@ function sourceTypeLabel(source) {
     <div ref="mainRef" class="qa-main" aria-live="polite">
       <!-- 空态欢迎 -->
       <div v-if="isEmpty" class="empty-state">
-        <div class="empty-icon">💬</div>
         <h1 class="empty-title">从真实课程知识库开始提问</h1>
-        <p class="empty-desc">先写问题，系统会尝试识别课程。课程、模式、记忆等设置都在输入框左侧的 ＋ 菜单里。</p>
-        <div class="suggest-row">
-          <button class="suggest-chip" type="button" @click="input = '解释「进程」与「线程」的本质区别'">📘 解释「进程」与「线程」的本质区别</button>
-          <button class="suggest-chip" type="button" @click="input = '给我整体的知识脉络'">🧭 给我整体的知识脉络</button>
-          <button class="suggest-chip" type="button" @click="input = '第 3 章的例题怎么解？'">📍 第 3 章的例题怎么解？</button>
-          <button class="suggest-chip" type="button" @click="input = '死锁与饥饿的关联与对比'">🔗 死锁与饥饿的关联与对比</button>
-        </div>
       </div>
 
       <!-- 消息列表 -->
@@ -1118,7 +1115,7 @@ function sourceTypeLabel(source) {
     </div>
 
     <!-- 底部 Composer -->
-    <div class="composer-wrap">
+    <div class="composer-wrap" :class="{ centered: isEmpty }">
       <!-- 浮层提示 -->
       <div v-if="errorMessage" class="toast error" role="alert">
         <el-icon><WarningFilled /></el-icon>
@@ -1140,18 +1137,18 @@ function sourceTypeLabel(source) {
         <span>知识库已有新索引；本会话继续使用旧索引 #{{ activeSession.indexRunId }}。</span>
         <button class="toast-action" type="button" @click="startNewIndexedSession">新建会话</button>
       </div>
-      <div v-else-if="statusMessage" class="toast info">
+      <div v-else-if="statusMessage && !isEmpty" class="toast info">
         <el-icon><Search /></el-icon>
         <span>{{ statusMessage }}</span>
       </div>
 
-      <div class="composer" :class="{ focused: composerFocused }">
+      <div class="composer" :class="{ focused: composerFocused, expanded: isComposerExpanded }">
         <textarea
           ref="composerInputRef"
           v-model="input"
           class="composer-input"
           :disabled="sending || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
-          :placeholder="activeSessionReadOnlyMessage || '问点什么…'"
+          :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
           rows="1"
           @focus="composerFocused = true"
           @blur="composerFocused = false"
@@ -1197,8 +1194,7 @@ function sourceTypeLabel(source) {
 
           <!-- 模式 chip -->
           <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
-            ✨ {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }}
-            <span class="chip-arrow">▾</span>
+            {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }} ▾
           </button>
 
           <!-- 课程选择 popover -->
@@ -1286,7 +1282,7 @@ function sourceTypeLabel(source) {
           <!-- 发送 -->
           <button
             class="send-btn"
-            :class="{ disabled: !canSend }"
+            :class="{ active: canSend }"
             :disabled="!canSend"
             type="button"
             aria-label="发送问题"
@@ -1298,7 +1294,14 @@ function sourceTypeLabel(source) {
         </div>
       </div>
 
-      <div class="composer-hint">
+      <!-- 推荐 chips（仅初始态显示在 composer 下方） -->
+      <div v-if="isEmpty" class="suggest-row below-composer">
+        <button class="suggest-chip" type="button" @click="input = '解释「进程」与「线程」的本质区别'">📘 解释「进程」与「线程」的本质区别</button>
+        <button class="suggest-chip" type="button" @click="input = '给我整体的知识脉络'">🧭 给我整体的知识脉络</button>
+        <button class="suggest-chip" type="button" @click="input = '第 3 章的例题怎么解？'">📍 第 3 章的例题怎么解？</button>
+      </div>
+
+      <div v-if="!isEmpty" class="composer-hint">
         <span><kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行</span>
         <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ activeModeOption.shortLabel }}</span>
         <span v-else>可先提问，系统会尝试识别课程</span>
@@ -1352,34 +1355,12 @@ function sourceTypeLabel(source) {
   gap: 14px;
 }
 
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #9333ea, #6366f1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-  box-shadow: 0 18px 40px rgba(147, 51, 234, 0.32);
-}
-
 .empty-title {
   font-family: 'Space Grotesk', inherit;
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #0f172a, #7e22ce 90%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.empty-desc {
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.7;
-  max-width: 460px;
 }
 
 .suggest-row {
@@ -1479,10 +1460,24 @@ function sourceTypeLabel(source) {
   bottom: 0;
   padding: 16px 24px 20px;
   background: linear-gradient(180deg, transparent, rgba(248, 250, 252, 0.95) 30%);
+  transition: all $duration-base $ease-out;
+
+  /* 初始态居中 */
+  &.centered {
+    position: absolute;
+    bottom: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    max-width: 720px;
+    padding: 0 24px;
+    background: transparent;
+  }
 }
 
 .toast {
-  max-width: 820px;
+  max-width: 720px;
   margin: 0 auto 8px;
   display: flex;
   align-items: center;
@@ -1512,26 +1507,31 @@ function sourceTypeLabel(source) {
 }
 
 .composer {
-  max-width: 820px;
+  max-width: 720px;
   margin: 0 auto;
   background: #fff;
-  border: 1px solid rgba(147, 51, 234, 0.22);
-  border-radius: 24px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 22px 60px rgba(15, 23, 42, 0.08), 0 0 0 6px rgba(147, 51, 234, 0.06);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 26px;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
   overflow: visible;
-  transition: border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
+  transition: border-radius $duration-base $ease-out, border-color $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
   &.focused {
-    border-color: rgba(147, 51, 234, 0.5);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 28px 70px rgba(147, 51, 234, 0.18), 0 0 0 6px rgba(147, 51, 234, 0.1);
+    border-color: rgba(147, 51, 234, 0.35);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08), 0 0 0 3px rgba(147, 51, 234, 0.06);
+  }
+
+  /* 多行展开态：圆角变小 */
+  &.expanded {
+    border-radius: 18px;
   }
 }
 
 .composer-input {
   display: block;
   width: 100%;
-  padding: 18px 22px 6px;
-  min-height: 48px;
+  padding: 14px 20px 4px;
+  min-height: 44px;
   max-height: 200px;
   font-size: 15px;
   line-height: 1.6;
@@ -1542,8 +1542,14 @@ function sourceTypeLabel(source) {
   resize: none;
   font-family: inherit;
   overflow-y: auto;
+  transition: min-height $duration-fast $ease-out;
 
-  &::placeholder { color: #94a3b8; }
+  /* 滚动条 */
+  &::-webkit-scrollbar { width: 6px; }
+  &::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
+  &::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+
+  &::placeholder { color: #9ca3af; }
   &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
 
@@ -1551,12 +1557,22 @@ function sourceTypeLabel(source) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px 12px;
+  padding: 6px 10px 10px;
   flex-wrap: wrap;
   position: relative;
 }
 
 .toolbar-spacer { flex: 1; }
+
+/* 推荐 chips 在 composer 下方 */
+.suggest-row.below-composer {
+  max-width: 720px;
+  margin: 12px auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
 
 /* Codex 圆环 */
 .plus-ring-wrap { position: relative; }
@@ -1799,35 +1815,42 @@ function sourceTypeLabel(source) {
 
 /* 发送按钮 */
 .send-btn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 0;
   cursor: pointer;
-  background: linear-gradient(135deg, #9333ea, #6366f1);
+  background: #d4d4d8;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12px 28px rgba(147, 51, 234, 0.36);
   font-size: 16px;
   font-family: inherit;
-  transition: transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
+  transition: background $duration-fast $ease-out, transform $duration-fast $ease-out, box-shadow $duration-fast $ease-out;
 
-  &:hover:not(:disabled) { transform: translateY(-1px) scale(1.04); box-shadow: 0 16px 36px rgba(147, 51, 234, 0.46); }
-  &.disabled, &:disabled { background: #cbd5e1; box-shadow: none; cursor: not-allowed; opacity: 0.7; }
+  /* 有内容时激活态 */
+  &.active {
+    background: #0f172a;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
+
+    &:hover { transform: translateY(-1px) scale(1.04); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.28); }
+  }
+
+  &:disabled { cursor: not-allowed; }
 }
 
 .send-arrow {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1;
   display: inline-block;
   transform: rotate(-90deg);
+  transition: transform $duration-fast $ease-out;
 }
 
 .composer-hint {
-  max-width: 820px;
+  max-width: 720px;
   margin: 8px auto 0;
   display: flex;
   align-items: center;
