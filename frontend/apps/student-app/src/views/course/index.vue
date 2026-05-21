@@ -255,8 +255,8 @@ $radius: 16px;
   position: relative;
   padding: 48px 40px 80px;
   background:
-    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.12), transparent 70%),
-    linear-gradient(180deg, #eff6ff 0%, $bg 100%);
+    radial-gradient(900px 400px at 50% 0%, rgba(37, 99, 235, 0.18), transparent 70%),
+    linear-gradient(180deg, #dbeafe 0%, $bg 100%);
   text-align: center;
 
   .header-content {
@@ -330,29 +330,33 @@ $radius: 16px;
       max-width: 100%;
 
       .el-input__wrapper {
-        border-radius: 999px;
+        border-radius: 999px 0 0 999px;
         padding: 4px 16px;
         box-shadow: 0 0 0 1px $border inset;
 
         &:hover { box-shadow: 0 0 0 1px rgba($course-primary, 0.35) inset; }
         &.is-focus { box-shadow: 0 0 0 1px $course-primary inset, 0 0 0 3px rgba($course-primary, 0.08); }
       }
+    }
 
-      .el-input-group__append .el-button {
+    :deep(.el-input-group__append) {
+      background: $course-primary;
+      border: 1px solid $course-primary;
+      border-left: 0;
+      border-radius: 0 999px 999px 0;
+      padding: 0;
+      box-shadow: none;
+
+      .el-button {
+        background: transparent;
+        border: 0;
         border-radius: 0 999px 999px 0;
-        padding: 0 20px;
-        background: $course-primary;
-        border-color: $course-primary;
+        padding: 0 22px;
         color: #fff;
-        border-left: 0;
+        font-weight: 600;
+        height: 100%;
 
-        &:hover { background: darken($course-primary, 8%); border-color: darken($course-primary, 8%); }
-      }
-
-      .el-input-group__append {
-        background: $course-primary;
-        border-color: $course-primary;
-        box-shadow: none;
+        &:hover { background: rgba(0, 0, 0, 0.1); }
       }
     }
   }
@@ -383,8 +387,9 @@ $radius: 16px;
   .category-tag {
     cursor: pointer;
     border-radius: 999px;
-    padding: 6px 16px;
-    font-size: 12.5px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
     transition: all 0.2s ease;
 
     &:hover {
@@ -403,8 +408,8 @@ $radius: 16px;
     border-radius: 999px !important;
     border-color: $border;
     font-weight: 600;
-    font-size: 12.5px;
-    padding: 7px 14px;
+    font-size: 13px;
+    padding: 7px 16px;
   }
 
   :deep(.el-radio-button:first-child .el-radio-button__inner) { border-radius: 999px !important; }
