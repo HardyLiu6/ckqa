@@ -584,6 +584,9 @@ public class QaWorkflowService {
                             task == null ? null : task.getId(),
                             userMessage && task != null ? task.getTaskStatus() : null,
                             userMessage && task != null ? task.getProgressStage() : null,
+                            task == null ? List.of() : splitLatestLogs(task.getLatestLogs()),
+                            userMessage && task != null ? task.getPartialResponseText() : null,
+                            task == null ? 0L : task.getStreamEventSeq(),
                             sources,
                             feedbackByMessage.get(message.getId())
                     );
@@ -648,9 +651,7 @@ public class QaWorkflowService {
             assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback, task.getQueryMode());
         }
 
-        List<String> latestLogs = StringUtils.hasText(task.getLatestLogs())
-                ? Arrays.stream(task.getLatestLogs().split("\\R")).toList()
-                : List.of();
+        List<String> latestLogs = splitLatestLogs(task.getLatestLogs());
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(task.getQueryMode());
         String contextStrategy = StringUtils.hasText(task.getContextStrategy()) ? task.getContextStrategy() : "none";
 
@@ -679,7 +680,15 @@ public class QaWorkflowService {
                 StringUtils.hasText(task.getMemoryStrategy()) ? task.getMemoryStrategy() : "none",
                 task.getMemoryScope(),
                 task.getMemorySourceCount() == null ? 0 : task.getMemorySourceCount(),
-                task.getMemorySizeChars() == null ? 0 : task.getMemorySizeChars()
+                task.getMemorySizeChars() == null ? 0 : task.getMemorySizeChars(),
+                task.getPartialResponseText(),
+                task.getStreamEventSeq()
         );
+    }
+
+    private List<String> splitLatestLogs(String latestLogs) {
+        return StringUtils.hasText(latestLogs)
+                ? Arrays.stream(latestLogs.split("\\R")).toList()
+                : List.of();
     }
 }

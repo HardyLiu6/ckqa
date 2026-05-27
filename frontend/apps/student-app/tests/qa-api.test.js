@@ -237,7 +237,7 @@ test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件',
     await options.onopen({ ok: true, status: 200 })
     options.onmessage({ event: 'ack', data: '{"sessionId":8,"taskId":99}' })
     options.onmessage({ event: 'status', data: '{"taskStatus":"running","mode":"basic"}' })
-    options.onmessage({ event: 'delta', data: '{"text":"死锁"}' })
+    options.onmessage({ event: 'delta', data: '{"text":"死锁","eventSeq":13}', id: '13' })
     options.onmessage({ event: 'sources', data: '[{"rankPosition":1,"sourceFile":"操作系统教材"}]' })
     options.onmessage({ event: 'done', data: '{"taskId":99,"taskStatus":"success"}' })
     options.onclose()
@@ -248,9 +248,10 @@ test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件',
     event: (eventName, payload) => received.push({ eventName, payload }),
   }, {
     signal: 'test-signal',
+    afterEventSeq: 12,
   })
 
-  assert.equal(streamCalls[0].url, '/api/v1/qa-sessions/8/tasks/99/events')
+  assert.equal(streamCalls[0].url, '/api/v1/qa-sessions/8/tasks/99/events?afterEventSeq=12')
   assert.equal(streamCalls[0].options.method, 'GET')
   assert.deepEqual(streamCalls[0].options.headers, {
     Accept: 'text/event-stream',
@@ -260,6 +261,7 @@ test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件',
   assert.equal(streamCalls[0].options.signal, 'test-signal')
   assert.deepEqual(received.map((item) => item.eventName), ['ack', 'status', 'delta', 'sources', 'done'])
   assert.equal(received[2].payload.text, '死锁')
+  assert.equal(received[2].payload.eventSeq, 13)
   setAuthSessionProvider(() => null)
 })
 

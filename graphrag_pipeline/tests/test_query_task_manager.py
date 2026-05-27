@@ -475,6 +475,8 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(loaded.history_fallback_reason, "missing artifacts")
             self.assertTrue(loaded.history_applied)
             self.assertEqual(loaded.history_turns_used, 1)
+            self.assertIsNone(loaded.partial_result_text)
+            self.assertEqual(loaded.stream_event_seq, 0)
 
     async def test_ignores_corrupt_persisted_snapshot_and_keeps_new_tasks_available(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -631,14 +633,50 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.streaming_provider, "native_graphrag")
         self.assertIsNone(snapshot.streaming_fallback_reason)
         self.assertIn("[已参考课程知识库]", snapshot.result_text)
+        self.assertEqual(snapshot.partial_result_text, "死锁会导致进程无法推进。")
+        self.assertGreater(snapshot.stream_event_seq, 0)
 
         replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
         unsubscribe()
         delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
         self.assertEqual(delta_text, "死锁会导致进程无法推进。")
         self.assertNotIn("[Data:", delta_text)
+        self.assertTrue(all("seq" in item for item in replay))
+        self.assertTrue(all(item["data"].get("eventSeq") == item["seq"] for item in replay))
 
-    async def test_native_streaming_replay_keeps_full_visible_delta_when_status_updates_are_frequent(self):
+    async def test_subscribe_events_can_resume_after_event_seq(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            yield type("Chunk", (), {"text": "第一段。"})()
+            yield type("Chunk", (), {"text": "第二段。"})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "解释进程",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        await asyncio.sleep(0.08)
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        first_delta_seq = next(item["seq"] for item in replay if item["event"] == "delta")
+
+        resumed, _, unsubscribe = manager.subscribe_events(created.python_task_id, after_event_seq=first_delta_seq)
+        unsubscribe()
+
+        resumed_delta_text = "".join(item["data"].get("text", "") for item in resumed if item["event"] == "delta")
+        self.assertEqual(resumed_delta_text, "第二段。")
+        self.assertTrue(all(item["seq"] > first_delta_seq for item in resumed))
+
+    async def test_native_streaming_snapshot_keeps_full_visible_delta_when_replay_is_trimmed(self):
         chunks = [f"片段{i}。" for i in range(1, 8)]
 
         async def streaming_runner(request: QueryTaskRequest):
@@ -665,7 +703,10 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
         unsubscribe()
         delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
-        self.assertEqual(delta_text, "".join(chunks))
+        snapshot = manager.get_snapshot(created.python_task_id)
+        self.assertEqual(snapshot.partial_result_text, "".join(chunks))
+        self.assertTrue(delta_text)
+        self.assertTrue("".join(chunks).endswith(delta_text))
 
     async def test_native_streaming_failure_falls_back_to_non_streaming_cli(self):
         async def streaming_runner(request: QueryTaskRequest):

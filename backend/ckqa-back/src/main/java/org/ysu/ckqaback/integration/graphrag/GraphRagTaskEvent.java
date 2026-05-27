@@ -7,6 +7,10 @@ import com.fasterxml.jackson.databind.JsonNode;
  */
 public record GraphRagTaskEvent(
         String eventName,
-        JsonNode data
+        JsonNode data,
+        Long eventSeq
 ) {
+    public GraphRagTaskEvent(String eventName, JsonNode data) {
+        this(eventName, data, null);
+    }
 }

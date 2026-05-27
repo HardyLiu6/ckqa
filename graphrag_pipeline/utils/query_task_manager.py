@@ -65,6 +65,8 @@ class QueryTaskSnapshot:
     streaming_provider: str | None = None
     streaming_fallback_reason: str | None = None
     streamed_text_length: int = 0
+    partial_result_text: str | None = None
+    stream_event_seq: int = 0
 
 
 class QueryTaskSnapshotStore:
@@ -204,6 +206,10 @@ class QueryTaskManager:
         self._task_event_replay: dict[str, list[dict[str, Any]]] = {}
         self._task_event_replay_chars: dict[str, int] = {}
         self._task_event_subscribers: dict[str, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._task_event_seq: dict[str, int] = {
+            task_id: int(snapshot.stream_event_seq or 0)
+            for task_id, snapshot in self._tasks.items()
+        }
         self._stream_replay_max_chars = max(1000, stream_replay_max_chars)
         self._lock = asyncio.Lock()
 
@@ -273,12 +279,20 @@ class QueryTaskManager:
             return None
         return replace(snapshot, latest_logs=list(snapshot.latest_logs or []))
 
-    def subscribe_events(self, python_task_id: str) -> tuple[list[dict[str, Any]], asyncio.Queue[dict[str, Any]], Callable[[], None]]:
+    def subscribe_events(
+        self,
+        python_task_id: str,
+        after_event_seq: int = 0,
+    ) -> tuple[list[dict[str, Any]], asyncio.Queue[dict[str, Any]], Callable[[], None]]:
         if python_task_id not in self._tasks:
             raise KeyError(python_task_id)
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._task_event_subscribers.setdefault(python_task_id, set()).add(queue)
-        replay = list(self._task_event_replay.get(python_task_id, []))
+        replay = [
+            item
+            for item in self._task_event_replay.get(python_task_id, [])
+            if int(item.get("seq") or 0) > max(0, int(after_event_seq or 0))
+        ]
 
         def unsubscribe() -> None:
             subscribers = self._task_event_subscribers.get(python_task_id)
@@ -307,8 +321,12 @@ class QueryTaskManager:
         if self._task_store is not None:
             self._task_store.save(snapshot)
 
-    def _publish_event(self, python_task_id: str, event: str, data: dict[str, Any]) -> None:
-        payload = {"event": event, "data": data}
+    def _publish_event(self, python_task_id: str, event: str, data: dict[str, Any]) -> int:
+        seq = self._task_event_seq.get(python_task_id, 0) + 1
+        self._task_event_seq[python_task_id] = seq
+        event_data = dict(data)
+        event_data["eventSeq"] = seq
+        payload = {"seq": seq, "event": event, "data": event_data}
         replay = self._task_event_replay.setdefault(python_task_id, [])
         if event == "status":
             for existing in list(replay):
@@ -328,6 +346,7 @@ class QueryTaskManager:
 
         for queue in list(self._task_event_subscribers.get(python_task_id, set())):
             queue.put_nowait(payload)
+        return seq
 
     async def _run_task(self, python_task_id: str) -> None:
         logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
@@ -499,7 +518,7 @@ class QueryTaskManager:
                 if visible:
                     visible_chunks.append(visible)
                     latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
-                    self._publish_event(python_task_id, "delta", {"text": visible})
+                    event_seq = self._publish_event(python_task_id, "delta", {"text": visible})
                     await self._update_task(
                         python_task_id,
                         last_heartbeat_at=utc_now(),
@@ -509,12 +528,26 @@ class QueryTaskManager:
                             max_chars=self._max_log_chars,
                         ),
                         streamed_text_length=sum(len(part) for part in visible_chunks),
+                        partial_result_text="".join(visible_chunks),
+                        stream_event_seq=event_seq,
                     )
             tail = delta_filter.finish()
             if tail:
                 visible_chunks.append(tail)
                 latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
-                self._publish_event(python_task_id, "delta", {"text": tail})
+                event_seq = self._publish_event(python_task_id, "delta", {"text": tail})
+                await self._update_task(
+                    python_task_id,
+                    last_heartbeat_at=utc_now(),
+                    latest_logs=trim_log_tail(
+                        [started_log, latest_progress_log],
+                        max_lines=self._max_log_lines,
+                        max_chars=self._max_log_chars,
+                    ),
+                    streamed_text_length=sum(len(part) for part in visible_chunks),
+                    partial_result_text="".join(visible_chunks),
+                    stream_event_seq=event_seq,
+                )
 
             raw_answer = "".join(raw_chunks)
             resolved_answer = resolve_answer_citations(
@@ -541,6 +574,7 @@ class QueryTaskManager:
                 return_code=0,
                 finished_at=utc_now(),
                 streamed_text_length=sum(len(part) for part in visible_chunks),
+                partial_result_text="".join(visible_chunks),
             )
             self._publish_event(python_task_id, "sources", {"sources": final_sources})
             self._publish_event(python_task_id, "done", {"taskStatus": "success"})
@@ -793,6 +827,11 @@ def _snapshot_from_json(payload: dict[str, Any]) -> QueryTaskSnapshot:
         kwargs["streamed_text_length"] = int(kwargs.get("streamed_text_length") or 0)
     except (TypeError, ValueError):
         kwargs["streamed_text_length"] = 0
+    kwargs["partial_result_text"] = kwargs.get("partial_result_text") or None
+    try:
+        kwargs["stream_event_seq"] = int(kwargs.get("stream_event_seq") or 0)
+    except (TypeError, ValueError):
+        kwargs["stream_event_seq"] = 0
     # 进程重启后旧 snapshot 只用于诊断和回读，不能继续声称子进程仍存活。
     kwargs["process_alive"] = False
     return QueryTaskSnapshot(**kwargs)
@@ -860,6 +899,8 @@ def _snapshot_status_payload(snapshot: QueryTaskSnapshot) -> dict[str, Any]:
         "streamingProvider": snapshot.streaming_provider,
         "streamingFallbackReason": snapshot.streaming_fallback_reason,
         "streamedTextLength": snapshot.streamed_text_length,
+        "partialResultText": snapshot.partial_result_text,
+        "streamEventSeq": snapshot.stream_event_seq,
     }
 
 

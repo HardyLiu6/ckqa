@@ -37,6 +37,8 @@ public class QaTaskDetailResponse {
     private final String memoryScope;
     private final Integer memorySourceCount;
     private final Integer memorySizeEstimate;
+    private final String partialResponseText;
+    private final Long streamEventSeq;
 
     private QaTaskDetailResponse(
             Long taskId,
@@ -63,7 +65,9 @@ public class QaTaskDetailResponse {
             String memoryStrategy,
             String memoryScope,
             Integer memorySourceCount,
-            Integer memorySizeEstimate
+            Integer memorySizeEstimate,
+            String partialResponseText,
+            Long streamEventSeq
     ) {
         this.taskId = taskId;
         this.userMessageId = userMessageId;
@@ -90,6 +94,8 @@ public class QaTaskDetailResponse {
         this.memoryScope = memoryScope;
         this.memorySourceCount = memorySourceCount;
         this.memorySizeEstimate = memorySizeEstimate;
+        this.partialResponseText = partialResponseText;
+        this.streamEventSeq = streamEventSeq == null ? 0L : streamEventSeq;
     }
 
     @JsonIgnore
@@ -119,7 +125,7 @@ public class QaTaskDetailResponse {
         return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, queryText,
                 latestLogs, startedAt, lastHeartbeatAt, finishedAt, assistantMessage, errorMessage,
                 recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, false, "none",
-                ContextSizeEstimateResponse.of(0), false, "none", null, 0, 0);
+                ContextSizeEstimateResponse.of(0), false, "none", null, 0, 0, null, 0L);
     }
 
     public static QaTaskDetailResponse of(
@@ -147,7 +153,7 @@ public class QaTaskDetailResponse {
         return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, queryText,
                 latestLogs, startedAt, lastHeartbeatAt, finishedAt, assistantMessage, errorMessage,
                 recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, contextApplied, contextStrategy,
-                contextSizeEstimate, false, "none", null, 0, 0);
+                contextSizeEstimate, false, "none", null, 0, 0, null, 0L);
     }
 
     public static QaTaskDetailResponse of(
@@ -175,7 +181,9 @@ public class QaTaskDetailResponse {
             String memoryStrategy,
             String memoryScope,
             Integer memorySourceCount,
-            Integer memorySizeEstimate
+            Integer memorySizeEstimate,
+            String partialResponseText,
+            Long streamEventSeq
     ) {
         return new QaTaskDetailResponse(
                 taskId,
@@ -202,7 +210,9 @@ public class QaTaskDetailResponse {
                 memoryStrategy,
                 memoryScope,
                 memorySourceCount,
-                memorySizeEstimate
+                memorySizeEstimate,
+                partialResponseText,
+                streamEventSeq
         );
     }
 }

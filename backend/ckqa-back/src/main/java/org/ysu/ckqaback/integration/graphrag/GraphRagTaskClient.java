@@ -155,8 +155,13 @@ public class GraphRagTaskClient {
     }
 
     public void streamTaskEvents(String pythonTaskId, Consumer<GraphRagTaskEvent> consumer) {
+        streamTaskEvents(pythonTaskId, 0L, consumer);
+    }
+
+    public void streamTaskEvents(String pythonTaskId, Long afterEventSeq, Consumer<GraphRagTaskEvent> consumer) {
+        long resumeSeq = afterEventSeq == null ? 0L : Math.max(0L, afterEventSeq);
         eventRestClient.get()
-                .uri("/v1/query-tasks/{taskId}/events", pythonTaskId)
+                .uri("/v1/query-tasks/{taskId}/events?afterEventSeq={afterEventSeq}", pythonTaskId, resumeSeq)
                 .accept(MediaType.TEXT_EVENT_STREAM)
                 .exchange((request, response) -> {
                     try (BufferedReader reader = new BufferedReader(
@@ -170,19 +175,23 @@ public class GraphRagTaskClient {
 
     private void parseSseEvents(BufferedReader reader, Consumer<GraphRagTaskEvent> consumer) throws IOException {
         String eventName = "message";
+        Long eventSeq = null;
         StringBuilder data = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {
             if (line.isBlank()) {
                 if (!data.isEmpty()) {
-                    consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString())));
+                    consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString()), eventSeq));
                 }
                 eventName = "message";
+                eventSeq = null;
                 data.setLength(0);
                 continue;
             }
             if (line.startsWith("event:")) {
                 eventName = line.substring("event:".length()).trim();
+            } else if (line.startsWith("id:")) {
+                eventSeq = parseEventSeq(line.substring("id:".length()).trim());
             } else if (line.startsWith("data:")) {
                 if (!data.isEmpty()) {
                     data.append('\n');
@@ -191,7 +200,18 @@ public class GraphRagTaskClient {
             }
         }
         if (!data.isEmpty()) {
-            consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString())));
+            consumer.accept(new GraphRagTaskEvent(eventName, parseJson(data.toString()), eventSeq));
+        }
+    }
+
+    private Long parseEventSeq(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 

@@ -435,7 +435,7 @@ class QaSessionsControllerWebMvcTest {
     void shouldOpenTaskEventStreamForOwner() throws Exception {
         org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter =
                 new org.springframework.web.servlet.mvc.method.annotation.SseEmitter();
-        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L)).willReturn(emitter);
+        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L, 0L)).willReturn(emitter);
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
@@ -444,7 +444,7 @@ class QaSessionsControllerWebMvcTest {
                         .contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM));
 
         then(qaWorkflowService).should().ensureSessionOwner(5L, 7L);
-        then(qaTaskEventStreamService).should().openStream(5L, 9001L, 7L);
+        then(qaTaskEventStreamService).should().openStream(5L, 9001L, 7L, 0L);
     }
 
     @Test
@@ -473,7 +473,7 @@ class QaSessionsControllerWebMvcTest {
 
     @Test
     void shouldReturnJsonWhenTaskEventStreamFailsBeforeEmitterIsEstablished() throws Exception {
-        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L))
+        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L, 0L))
                 .willThrow(new IllegalStateException("stream setup failed"));
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")

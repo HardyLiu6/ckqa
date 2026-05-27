@@ -538,11 +538,14 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "streamingProvider": snapshot.streaming_provider,
         "streamingFallbackReason": snapshot.streaming_fallback_reason,
         "streamedTextLength": snapshot.streamed_text_length,
+        "partialResultText": snapshot.partial_result_text,
+        "streamEventSeq": snapshot.stream_event_seq,
     }
 
 
-def _sse_event(event_name: str, payload: dict[str, Any]) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+def _sse_event(event_name: str, payload: dict[str, Any], event_seq: int | None = None) -> str:
+    event_id = f"id: {event_seq}\n" if event_seq is not None else ""
+    return f"{event_id}event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
 
 
 def _hybrid_readiness_payload(data_dir, data_dir_uri: str | None) -> dict[str, object]:
@@ -626,7 +629,7 @@ def create_app(
         return JSONResponse(content=_serialize_task_snapshot(snapshot))
 
     @app.get("/v1/query-tasks/{taskId}/events")
-    async def stream_query_task_events(taskId: str):
+    async def stream_query_task_events(taskId: str, afterEventSeq: int = 0):
         """Java 后端内部消费的查询任务事件流。"""
         snapshot = active_task_manager.get_snapshot(taskId)
         if snapshot is None:
@@ -634,11 +637,11 @@ def create_app(
 
         async def generate_events():
             yield _sse_event("ack", {"pythonTaskId": taskId})
-            replay, queue, unsubscribe = active_task_manager.subscribe_events(taskId)
+            replay, queue, unsubscribe = active_task_manager.subscribe_events(taskId, after_event_seq=afterEventSeq)
             terminal = False
             try:
                 for item in replay:
-                    yield _sse_event(item["event"], item["data"])
+                    yield _sse_event(item["event"], item["data"], item.get("seq"))
                     if item["event"] in {"done", "error"}:
                         terminal = True
                 current = active_task_manager.get_snapshot(taskId)
@@ -656,7 +659,7 @@ def create_app(
                     except asyncio.TimeoutError:
                         yield _sse_event("heartbeat", {"pythonTaskId": taskId, "serverTime": _serialize_api_local_datetime(datetime.now(API_TIME_ZONE))})
                         continue
-                    yield _sse_event(item["event"], item["data"])
+                    yield _sse_event(item["event"], item["data"], item.get("seq"))
                     if item["event"] in {"done", "error"}:
                         terminal = True
             finally:

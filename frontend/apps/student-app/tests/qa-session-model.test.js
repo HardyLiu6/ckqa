@@ -148,6 +148,8 @@ test('消息与任务状态规范化为前端展示模型', () => {
       taskStatus: null,
       progressStage: null,
       latestLogs: [],
+      partialResponseText: '',
+      streamEventSeq: 0,
       sources: [],
       feedback: null,
     },
@@ -167,10 +169,14 @@ test('消息与任务状态规范化为前端展示模型', () => {
     taskStatus: 'running',
     progressStage: 'running',
     latestLogs: ['started native streaming query task provider=native_graphrag', 42, ''],
+    partialResponseText: '当前已经生成的部分回答',
+    streamEventSeq: '12',
   })
   assert.equal(runningMessage.taskId, 9001)
   assert.equal(runningMessage.taskStatus, 'running')
   assert.deepEqual(runningMessage.latestLogs, ['started native streaming query task provider=native_graphrag', '42'])
+  assert.equal(runningMessage.partialResponseText, '当前已经生成的部分回答')
+  assert.equal(runningMessage.streamEventSeq, 12)
 })
 
 test('学生反馈规范化为消息内轻量状态', () => {

@@ -1178,6 +1178,9 @@ class QaWorkflowServiceTest {
         task.setQueryMode("global");
         task.setTaskStatus("running");
         task.setProgressStage("running");
+        task.setLatestLogs("started native streaming query task provider=native_graphrag\nstreamed chunk count=2");
+        task.setPartialResponseText("当前已经生成的部分回答");
+        task.setStreamEventSeq(12L);
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(userMessage, assistantMessage));
@@ -1194,10 +1197,22 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
         assertThat(responses.get(0).getMode()).isEqualTo("global");
         assertThat(responses.get(0).getTaskId()).isEqualTo(9001L);
+        assertThat(responses.get(0).getLatestLogs()).containsExactly(
+                "started native streaming query task provider=native_graphrag",
+                "streamed chunk count=2"
+        );
+        assertThat(responses.get(0).getPartialResponseText()).isEqualTo("当前已经生成的部分回答");
+        assertThat(responses.get(0).getStreamEventSeq()).isEqualTo(12L);
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
         assertThat(responses.get(1).getMode()).isEqualTo("global");
         assertThat(responses.get(1).getTaskId()).isEqualTo(9001L);
+        assertThat(responses.get(1).getLatestLogs()).containsExactly(
+                "started native streaming query task provider=native_graphrag",
+                "streamed chunk count=2"
+        );
+        assertThat(responses.get(1).getPartialResponseText()).isNull();
+        assertThat(responses.get(1).getStreamEventSeq()).isEqualTo(12L);
         assertThat(responses.get(1).getSources()).hasSize(1);
         assertThat(responses.get(1).getSources().get(0).getSourceFile()).isEqualTo("操作系统教材");
     }
@@ -1233,6 +1248,8 @@ class QaWorkflowServiceTest {
         task.setQueryMode("drift");
         task.setQueryText("请用 drift 模式回答");
         task.setLatestLogs("drift still running");
+        task.setPartialResponseText("drift 已生成的部分回答");
+        task.setStreamEventSeq(18L);
         task.setMemoryApplied(true);
         task.setMemoryStrategy("local_history");
         task.setMemoryScope("userId=7;courseId=os;knowledgeBaseId=3;indexRunId=17");
@@ -1253,6 +1270,8 @@ class QaWorkflowServiceTest {
         assertThat(response.getMemoryScope()).contains("knowledgeBaseId=3");
         assertThat(response.getMemorySourceCount()).isEqualTo(2);
         assertThat(response.getMemorySizeEstimate()).isEqualTo(88);
+        assertThat(response.getPartialResponseText()).isEqualTo("drift 已生成的部分回答");
+        assertThat(response.getStreamEventSeq()).isEqualTo(18L);
     }
 
     private KnowledgeBases buildKnowledgeBase() {

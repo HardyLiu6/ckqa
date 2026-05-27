@@ -130,6 +130,8 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .set(QaRetrievalLogs::getTaskStatus, snapshot.taskStatus())
                 .set(QaRetrievalLogs::getProgressStage, snapshot.progressStage())
                 .set(QaRetrievalLogs::getLatestLogs, joinLatestLogs(snapshot.latestLogs()))
+                .set(QaRetrievalLogs::getPartialResponseText, snapshot.partialResultText())
+                .set(QaRetrievalLogs::getStreamEventSeq, snapshot.streamEventSeq())
                 .set(QaRetrievalLogs::getStartedAt, snapshot.startedAt())
                 .set(QaRetrievalLogs::getLastHeartbeatAt, snapshot.lastHeartbeatAt())
                 .set(StringUtils.hasText(snapshot.queryEngineStrategy()), QaRetrievalLogs::getQueryEngineStrategy, snapshot.queryEngineStrategy())
@@ -147,6 +149,7 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
                 .set(QaRetrievalLogs::getProgressStage, "done")
                 .set(QaRetrievalLogs::getRetrievalStatus, retrievalStatus)
                 .set(QaRetrievalLogs::getLatestLogs, latestLogs)
+                .set(QaRetrievalLogs::getPartialResponseText, null)
                 .set(QaRetrievalLogs::getErrorMessage, null)
                 .set(QaRetrievalLogs::getFinishedAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, updateWrapper);

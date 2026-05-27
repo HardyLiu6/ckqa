@@ -26,7 +26,9 @@ public record GraphRagTaskSnapshot(
         Boolean streamingEnabled,
         String streamingProvider,
         String streamingFallbackReason,
-        Integer streamedTextLength
+        Integer streamedTextLength,
+        String partialResultText,
+        Long streamEventSeq
 ) {
 
     public GraphRagTaskSnapshot(
@@ -62,7 +64,9 @@ public record GraphRagTaskSnapshot(
                 false,
                 null,
                 null,
-                0
+                0,
+                null,
+                0L
         );
     }
 
@@ -100,7 +104,9 @@ public record GraphRagTaskSnapshot(
                 false,
                 null,
                 null,
-                0
+                0,
+                null,
+                0L
         );
     }
 
@@ -110,6 +116,7 @@ public record GraphRagTaskSnapshot(
         historyTurnsUsed = historyTurnsUsed == null ? 0 : historyTurnsUsed;
         streamingEnabled = Boolean.TRUE.equals(streamingEnabled);
         streamedTextLength = streamedTextLength == null ? 0 : streamedTextLength;
+        streamEventSeq = streamEventSeq == null ? 0L : streamEventSeq;
     }
 
     public boolean isTerminal() {

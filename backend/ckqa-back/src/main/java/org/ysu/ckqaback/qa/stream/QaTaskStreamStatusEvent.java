@@ -31,7 +31,9 @@ public record QaTaskStreamStatusEvent(
         String memoryStrategy,
         String memoryScope,
         Integer memorySourceCount,
-        Integer memorySizeEstimate
+        Integer memorySizeEstimate,
+        String partialResponseText,
+        Long streamEventSeq
 ) {
 
     public static QaTaskStreamStatusEvent from(QaTaskDetailResponse detail) {
@@ -57,7 +59,9 @@ public record QaTaskStreamStatusEvent(
                 detail.getMemoryStrategy(),
                 detail.getMemoryScope(),
                 detail.getMemorySourceCount(),
-                detail.getMemorySizeEstimate()
+                detail.getMemorySizeEstimate(),
+                detail.getPartialResponseText(),
+                detail.getStreamEventSeq()
         );
     }
 }

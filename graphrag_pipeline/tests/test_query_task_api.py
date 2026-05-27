@@ -93,6 +93,8 @@ class _FakeQueryTaskManager:
             generation_context=generation_context,
             query_engine_strategy=query_engine_strategy,
             conversation_history=list(conversation_history or []),
+            partial_result_text=None,
+            stream_event_seq=0,
         )
 
     def get_snapshot(self, python_task_id: str) -> QueryTaskSnapshot | None:
@@ -111,6 +113,8 @@ class _FakeQueryTaskManager:
             started_at=self.started_at,
             last_heartbeat_at=self.last_heartbeat_at,
             latest_logs=["started graphrag query --method global"],
+            partial_result_text="死锁",
+            stream_event_seq=2,
             sources=[
                 {
                     "rank": 1,
@@ -128,13 +132,14 @@ class _FakeQueryTaskManager:
             conversation_history=[],
         )
 
-    def subscribe_events(self, python_task_id: str):
+    def subscribe_events(self, python_task_id: str, after_event_seq: int = 0):
         if python_task_id != "qt_20260422_000001_001":
             raise KeyError(python_task_id)
         replay = [
-            {"event": "delta", "data": {"text": "死锁"}},
-            {"event": "done", "data": {"taskStatus": "success"}},
+            {"seq": 1, "event": "delta", "data": {"text": "死锁", "eventSeq": 1}},
+            {"seq": 2, "event": "done", "data": {"taskStatus": "success", "eventSeq": 2}},
         ]
+        replay = [item for item in replay if item["seq"] > after_event_seq]
         return replay, asyncio.Queue(), lambda: None
 
 
@@ -290,13 +295,15 @@ class TestQueryTaskApi(unittest.TestCase):
         self.assertIsNone(fetch_payload["historyFallbackReason"])
         self.assertFalse(fetch_payload["historyApplied"])
         self.assertEqual(fetch_payload["historyTurnsUsed"], 0)
+        self.assertEqual(fetch_payload["partialResultText"], "死锁")
+        self.assertEqual(fetch_payload["streamEventSeq"], 2)
         self.assertEqual(fetch_payload["sources"][0]["source_file"], "操作系统教材")
 
     def test_query_task_events_streams_replay_payloads(self):
         app = create_app(task_manager=_FakeQueryTaskManager())
         events_endpoint = _get_route_endpoint(app, "/v1/query-tasks/{taskId}/events", "GET")
 
-        response = asyncio.run(events_endpoint("qt_20260422_000001_001"))
+        response = asyncio.run(events_endpoint("qt_20260422_000001_001", afterEventSeq=1))
 
         async def collect_body():
             chunks = []
@@ -306,8 +313,9 @@ class TestQueryTaskApi(unittest.TestCase):
 
         body = asyncio.run(collect_body())
         self.assertIn("event: ack", body)
-        self.assertIn("event: delta", body)
-        self.assertIn('"text": "死锁"', body)
+        self.assertIn("id: 2", body)
+        self.assertNotIn("event: delta", body)
+        self.assertNotIn('"text": "死锁"', body)
         self.assertIn("event: done", body)
 
     def test_submit_query_task_accepts_backend_index_context(self):

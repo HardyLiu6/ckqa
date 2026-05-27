@@ -23,6 +23,9 @@ test('真实问答页恢复历史会话时会重新接入运行中任务', () =>
   assert.match(qaPageSource, /resumeRunningTaskFromMessages/)
   assert.match(qaPageSource, /getQaTask\(sessionId, runningUserMessage\.taskId\)/)
   assert.match(qaPageSource, /startTaskStream\(sessionId, runningUserMessage\.taskId, pendingTask\.value\)/)
+  assert.match(qaPageSource, /partialResponseText/)
+  assert.match(qaPageSource, /afterEventSeq/)
+  assert.match(qaPageSource, /eventSeq <=/)
   assert.match(qaPageSource, /Math\.min\(2, resolvePollingDelaySeconds/)
 })
 

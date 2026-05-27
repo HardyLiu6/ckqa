@@ -2,13 +2,17 @@ package org.ysu.ckqaback.qa.stream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
+import org.ysu.ckqaback.integration.graphrag.GraphRagTaskEvent;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -18,6 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -26,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
@@ -108,8 +114,19 @@ class QaTaskEventStreamServiceTest {
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setPythonTaskId("qt_stream_1");
         given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        ObjectMapper objectMapper = new ObjectMapper();
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<GraphRagTaskEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new GraphRagTaskEvent(
+                    "delta",
+                    objectMapper.readTree("{\"text\":\"死锁\",\"eventSeq\":13}"),
+                    13L
+            ));
+            return null;
+        }).when(graphRagTaskClient).streamTaskEvents(eq("qt_stream_1"), eq(12L), any());
 
-        QaTaskEventStreamService service = new QaTaskEventStreamService(
+        TestableQaTaskEventStreamService service = new TestableQaTaskEventStreamService(
                 workflowService,
                 retrievalLogsService,
                 graphRagTaskClient,
@@ -117,10 +134,59 @@ class QaTaskEventStreamServiceTest {
                 scheduler,
                 new SyncTaskExecutor()
         );
-        service.openStream(5L, 9001L, 7L);
+        service.openStream(5L, 9001L, 7L, 12L);
         scheduledTask.get().run();
 
-        then(graphRagTaskClient).should().streamTaskEvents(eq("qt_stream_1"), any());
+        then(graphRagTaskClient).should().streamTaskEvents(eq("qt_stream_1"), eq(12L), any());
+        assertThat(service.emitter.renderedEvents).anySatisfy(event -> {
+            assertThat(event).contains("id:13");
+            assertThat(event).contains("event:delta");
+            assertThat(event).contains("死锁");
+        });
+    }
+
+    @Test
+    void shouldNotReplayFallbackDeltasWhenResumingAfterPythonStreamSeq() {
+        QaWorkflowService workflowService = mock(QaWorkflowService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        GraphRagTaskClient graphRagTaskClient = mock(GraphRagTaskClient.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        @SuppressWarnings("unchecked")
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
+        QaTaskStreamProperties properties = new QaTaskStreamProperties();
+        properties.setStatusIntervalSeconds(2L);
+        properties.setDeltaChars(20);
+
+        given(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(2L), eq(TimeUnit.SECONDS)))
+                .willAnswer(invocation -> {
+                    scheduledTask.set(invocation.getArgument(0));
+                    return scheduledFuture;
+                });
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(successDetail());
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setPythonTaskId("qt_stream_1");
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        doAnswer(invocation -> null)
+                .when(graphRagTaskClient).streamTaskEvents(eq("qt_stream_1"), eq(25L), any());
+
+        TestableQaTaskEventStreamService service = new TestableQaTaskEventStreamService(
+                workflowService,
+                retrievalLogsService,
+                graphRagTaskClient,
+                properties,
+                scheduler,
+                new SyncTaskExecutor()
+        );
+        service.openStream(5L, 9001L, 7L, 25L);
+        scheduledTask.get().run();
+
+        assertThat(service.emitter.renderedEvents)
+                .noneSatisfy(event -> assertThat(event).contains("event:delta"));
+        assertThat(service.emitter.renderedEvents)
+                .anySatisfy(event -> assertThat(event).contains("event:message"));
+        assertThat(service.emitter.renderedEvents)
+                .anySatisfy(event -> assertThat(event).contains("event:done"));
     }
 
     @Test
@@ -272,6 +338,7 @@ class QaTaskEventStreamServiceTest {
         @Override
         public void send(SseEventBuilder builder) throws IOException {
             events.add(builder);
+            renderedEvents.add(render(builder));
         }
 
         @Override
@@ -282,6 +349,16 @@ class QaTaskEventStreamServiceTest {
         @Override
         public void completeWithError(Throwable ex) {
             completedWithError = true;
+        }
+
+        private final List<String> renderedEvents = new ArrayList<>();
+
+        private String render(SseEventBuilder builder) {
+            StringBuilder text = new StringBuilder();
+            for (ResponseBodyEmitter.DataWithMediaType item : builder.build()) {
+                text.append(item.getData());
+            }
+            return text.toString();
         }
     }
 }

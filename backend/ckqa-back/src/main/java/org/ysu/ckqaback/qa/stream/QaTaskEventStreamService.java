@@ -58,6 +58,10 @@ public class QaTaskEventStreamService {
     }
 
     public SseEmitter openStream(Long sessionId, Long taskId, Long currentUserId) {
+        return openStream(sessionId, taskId, currentUserId, 0L);
+    }
+
+    public SseEmitter openStream(Long sessionId, Long taskId, Long currentUserId, Long afterEventSeq) {
         if (!properties.isEnabled()) {
             throw new BusinessException(
                     ApiResultCode.PIPELINE_NOT_IMPLEMENTED,
@@ -97,7 +101,8 @@ public class QaTaskEventStreamService {
                         futureRef,
                         bridgedPythonTaskId,
                         pythonDeltaForwarded,
-                        lastHeartbeatEpochMillis
+                        lastHeartbeatEpochMillis,
+                        afterEventSeq == null ? 0L : Math.max(0L, afterEventSeq)
                 ),
                 0L,
                 properties.statusIntervalSeconds(),
@@ -119,13 +124,14 @@ public class QaTaskEventStreamService {
             AtomicReference<ScheduledFuture<?>> futureRef,
             AtomicReference<String> bridgedPythonTaskId,
             AtomicBoolean pythonDeltaForwarded,
-            AtomicLong lastHeartbeatEpochMillis
+            AtomicLong lastHeartbeatEpochMillis,
+            Long afterEventSeq
     ) {
         try {
             QaTaskDetailResponse detail = qaWorkflowService.getTaskDetail(sessionId, taskId, currentUserId);
             sendEvent(emitter, "status", QaTaskStreamStatusEvent.from(detail));
             sendHeartbeatIfDue(taskId, emitter, lastHeartbeatEpochMillis);
-            startPythonBridgeIfAvailable(sessionId, taskId, emitter, bridgedPythonTaskId, pythonDeltaForwarded);
+            startPythonBridgeIfAvailable(sessionId, taskId, emitter, bridgedPythonTaskId, pythonDeltaForwarded, afterEventSeq);
 
             if (!isTerminal(detail.getTaskStatus())) {
                 return;
@@ -133,7 +139,7 @@ public class QaTaskEventStreamService {
 
             QaTaskDetailResponse terminalDetail = resolveTerminalDetail(sessionId, taskId, currentUserId, detail);
             if ("success".equals(terminalDetail.getTaskStatus()) && terminalDetail.getAssistantMessage() != null) {
-                if (!pythonDeltaForwarded.get()) {
+                if (!pythonDeltaForwarded.get() && shouldSendFallbackDeltas(afterEventSeq)) {
                     sendDeltas(emitter, terminalDetail.getAssistantMessage());
                 }
                 sendEvent(emitter, "sources", terminalDetail.getAssistantMessage().getSources());
@@ -159,12 +165,17 @@ public class QaTaskEventStreamService {
         }
     }
 
+    private boolean shouldSendFallbackDeltas(Long afterEventSeq) {
+        return afterEventSeq == null || afterEventSeq <= 0L;
+    }
+
     private void startPythonBridgeIfAvailable(
             Long sessionId,
             Long taskId,
             SseEmitter emitter,
             AtomicReference<String> bridgedPythonTaskId,
-            AtomicBoolean pythonDeltaForwarded
+            AtomicBoolean pythonDeltaForwarded,
+            Long afterEventSeq
     ) {
         if (bridgedPythonTaskId.get() != null) {
             return;
@@ -188,7 +199,11 @@ public class QaTaskEventStreamService {
         }
         qaTaskExecutor.execute(() -> {
             try {
-                graphRagTaskClient.streamTaskEvents(pythonTaskId, event -> forwardPythonEvent(emitter, event, pythonDeltaForwarded));
+                graphRagTaskClient.streamTaskEvents(
+                        pythonTaskId,
+                        afterEventSeq,
+                        event -> forwardPythonEvent(emitter, event, pythonDeltaForwarded)
+                );
             } catch (RuntimeException ex) {
                 log.debug("Python QA 事件流不可用，继续使用 Java 阶段 1 事件流, pythonTaskId={}", pythonTaskId, ex);
             }
@@ -205,7 +220,15 @@ public class QaTaskEventStreamService {
         }
         try {
             pythonDeltaForwarded.set(true);
-            sendEvent(emitter, "delta", Map.of("text", text));
+            Long eventSeq = event.eventSeq();
+            if (eventSeq == null && event.data().has("eventSeq")) {
+                eventSeq = event.data().get("eventSeq").asLong();
+            }
+            if (eventSeq == null) {
+                sendEvent(emitter, "delta", Map.of("text", text));
+            } else {
+                sendEvent(emitter, "delta", Map.of("text", text, "eventSeq", eventSeq), eventSeq);
+            }
         } catch (IOException ex) {
             log.debug("转发 Python QA delta 失败: {}", ex.getMessage());
         }
@@ -284,8 +307,16 @@ public class QaTaskEventStreamService {
     }
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data) throws IOException {
+        sendEvent(emitter, eventName, data, null);
+    }
+
+    private void sendEvent(SseEmitter emitter, String eventName, Object data, Long eventSeq) throws IOException {
         synchronized (emitter) {
-            emitter.send(SseEmitter.event().name(eventName).data(data));
+            SseEmitter.SseEventBuilder builder = SseEmitter.event().name(eventName).data(data);
+            if (eventSeq != null) {
+                builder.id(String.valueOf(eventSeq));
+            }
+            emitter.send(builder);
         }
     }
 

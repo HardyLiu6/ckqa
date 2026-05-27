@@ -22,6 +22,9 @@ public class QaMessageResponse {
     private final Long taskId;
     private final String taskStatus;
     private final String progressStage;
+    private final List<String> latestLogs;
+    private final String partialResponseText;
+    private final Long streamEventSeq;
     private final List<QaSourceResponse> sources;
     private final QaFeedbackResponse feedback;
 
@@ -36,6 +39,9 @@ public class QaMessageResponse {
             Long taskId,
             String taskStatus,
             String progressStage,
+            List<String> latestLogs,
+            String partialResponseText,
+            Long streamEventSeq,
             List<QaSourceResponse> sources,
             QaFeedbackResponse feedback
     ) {
@@ -49,6 +55,9 @@ public class QaMessageResponse {
         this.taskId = taskId;
         this.taskStatus = taskStatus;
         this.progressStage = progressStage;
+        this.latestLogs = latestLogs == null ? List.of() : List.copyOf(latestLogs);
+        this.partialResponseText = partialResponseText;
+        this.streamEventSeq = streamEventSeq == null ? 0L : streamEventSeq;
         this.sources = sources == null ? List.of() : List.copyOf(sources);
         this.feedback = feedback;
     }
@@ -118,6 +127,9 @@ public class QaMessageResponse {
                 null,
                 taskStatus,
                 progressStage,
+                List.of(),
+                null,
+                0L,
                 sources,
                 feedback
         );
@@ -137,6 +149,27 @@ public class QaMessageResponse {
             List<QaSourceResponse> sources,
             QaFeedbackResponse feedback
     ) {
+        return of(id, sessionId, role, sequenceNo, content, createdAt, mode, taskId, taskStatus, progressStage,
+                List.of(), null, 0L, sources, feedback);
+    }
+
+    public static QaMessageResponse of(
+            Long id,
+            Long sessionId,
+            String role,
+            Integer sequenceNo,
+            String content,
+            LocalDateTime createdAt,
+            String mode,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            List<String> latestLogs,
+            String partialResponseText,
+            Long streamEventSeq,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
+    ) {
         return new QaMessageResponse(
                 id,
                 sessionId,
@@ -148,6 +181,9 @@ public class QaMessageResponse {
                 taskId,
                 taskStatus,
                 progressStage,
+                latestLogs,
+                partialResponseText,
+                streamEventSeq,
                 sources,
                 feedback
         );

@@ -232,27 +232,31 @@ class GraphRagTaskClientTest {
     void shouldParsePythonTaskEventStream() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks/qt_1/events"))
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks/qt_1/events?afterEventSeq=7"))
                 .andExpect(method(HttpMethod.GET))
                 .andRespond(withSuccess("""
                         event: ack
                         data: {"pythonTaskId":"qt_1"}
 
+                        id: 8
                         event: delta
-                        data: {"text":"死锁"}
+                        data: {"text":"死锁","eventSeq":8}
 
+                        id: 9
                         event: done
-                        data: {"taskStatus":"success"}
+                        data: {"taskStatus":"success","eventSeq":9}
 
                         """, MediaType.TEXT_EVENT_STREAM));
 
         GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
         List<GraphRagTaskEvent> events = new ArrayList<>();
-        client.streamTaskEvents("qt_1", events::add);
+        client.streamTaskEvents("qt_1", 7L, events::add);
 
         assertThat(events).extracting(GraphRagTaskEvent::eventName)
                 .containsExactly("ack", "delta", "done");
         assertThat(events.get(1).data().get("text").asText()).isEqualTo("死锁");
+        assertThat(events.get(1).eventSeq()).isEqualTo(8L);
+        assertThat(events.get(2).eventSeq()).isEqualTo(9L);
         server.verify();
     }
 

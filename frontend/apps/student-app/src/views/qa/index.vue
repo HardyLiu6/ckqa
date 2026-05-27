@@ -72,6 +72,7 @@ import {
   normalizeQaFeedback,
   normalizeQaMessage,
   normalizeQaSession,
+  normalizeStreamEventSeq,
   normalizeTaskLogs,
   resolveSessionLifecycleStatusText,
   resolveContextStatusText,
@@ -167,6 +168,9 @@ const memorySendStatusText = computed(() => {
   })
 })
 const pendingProcessLogs = computed(() => normalizeTaskLogs(pendingTask.value?.latestLogs))
+const hasActivePendingTask = computed(() => Boolean(
+  pendingTask.value && !isTerminalTaskStatus(pendingTask.value.taskStatus),
+))
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -180,7 +184,7 @@ const canSend = computed(() => Boolean(
   && !sending.value
   && !courseRoutingLoading.value
   && !courseRouteConfirmation.value
-  && !pendingTask.value
+  && !hasActivePendingTask.value
   && !activeSessionReadOnlyMessage.value,
 ))
 const selectedScopeLabel = computed(() => {
@@ -427,7 +431,7 @@ async function ensureMemoryStateForScope(courseId, knowledgeBaseId) {
 
 async function send() {
   const text = input.value.trim()
-  if (!text || sending.value || pendingTask.value) {
+  if (!text || sending.value || hasActivePendingTask.value) {
     return
   }
 
@@ -868,7 +872,10 @@ async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(ro
       return
     }
     if (!resumed) {
-      statusMessage.value = activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问'
+      const restoredTerminalPartial = restoreTerminalPartialTaskFromMessages(session.id, messages.value)
+      statusMessage.value = restoredTerminalPartial
+        ? '已恢复上次未完成任务的部分回答和检索过程，可以继续提问'
+        : (activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问')
     }
     await scrollToBottom()
   } catch (error) {
@@ -913,6 +920,8 @@ async function resumeRunningTaskFromMessages(sessionId, restoredMessages, reques
       sessionId,
       mode: detail.mode || runningUserMessage.mode || '',
       queryText: detail.queryText || runningUserMessage.content,
+      streamText: detail.partialResponseText || runningUserMessage.partialResponseText || '',
+      lastStreamEventSeq: normalizeStreamEventSeq(detail.streamEventSeq ?? runningUserMessage.streamEventSeq),
     }
     statusMessage.value = '已恢复运行中的问答任务，正在继续接收结果'
     startTaskStream(sessionId, runningUserMessage.taskId, pendingTask.value)
@@ -923,6 +932,37 @@ async function resumeRunningTaskFromMessages(sessionId, restoredMessages, reques
     }
     return false
   }
+}
+
+function restoreTerminalPartialTaskFromMessages(sessionId, restoredMessages) {
+  const lastMessage = restoredMessages.at(-1)
+  if (lastMessage?.role !== 'user' || !lastMessage.taskId) {
+    return false
+  }
+  const status = String(lastMessage.taskStatus ?? '').toLowerCase()
+  if (!['failed', 'stale'].includes(status)) {
+    return false
+  }
+  const streamText = lastMessage.partialResponseText || ''
+  const latestLogs = normalizeTaskLogs(lastMessage.latestLogs)
+  if (!streamText && !latestLogs.length) {
+    return false
+  }
+  pendingTask.value = {
+    sessionId,
+    taskId: lastMessage.taskId,
+    taskStatus: status,
+    progressStage: lastMessage.progressStage,
+    mode: lastMessage.mode || '',
+    queryText: lastMessage.content,
+    streamText,
+    latestLogs,
+    streamEventSeq: normalizeStreamEventSeq(lastMessage.streamEventSeq),
+    lastStreamEventSeq: normalizeStreamEventSeq(lastMessage.streamEventSeq),
+    streaming: false,
+    timeoutMessage: status === 'stale' ? '任务心跳超时，已保留已生成的部分回答。' : '',
+  }
+  return true
 }
 
 async function syncRestoredSessionRouteQuery(session, sessionId) {
@@ -990,6 +1030,15 @@ function scheduleTaskPoll(sessionId, taskId, delaySeconds) {
 
 function startTaskStream(sessionId, taskId, submission) {
   clearTaskStream()
+  const initialStreamText = String(
+    submission?.streamText
+    ?? submission?.partialResponseText
+    ?? '',
+  )
+  const initialEventSeq = normalizeStreamEventSeq(
+    submission?.lastStreamEventSeq
+    ?? submission?.streamEventSeq,
+  )
   if (typeof AbortController === 'undefined') {
     scheduleTaskPoll(sessionId, taskId, resolvePollingDelaySeconds(submission))
     return
@@ -1025,7 +1074,8 @@ function startTaskStream(sessionId, taskId, submission) {
         ...(pendingTask.value ?? submission),
         sessionId,
         streaming: true,
-        streamText: '',
+        streamText: pendingTask.value?.streamText ?? initialStreamText,
+        lastStreamEventSeq: normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq),
       }
     },
     status(payload) {
@@ -1035,11 +1085,17 @@ function startTaskStream(sessionId, taskId, submission) {
       if (!payload) {
         return
       }
+      const currentStreamText = pendingTask.value?.streamText ?? initialStreamText
+      const payloadPartialText = payload.partialResponseText ?? payload.partial_result_text ?? ''
+      const currentSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
+      const payloadSeq = normalizeStreamEventSeq(payload.streamEventSeq ?? payload.stream_event_seq)
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         ...payload,
         sessionId,
         streaming: true,
+        streamText: currentStreamText || payloadPartialText,
+        lastStreamEventSeq: Math.max(currentSeq, payloadSeq),
       }
       updateUserMessageTask(payload)
     },
@@ -1062,11 +1118,18 @@ function startTaskStream(sessionId, taskId, submission) {
       if (!text) {
         return
       }
+      const eventSeq = normalizeStreamEventSeq(payload?.eventSeq ?? payload?.event_seq)
+      const lastEventSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
+      if (eventSeq > 0 && eventSeq <= lastEventSeq) {
+        return
+      }
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         sessionId,
         streaming: true,
         streamText: `${pendingTask.value?.streamText ?? ''}${text}`,
+        lastStreamEventSeq: eventSeq || lastEventSeq,
+        streamEventSeq: eventSeq || lastEventSeq,
       }
       scrollToBottom()
     },
@@ -1093,6 +1156,7 @@ function startTaskStream(sessionId, taskId, submission) {
           sessionId,
           streaming: true,
           streamText: '',
+          lastStreamEventSeq: normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq),
         }
       }
     },
@@ -1124,13 +1188,21 @@ function startTaskStream(sessionId, taskId, submission) {
       state.terminal = true
       clearTaskStream()
       errorMessage.value = payloadOrError?.message || '问答任务执行失败'
-      pendingTask.value = null
+      const errorPayload = payloadOrError && typeof payloadOrError === 'object' ? payloadOrError : {}
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        ...errorPayload,
+        sessionId,
+        taskStatus: pendingTask.value?.taskStatus || 'failed',
+        streaming: false,
+      }
     },
     close() {
       fallbackToPolling()
     },
   }, {
     signal: controller.signal,
+    afterEventSeq: initialEventSeq,
   }).catch(() => {
     fallbackToPolling('事件流连接失败，已切换为轮询。')
   })
@@ -1139,10 +1211,16 @@ function startTaskStream(sessionId, taskId, submission) {
 async function pollTask(sessionId, taskId) {
   try {
     const detail = await getQaTask(sessionId, taskId)
+    const currentStreamText = pendingTask.value?.streamText ?? ''
+    const partialStreamText = detail.partialResponseText ?? ''
+    const currentSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? pendingTask.value?.streamEventSeq)
+    const detailSeq = normalizeStreamEventSeq(detail.streamEventSeq)
     pendingTask.value = {
       ...(pendingTask.value ?? {}),
       ...detail,
       sessionId,
+      streamText: currentStreamText || partialStreamText,
+      lastStreamEventSeq: Math.max(currentSeq, detailSeq),
     }
     updateUserMessageTask(detail)
 
@@ -1170,10 +1248,26 @@ async function pollTask(sessionId, taskId) {
       ? (detail.timeoutMessage || '任务心跳超时，请稍后重试')
       : (detail.errorMessage || '问答任务执行失败')
     errorMessage.value = fallbackMessage
-    pendingTask.value = null
+    pendingTask.value = {
+      ...(pendingTask.value ?? {}),
+      ...detail,
+      sessionId,
+      streaming: false,
+      streamText: pendingTask.value?.streamText || detail.partialResponseText || '',
+      lastStreamEventSeq: Math.max(
+        normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? pendingTask.value?.streamEventSeq),
+        normalizeStreamEventSeq(detail.streamEventSeq),
+      ),
+    }
   } catch (error) {
     errorMessage.value = error?.message || '问答任务轮询失败'
-    pendingTask.value = null
+    if (pendingTask.value) {
+      pendingTask.value = {
+        ...pendingTask.value,
+        taskStatus: pendingTask.value.taskStatus || 'failed',
+        streaming: false,
+      }
+    }
   }
 }
 
@@ -1211,6 +1305,9 @@ function updateUserMessageTask(detail) {
             taskId: detail.taskId ?? message.taskId ?? null,
             taskStatus: detail.taskStatus,
             progressStage: detail.progressStage,
+            latestLogs: normalizeTaskLogs(detail.latestLogs ?? message.latestLogs),
+            partialResponseText: detail.partialResponseText ?? message.partialResponseText ?? '',
+            streamEventSeq: normalizeStreamEventSeq(detail.streamEventSeq ?? message.streamEventSeq),
           }
       : message
   ))
@@ -1666,7 +1763,7 @@ function sourceTypeLabel(source) {
             ref="composerInputRef"
             v-model="input"
             class="composer-input"
-            :disabled="sending || courseRoutingLoading || restoringSession || Boolean(pendingTask) || Boolean(activeSessionReadOnlyMessage)"
+            :disabled="sending || courseRoutingLoading || restoringSession || hasActivePendingTask || Boolean(activeSessionReadOnlyMessage)"
             :placeholder="activeSessionReadOnlyMessage || '有问题，尽管问'"
             rows="1"
             @focus="composerFocused = true"

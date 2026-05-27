@@ -89,7 +89,8 @@ export function openQaTaskEventStream(
   options = {},
   eventSourceClient = fetchEventSource,
 ) {
-  const path = `/qa-sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/events`
+  const query = normalizeAfterEventSeq(options.afterEventSeq)
+  const path = `/qa-sessions/${encodeURIComponent(sessionId)}/tasks/${encodeURIComponent(taskId)}/events${query ? `?afterEventSeq=${query}` : ''}`
   const headers = {
     Accept: 'text/event-stream',
     ...resolveAuthHeaders(),
@@ -112,6 +113,7 @@ export function openQaTaskEventStream(
     onmessage(event) {
       const eventName = event.event || 'message'
       const payload = parseStreamPayload(event.data)
+      attachEventSeq(payload, event)
       handlers.event?.(eventName, payload, event)
       handlers[eventName]?.(payload, event)
     },
@@ -123,6 +125,21 @@ export function openQaTaskEventStream(
       throw error
     },
   })
+}
+
+function normalizeAfterEventSeq(value) {
+  const number = Number(value ?? 0)
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
+}
+
+function attachEventSeq(payload, event) {
+  if (!payload || typeof payload !== 'object' || payload.eventSeq != null) {
+    return
+  }
+  const number = Number(event?.id ?? event?.lastEventId ?? 0)
+  if (Number.isFinite(number) && number > 0) {
+    payload.eventSeq = Math.floor(number)
+  }
 }
 
 function resolveApiUrl(path) {

@@ -192,9 +192,16 @@ export function normalizeQaMessage(message) {
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
     latestLogs: normalizeTaskLogs(message.latestLogs ?? message.latest_logs),
+    partialResponseText: String(message.partialResponseText ?? message.partial_response_text ?? ''),
+    streamEventSeq: normalizeStreamEventSeq(message.streamEventSeq ?? message.stream_event_seq),
     sources: normalizeQaSources(message.sources),
     feedback: normalizeQaFeedback(message.feedback),
   }
+}
+
+export function normalizeStreamEventSeq(value) {
+  const number = Number(value ?? 0)
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
 }
 
 export function normalizeTaskLogs(logs) {

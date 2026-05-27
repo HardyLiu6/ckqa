@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
@@ -140,11 +141,12 @@ public class QaSessionsController {
     public SseEmitter streamTaskEvents(
             @PathVariable @Positive(message = "sessionId必须大于0") Long sessionId,
             @PathVariable @Positive(message = "taskId必须大于0") Long taskId,
+            @RequestParam(required = false, defaultValue = "0") Long afterEventSeq,
             HttpServletRequest servletRequest
     ) {
         Long currentUserId = currentUserId(servletRequest);
         qaWorkflowService.ensureSessionOwner(sessionId, currentUserId);
-        return qaTaskEventStreamService.openStream(sessionId, taskId, currentUserId);
+        return qaTaskEventStreamService.openStream(sessionId, taskId, currentUserId, afterEventSeq);
     }
 
     private Long currentUserId(HttpServletRequest servletRequest) {

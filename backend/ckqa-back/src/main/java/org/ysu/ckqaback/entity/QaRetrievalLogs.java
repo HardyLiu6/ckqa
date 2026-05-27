@@ -82,6 +82,18 @@ public class QaRetrievalLogs implements Serializable {
     private String latestLogs;
 
     /**
+     * 运行中已生成的可恢复回答文本
+     */
+    @TableField("partial_response_text")
+    private String partialResponseText;
+
+    /**
+     * 已同步的流式事件序号
+     */
+    @TableField("stream_event_seq")
+    private Long streamEventSeq;
+
+    /**
      * 课程ID
      */
     @TableField("course_id")
