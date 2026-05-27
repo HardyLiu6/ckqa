@@ -12,7 +12,9 @@ import org.ysu.ckqaback.auth.AuthConstants;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.qa.dto.QaModeRecommendationResponse;
+import org.ysu.ckqaback.qa.dto.QaQuestionDomainCheckResponse;
 import org.ysu.ckqaback.qa.routing.QaModeRoutingService;
+import org.ysu.ckqaback.qa.routing.QaQuestionDomainGuardService;
 
 import java.util.List;
 import java.util.Map;
@@ -28,14 +30,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class QaRoutingControllerWebMvcTest {
 
     private QaModeRoutingService qaModeRoutingService;
+    private QaQuestionDomainGuardService qaQuestionDomainGuardService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         qaModeRoutingService = Mockito.mock(QaModeRoutingService.class);
+        qaQuestionDomainGuardService = Mockito.mock(QaQuestionDomainGuardService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new QaRoutingController(qaModeRoutingService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new QaRoutingController(qaModeRoutingService, qaQuestionDomainGuardService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -97,8 +101,62 @@ class QaRoutingControllerWebMvcTest {
     }
 
     @Test
+    void shouldCheckQuestionDomainForAuthenticatedStudent() throws Exception {
+        given(qaQuestionDomainGuardService.check(any(), eq(student()))).willReturn(QaQuestionDomainCheckResponse.outOfScope(
+                "campus_life",
+                "这个问题看起来不属于课程知识问答范围。"
+        ));
+
+        mockMvc.perform(post(ApiPaths.QA_ROUTING + "/domain-check")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, student())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "courseId": "os",
+                                  "knowledgeBaseId": 5,
+                                  "sessionId": 21,
+                                  "question": "今天晚上食堂有什么菜？",
+                                  "hasConversationContext": false
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("out_of_scope"))
+                .andExpect(jsonPath("$.data.reasonCode").value("campus_life"))
+                .andExpect(jsonPath("$.data.strategy").value("rule_domain_guard_v1"));
+
+        then(qaQuestionDomainGuardService).should().check(any(), eq(student()));
+    }
+
+    @Test
+    void shouldRequireAuthForDomainCheck() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_ROUTING + "/domain-check")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "今天晚上吃什么"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("请先登录"));
+    }
+
+    @Test
     void shouldValidateQuestionLength() throws Exception {
         mockMvc.perform(post(ApiPaths.QA_ROUTING + "/recommend")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, student())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": ""
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("参数校验失败"));
+    }
+
+    @Test
+    void shouldValidateDomainCheckQuestionLength() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_ROUTING + "/domain-check")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, student())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

@@ -90,6 +90,24 @@ export function normalizeCourseRoutingCandidates(candidates = []) {
     .filter((candidate) => candidate.courseId)
 }
 
+export const QA_QUESTION_DOMAIN_OUT_OF_SCOPE_FALLBACK_MESSAGE = '当前问答仅支持课程知识库相关问题，请改问课程概念、章节、资料或知识点。'
+
+export function normalizeQaQuestionDomainCheck(payload = {}) {
+  const status = String(payload?.status ?? '').trim().toLowerCase()
+  const normalizedStatus = status || (payload?.allowed === true ? 'allowed' : 'unknown')
+  const outOfScope = normalizedStatus === 'out_of_scope'
+  const message = String(payload?.message ?? '').trim()
+  return {
+    status: normalizedStatus,
+    allowed: !outOfScope,
+    message: outOfScope ? (message || QA_QUESTION_DOMAIN_OUT_OF_SCOPE_FALLBACK_MESSAGE) : message,
+  }
+}
+
+export function isQuestionDomainOutOfScope(payload = {}) {
+  return normalizeQaQuestionDomainCheck(payload).status === 'out_of_scope'
+}
+
 export function shouldRequestCourseRouting({ selectedCourseId = '', sessionCourseId = '' } = {}) {
   return !String(selectedCourseId || '').trim() && !String(sessionCourseId || '').trim()
 }

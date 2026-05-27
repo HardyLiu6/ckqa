@@ -18,7 +18,10 @@ import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.qa.dto.QaModeRecommendationRequest;
 import org.ysu.ckqaback.qa.dto.QaModeRecommendationResponse;
+import org.ysu.ckqaback.qa.dto.QaQuestionDomainCheckRequest;
+import org.ysu.ckqaback.qa.dto.QaQuestionDomainCheckResponse;
 import org.ysu.ckqaback.qa.routing.QaModeRoutingService;
+import org.ysu.ckqaback.qa.routing.QaQuestionDomainGuardService;
 
 /**
  * 学生端智能问答模式推荐。
@@ -30,6 +33,7 @@ import org.ysu.ckqaback.qa.routing.QaModeRoutingService;
 public class QaRoutingController {
 
     private final QaModeRoutingService qaModeRoutingService;
+    private final QaQuestionDomainGuardService qaQuestionDomainGuardService;
 
     @PostMapping("/recommend")
     public ApiResponse<QaModeRecommendationResponse> recommend(
@@ -37,6 +41,14 @@ public class QaRoutingController {
             HttpServletRequest servletRequest
     ) {
         return ApiResponseUtils.success(qaModeRoutingService.recommend(request, currentUser(servletRequest)));
+    }
+
+    @PostMapping("/domain-check")
+    public ApiResponse<QaQuestionDomainCheckResponse> checkDomain(
+            @Valid @RequestBody QaQuestionDomainCheckRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaQuestionDomainGuardService.check(request, currentUser(servletRequest)));
     }
 
     private AuthenticatedUser currentUser(HttpServletRequest servletRequest) {

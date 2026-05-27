@@ -18,6 +18,7 @@ import {
 
 import { listCourses, listCourseKnowledgeBases } from '@/api/courses'
 import {
+  checkQaQuestionDomain,
   createQaSession,
   deleteQaMemoryItem,
   deleteQaFeedback,
@@ -60,7 +61,9 @@ import {
   hasActiveIndexChanged,
   isArchivedReadOnlySession,
   isLegacyReadOnlySession,
+  isQuestionDomainOutOfScope,
   learningMemoryTypeLabel,
+  normalizeQaQuestionDomainCheck,
   normalizeCourseRoutingRecommendation,
   normalizeCourseList,
   normalizeKnowledgeBaseList,
@@ -452,7 +455,7 @@ async function send() {
     }
     const nextKnowledgeBases = knowledgeBases.value.length
       ? knowledgeBases.value
-      : await loadKnowledgeBases(course.courseId)
+      : await loadKnowledgeBases(course.courseId, { loadMemory: false })
     const knowledgeBaseResult = selectReadyKnowledgeBase(nextKnowledgeBases, selectedKnowledgeBaseId.value)
     if (knowledgeBaseResult.status !== 'ready') {
       throw new Error('当前课程还没有可用知识库索引，请先完成知识库构建')
@@ -461,6 +464,13 @@ async function send() {
     const knowledgeBase = knowledgeBaseResult.knowledgeBase
     selectedCourseId.value = course.courseId
     selectedKnowledgeBaseId.value = String(knowledgeBase.id)
+    const domainGuardResult = await checkQuestionDomainBeforeSend(course, knowledgeBase, text)
+    if (domainGuardResult.blocked) {
+      errorMessage.value = domainGuardResult.message
+      statusMessage.value = ''
+      ElMessage.warning(domainGuardResult.message)
+      return
+    }
     await ensureMemoryStateForScope(course.courseId, knowledgeBase.id)
 
     let modeResolution = await resolveModeForSend(text, course, knowledgeBase)
@@ -494,10 +504,11 @@ async function send() {
       ...submission,
       mode: modeResolution.mode,
     })
-    statusMessage.value = modeResolution.fromSmart
+    const submitStatus = modeResolution.fromSmart
       ? `智能推荐为 ${modeResolution.mode} 模式：${modeResolution.reason}。${resolveContextStatusText(submission)}。${memoryStatus}`
       : `已使用 ${modeResolution.mode} 模式提交问题。${resolveContextStatusText(submission)}。${memoryStatus}`
-    statusMessage.value = `${statusMessage.value}${confidenceHint}`
+    const domainGuardHint = domainGuardResult.statusMessage ? `${domainGuardResult.statusMessage}。` : ''
+    statusMessage.value = `${domainGuardHint}${submitStatus}${confidenceHint}`
     input.value = ''
     await scrollToBottom()
     startTaskStream(session.id, submission.taskId, submission)
@@ -553,6 +564,36 @@ async function resolveModeForSend(text, course, knowledgeBase) {
       ...localResolution,
       fromServer: false,
       reason: `服务端智能推荐暂不可用，已使用本地规则：${localResolution.reason}`,
+    }
+  }
+}
+
+async function checkQuestionDomainBeforeSend(course, knowledgeBase, text) {
+  try {
+    const result = normalizeQaQuestionDomainCheck(await checkQaQuestionDomain({
+      courseId: course.courseId,
+      knowledgeBaseId: knowledgeBase.id,
+      sessionId: activeSession.value?.id,
+      question: text,
+      hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
+    }))
+    if (isQuestionDomainOutOfScope(result)) {
+      return {
+        blocked: true,
+        message: result.message,
+        statusMessage: '',
+      }
+    }
+    return {
+      blocked: false,
+      message: '',
+      statusMessage: '',
+    }
+  } catch {
+    return {
+      blocked: false,
+      message: '',
+      statusMessage: '课程问答范围校验暂不可用，已继续提交',
     }
   }
 }
@@ -686,7 +727,7 @@ async function resolveCourse(question) {
       selectedCourseId.value = course.courseId
       clearCourseRouteConfirmation()
       statusMessage.value = `已根据课程画像识别课程：${course.name}`
-      await loadKnowledgeBases(course.courseId)
+      await loadKnowledgeBases(course.courseId, { loadMemory: false })
       return course
     }
 
@@ -2168,4 +2209,3 @@ function sourceTypeLabel(source) {
   .composer { border-radius: 18px; }
 }
 </style>
-

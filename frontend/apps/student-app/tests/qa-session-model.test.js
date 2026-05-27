@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
+import * as qaSessionModel from '../src/views/qa/qa-session-model.js'
 import {
   isTerminalTaskStatus,
   matchCourseForQuestion,
@@ -309,6 +310,26 @@ test('归档会话在前端识别为只读并给出恢复文案', () => {
   assert.equal(isArchivedReadOnlySession(archived), true)
   assert.equal(resolveSessionLifecycleStatusText(archived), '该会话已归档，恢复后才能继续提问')
   assert.equal(resolveSessionLifecycleStatusText({ ...archived, status: 'active' }), '')
+})
+
+test('问题范围校验仅在 out_of_scope 时阻断并补齐兜底提示', () => {
+  assert.equal(typeof qaSessionModel.normalizeQaQuestionDomainCheck, 'function')
+  assert.equal(typeof qaSessionModel.isQuestionDomainOutOfScope, 'function')
+
+  const blocked = qaSessionModel.normalizeQaQuestionDomainCheck({
+    status: 'out_of_scope',
+    message: '',
+  })
+
+  assert.equal(blocked.status, 'out_of_scope')
+  assert.equal(blocked.allowed, false)
+  assert.equal(
+    blocked.message,
+    '当前问答仅支持课程知识库相关问题，请改问课程概念、章节、资料或知识点。',
+  )
+  assert.equal(qaSessionModel.isQuestionDomainOutOfScope(blocked), true)
+  assert.equal(qaSessionModel.isQuestionDomainOutOfScope({ status: 'allowed', allowed: true }), false)
+  assert.equal(qaSessionModel.isQuestionDomainOutOfScope({ status: 'unexpected', allowed: false }), false)
 })
 
 test('上下文状态文案只展示策略和字符数', () => {

@@ -471,6 +471,7 @@ GET /api/v1/qa-sessions/{id}/messages
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| `POST` | `/qa-routing/domain-check` | 课程问答域校验。前端在创建新 session 或发送消息前调用，用于已解析课程/知识库后的明显非课程问题拦截。 |
 | `POST` | `/qa-routing/recommend` | 智能模式推荐。前端传 `courseId`、`knowledgeBaseId`、`sessionId`、`question`、`betaHybridEnabled`、`hasConversationContext`，并用返回的 `recommendedMode/confidence/reasons/fallbackMode` 决定最终模式。 |
 | `POST` | `/qa-sessions/hybrid-warmup` | `hybrid_v0` 混合检索预热；未 ready 时智能模式可降级到 fallback，手动 hybrid 则保留选择并提示。 |
 | `GET` | `/qa-memory/preferences` | 查询当前课程/知识库下的学习记忆偏好。 |
@@ -485,6 +486,69 @@ GET /api/v1/qa-sessions/{id}/messages
 - 这些接口仍通过 `src/api/qa.js` 统一封装，不在页面中手写 URL。
 - 推荐和反馈请求不应依赖浏览器传入的 `userId`；登录态由 Axios 统一注入。
 - 学习记忆只在已选择 `courseId` 与 `knowledgeBaseId` 后启用。
+
+#### 课程问答域校验
+
+`POST /api/v1/qa-routing/domain-check` 是学生端提交问题前的轻量规则守卫，用于课程资料已经解析、知识库已经可用之后，识别明显不属于当前课程问答域的问题。它仍属于 Java `/api/v1` 契约；浏览器不直接调用 GraphRAG Python 服务。
+
+请求体：
+
+```json
+{
+  "courseId": "os",
+  "knowledgeBaseId": 3,
+  "sessionId": 5,
+  "question": "今天晚上吃什么",
+  "hasConversationContext": false
+}
+```
+
+字段约定：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `courseId` | string | 当前课程 ID。首次提问前可只传课程和知识库上下文。 |
+| `knowledgeBaseId` | number | 当前课程下已激活、可问答的知识库 ID。 |
+| `sessionId` | number / null | 已有会话继续追问时传入；首次提问、尚未创建 session 时可为空。 |
+| `question` | string | 用户准备提交的问题。 |
+| `hasConversationContext` | boolean | 当前问题是否有可用的会话上下文；续聊追问时通常为 `true`。 |
+
+响应 `data`：
+
+```json
+{
+  "status": "out_of_scope",
+  "reasonCode": "campus_life",
+  "message": "这个问题更像校园生活咨询，不属于当前课程资料问答范围。",
+  "strategy": "rule_domain_guard_v1"
+}
+```
+
+字段约定：
+
+| 字段 | 说明 |
+| --- | --- |
+| `status` | `allowed` 或 `out_of_scope`。 |
+| `reasonCode` | 规则命中的原因编码；允许继续时可为 `course_or_uncertain`。 |
+| `message` | 前端可直接展示的提示文案。 |
+| `strategy` | 固定为 `rule_domain_guard_v1`。 |
+
+前端行为：
+
+- `status=allowed` 时，按原流程继续创建新 session 或发送消息。
+- `status=out_of_scope` 时，不创建 session、不发送消息、不启动 task，直接展示后端返回的 `message`。
+- 接口不可用、超时、返回体不可解析或 Axios 层无法识别 `status` 时，采用 fail-open：继续提交问题，避免因为守卫异常阻断正常课程问答。
+- 该接口只做明显非课程问题的前置拦截；弱课程意图、上下文追问或无法确定的问题应继续进入后续推荐和问答流程。
+
+强负样本：
+
+| 问题 | 预期 |
+| --- | --- |
+| `今天晚上吃什么` | `out_of_scope` |
+| `今天晚上食堂有什么菜？` | `out_of_scope` |
+| `帮我写一首关于春天的短诗` | `out_of_scope` |
+| `我的头像应该怎么换？` | `out_of_scope` |
+| `这门课什么时候期末考试？` | `out_of_scope` |
 
 ## Java 到 GraphRAG 的内部契约
 
@@ -622,11 +686,13 @@ GET /health
 1. 配置 `VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1`。
 2. 页面加载时调用 `GET /system/health`，展示后端和 GraphRAG 就绪状态。
 3. 进入课程页时调用 `GET /courses/{courseId}/knowledge-bases`，选取带 `activeIndexRunId` 的知识库。
-4. 首次提问前调用 `POST /qa-sessions` 创建会话。
-5. 发送问题调用 `POST /qa-sessions/{sessionId}/messages`。
-6. 优先连接 `GET /qa-sessions/{sessionId}/tasks/{taskId}/events` 消费 SSE 事件。
-7. 事件流不可用时，按响应里的 `recommendedPollingIntervalSeconds` 轮询 `GET /qa-sessions/{sessionId}/tasks/{taskId}`。
-8. 任务成功后使用 `assistantMessage` 或事件流 `message` 更新 UI；页面刷新时用 `GET /qa-sessions/{id}/messages` 还原消息流。
+4. 用户提交问题后，先调用 `POST /qa-routing/domain-check` 做课程问答域校验；`allowed` 或 fail-open 时继续，`out_of_scope` 时展示 `message` 并停止本次提交。
+5. 需要智能模式时调用 `POST /qa-routing/recommend`，把 `smart` 落到后端支持的实际模式。
+6. 首次提问且尚无会话时，调用 `POST /qa-sessions` 创建会话。
+7. 发送问题调用 `POST /qa-sessions/{sessionId}/messages`。
+8. 优先连接 `GET /qa-sessions/{sessionId}/tasks/{taskId}/events` 消费 SSE 事件。
+9. 事件流不可用时，按响应里的 `recommendedPollingIntervalSeconds` 轮询 `GET /qa-sessions/{sessionId}/tasks/{taskId}`。
+10. 任务成功后使用 `assistantMessage` 或事件流 `message` 更新 UI；页面刷新时用 `GET /qa-sessions/{id}/messages` 还原消息流。
 
 ## 当前明确不在契约内
 

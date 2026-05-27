@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { setAuthSessionProvider } from '../src/axios/index.js'
 import { createCoursesApi } from '../src/api/courses.js'
+import * as qaApiModule from '../src/api/qa.js'
 import {
   createQaApi,
   QA_HYBRID_WARMUP_TIMEOUT_MS,
@@ -187,6 +188,38 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
       method: 'delete',
       url: '/qa-message-feedback/33',
       config: {},
+    },
+  ])
+})
+
+test('问答问题范围校验使用 Java qa-routing/domain-check 并剥离 userId', async () => {
+  const { calls, client } = createClientRecorder()
+  const api = createQaApi(client)
+
+  assert.equal(typeof api.checkQaQuestionDomain, 'function')
+  assert.equal(typeof qaApiModule.checkQaQuestionDomain, 'function')
+
+  await api.checkQaQuestionDomain({
+    courseId: 'os',
+    knowledgeBaseId: 2,
+    sessionId: 8,
+    question: '今晚吃什么？',
+    hasConversationContext: true,
+    userId: 999,
+  })
+
+  assert.deepEqual(calls, [
+    {
+      method: 'post',
+      url: '/qa-routing/domain-check',
+      data: {
+        courseId: 'os',
+        knowledgeBaseId: 2,
+        sessionId: 8,
+        question: '今晚吃什么？',
+        hasConversationContext: true,
+      },
+      config: { timeout: QA_ROUTING_TIMEOUT_MS },
     },
   ])
 })

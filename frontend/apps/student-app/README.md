@@ -126,6 +126,10 @@ http://127.0.0.1:5174
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
 - 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `delta`，不可用时自动回退到 task 轮询或最终答案分段
 - 问答页在没有 URL、手动选择或历史会话 `courseId` 时，会先调用 Java `/api/v1/course-routing/recommend`；高置信 `matched` 自动选课，分数够但分差不足的 `needs_confirmation` 展示候选课程，确认后保留当前 QA mode 并继续发送原问题；明显非课程问题会得到 `no_match`，前端提示先选择课程，不直接发送正式问答
+- 问答页在已选课程、已从 URL/历史会话恢复课程，或已通过课程画像路由解析出课程后，应先调用 Java `/api/v1/qa-routing/domain-check` 做课程问答域校验
+- `domain-check` 返回 `allowed` 时才继续创建 session、发送消息并启动 task；返回 `out_of_scope` 时不创建 session、不发送消息、不启动 task，而是提示该问题不适合当前课程知识库问答
+- `domain-check` 暂不可用、超时或返回不可解析结果时，学生端按 fail-open 处理，继续走原有提交链路
+- 强负样本如 `今天晚上吃什么`、`今天晚上食堂有什么菜？`、`帮我写一首关于春天的短诗`、`我的头像应该怎么换？`、`这门课什么时候期末考试？` 应由后端策略返回 `out_of_scope`
 - 问答页会把 `courseId`、`sessionId`、`mode`、`topic` 写入路由 query；从图谱节点、问答侧栏、刷新页面返回时可以恢复课程与会话上下文
 - 顶栏会在首屏稳定后预加载课程、问答、知识图谱模块和副导航，G6 图谱画布也改为进入图谱页后再延迟加载
 - 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在

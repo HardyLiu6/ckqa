@@ -1,0 +1,194 @@
+package org.ysu.ckqaback.qa.routing;
+
+import org.junit.jupiter.api.Test;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.course.CourseAccessService;
+import org.ysu.ckqaback.entity.KnowledgeBases;
+import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.exception.BusinessException;
+import org.ysu.ckqaback.qa.dto.QaQuestionDomainCheckRequest;
+import org.ysu.ckqaback.service.KnowledgeBasesService;
+import org.ysu.ckqaback.service.QaSessionsService;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.mock;
+
+class QaQuestionDomainGuardServiceTest {
+
+    @Test
+    void shouldBlockObviousOutOfScopeQuestionsWithReasonCodes() {
+        QaQuestionDomainGuardService service = buildService();
+
+        assertOutOfScope(service, "今天晚上吃什么", "campus_life");
+        assertOutOfScope(service, "今天晚上食堂有什么菜？", "campus_life");
+        assertOutOfScope(service, "帮我写一首关于春天的短诗", "creative_writing");
+        assertOutOfScope(service, "我的头像应该怎么换？", "profile_help");
+        assertOutOfScope(service, "这门课什么时候期末考试？", "course_administrivia");
+    }
+
+    @Test
+    void shouldAllowCourseLikeAndWeakButReasonableQuestions() {
+        QaQuestionDomainGuardService service = buildService();
+
+        assertAllowed(service, request("什么是进程？"));
+        assertAllowed(service, request("帮我复习一下"));
+        assertAllowed(service, request("请根据第 3 章解释银行家算法的安全性检查过程"));
+        assertAllowed(service, request("校园卡系统的数据库表如何设计？"));
+        assertAllowed(service, request("宿舍网络拓扑如何规划？"));
+
+        QaQuestionDomainCheckRequest contextualFollowUp = request("它和资源分配图有什么关系？请给出材料依据");
+        contextualFollowUp.setHasConversationContext(true);
+        assertAllowed(service, contextualFollowUp);
+    }
+
+    @Test
+    void shouldValidateSessionOwnerAndSessionScope() {
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(sessionsService, knowledgeBasesService);
+        service.setCourseAccessService(courseAccessService);
+
+        QaSessions session = session(21L, 7L, "os", 5L);
+        given(sessionsService.getRequiredById(21L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(knowledgeBase(5L, "os"));
+
+        QaQuestionDomainCheckRequest request = request("什么是进程？");
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(5L);
+        request.setSessionId(21L);
+
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldRejectSessionThatBelongsToAnotherUser() {
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(sessionsService, mock(KnowledgeBasesService.class));
+        given(sessionsService.getRequiredById(21L)).willReturn(session(21L, 8L, "os", 5L));
+
+        QaQuestionDomainCheckRequest request = request("什么是进程？");
+        request.setSessionId(21L);
+
+        assertThatThrownBy(() -> service.check(request, student()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("只能访问自己的问答会话");
+    }
+
+    @Test
+    void shouldRejectKnowledgeBaseOutsideRequestedCourse() {
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(mock(QaSessionsService.class), knowledgeBasesService);
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(knowledgeBase(5L, "db"));
+
+        QaQuestionDomainCheckRequest request = request("什么是进程？");
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(5L);
+
+        assertThatThrownBy(() -> service.check(request, student()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("知识库不属于当前课程");
+    }
+
+    @Test
+    void shouldValidateRequestKnowledgeBaseWhenSessionHasNoKnowledgeBase() {
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        CourseAccessService courseAccessService = mock(CourseAccessService.class);
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(sessionsService, knowledgeBasesService);
+        service.setCourseAccessService(courseAccessService);
+        given(sessionsService.getRequiredById(21L)).willReturn(session(21L, 7L, "os", null));
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(knowledgeBase(5L, "os"));
+
+        QaQuestionDomainCheckRequest request = request("什么是进程？");
+        request.setSessionId(21L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(5L);
+
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        then(knowledgeBasesService).should().getRequiredById(5L);
+        then(courseAccessService).should().assertCourseReadable("os", "student.zhouzh");
+    }
+
+    @Test
+    void shouldRejectRequestKnowledgeBaseOutsideSessionCourseWhenSessionHasNoKnowledgeBase() {
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(sessionsService, knowledgeBasesService);
+        given(sessionsService.getRequiredById(21L)).willReturn(session(21L, 7L, "os", null));
+        given(knowledgeBasesService.getRequiredById(5L)).willReturn(knowledgeBase(5L, "db"));
+
+        QaQuestionDomainCheckRequest request = request("什么是进程？");
+        request.setSessionId(21L);
+        request.setCourseId("os");
+        request.setKnowledgeBaseId(5L);
+
+        assertThatThrownBy(() -> service.check(request, student()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("知识库不属于当前课程");
+    }
+
+    @Test
+    void shouldRequireAuthenticatedUser() {
+        QaQuestionDomainGuardService service = buildService();
+
+        assertThatThrownBy(() -> service.check(request("什么是进程？"), null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("请先登录");
+    }
+
+    private void assertOutOfScope(QaQuestionDomainGuardService service, String question, String reasonCode) {
+        var response = service.check(request(question), student());
+
+        assertThat(response.getStatus()).isEqualTo("out_of_scope");
+        assertThat(response.getReasonCode()).isEqualTo(reasonCode);
+        assertThat(response.getStrategy()).isEqualTo("rule_domain_guard_v1");
+    }
+
+    private void assertAllowed(QaQuestionDomainGuardService service, QaQuestionDomainCheckRequest request) {
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        assertThat(response.getStrategy()).isEqualTo("rule_domain_guard_v1");
+    }
+
+    private QaQuestionDomainGuardService buildService() {
+        return new QaQuestionDomainGuardService(mock(QaSessionsService.class), mock(KnowledgeBasesService.class));
+    }
+
+    private QaQuestionDomainCheckRequest request(String question) {
+        QaQuestionDomainCheckRequest request = new QaQuestionDomainCheckRequest();
+        request.setQuestion(question);
+        return request;
+    }
+
+    private QaSessions session(Long id, Long userId, String courseId, Long knowledgeBaseId) {
+        QaSessions session = new QaSessions();
+        session.setId(id);
+        session.setUserId(userId);
+        session.setCourseId(courseId);
+        session.setKnowledgeBaseId(knowledgeBaseId);
+        return session;
+    }
+
+    private KnowledgeBases knowledgeBase(Long id, String courseId) {
+        KnowledgeBases knowledgeBase = new KnowledgeBases();
+        knowledgeBase.setId(id);
+        knowledgeBase.setCourseId(courseId);
+        return knowledgeBase;
+    }
+
+    private AuthenticatedUser student() {
+        return new AuthenticatedUser(7L, "student.zhouzh", "student.zhouzh", "周同学", List.of("student"), List.of());
+    }
+}

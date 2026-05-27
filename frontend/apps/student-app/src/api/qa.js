@@ -44,6 +44,12 @@ export function createQaApi(client = { delete: del, del, get, patch, post, put }
         timeout: QA_ROUTING_TIMEOUT_MS,
       })
     },
+    checkQaQuestionDomain(payload) {
+      const { userId, ...safePayload } = payload ?? {}
+      return client.post('/qa-routing/domain-check', safePayload, {
+        timeout: QA_ROUTING_TIMEOUT_MS,
+      })
+    },
     recommendCourse(payload) {
       return client.post('/course-routing/recommend', payload ?? {}, {
         timeout: QA_ROUTING_TIMEOUT_MS,
@@ -149,6 +155,7 @@ export const getQaTask = qaApi.getQaTask
 export const streamQaTaskEvents = qaApi.streamQaTaskEvents
 export const listQaMessages = qaApi.listQaMessages
 export const recommendQaMode = qaApi.recommendQaMode
+export const checkQaQuestionDomain = qaApi.checkQaQuestionDomain
 export const recommendCourse = qaApi.recommendCourse
 export const warmupHybrid = qaApi.warmupHybrid
 export const getQaMemoryPreference = qaApi.getQaMemoryPreference
