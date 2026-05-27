@@ -401,7 +401,12 @@ class QueryTaskManager:
                 max_chars=self._max_log_chars,
             )
             stdout_text = "\n".join(stdout_lines)
-            resolved_answer = resolve_answer_citations(stdout_text, request.data_dir)
+            resolved_answer = resolve_answer_citations(
+                stdout_text,
+                request.data_dir,
+                mode=request.mode,
+                fallback_query=request.retrieval_query or request.prompt,
+            )
             await self._update_task(
                 python_task_id,
                 task_status="success" if return_code == 0 else "failed",
@@ -485,7 +490,12 @@ class QueryTaskManager:
                 self._publish_event(python_task_id, "delta", {"text": tail})
 
             raw_answer = "".join(raw_chunks)
-            resolved_answer = resolve_answer_citations(raw_answer, request.data_dir)
+            resolved_answer = resolve_answer_citations(
+                raw_answer,
+                request.data_dir,
+                mode=request.mode,
+                fallback_query=request.retrieval_query or request.prompt,
+            )
             final_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else response_sources
             finished_log = "finished native streaming query task"
             await self._update_task(
@@ -641,7 +651,12 @@ class QueryTaskManager:
         if inspect.isawaitable(result):
             result = await result
         raw_answer = str(getattr(result, "answer", "") or "")
-        resolved_answer = resolve_answer_citations(raw_answer, request.data_dir)
+        resolved_answer = resolve_answer_citations(
+            raw_answer,
+            request.data_dir,
+            mode=request.mode,
+            fallback_query=request.retrieval_query or request.prompt,
+        )
         hybrid_sources = _serialize_hybrid_sources(list(getattr(result, "sources", []) or []))
         response_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else hybrid_sources
         await self._update_task(

@@ -581,6 +581,7 @@ public class QaWorkflowService {
                             message.getContent(),
                             message.getCreatedAt(),
                             task == null ? null : task.getQueryMode(),
+                            task == null ? null : task.getId(),
                             userMessage && task != null ? task.getTaskStatus() : null,
                             userMessage && task != null ? task.getProgressStage() : null,
                             sources,

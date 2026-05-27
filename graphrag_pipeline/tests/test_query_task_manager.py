@@ -137,6 +137,61 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.task_status, "success")
         self.assertEqual(snapshot.result_text, "  section\n    detail")
 
+    async def test_global_task_resolves_report_and_fallback_sources(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_runs_root = Path(temp_dir) / "runtime" / "kb-build-runs"
+            data_dir_uri = "user_2/kb_5/build_27/index/output"
+            output_dir = build_runs_root / data_dir_uri
+            output_dir.mkdir(parents=True)
+            pd.DataFrame(
+                [
+                    {
+                        "id": "community-7",
+                        "human_readable_id": 7,
+                        "title": "操作系统第一章主题报告",
+                        "summary": "本报告概括操作系统定义、设计目标和发展历史。",
+                    }
+                ]
+            ).to_parquet(output_dir / "community_reports.parquet")
+            pd.DataFrame(
+                [
+                    {
+                        "id": "text-unit-21",
+                        "human_readable_id": 21,
+                        "text": (
+                            "source_file: 操作系统教材. heading_path_text: 第一章 > 操作系统目标. "
+                            "page_start: 9. page_end: 10. 操作系统的发展目标包括方便性、有效性、可扩充性和开放性。"
+                        ),
+                        "document_id": "doc-os",
+                    }
+                ]
+            ).to_parquet(output_dir / "text_units.parquet")
+
+            manager = QueryTaskManager(
+                heartbeat_interval_seconds=0.05,
+                command_factory=lambda request: _python_cmd(
+                    "print('第一章总结 [Data: Reports (7)]。', flush=True)"
+                ),
+                env_factory=lambda request: os.environ.copy(),
+                cwd=_PROJECT_ROOT,
+                build_runs_root=build_runs_root,
+            )
+
+            created = await manager.create_task(
+                "global",
+                "操作系统第一章发展目标",
+                data_dir_uri=data_dir_uri,
+            )
+            await asyncio.sleep(0.2)
+
+            snapshot = manager.get_snapshot(created.python_task_id)
+            self.assertEqual(snapshot.task_status, "success")
+            self.assertNotIn("[Data:", snapshot.result_text)
+            self.assertIn("[来源 1]", snapshot.result_text)
+            self.assertGreaterEqual(len(snapshot.sources), 2)
+            self.assertEqual(snapshot.sources[0]["source_type"], "graphrag_report")
+            self.assertEqual(snapshot.sources[1]["source_type"], "global_fallback_text_unit")
+
     async def test_uses_task_specific_data_dir_uri(self):
         manager = QueryTaskManager(
             heartbeat_interval_seconds=0.05,

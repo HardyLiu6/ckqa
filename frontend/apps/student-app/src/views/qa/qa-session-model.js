@@ -188,6 +188,7 @@ export function normalizeQaMessage(message) {
     content: message.content ?? '',
     createdAt: message.createdAt ?? '',
     mode: normalizeQaMessageMode(message),
+    taskId: message.taskId ?? null,
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
     sources: normalizeQaSources(message.sources),
@@ -236,6 +237,9 @@ export function normalizeQaSources(sources) {
 
 export function normalizeSourceType(value) {
   const normalized = String(value ?? '').trim().toLowerCase().replace(/-/g, '_')
+  if (['graphrag_report', 'graphrag_entity', 'graphrag_relationship', 'global_fallback_text_unit'].includes(normalized)) {
+    return normalized
+  }
   if (normalized.includes('bm25')) {
     return 'bm25'
   }

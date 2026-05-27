@@ -1193,9 +1193,11 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getTaskStatus()).isEqualTo("running");
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
         assertThat(responses.get(0).getMode()).isEqualTo("global");
+        assertThat(responses.get(0).getTaskId()).isEqualTo(9001L);
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
         assertThat(responses.get(1).getMode()).isEqualTo("global");
+        assertThat(responses.get(1).getTaskId()).isEqualTo(9001L);
         assertThat(responses.get(1).getSources()).hasSize(1);
         assertThat(responses.get(1).getSources().get(0).getSourceFile()).isEqualTo("操作系统教材");
     }

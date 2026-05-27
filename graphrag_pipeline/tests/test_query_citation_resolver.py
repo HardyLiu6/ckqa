@@ -79,3 +79,96 @@ def test_keeps_answer_when_text_units_missing(tmp_path):
 
     assert resolved.display_text == "回答没有可解析来源 [已参考课程知识库]。"
     assert resolved.sources == []
+
+
+def test_resolves_global_report_and_adds_fallback_text_units(tmp_path):
+    output_dir = tmp_path / "index-output"
+    output_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "community-7",
+                "human_readable_id": 7,
+                "title": "操作系统第一章主题报告",
+                "summary": "本报告概括操作系统定义、设计目标和发展历史。",
+                "full_content": "更长的报告正文。",
+            }
+        ]
+    ).to_parquet(output_dir / "community_reports.parquet")
+    pd.DataFrame(
+        [
+            {
+                "id": "text-unit-21",
+                "human_readable_id": 21,
+                "text": (
+                    "source_file: 操作系统教材. heading_path_text: 第一章 > 操作系统目标. "
+                    "page_start: 9. page_end: 10. 操作系统的发展目标包括方便性、有效性、可扩充性和开放性。"
+                ),
+                "document_id": "doc-os",
+            },
+            {
+                "id": "text-unit-22",
+                "human_readable_id": 22,
+                "text": (
+                    "source_file: 操作系统教材. heading_path_text: 第一章 > 操作系统发展历史. "
+                    "page_start: 12. page_end: 13. 操作系统发展经历了单道批处理、多道程序和分时系统等阶段。"
+                ),
+                "document_id": "doc-os",
+            },
+        ]
+    ).to_parquet(output_dir / "text_units.parquet")
+
+    resolved = resolve_answer_citations(
+        "第一章可以从定义、目标和发展历史总结 [Data: Reports (7)]。",
+        output_dir,
+        mode="global",
+        fallback_query="操作系统第一章发展目标",
+    )
+
+    assert resolved.display_text.startswith("第一章可以从定义、目标和发展历史总结 [来源 1]。")
+    assert [source.kind for source in resolved.sources] == [
+        "graphrag_report",
+        "global_fallback_text_unit",
+        "global_fallback_text_unit",
+    ]
+    assert resolved.sources[0].source_file == "课程知识图谱报告"
+    assert resolved.sources[0].heading_path == "操作系统第一章主题报告"
+    assert "操作系统定义、设计目标和发展历史" in resolved.sources[0].snippet
+    assert resolved.sources[1].source_file == "操作系统教材"
+    assert resolved.sources[1].page_start == 9
+    assert resolved.sources[1].to_dict()["source_type"] == "global_fallback_text_unit"
+
+
+def test_resolves_entity_and_relationship_references(tmp_path):
+    output_dir = tmp_path / "index-output"
+    output_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "entity-os",
+                "human_readable_id": 4,
+                "title": "操作系统",
+                "description": "操作系统是管理计算机资源的核心系统软件。",
+            }
+        ]
+    ).to_parquet(output_dir / "entities.parquet")
+    pd.DataFrame(
+        [
+            {
+                "id": "rel-3",
+                "human_readable_id": 3,
+                "source": "操作系统",
+                "target": "资源管理",
+                "description": "操作系统通过资源管理支持应用运行。",
+            }
+        ]
+    ).to_parquet(output_dir / "relationships.parquet")
+
+    resolved = resolve_answer_citations(
+        "操作系统围绕资源管理展开 [Data: Entities (4); Relationships (3)]。",
+        output_dir,
+    )
+
+    assert "操作系统围绕资源管理展开 [来源 1、2]。" in resolved.display_text
+    assert [source.kind for source in resolved.sources] == ["graphrag_entity", "graphrag_relationship"]
+    assert resolved.sources[1].heading_path == "操作系统 -> 资源管理"

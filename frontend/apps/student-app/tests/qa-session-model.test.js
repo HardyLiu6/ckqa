@@ -144,6 +144,7 @@ test('消息与任务状态规范化为前端展示模型', () => {
       content: '回答内容',
       createdAt: '2026-05-17T10:20:30',
       mode: '',
+      taskId: null,
       taskStatus: null,
       progressStage: null,
       sources: [],
@@ -155,6 +156,18 @@ test('消息与任务状态规范化为前端展示模型', () => {
   assert.equal(isTerminalTaskStatus('running'), false)
   assert.equal(resolvePollingDelaySeconds({ recommendedPollingIntervalSeconds: 30 }), 30)
   assert.equal(resolvePollingDelaySeconds({ mode: 'basic' }), 10)
+
+  const runningMessage = normalizeQaMessage({
+    id: 11,
+    role: 'user',
+    content: '请总结第一章',
+    mode: 'global',
+    taskId: 9001,
+    taskStatus: 'running',
+    progressStage: 'running',
+  })
+  assert.equal(runningMessage.taskId, 9001)
+  assert.equal(runningMessage.taskStatus, 'running')
 })
 
 test('学生反馈规范化为消息内轻量状态', () => {
@@ -216,6 +229,28 @@ test('来源卡片数据规范化为学生端展示模型', () => {
       },
     ],
   )
+
+  const normalizedSources = normalizeQaSources([
+    {
+      rank: 2,
+      source_type: 'graphrag_report',
+      ref: '7',
+      sourceFile: '课程知识图谱报告',
+      headingPath: '操作系统第一章主题报告',
+      snippet: '报告摘要',
+    },
+    {
+      rank: 3,
+      source_type: 'global_fallback_text_unit',
+      ref: '21',
+      sourceFile: '操作系统教材',
+      snippet: '补充片段',
+    },
+  ])
+  assert.equal(normalizedSources[0].sourceType, 'graphrag_report')
+  assert.equal(normalizedSources[1].sourceType, 'global_fallback_text_unit')
+  assert.equal(qaSessionModel.normalizeSourceType('graphrag_entity'), 'graphrag_entity')
+  assert.equal(qaSessionModel.normalizeSourceType('graphrag_relationship'), 'graphrag_relationship')
 })
 
 test('会话模型保留固化索引和可恢复状态', () => {

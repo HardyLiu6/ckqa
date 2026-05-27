@@ -827,6 +827,9 @@ async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(ro
 
   const requestId = ++sessionRestoreRequestId
   restoringSession.value = true
+  clearPollTimer()
+  clearTaskStream()
+  pendingTask.value = null
   errorMessage.value = ''
   try {
     const session = normalizeQaSession(await getQaSession(sessionId))
@@ -858,7 +861,13 @@ async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(ro
       return
     }
     messages.value = list.map(normalizeQaMessage)
-    statusMessage.value = activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问'
+    const resumed = await resumeRunningTaskFromMessages(session.id, messages.value, requestId, sessionId)
+    if (!isCurrentSessionRestore(requestId, sessionId)) {
+      return
+    }
+    if (!resumed) {
+      statusMessage.value = activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问'
+    }
     await scrollToBottom()
   } catch (error) {
     if (isCurrentSessionRestore(requestId, sessionId)) {
@@ -868,6 +877,49 @@ async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(ro
     if (requestId === sessionRestoreRequestId) {
       restoringSession.value = false
     }
+  }
+}
+
+async function resumeRunningTaskFromMessages(sessionId, restoredMessages, requestId, routeSessionId) {
+  const runningUserMessage = [...restoredMessages].reverse().find((message) => {
+    const status = String(message.taskStatus ?? '').toLowerCase()
+    return message.role === 'user' && message.taskId && ['pending', 'running'].includes(status)
+  })
+  if (!runningUserMessage) {
+    return false
+  }
+
+  try {
+    const detail = await getQaTask(sessionId, runningUserMessage.taskId)
+    if (!isCurrentSessionRestore(requestId, routeSessionId)) {
+      return true
+    }
+    updateUserMessageTask(detail)
+    if (isTerminalTaskStatus(detail.taskStatus)) {
+      pendingTask.value = null
+      if (detail.taskStatus === 'success' && detail.assistantMessage) {
+        messages.value = upsertQaMessage(messages.value, withTaskMode(detail.assistantMessage, detail))
+        statusMessage.value = '回答已生成，可以继续提问'
+      } else if (detail.taskStatus !== 'success') {
+        errorMessage.value = detail.errorMessage || detail.timeoutMessage || '问答任务已结束'
+      }
+      return false
+    }
+
+    pendingTask.value = {
+      ...detail,
+      sessionId,
+      mode: detail.mode || runningUserMessage.mode || '',
+      queryText: detail.queryText || runningUserMessage.content,
+    }
+    statusMessage.value = '已恢复运行中的问答任务，正在继续接收结果'
+    startTaskStream(sessionId, runningUserMessage.taskId, pendingTask.value)
+    return true
+  } catch (error) {
+    if (isCurrentSessionRestore(requestId, routeSessionId)) {
+      statusMessage.value = '已恢复历史会话，运行中任务状态暂时无法校准'
+    }
+    return false
   }
 }
 
@@ -948,9 +1000,13 @@ function startTaskStream(sessionId, taskId, submission) {
     fallbackStarted: false,
     messageReceived: false,
   }
+  const isCurrentStream = () => (
+    taskStreamController === controller
+    && String(activeSession.value?.id ?? '') === String(sessionId)
+  )
 
   const fallbackToPolling = (reason = '事件流暂不可用，已切换为轮询。') => {
-    if (state.terminal || state.fallbackStarted || controller.signal.aborted) {
+    if (state.terminal || state.fallbackStarted || controller.signal.aborted || !isCurrentStream()) {
       return
     }
     state.fallbackStarted = true
@@ -960,6 +1016,9 @@ function startTaskStream(sessionId, taskId, submission) {
 
   streamQaTaskEvents(sessionId, taskId, {
     open() {
+      if (!isCurrentStream()) {
+        return
+      }
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         sessionId,
@@ -968,6 +1027,9 @@ function startTaskStream(sessionId, taskId, submission) {
       }
     },
     status(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
       if (!payload) {
         return
       }
@@ -980,6 +1042,9 @@ function startTaskStream(sessionId, taskId, submission) {
       updateUserMessageTask(payload)
     },
     heartbeat() {
+      if (!isCurrentStream()) {
+        return
+      }
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         sessionId,
@@ -988,6 +1053,9 @@ function startTaskStream(sessionId, taskId, submission) {
       }
     },
     delta(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
       const text = payload?.text ?? ''
       if (!text) {
         return
@@ -1001,6 +1069,9 @@ function startTaskStream(sessionId, taskId, submission) {
       scrollToBottom()
     },
     sources(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         sessionId,
@@ -1009,6 +1080,9 @@ function startTaskStream(sessionId, taskId, submission) {
       }
     },
     message(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
       if (payload) {
         state.messageReceived = true
         messages.value = upsertQaMessage(messages.value, withTaskMode(payload, pendingTask.value || submission))
@@ -1021,6 +1095,9 @@ function startTaskStream(sessionId, taskId, submission) {
       }
     },
     async done(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
       state.terminal = true
       clearTaskStream()
       if (!state.messageReceived) {
@@ -1034,6 +1111,9 @@ function startTaskStream(sessionId, taskId, submission) {
       await scrollToBottom()
     },
     error(payloadOrError) {
+      if (!isCurrentStream()) {
+        return
+      }
       const isNetworkError = payloadOrError instanceof Error
       if (isNetworkError) {
         fallbackToPolling('事件流连接中断，已切换为轮询。')
@@ -1123,12 +1203,13 @@ function updateUserMessageTask(detail) {
   }
   messages.value = messages.value.map((message) => (
     message.id === detail.userMessageId
-      ? {
-          ...message,
-          mode: detail.mode || message.mode || '',
-          taskStatus: detail.taskStatus,
-          progressStage: detail.progressStage,
-        }
+        ? {
+            ...message,
+            mode: detail.mode || message.mode || '',
+            taskId: detail.taskId ?? message.taskId ?? null,
+            taskStatus: detail.taskStatus,
+            progressStage: detail.progressStage,
+          }
       : message
   ))
 }
@@ -1296,6 +1377,18 @@ function sourceTypeLabel(source) {
   }
   if (type === 'graphrag_citation') {
     return 'GraphRAG'
+  }
+  if (type === 'graphrag_report') {
+    return '报告'
+  }
+  if (type === 'graphrag_entity') {
+    return '实体'
+  }
+  if (type === 'graphrag_relationship') {
+    return '关系'
+  }
+  if (type === 'global_fallback_text_unit') {
+    return '补充片段'
   }
   if (type === 'basic_citation') {
     return 'Basic'

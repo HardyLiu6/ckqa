@@ -66,7 +66,7 @@ public class QaTaskEventStreamService {
             );
         }
 
-        SseEmitter emitter = new SseEmitter(properties.timeoutMillis());
+        SseEmitter emitter = createEmitter(properties.timeoutMillis());
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
         AtomicReference<String> bridgedPythonTaskId = new AtomicReference<>();
         AtomicBoolean pythonDeltaForwarded = new AtomicBoolean(false);
@@ -83,7 +83,8 @@ public class QaTaskEventStreamService {
         try {
             sendEvent(emitter, "ack", Map.of("sessionId", sessionId, "taskId", taskId));
         } catch (IOException ex) {
-            emitter.completeWithError(ex);
+            log.debug("QA 任务事件流 ack 推送失败, sessionId={}, taskId={}: {}", sessionId, taskId, ex.getMessage());
+            completeQuietly(emitter);
             return emitter;
         }
 
@@ -104,6 +105,10 @@ public class QaTaskEventStreamService {
         );
         futureRef.set(future);
         return emitter;
+    }
+
+    protected SseEmitter createEmitter(long timeoutMillis) {
+        return new SseEmitter(timeoutMillis);
     }
 
     private void pushSnapshot(
@@ -145,11 +150,12 @@ public class QaTaskEventStreamService {
             emitter.complete();
         } catch (IOException ex) {
             cancelScheduled(futureRef);
-            emitter.completeWithError(ex);
+            log.debug("QA 任务事件流连接已不可写, sessionId={}, taskId={}: {}", sessionId, taskId, ex.getMessage());
+            completeQuietly(emitter);
         } catch (RuntimeException ex) {
             cancelScheduled(futureRef);
             log.warn("QA 任务事件推送失败, sessionId={}, taskId={}", sessionId, taskId, ex);
-            emitter.completeWithError(ex);
+            sendErrorEventAndComplete(emitter, taskId, "QA 任务事件流中断，前端可回退到轮询");
         }
     }
 
@@ -280,6 +286,28 @@ public class QaTaskEventStreamService {
     private void sendEvent(SseEmitter emitter, String eventName, Object data) throws IOException {
         synchronized (emitter) {
             emitter.send(SseEmitter.event().name(eventName).data(data));
+        }
+    }
+
+    private void sendErrorEventAndComplete(SseEmitter emitter, Long taskId, String message) {
+        try {
+            sendEvent(emitter, "error", Map.of(
+                    "taskId", taskId,
+                    "taskStatus", "failed",
+                    "message", message
+            ));
+        } catch (IOException ex) {
+            log.debug("QA 任务事件流 error 事件发送失败, taskId={}: {}", taskId, ex.getMessage());
+        } finally {
+            completeQuietly(emitter);
+        }
+    }
+
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (RuntimeException ex) {
+            log.debug("QA 任务事件流关闭失败: {}", ex.getMessage());
         }
     }
 

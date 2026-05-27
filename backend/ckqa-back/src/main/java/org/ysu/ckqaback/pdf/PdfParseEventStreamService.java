@@ -9,6 +9,7 @@ import org.ysu.ckqaback.service.CourseMaterialsService;
 
 import java.io.IOException;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -73,11 +74,12 @@ public class PdfParseEventStreamService {
             }
         } catch (IOException ex) {
             cancelScheduled(futureRef);
-            emitter.completeWithError(ex);
+            log.debug("解析进度事件流连接已不可写, materialId={}: {}", materialId, ex.getMessage());
+            completeQuietly(emitter);
         } catch (RuntimeException ex) {
             cancelScheduled(futureRef);
             log.warn("解析进度事件推送失败, materialId={}", materialId, ex);
-            emitter.completeWithError(ex);
+            sendErrorEventAndComplete(emitter, materialId);
         }
     }
 
@@ -93,6 +95,27 @@ public class PdfParseEventStreamService {
     private boolean isTerminal(String status) {
         String normalized = String.valueOf(status).toLowerCase(Locale.ROOT);
         return "done".equals(normalized) || "failed".equals(normalized);
+    }
+
+    private void sendErrorEventAndComplete(SseEmitter emitter, Long materialId) {
+        try {
+            emitter.send(SseEmitter.event().name("error").data(Map.of(
+                    "materialId", materialId,
+                    "message", "解析进度事件流中断，请刷新后重试"
+            )));
+        } catch (IOException ex) {
+            log.debug("解析进度事件流 error 事件发送失败, materialId={}: {}", materialId, ex.getMessage());
+        } finally {
+            completeQuietly(emitter);
+        }
+    }
+
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (RuntimeException ex) {
+            log.debug("解析进度事件流关闭失败: {}", ex.getMessage());
+        }
     }
 
     private void cancelScheduled(AtomicReference<ScheduledFuture<?>> futureRef) {

@@ -449,8 +449,11 @@ class QaSessionsControllerWebMvcTest {
 
     @Test
     void shouldRequireAuthWhenOpeningTaskEventStream() throws Exception {
-        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events"))
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
+                        .accept(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(4010));
     }
 
@@ -460,8 +463,11 @@ class QaSessionsControllerWebMvcTest {
                 .when(qaWorkflowService).ensureSessionOwner(5L, 7L);
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
+                        .accept(MediaType.TEXT_EVENT_STREAM)
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
                 .andExpect(status().isForbidden())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value(4030));
     }
 

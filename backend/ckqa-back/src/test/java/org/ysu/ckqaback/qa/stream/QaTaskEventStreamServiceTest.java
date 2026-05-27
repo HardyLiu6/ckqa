@@ -2,6 +2,7 @@ package org.ysu.ckqaback.qa.stream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.QaWorkflowService;
@@ -9,7 +10,9 @@ import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -17,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -119,6 +123,39 @@ class QaTaskEventStreamServiceTest {
         then(graphRagTaskClient).should().streamTaskEvents(eq("qt_stream_1"), any());
     }
 
+    @Test
+    void shouldSendErrorEventAndCompleteWhenStatusPushFails() {
+        QaWorkflowService workflowService = mock(QaWorkflowService.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        @SuppressWarnings("unchecked")
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
+        QaTaskStreamProperties properties = new QaTaskStreamProperties();
+        properties.setStatusIntervalSeconds(2L);
+        given(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(2L), eq(TimeUnit.SECONDS)))
+                .willAnswer(invocation -> {
+                    scheduledTask.set(invocation.getArgument(0));
+                    return scheduledFuture;
+                });
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willThrow(new IllegalStateException("boom"));
+
+        TestableQaTaskEventStreamService service = new TestableQaTaskEventStreamService(
+                workflowService,
+                mock(QaRetrievalLogsService.class),
+                mock(GraphRagTaskClient.class),
+                properties,
+                scheduler,
+                new SyncTaskExecutor()
+        );
+        service.openStream(5L, 9001L, 7L);
+
+        assertThatCode(() -> scheduledTask.get().run()).doesNotThrowAnyException();
+        assertThat(service.emitter.events).hasSize(2);
+        assertThat(service.emitter.completed).isTrue();
+        assertThat(service.emitter.completedWithError).isFalse();
+        then(scheduledFuture).should().cancel(false);
+    }
+
     private static QaTaskDetailResponse runningDetail() {
         return QaTaskDetailResponse.of(
                 9001L,
@@ -170,5 +207,46 @@ class QaTaskEventStreamServiceTest {
                 300L,
                 "任务心跳超时"
         );
+    }
+
+    private static final class TestableQaTaskEventStreamService extends QaTaskEventStreamService {
+        private final RecordingSseEmitter emitter = new RecordingSseEmitter();
+
+        private TestableQaTaskEventStreamService(
+                QaWorkflowService qaWorkflowService,
+                QaRetrievalLogsService qaRetrievalLogsService,
+                GraphRagTaskClient graphRagTaskClient,
+                QaTaskStreamProperties properties,
+                ScheduledExecutorService scheduler,
+                SyncTaskExecutor qaTaskExecutor
+        ) {
+            super(qaWorkflowService, qaRetrievalLogsService, graphRagTaskClient, properties, scheduler, qaTaskExecutor);
+        }
+
+        @Override
+        protected SseEmitter createEmitter(long timeoutMillis) {
+            return emitter;
+        }
+    }
+
+    private static final class RecordingSseEmitter extends SseEmitter {
+        private final List<SseEventBuilder> events = new ArrayList<>();
+        private boolean completed;
+        private boolean completedWithError;
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            events.add(builder);
+        }
+
+        @Override
+        public void complete() {
+            completed = true;
+        }
+
+        @Override
+        public void completeWithError(Throwable ex) {
+            completedWithError = true;
+        }
     }
 }

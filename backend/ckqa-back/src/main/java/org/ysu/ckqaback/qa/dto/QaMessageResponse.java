@@ -19,6 +19,7 @@ public class QaMessageResponse {
     private final String content;
     private final LocalDateTime createdAt;
     private final String mode;
+    private final Long taskId;
     private final String taskStatus;
     private final String progressStage;
     private final List<QaSourceResponse> sources;
@@ -32,6 +33,7 @@ public class QaMessageResponse {
             String content,
             LocalDateTime createdAt,
             String mode,
+            Long taskId,
             String taskStatus,
             String progressStage,
             List<QaSourceResponse> sources,
@@ -44,6 +46,7 @@ public class QaMessageResponse {
         this.content = content;
         this.createdAt = createdAt;
         this.mode = mode;
+        this.taskId = taskId;
         this.taskStatus = taskStatus;
         this.progressStage = progressStage;
         this.sources = sources == null ? List.of() : List.copyOf(sources);
@@ -104,6 +107,36 @@ public class QaMessageResponse {
             List<QaSourceResponse> sources,
             QaFeedbackResponse feedback
     ) {
+        return of(
+                id,
+                sessionId,
+                role,
+                sequenceNo,
+                content,
+                createdAt,
+                mode,
+                null,
+                taskStatus,
+                progressStage,
+                sources,
+                feedback
+        );
+    }
+
+    public static QaMessageResponse of(
+            Long id,
+            Long sessionId,
+            String role,
+            Integer sequenceNo,
+            String content,
+            LocalDateTime createdAt,
+            String mode,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
+    ) {
         return new QaMessageResponse(
                 id,
                 sessionId,
@@ -112,6 +145,7 @@ public class QaMessageResponse {
                 content,
                 createdAt,
                 mode,
+                taskId,
                 taskStatus,
                 progressStage,
                 sources,
