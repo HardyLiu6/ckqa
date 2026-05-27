@@ -310,6 +310,7 @@ Content-Type: application/json
     "sequenceNo": 1,
     "content": "请概括这套图谱的主题",
     "createdAt": "2026-04-23T15:31:00",
+    "mode": "basic",
     "taskStatus": null,
     "progressStage": null
   },
@@ -407,6 +408,7 @@ GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}
     "sequenceNo": 2,
     "content": "图谱主题集中在操作系统概念网络。",
     "createdAt": "2026-04-23T15:32:20",
+    "mode": "basic",
     "taskStatus": null,
     "progressStage": null
   },
@@ -443,6 +445,7 @@ GET /api/v1/qa-sessions/{id}/messages
     "sequenceNo": 1,
     "content": "请概括这套图谱的主题",
     "createdAt": "2026-04-23T15:31:00",
+    "mode": "global",
     "taskStatus": "running",
     "progressStage": "running"
   },
@@ -453,6 +456,7 @@ GET /api/v1/qa-sessions/{id}/messages
     "sequenceNo": 2,
     "content": "图谱主题集中在操作系统概念网络。",
     "createdAt": "2026-04-23T15:32:20",
+    "mode": "global",
     "taskStatus": null,
     "progressStage": null
   }
@@ -462,6 +466,7 @@ GET /api/v1/qa-sessions/{id}/messages
 前端建议：
 
 - 刷新页面后先拉取会话和消息列表。
+- 用户消息和 assistant 消息都携带 `mode`，表示该条消息关联任务实际使用的查询模式；前端模式标签必须读取 `message.mode`，不要用当前选择器或会话默认模式回填历史消息。
 - 用户消息上的 `taskStatus` / `progressStage` 只表示该用户消息关联的最新问答任务摘要。
 - assistant 消息本身不携带任务状态。
 

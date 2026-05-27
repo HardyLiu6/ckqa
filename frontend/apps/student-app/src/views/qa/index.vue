@@ -144,7 +144,6 @@ const readyKnowledgeBases = computed(() => (
   knowledgeBases.value.filter((knowledgeBase) => knowledgeBase.activeIndexRunId != null)
 ))
 const modePreview = computed(() => resolveQaMode(input.value, selectedMode.value, qaModeResolveOptions()))
-const activeModeOption = computed(() => getModeOption(modePreview.value.mode))
 const hybridWarmupText = computed(() => resolveHybridWarmupText(hybridWarmupStatus.value, hybridWarmupCached.value))
 const memoryScopeReady = computed(() => Boolean(selectedCourseId.value && selectedKnowledgeBaseId.value))
 const memoryEnabled = computed(() => Boolean(memoryScopeReady.value && memoryPreference.value.enabled))
@@ -489,7 +488,7 @@ async function send() {
       clientRoutingSnapshot: buildClientRoutingSnapshot(modeResolution),
     })
 
-    messages.value = upsertQaMessage(messages.value, submission.userMessage)
+    messages.value = upsertQaMessage(messages.value, withTaskMode(submission.userMessage, { mode: modeResolution.mode }))
     pendingTask.value = {
       ...submission,
       sessionId: session.id,
@@ -1012,7 +1011,7 @@ function startTaskStream(sessionId, taskId, submission) {
     message(payload) {
       if (payload) {
         state.messageReceived = true
-        messages.value = upsertQaMessage(messages.value, normalizeQaMessage(payload))
+        messages.value = upsertQaMessage(messages.value, withTaskMode(payload, pendingTask.value || submission))
         pendingTask.value = {
           ...(pendingTask.value ?? submission),
           sessionId,
@@ -1072,7 +1071,7 @@ async function pollTask(sessionId, taskId) {
 
     if (detail.taskStatus === 'success') {
       if (detail.assistantMessage) {
-        messages.value = upsertQaMessage(messages.value, detail.assistantMessage)
+        messages.value = upsertQaMessage(messages.value, withTaskMode(detail.assistantMessage, detail))
       } else {
         await refreshAssistantAfterEmptySuccess(sessionId, taskId)
       }
@@ -1106,7 +1105,7 @@ async function refreshAssistantAfterEmptySuccess(sessionId, taskId) {
       sessionId,
     }
     if (detail.assistantMessage) {
-      messages.value = upsertQaMessage(messages.value, detail.assistantMessage)
+      messages.value = upsertQaMessage(messages.value, withTaskMode(detail.assistantMessage, detail))
       return
     }
   }
@@ -1126,6 +1125,7 @@ function updateUserMessageTask(detail) {
     message.id === detail.userMessageId
       ? {
           ...message,
+          mode: detail.mode || message.mode || '',
           taskStatus: detail.taskStatus,
           progressStage: detail.progressStage,
         }
@@ -1243,6 +1243,20 @@ function taskStatusText(task) {
   return task.progressStage || task.taskStatus || '处理中'
 }
 
+function messageModeLabel(message) {
+  return getModeOption(message?.mode || 'basic').shortLabel
+}
+
+function withTaskMode(message, task) {
+  if (!message) {
+    return message
+  }
+  return {
+    ...message,
+    mode: message.mode || message.queryMode || message.searchMode || task?.mode || '',
+  }
+}
+
 function estimateLearningMemoryChars() {
   return learningMemoryItems.value.reduce((total, item) => total + String(item.memoryText ?? '').length, 0)
 }
@@ -1322,7 +1336,7 @@ function sourceTypeLabel(source) {
                 {{ selectedKnowledgeBase?.name || '课程知识库' }}
               </ModuleTag>
               <ModuleTag module="knowledge" size="sm">
-                {{ activeModeOption.shortLabel }}
+                {{ messageModeLabel(msg) }}
               </ModuleTag>
             </div>
             <QaMarkdownContent :content="msg.content" />
@@ -1553,7 +1567,7 @@ function sourceTypeLabel(source) {
 
       <div v-if="!isEmpty" class="composer-hint">
         <span><kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行</span>
-        <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ activeModeOption.shortLabel }}</span>
+        <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ getModeOption(modePreview.mode).shortLabel }}</span>
         <span v-else>可先提问，系统会尝试识别课程</span>
       </div>
     </div>

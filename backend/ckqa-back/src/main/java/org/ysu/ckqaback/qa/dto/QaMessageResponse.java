@@ -18,6 +18,7 @@ public class QaMessageResponse {
     private final Integer sequenceNo;
     private final String content;
     private final LocalDateTime createdAt;
+    private final String mode;
     private final String taskStatus;
     private final String progressStage;
     private final List<QaSourceResponse> sources;
@@ -30,6 +31,7 @@ public class QaMessageResponse {
             Integer sequenceNo,
             String content,
             LocalDateTime createdAt,
+            String mode,
             String taskStatus,
             String progressStage,
             List<QaSourceResponse> sources,
@@ -41,6 +43,7 @@ public class QaMessageResponse {
         this.sequenceNo = sequenceNo;
         this.content = content;
         this.createdAt = createdAt;
+        this.mode = mode;
         this.taskStatus = taskStatus;
         this.progressStage = progressStage;
         this.sources = sources == null ? List.of() : List.copyOf(sources);
@@ -57,7 +60,21 @@ public class QaMessageResponse {
             String taskStatus,
             String progressStage
     ) {
-        return of(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage, List.of(), null);
+        return of(id, sessionId, role, sequenceNo, content, createdAt, null, taskStatus, progressStage, List.of(), null);
+    }
+
+    public static QaMessageResponse of(
+            Long id,
+            Long sessionId,
+            String role,
+            Integer sequenceNo,
+            String content,
+            LocalDateTime createdAt,
+            String mode,
+            String taskStatus,
+            String progressStage
+    ) {
+        return of(id, sessionId, role, sequenceNo, content, createdAt, mode, taskStatus, progressStage, List.of(), null);
     }
 
     public static QaMessageResponse of(
@@ -71,7 +88,7 @@ public class QaMessageResponse {
             String progressStage,
             List<QaSourceResponse> sources
     ) {
-        return of(id, sessionId, role, sequenceNo, content, createdAt, taskStatus, progressStage, sources, null);
+        return of(id, sessionId, role, sequenceNo, content, createdAt, null, taskStatus, progressStage, sources, null);
     }
 
     public static QaMessageResponse of(
@@ -81,6 +98,7 @@ public class QaMessageResponse {
             Integer sequenceNo,
             String content,
             LocalDateTime createdAt,
+            String mode,
             String taskStatus,
             String progressStage,
             List<QaSourceResponse> sources,
@@ -93,6 +111,7 @@ public class QaMessageResponse {
                 sequenceNo,
                 content,
                 createdAt,
+                mode,
                 taskStatus,
                 progressStage,
                 sources,
@@ -101,6 +120,10 @@ public class QaMessageResponse {
     }
 
     public static QaMessageResponse fromEntity(QaMessages message) {
+        return fromEntity(message, (String) null);
+    }
+
+    public static QaMessageResponse fromEntity(QaMessages message, String mode) {
         return of(
                 message.getId(),
                 message.getSessionId(),
@@ -108,7 +131,10 @@ public class QaMessageResponse {
                 message.getSequenceNo(),
                 message.getContent(),
                 message.getCreatedAt(),
+                mode,
                 null,
+                null,
+                List.of(),
                 null
         );
     }
@@ -122,6 +148,15 @@ public class QaMessageResponse {
             List<QaSourceResponse> sources,
             QaFeedbackResponse feedback
     ) {
+        return fromEntity(message, sources, feedback, null);
+    }
+
+    public static QaMessageResponse fromEntity(
+            QaMessages message,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback,
+            String mode
+    ) {
         return of(
                 message.getId(),
                 message.getSessionId(),
@@ -129,6 +164,7 @@ public class QaMessageResponse {
                 message.getSequenceNo(),
                 message.getContent(),
                 message.getCreatedAt(),
+                mode,
                 null,
                 null,
                 sources,

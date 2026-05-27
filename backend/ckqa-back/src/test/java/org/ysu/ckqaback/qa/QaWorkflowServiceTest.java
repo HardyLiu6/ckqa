@@ -1175,6 +1175,7 @@ class QaWorkflowServiceTest {
         task.setId(9001L);
         task.setUserMessageId(101L);
         task.setAssistantMessageId(102L);
+        task.setQueryMode("global");
         task.setTaskStatus("running");
         task.setProgressStage("running");
 
@@ -1191,8 +1192,10 @@ class QaWorkflowServiceTest {
         assertThat(responses).hasSize(2);
         assertThat(responses.get(0).getTaskStatus()).isEqualTo("running");
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
+        assertThat(responses.get(0).getMode()).isEqualTo("global");
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
+        assertThat(responses.get(1).getMode()).isEqualTo("global");
         assertThat(responses.get(1).getSources()).hasSize(1);
         assertThat(responses.get(1).getSources().get(0).getSourceFile()).isEqualTo("操作系统教材");
     }

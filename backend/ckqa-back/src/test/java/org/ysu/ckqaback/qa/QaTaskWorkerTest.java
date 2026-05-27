@@ -244,6 +244,65 @@ class QaTaskWorkerTest {
     }
 
     @Test
+    void shouldRequestNativeStreamingWhenStreamModeEnabledWithoutBuildRunArtifact() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                null,
+                mode -> Duration.ZERO,
+                mode -> Duration.ofSeconds(30),
+                mode -> "任务心跳超时",
+                mode -> true,
+                Clock.fixed(Instant.parse("2026-04-22T12:00:40Z"), SHANGHAI_ZONE)
+        );
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setQueryMode("global");
+        task.setQueryText("请概括这套图谱的主题");
+        task.setUserMessageId(101L);
+
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(taskClient.createTask("global", "请概括这套图谱的主题", null, null, null))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260422_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.createTask("global", "请概括这套图谱的主题", null, null, null, null, null, true))
+                .willReturn(new GraphRagTaskCreateResult("qt_20260422_001", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260422_001"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260422_001",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "图谱主题集中在操作系统概念网络",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(102L);
+        given(messagesService.appendAssistantMessage(5L, "图谱主题集中在操作系统概念网络")).willReturn(assistant);
+
+        worker.processTask(5L, 9001L);
+
+        then(taskClient).should().createTask("global", "请概括这套图谱的主题", null, null, null, null, null, true);
+        then(taskClient).should(never()).createTask("global", "请概括这套图谱的主题", null, null, null);
+    }
+
+    @Test
     void shouldKeepAssistantMessageAndSuccessWhenSourcePersistenceFails() {
         GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
         QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);

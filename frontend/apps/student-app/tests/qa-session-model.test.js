@@ -143,6 +143,7 @@ test('消息与任务状态规范化为前端展示模型', () => {
       role: 'assistant',
       content: '回答内容',
       createdAt: '2026-05-17T10:20:30',
+      mode: '',
       taskStatus: null,
       progressStage: null,
       sources: [],
@@ -330,6 +331,32 @@ test('问题范围校验仅在 out_of_scope 时阻断并补齐兜底提示', () 
   assert.equal(qaSessionModel.isQuestionDomainOutOfScope(blocked), true)
   assert.equal(qaSessionModel.isQuestionDomainOutOfScope({ status: 'allowed', allowed: true }), false)
   assert.equal(qaSessionModel.isQuestionDomainOutOfScope({ status: 'unexpected', allowed: false }), false)
+})
+
+test('消息模型保留每条消息自身的问答模式', () => {
+  const basicMessage = normalizeQaMessage({
+    id: 201,
+    role: 'assistant',
+    content: 'Basic 回答',
+    mode: 'basic',
+  })
+  const localMessage = normalizeQaMessage({
+    id: 202,
+    role: 'assistant',
+    content: 'Local 回答',
+    queryMode: 'local',
+  })
+
+  assert.equal(basicMessage.mode, 'basic')
+  assert.equal(localMessage.mode, 'local')
+
+  const updated = qaSessionModel.upsertQaMessage([basicMessage], {
+    id: 201,
+    role: 'assistant',
+    content: 'Basic 回答更新',
+  })[0]
+
+  assert.equal(updated.mode, 'basic')
 })
 
 test('上下文状态文案只展示策略和字符数', () => {

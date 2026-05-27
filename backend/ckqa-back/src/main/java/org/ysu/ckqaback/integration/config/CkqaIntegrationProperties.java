@@ -157,7 +157,7 @@ public class CkqaIntegrationProperties {
     @Setter
     public static class StreamingProperties {
         private boolean pythonStreamEnabled = true;
-        private String pythonStreamModes = "hybrid_v0,basic";
+        private String pythonStreamModes = "basic,local,global,drift,hybrid_v0";
         private long pythonStreamConnectTimeoutSeconds = 10L;
         private long pythonStreamReadTimeoutSeconds = 300L;
 

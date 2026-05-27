@@ -400,7 +400,7 @@ public class QaWorkflowService {
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(request.getMode());
 
         return QaTaskSubmissionResponse.of(
-                QaMessageResponse.fromEntity(userMessage),
+                QaMessageResponse.fromEntity(userMessage, taskPolicy.mode()),
                 task.getId(),
                 task.getTaskStatus(),
                 task.getProgressStage(),
@@ -554,12 +554,22 @@ public class QaWorkflowService {
                 .map(QaMessages::getId)
                 .toList();
         Map<Long, QaRetrievalLogs> taskMap = qaRetrievalLogsService.findLatestByUserMessageIds(userMessageIds);
+        Map<Long, QaRetrievalLogs> taskByAssistantMessage = taskMap.values().stream()
+                .filter(task -> task.getAssistantMessageId() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        QaRetrievalLogs::getAssistantMessageId,
+                        task -> task,
+                        (left, right) -> left
+                ));
         Map<Long, List<QaSourceResponse>> sourcesByAssistantMessage = loadSourcesByAssistantMessage(taskMap);
         Map<Long, org.ysu.ckqaback.qa.dto.QaFeedbackResponse> feedbackByMessage = loadFeedbackByMessage(messages, currentUserId);
 
         return messages.stream()
                 .map(message -> {
-                    QaRetrievalLogs task = "user".equals(message.getRole()) ? taskMap.get(message.getId()) : null;
+                    QaRetrievalLogs task = "user".equals(message.getRole())
+                            ? taskMap.get(message.getId())
+                            : taskByAssistantMessage.get(message.getId());
+                    boolean userMessage = "user".equals(message.getRole());
                     List<QaSourceResponse> sources = "assistant".equals(message.getRole())
                             ? sourcesByAssistantMessage.getOrDefault(message.getId(), List.of())
                             : List.of();
@@ -570,8 +580,9 @@ public class QaWorkflowService {
                             message.getSequenceNo(),
                             message.getContent(),
                             message.getCreatedAt(),
-                            task == null ? null : task.getTaskStatus(),
-                            task == null ? null : task.getProgressStage(),
+                            task == null ? null : task.getQueryMode(),
+                            userMessage && task != null ? task.getTaskStatus() : null,
+                            userMessage && task != null ? task.getProgressStage() : null,
                             sources,
                             feedbackByMessage.get(message.getId())
                     );
@@ -633,7 +644,7 @@ public class QaWorkflowService {
                     ? null
                     : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(message.getId()), currentUserId)
                     .get(message.getId());
-            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback);
+            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback, task.getQueryMode());
         }
 
         List<String> latestLogs = StringUtils.hasText(task.getLatestLogs())

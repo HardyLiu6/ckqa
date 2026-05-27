@@ -40,4 +40,16 @@ class CkqaIntegrationPropertiesTest {
         assertThat(properties.getGraphrag().getRetention().getKeepFailedBuildRuns()).isEqualTo(3);
         assertThat(properties.getGraphrag().getRetention().isAutoCleanupEnabled()).isFalse();
     }
+
+    @Test
+    void shouldEnablePythonStreamingForEverySupportedQaModeByDefault() {
+        CkqaIntegrationProperties properties = new CkqaIntegrationProperties();
+
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("basic")).isTrue();
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("local")).isTrue();
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("global")).isTrue();
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("drift")).isTrue();
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("hybrid_v0")).isTrue();
+        assertThat(properties.getStreaming().isPythonStreamModeEnabled("unknown")).isFalse();
+    }
 }

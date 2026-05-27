@@ -328,7 +328,7 @@ public class QaTaskWorker {
         boolean useHistoryStrategy = StringUtils.hasText(task.getQueryEngineStrategy()) || !conversationHistory.isEmpty();
         boolean streamResponse = Boolean.TRUE.equals(pythonStreamModeResolver.apply(task.getQueryMode()));
         if (!StringUtils.hasText(dataDirUri)) {
-            if (!useHistoryStrategy) {
+            if (!useHistoryStrategy && !streamResponse) {
                 return graphRagTaskClient.createTask(
                         task.getQueryMode(),
                         task.getQueryText(),
@@ -343,8 +343,8 @@ public class QaTaskWorker {
                     null,
                     null,
                     task.getContextSnapshotText(),
-                    task.getQueryEngineStrategy(),
-                    conversationHistory,
+                    useHistoryStrategy ? task.getQueryEngineStrategy() : null,
+                    useHistoryStrategy ? conversationHistory : null,
                     streamResponse
             );
         }

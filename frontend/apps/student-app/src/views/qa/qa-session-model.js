@@ -5,7 +5,10 @@ const MODE_POLLING_DEFAULTS = {
   local: 10,
   global: 30,
   drift: 30,
+  hybrid_v0: 30,
 }
+
+const QA_MESSAGE_MODES = new Set(['basic', 'local', 'global', 'drift', 'hybrid_v0'])
 
 export function normalizeCourseList(payload) {
   const list = Array.isArray(payload) ? payload : payload?.items ?? payload?.records ?? []
@@ -184,11 +187,17 @@ export function normalizeQaMessage(message) {
     role: message.role === 'ai' ? 'assistant' : message.role,
     content: message.content ?? '',
     createdAt: message.createdAt ?? '',
+    mode: normalizeQaMessageMode(message),
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
     sources: normalizeQaSources(message.sources),
     feedback: normalizeQaFeedback(message.feedback),
   }
+}
+
+export function normalizeQaMessageMode(message = {}) {
+  const mode = String(message.mode ?? message.queryMode ?? message.searchMode ?? '').trim().toLowerCase()
+  return QA_MESSAGE_MODES.has(mode) ? mode : ''
 }
 
 export function normalizeQaFeedback(feedback) {
@@ -418,7 +427,13 @@ export function upsertQaMessage(messages, message) {
   const index = messages.findIndex((item) => item.id === normalizedMessage.id)
   if (index >= 0) {
     return messages.map((item, itemIndex) => (
-      itemIndex === index ? { ...item, ...normalizedMessage } : item
+      itemIndex === index
+        ? {
+            ...item,
+            ...normalizedMessage,
+            mode: normalizedMessage.mode || item.mode || '',
+          }
+        : item
     ))
   }
   return [...messages, normalizedMessage]
