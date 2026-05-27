@@ -181,7 +181,7 @@ class QueryTaskManager:
         task_store_dir: str | Path | None = None,
         task_store_retention_days: int = 7,
         task_store_retention_limit: int = 5000,
-        stream_replay_max_chars: int = 12000,
+        stream_replay_max_chars: int = 64000,
     ) -> None:
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._max_log_lines = max_log_lines
@@ -310,6 +310,14 @@ class QueryTaskManager:
     def _publish_event(self, python_task_id: str, event: str, data: dict[str, Any]) -> None:
         payload = {"event": event, "data": data}
         replay = self._task_event_replay.setdefault(python_task_id, [])
+        if event == "status":
+            for existing in list(replay):
+                if existing.get("event") == "status":
+                    replay.remove(existing)
+                    self._task_event_replay_chars[python_task_id] = self._task_event_replay_chars.get(
+                        python_task_id,
+                        0,
+                    ) - len(json.dumps(existing, ensure_ascii=False))
         replay.append(payload)
         self._task_event_replay_chars[python_task_id] = self._task_event_replay_chars.get(python_task_id, 0) + len(
             json.dumps(payload, ensure_ascii=False)
@@ -366,7 +374,12 @@ class QueryTaskManager:
         logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
         stdout_lines: list[str] = []
         heartbeat: asyncio.Task[None] | None = None
-        preserved_logs = list(initial_logs or [])
+        started_log = f"started graphrag query --method {request.mode}"
+        preserved_logs = trim_log_tail(
+            [*(initial_logs or []), started_log],
+            max_lines=self._max_log_lines,
+            max_chars=self._max_log_chars,
+        )
         try:
             cmd = self._command_factory(request)
             process = await asyncio.create_subprocess_exec(
@@ -394,9 +407,15 @@ class QueryTaskManager:
             await asyncio.gather(stdout_task, stderr_task)
             return_code = await process.wait()
 
+            finished_log = f"finished graphrag query --method {request.mode} exit_code={return_code}"
             final_logs = merge_log_tail(
                 preserved_logs,
                 list(logs),
+                max_lines=self._max_log_lines,
+                max_chars=self._max_log_chars,
+            )
+            final_logs = trim_log_tail(
+                [*final_logs, finished_log],
                 max_lines=self._max_log_lines,
                 max_chars=self._max_log_chars,
             )
@@ -463,6 +482,7 @@ class QueryTaskManager:
         visible_chunks: list[str] = []
         response_sources: list[dict[str, Any]] = []
         delta_filter = _DataCitationDeltaFilter()
+        latest_progress_log = "waiting first streaming chunk"
         try:
             stream_result = self._native_streaming_runner(request)
             if inspect.isawaitable(stream_result):
@@ -478,15 +498,22 @@ class QueryTaskManager:
                 visible = delta_filter.feed(raw_text)
                 if visible:
                     visible_chunks.append(visible)
+                    latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
                     self._publish_event(python_task_id, "delta", {"text": visible})
                     await self._update_task(
                         python_task_id,
                         last_heartbeat_at=utc_now(),
+                        latest_logs=trim_log_tail(
+                            [started_log, latest_progress_log],
+                            max_lines=self._max_log_lines,
+                            max_chars=self._max_log_chars,
+                        ),
                         streamed_text_length=sum(len(part) for part in visible_chunks),
                     )
             tail = delta_filter.finish()
             if tail:
                 visible_chunks.append(tail)
+                latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
                 self._publish_event(python_task_id, "delta", {"text": tail})
 
             raw_answer = "".join(raw_chunks)
@@ -503,7 +530,11 @@ class QueryTaskManager:
                 task_status="success",
                 progress_stage="done",
                 process_alive=False,
-                latest_logs=[started_log, finished_log],
+                latest_logs=trim_log_tail(
+                    [started_log, latest_progress_log, finished_log],
+                    max_lines=self._max_log_lines,
+                    max_chars=self._max_log_chars,
+                ),
                 result_text=resolved_answer.display_text,
                 sources=final_sources,
                 error_message=None,

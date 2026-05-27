@@ -166,10 +166,10 @@ CKQA_HYBRID_V0_DISABLE_SYNTHESIS=false
 默认开启的原生流式模式为：
 
 ```bash
-CKQA_GRAPHRAG_NATIVE_STREAMING_MODES=hybrid_v0,basic
+CKQA_GRAPHRAG_NATIVE_STREAMING_MODES=basic,local,global,drift,hybrid_v0
 ```
 
-`basic` 会调用 GraphRAG `basic_search_streaming`。`hybrid_v0` 仍保持当前质量路径：先用 `v6` BM25/text-unit evidence selector 构造 `LOCAL_BM25_EVIDENCE`，再把注入后的 Basic query 交给 GraphRAG `basic_search_streaming`；默认不调用 CKQA synthesis client。
+`basic/local/global/drift` 分别调用 GraphRAG `basic_search_streaming`、`local_search_streaming`、`global_search_streaming`、`drift_search_streaming`。`hybrid_v0` 仍保持当前质量路径：先用 `v6` BM25/text-unit evidence selector 构造 `LOCAL_BM25_EVIDENCE`，再把注入后的 Basic query 交给 GraphRAG `basic_search_streaming`；默认不调用 CKQA synthesis client。
 
 Python 内部事件流：
 

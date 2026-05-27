@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.exception;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -81,7 +82,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Object>> handleException(Exception exception) {
+    public ResponseEntity<?> handleException(Exception exception, HttpServletResponse response) {
+        if (isEventStreamResponse(response)) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
         return json(HttpStatus.INTERNAL_SERVER_ERROR, ApiResponseUtils.error(ApiResultCode.INTERNAL_ERROR));
     }
 
@@ -99,5 +103,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body);
+    }
+
+    private boolean isEventStreamResponse(HttpServletResponse response) {
+        if (response == null) {
+            return false;
+        }
+        String contentType = response.getContentType();
+        return contentType != null && contentType.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 }

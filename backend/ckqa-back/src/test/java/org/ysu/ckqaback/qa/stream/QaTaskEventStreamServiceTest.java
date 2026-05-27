@@ -156,6 +156,16 @@ class QaTaskEventStreamServiceTest {
         then(scheduledFuture).should().cancel(false);
     }
 
+    @Test
+    void statusEventShouldExposeLatestLogsForProgressDisplay() {
+        QaTaskStreamStatusEvent event = QaTaskStreamStatusEvent.from(runningDetailWithLogs());
+
+        assertThat(event.latestLogs()).containsExactly(
+                "started native streaming query task provider=native_graphrag",
+                "streamed chunk count=3"
+        );
+    }
+
     private static QaTaskDetailResponse runningDetail() {
         return QaTaskDetailResponse.of(
                 9001L,
@@ -174,6 +184,31 @@ class QaTaskEventStreamServiceTest {
                 null,
                 10L,
                 300L,
+                "任务心跳超时"
+        );
+    }
+
+    private static QaTaskDetailResponse runningDetailWithLogs() {
+        return QaTaskDetailResponse.of(
+                9001L,
+                101L,
+                null,
+                "running",
+                "streaming",
+                "running",
+                "global",
+                "请总结第一章",
+                List.of(
+                        "started native streaming query task provider=native_graphrag",
+                        "streamed chunk count=3"
+                ),
+                LocalDateTime.of(2026, 5, 20, 10, 0),
+                LocalDateTime.of(2026, 5, 20, 10, 0, 5),
+                null,
+                null,
+                null,
+                30L,
+                1800L,
                 "任务心跳超时"
         );
     }

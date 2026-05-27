@@ -4,6 +4,7 @@ import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * SSE 中对学生端安全暴露的任务状态快照。
@@ -16,6 +17,7 @@ public record QaTaskStreamStatusEvent(
         String progressStage,
         String retrievalStatus,
         String mode,
+        List<String> latestLogs,
         LocalDateTime startedAt,
         LocalDateTime lastHeartbeatAt,
         LocalDateTime finishedAt,
@@ -41,6 +43,7 @@ public record QaTaskStreamStatusEvent(
                 detail.getProgressStage(),
                 detail.getRetrievalStatus(),
                 detail.getMode(),
+                detail.getLatestLogs(),
                 detail.getStartedAt(),
                 detail.getLastHeartbeatAt(),
                 detail.getFinishedAt(),

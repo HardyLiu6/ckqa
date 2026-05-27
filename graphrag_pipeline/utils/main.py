@@ -398,7 +398,7 @@ QUERY_TASK_MANAGER = QueryTaskManager(
     task_store_dir=os.getenv("GRAPHRAG_QUERY_TASK_STORE_DIR", str(GRAPHRAG_ROOT / "runtime" / "query-tasks")),
     task_store_retention_days=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_DAYS", "7")),
     task_store_retention_limit=int(os.getenv("GRAPHRAG_QUERY_TASK_RETENTION_LIMIT", "5000")),
-    stream_replay_max_chars=int(os.getenv("CKQA_QA_PYTHON_STREAM_REPLAY_MAX_CHARS", "12000")),
+    stream_replay_max_chars=int(os.getenv("CKQA_QA_PYTHON_STREAM_REPLAY_MAX_CHARS", "64000")),
 )
 
 

@@ -72,6 +72,7 @@ import {
   normalizeQaFeedback,
   normalizeQaMessage,
   normalizeQaSession,
+  normalizeTaskLogs,
   resolveSessionLifecycleStatusText,
   resolveContextStatusText,
   resolveMemoryStatusText,
@@ -165,6 +166,7 @@ const memorySendStatusText = computed(() => {
     memorySizeEstimate: { chars: estimateLearningMemoryChars() },
   })
 })
+const pendingProcessLogs = computed(() => normalizeTaskLogs(pendingTask.value?.latestLogs))
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -1335,7 +1337,57 @@ function withTaskMode(message, task) {
   return {
     ...message,
     mode: message.mode || message.queryMode || message.searchMode || task?.mode || '',
+    latestLogs: normalizeTaskLogs(message.latestLogs ?? task?.latestLogs),
   }
+}
+
+function formatTaskLogLine(logLine = '') {
+  const text = String(logLine ?? '').trim()
+  if (!text) {
+    return ''
+  }
+  if (text === 'waiting first streaming chunk') {
+    return '正在等待首个流式片段'
+  }
+  if (text.startsWith('streamed chunk count=')) {
+    return `已接收 ${text.slice('streamed chunk count='.length).trim()} 个流式片段`
+  }
+  if (text.startsWith('started native streaming query task provider=')) {
+    return '已连接 Python 原生流式检索'
+  }
+  if (text === 'finished native streaming query task') {
+    return '原生流式检索已完成'
+  }
+  if (text.startsWith('fallback native streaming to non-streaming task:')) {
+    return `原生流式不可用，已回退为非流式检索：${text.slice('fallback native streaming to non-streaming task:'.length).trim()}`
+  }
+  if (text === 'started local_history query task') {
+    return '已启用 Local 历史增强检索'
+  }
+  if (text === 'finished local_history query task') {
+    return 'Local 历史增强检索已完成'
+  }
+  if (text.startsWith('fallback local_history to cli:')) {
+    return `Local 历史增强不可用，已回退为标准检索：${text.slice('fallback local_history to cli:'.length).trim()}`
+  }
+  if (text === 'started hybrid_v0 query task') {
+    return '已启动混合检索'
+  }
+  if (text === 'finished hybrid_v0 query task') {
+    return '混合检索已完成'
+  }
+  if (text.startsWith('started graphrag query --method ')) {
+    return `已启动 ${text.slice('started graphrag query --method '.length).trim()} 检索`
+  }
+  if (text.startsWith('finished graphrag query --method ')) {
+    const detail = text.slice('finished graphrag query --method '.length).trim()
+    const [modeLabel, exitCodePart] = detail.split(' exit_code=')
+    if (exitCodePart != null) {
+      return `已完成 ${modeLabel.trim()} 检索（退出码 ${exitCodePart.trim()}）`
+    }
+    return `已完成 ${detail} 检索`
+  }
+  return text
 }
 
 function estimateLearningMemoryChars() {
@@ -1451,6 +1503,19 @@ function sourceTypeLabel(source) {
                 </li>
               </ol>
             </details>
+            <details v-if="msg.latestLogs?.length" class="process-cards">
+              <summary>检索过程 {{ msg.latestLogs.length }}</summary>
+              <ol class="process-list">
+                <li
+                  v-for="(logLine, index) in msg.latestLogs"
+                  :key="`${msg.id}-process-${index}`"
+                  class="process-item"
+                >
+                  <span class="process-step">步骤 {{ index + 1 }}</span>
+                  <span class="process-log">{{ formatTaskLogLine(logLine) }}</span>
+                </li>
+              </ol>
+            </details>
             <div class="message-feedback" aria-label="回答反馈">
               <button
                 v-for="action in FEEDBACK_ACTIONS"
@@ -1483,6 +1548,19 @@ function sourceTypeLabel(source) {
               :content="pendingTask.streamText"
               class="pending-stream-content"
             />
+            <details v-if="pendingProcessLogs.length" class="process-cards process-cards-pending" open>
+              <summary>检索过程 {{ pendingProcessLogs.length }}</summary>
+              <ol class="process-list">
+                <li
+                  v-for="(logLine, index) in pendingProcessLogs"
+                  :key="`pending-process-${index}`"
+                  class="process-item"
+                >
+                  <span class="process-step">步骤 {{ index + 1 }}</span>
+                  <span class="process-log">{{ formatTaskLogLine(logLine) }}</span>
+                </li>
+              </ol>
+            </details>
             <div class="msg-meta">
               <el-icon><Clock /></el-icon>
               <span v-if="pendingTask.streaming">模式 {{ pendingTask.mode }}，事件流连接中</span>
@@ -1786,6 +1864,20 @@ function sourceTypeLabel(source) {
 .source-type { flex: 0 0 auto; border-radius: 999px; background: rgba(147, 51, 234, 0.1); padding: 2px 7px; color: #7e22ce; font-size: 11px; font-weight: 800; }
 .source-card-meta { margin-top: 5px; color: #64748b; font-size: 11px; line-height: 1.55; }
 .source-snippet { margin: 7px 0 0; color: #475569; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.process-cards { margin-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.18); padding-top: 10px; }
+.process-cards summary { width: max-content; cursor: pointer; color: #0f766e; font-size: 12px; font-weight: 800; }
+.process-cards-pending summary { color: var(--qa-teal); }
+.process-list { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.process-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  border-radius: $radius-md;
+  background: rgba(240, 253, 250, 0.9);
+  padding: 9px 10px;
+}
+.process-step { color: #0f766e; font-size: 11px; font-weight: 800; }
+.process-log { color: #334155; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 
 .message-feedback { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .feedback-action {

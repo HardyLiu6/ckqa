@@ -19,16 +19,16 @@ _DATA_BLOCK_RE = re.compile(r"\[Data:\s*[^\]]*\]", re.IGNORECASE)
 
 @dataclass(frozen=True, slots=True)
 class NativeStreamingConfig:
-    enabled_modes: set[str] = field(default_factory=lambda: {"hybrid_v0", "basic"})
+    enabled_modes: set[str] = field(default_factory=lambda: {"basic", "local", "global", "drift", "hybrid_v0"})
     response_type: str = "Multiple Paragraphs"
     hybrid_evidence_chars: int = 6000
 
     @classmethod
     def from_env(cls) -> "NativeStreamingConfig":
-        raw_modes = os.getenv("CKQA_GRAPHRAG_NATIVE_STREAMING_MODES") or "hybrid_v0,basic"
+        raw_modes = os.getenv("CKQA_GRAPHRAG_NATIVE_STREAMING_MODES") or "basic,local,global,drift,hybrid_v0"
         modes = {mode.strip() for mode in raw_modes.split(",") if mode.strip()}
         return cls(
-            enabled_modes=modes or {"hybrid_v0", "basic"},
+            enabled_modes=modes or {"basic", "local", "global", "drift", "hybrid_v0"},
             response_type=os.getenv("CKQA_GRAPHRAG_NATIVE_STREAMING_RESPONSE_TYPE") or "Multiple Paragraphs",
             hybrid_evidence_chars=_parse_positive_int(
                 os.getenv("CKQA_HYBRID_V0_BASIC_INJECTION_EVIDENCE_CHARS"),
@@ -46,8 +46,8 @@ class NativeStreamingChunk:
 class NativeGraphRagStreamingAdapter:
     """GraphRAG Python Query API streaming 适配层。
 
-    首版默认用于 `basic` 与 `hybrid_v0`。`local/global/drift` 的调用入口
-    保持可用，但由 `CKQA_GRAPHRAG_NATIVE_STREAMING_MODES` 控制灰度开启。
+    默认覆盖 `basic/local/global/drift/hybrid_v0` 五种学生端 QA 模式；
+    可通过 `CKQA_GRAPHRAG_NATIVE_STREAMING_MODES` 缩小或调整启用范围。
     """
 
     def __init__(
@@ -293,4 +293,3 @@ def _parse_positive_int(value: str | None, *, default: int) -> int:
     except ValueError:
         return default
     return parsed if parsed > 0 else default
-

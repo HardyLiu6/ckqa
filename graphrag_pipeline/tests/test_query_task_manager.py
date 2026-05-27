@@ -62,7 +62,9 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         finished = await _wait_for_task_status(manager, created.python_task_id, "success")
         self.assertEqual(finished.task_status, "success")
         self.assertEqual(finished.progress_stage, "done")
+        self.assertIn("started graphrag query --method global", finished.latest_logs)
         self.assertIn("started", finished.latest_logs)
+        self.assertIn("finished graphrag query --method global exit_code=0", finished.latest_logs)
         self.assertIn("done", finished.result_text)
 
     async def test_trims_latest_logs_and_marks_failed_on_non_zero_exit(self):
@@ -84,7 +86,8 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.task_status, "failed")
         self.assertEqual(snapshot.return_code, 3)
         self.assertLessEqual(len(snapshot.latest_logs), 3)
-        self.assertTrue("\n".join(snapshot.latest_logs).endswith("line-5"))
+        self.assertTrue(snapshot.latest_logs)
+        self.assertIn("exit_code=3", "\n".join(snapshot.latest_logs))
 
     async def test_marks_task_failed_when_process_startup_raises(self):
         manager = QueryTaskManager(
@@ -634,6 +637,35 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
         self.assertEqual(delta_text, "死锁会导致进程无法推进。")
         self.assertNotIn("[Data:", delta_text)
+
+    async def test_native_streaming_replay_keeps_full_visible_delta_when_status_updates_are_frequent(self):
+        chunks = [f"片段{i}。" for i in range(1, 8)]
+
+        async def streaming_runner(request: QueryTaskRequest):
+            for chunk in chunks:
+                yield type("Chunk", (), {"text": chunk})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+            stream_replay_max_chars=1000,
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "解释进程",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        await asyncio.sleep(0.1)
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
+        self.assertEqual(delta_text, "".join(chunks))
 
     async def test_native_streaming_failure_falls_back_to_non_streaming_cli(self):
         async def streaming_runner(request: QueryTaskRequest):

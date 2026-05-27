@@ -191,9 +191,17 @@ export function normalizeQaMessage(message) {
     taskId: message.taskId ?? null,
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
+    latestLogs: normalizeTaskLogs(message.latestLogs ?? message.latest_logs),
     sources: normalizeQaSources(message.sources),
     feedback: normalizeQaFeedback(message.feedback),
   }
+}
+
+export function normalizeTaskLogs(logs) {
+  const list = Array.isArray(logs) ? logs : []
+  return list
+    .map((log) => String(log ?? '').trim())
+    .filter(Boolean)
 }
 
 export function normalizeQaMessageMode(message = {}) {

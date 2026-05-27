@@ -472,6 +472,20 @@ class QaSessionsControllerWebMvcTest {
     }
 
     @Test
+    void shouldReturnJsonWhenTaskEventStreamFailsBeforeEmitterIsEstablished() throws Exception {
+        given(qaTaskEventStreamService.openStream(5L, 9001L, 7L))
+                .willThrow(new IllegalStateException("stream setup failed"));
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/tasks/9001/events")
+                        .accept(MediaType.TEXT_EVENT_STREAM)
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code").value(5000));
+    }
+
+    @Test
     void shouldListMessagesWithTaskSummaryOnlyOnUserMessages() throws Exception {
         given(qaWorkflowService.listMessages(5L, 7L)).willReturn(List.of(
                 QaMessageResponse.of(101L, 5L, "user", 1, "请概括这套图谱的主题", LocalDateTime.of(2026, 4, 22, 15, 20), "running", "running"),
