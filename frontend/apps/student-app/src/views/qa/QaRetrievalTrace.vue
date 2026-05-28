@@ -1,5 +1,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import {
+  compactRetrievalTraceEvents,
+  latestRetrievalTraceEvent,
+  retrievalTraceEvidenceLabel,
+  retrievalTraceEvidenceSnippet,
+  retrievalTraceEvidenceTitle,
+} from './qa-retrieval-trace-model'
 
 const props = defineProps({
   events: {
@@ -26,48 +33,23 @@ watch(() => props.defaultOpen, (value) => {
   isOpen.value = value
 })
 
-const visibleEvents = computed(() => compactRunningEvents(props.events))
-const latestEvent = computed(() => visibleEvents.value.at(-1) ?? null)
-
-function compactRunningEvents(events) {
-  const result = []
-  const runningIndexes = new Map()
-  for (const event of Array.isArray(events) ? events : []) {
-    if (!event || typeof event !== 'object' || !event.summary) {
-      continue
-    }
-    const type = String(event.type || 'progress')
-    if (type.endsWith('_running')) {
-      const existingIndex = runningIndexes.get(type)
-      if (existingIndex != null) {
-        result[existingIndex] = event
-        continue
-      }
-      runningIndexes.set(type, result.length)
-    }
-    result.push(event)
-  }
-  return result
-}
+const visibleEvents = computed(() => compactRetrievalTraceEvents(props.events))
+const latestEvent = computed(() => latestRetrievalTraceEvent(props.events))
 
 function formatProgressSummary(event) {
   return event?.summary || ''
 }
 
 function progressEvidenceLabel(event) {
-  const count = Array.isArray(event?.evidence) ? event.evidence.length : 0
-  if (!count) {
-    return props.modeLabel || '检索'
-  }
-  return `关联依据 ${count} 条`
+  return retrievalTraceEvidenceLabel(event, props.modeLabel || '检索')
 }
 
 function progressEvidenceTitle(item) {
-  return item?.title || item?.sourceFile || item?.source_file || item?.id || item?.ref || '课程依据'
+  return retrievalTraceEvidenceTitle(item)
 }
 
 function progressEvidenceSnippet(item) {
-  return item?.snippet || item?.summary || item?.text || ''
+  return retrievalTraceEvidenceSnippet(item)
 }
 </script>
 

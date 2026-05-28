@@ -40,6 +40,19 @@ test('真实问答页会展示可折叠的检索过程日志', () => {
   assert.doesNotMatch(qaPageSource, /streamed chunk count=/)
 })
 
+test('检索过程组件使用阶段归并模型而不是直接按数组最后一项展示', () => {
+  const traceSource = readFileSync(resolve(__dirname, '../src/views/qa/QaRetrievalTrace.vue'), 'utf8')
+  assert.match(traceSource, /compactRetrievalTraceEvents/)
+  assert.match(traceSource, /latestRetrievalTraceEvent/)
+  assert.doesNotMatch(traceSource, /visibleEvents\.value\.at\(-1\)/)
+})
+
+test('真实问答页不会因状态快照游标丢弃较早的检索过程事件', () => {
+  const progressBlock = qaPageSource.match(/progress\(payload\) \{[\s\S]*?\n    \},\n    delta\(payload\)/)?.[0] ?? ''
+  assert.match(progressBlock, /mergeProgressEvents\(pendingTask\.value\?\.progressEvents, \[payload\]\)/)
+  assert.doesNotMatch(progressBlock, /eventSeq > 0 && eventSeq <= lastEventSeq/)
+})
+
 test('真实问答页流式输出时尊重用户滚动位置', () => {
   assert.match(qaPageSource, /@scroll="handleMainScroll"/)
   assert.match(qaPageSource, /followLatestAnswerIfPinned/)

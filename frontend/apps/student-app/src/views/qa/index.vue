@@ -57,6 +57,7 @@ import {
 } from './qa-route-query-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
 import QaRetrievalTrace from './QaRetrievalTrace.vue'
+import { mergeRetrievalTraceEvents } from './qa-retrieval-trace-model'
 import {
   isNearScrollBottom,
   resolveAutoScrollAfterUserScroll,
@@ -1141,9 +1142,7 @@ function startTaskStream(sessionId, taskId, submission) {
       }
       const eventSeq = normalizeStreamEventSeq(payload?.eventSeq ?? payload?.event_seq)
       const lastEventSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
-      if (eventSeq > 0 && eventSeq <= lastEventSeq) {
-        return
-      }
+      const nextEventSeq = Math.max(lastEventSeq, eventSeq)
       const progressEvents = mergeProgressEvents(pendingTask.value?.progressEvents, [payload])
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
@@ -1151,8 +1150,8 @@ function startTaskStream(sessionId, taskId, submission) {
         streaming: true,
         progressEvents,
         latestLogs: normalizeTaskLogs(pendingTask.value?.latestLogs, progressEvents),
-        lastStreamEventSeq: eventSeq || lastEventSeq,
-        streamEventSeq: eventSeq || lastEventSeq,
+        lastStreamEventSeq: nextEventSeq,
+        streamEventSeq: nextEventSeq,
       }
     },
     delta(payload) {
@@ -1555,22 +1554,10 @@ function withTaskMode(message, task) {
 }
 
 function mergeProgressEvents(currentEvents, incomingEvents) {
-  const merged = []
-  const seen = new Set()
-  for (const event of [
-    ...normalizeProgressEvents(currentEvents),
-    ...normalizeProgressEvents(incomingEvents),
-  ]) {
-    const key = event.eventSeq > 0
-      ? `seq:${event.eventSeq}`
-      : `${event.type}:${event.summary}:${JSON.stringify(event.metrics)}`
-    if (seen.has(key)) {
-      continue
-    }
-    seen.add(key)
-    merged.push(event)
-  }
-  return merged.slice(-12)
+  return mergeRetrievalTraceEvents(
+    normalizeProgressEvents(currentEvents),
+    normalizeProgressEvents(incomingEvents),
+  )
 }
 
 function estimateLearningMemoryChars() {
