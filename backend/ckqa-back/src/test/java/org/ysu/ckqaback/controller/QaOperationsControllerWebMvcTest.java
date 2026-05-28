@@ -14,6 +14,7 @@ import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.entity.QaSourceReviews;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.qa.QaOperationsService;
+import org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceReviewResponse;
 import org.ysu.ckqaback.service.QaSourceReviewsService;
 
@@ -57,11 +58,30 @@ class QaOperationsControllerWebMvcTest {
                         .param("mode", "hybrid_v0")
                         .param("feedbackTag", "source_irrelevant")
                         .param("routingConfidenceBand", "low_confidence")
-                        .param("reviewPriority", "low_confidence"))
+                        .param("reviewPriority", "low_confidence")
+                        .param("keyword", "操作系统"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items").isArray());
 
         then(qaOperationsService).should().pageLogs(any(), eq(authenticatedAdmin()));
+    }
+
+    @Test
+    void shouldReturnQaOperationsSummaryWithFilters() throws Exception {
+        given(qaOperationsService.summaryLogs(any(), eq(authenticatedAdmin())))
+                .willReturn(new QaOperationsSummaryResponse(42L, 30L, 5L, 4L, 3L));
+
+        mockMvc.perform(get(ApiPaths.QA_OPERATIONS + "/logs/summary")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedAdmin())
+                        .param("mode", "global"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(42))
+                .andExpect(jsonPath("$.data.success").value(30))
+                .andExpect(jsonPath("$.data.failed").value(5))
+                .andExpect(jsonPath("$.data.lowConfidence").value(4))
+                .andExpect(jsonPath("$.data.needReview").value(3));
+
+        then(qaOperationsService).should().summaryLogs(any(), eq(authenticatedAdmin()));
     }
 
     @Test

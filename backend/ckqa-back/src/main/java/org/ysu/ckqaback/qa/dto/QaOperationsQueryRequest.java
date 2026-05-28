@@ -13,6 +13,11 @@ import lombok.Setter;
 @Setter
 public class QaOperationsQueryRequest {
 
+    /**
+     * 关键字搜索：覆盖课程名、知识库名、学生姓名/账号、日志 ID。
+     */
+    private String keyword;
+
     private String courseId;
     private Long knowledgeBaseId;
 

@@ -20,6 +20,7 @@ import {
 import {
   exportQaOperationLogs,
   getQaOperationLog,
+  getQaOperationsSummary,
   listQaOperationLogs,
   upsertQaSourceReview,
 } from './api/qa-operations.js'
@@ -1776,9 +1777,11 @@ test('QA 运维 API 使用管理端 qa-operations 契约', async () => {
       calls.push(['get', url, config?.params ?? null])
       const data = url.endsWith('/export')
         ? [{ retrievalLogId: 9 }]
-        : (url === '/qa-operations/logs'
-          ? { items: [{ retrievalLogId: 9 }], current: 1, size: 20, total: 1, pages: 1 }
-          : { retrievalLogId: 9 })
+        : url === '/qa-operations/logs/summary'
+          ? { total: 42, success: 30, failed: 5, lowConfidence: 4, needReview: 3 }
+          : (url === '/qa-operations/logs'
+            ? { items: [{ retrievalLogId: 9 }], current: 1, size: 20, total: 1, pages: 1 }
+            : { retrievalLogId: 9 })
       return { data: { code: 200, message: 'ok', data } }
     },
     put: async (url, payload) => {
@@ -1790,13 +1793,18 @@ test('QA 运维 API 使用管理端 qa-operations 契约', async () => {
   const page = await listQaOperationLogs({ mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }, client)
   await getQaOperationLog(9, client)
   await exportQaOperationLogs({ taskStatus: 'success' }, client)
+  const summary = await getQaOperationsSummary({ mode: 'global', keyword: '操作系统' }, client)
   await upsertQaSourceReview(7, { relevance: 'partially_relevant', citationQuality: 'weak_support' }, client)
 
   assert.equal(page.items[0].retrievalLogId, 9)
+  assert.equal(summary.total, 42)
+  assert.equal(summary.success, 30)
+  assert.equal(summary.lowConfidence, 4)
   assert.deepEqual(calls, [
     ['get', '/qa-operations/logs', { mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }],
     ['get', '/qa-operations/logs/9', null],
     ['get', '/qa-operations/logs/export', { taskStatus: 'success' }],
+    ['get', '/qa-operations/logs/summary', { mode: 'global', keyword: '操作系统' }],
     ['put', '/qa-operations/source-reviews/7', { relevance: 'partially_relevant', citationQuality: 'weak_support' }],
   ])
 })

@@ -5,6 +5,16 @@ export async function listQaOperationLogs(params = {}, client = http) {
   return normalizePageData(unwrapApiResponse(await client.get('/qa-operations/logs', { params })))
 }
 
+/**
+ * 拉取问答运维列表的全库聚合统计。
+ *
+ * 后端在数据库层按当前筛选条件聚合 total / success / failed / lowConfidence / needReview，
+ * 用于前端运维概览卡片，避免基于「当前页」做误导性统计。
+ */
+export async function getQaOperationsSummary(params = {}, client = http) {
+  return unwrapApiResponse(await client.get('/qa-operations/logs/summary', { params }))
+}
+
 export async function getQaOperationLog(retrievalLogId, client = http) {
   return unwrapApiResponse(await client.get(`/qa-operations/logs/${encodeURIComponent(retrievalLogId)}`))
 }

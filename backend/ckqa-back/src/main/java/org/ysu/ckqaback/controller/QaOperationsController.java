@@ -22,6 +22,7 @@ import org.ysu.ckqaback.qa.QaOperationsService;
 import org.ysu.ckqaback.qa.dto.QaOperationLogDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationLogResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationsQueryRequest;
+import org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceReviewResponse;
 import org.ysu.ckqaback.qa.dto.UpsertQaSourceReviewRequest;
 import org.ysu.ckqaback.service.QaSourceReviewsService;
@@ -46,6 +47,18 @@ public class QaOperationsController {
             HttpServletRequest servletRequest
     ) {
         return ApiResponseUtils.success(qaOperationsService.pageLogs(request, currentUser(servletRequest)));
+    }
+
+    /**
+     * 全库聚合统计：按当前筛选条件返回总数、成功、失败/失效、低置信、待复核数。
+     * 让前端运维概览卡片不必基于当前页做误导性统计。
+     */
+    @GetMapping("/logs/summary")
+    public ApiResponse<QaOperationsSummaryResponse> summaryLogs(
+            @Valid @ModelAttribute QaOperationsQueryRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaOperationsService.summaryLogs(request, currentUser(servletRequest)));
     }
 
     @GetMapping("/logs/export")

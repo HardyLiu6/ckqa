@@ -14,6 +14,7 @@ import org.ysu.ckqaback.qa.dto.QaOperationLogDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationLogResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationsQueryRequest;
+import org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceReviewResponse;
 import org.ysu.ckqaback.qa.ops.QaOperationLogRow;
 import org.ysu.ckqaback.qa.ops.QaOperationSourceRow;
@@ -57,6 +58,19 @@ public class QaOperationsService {
                 .toList();
         long pages = size > 0 ? (long) Math.ceil((double) total / (double) size) : 0;
         return new ApiPageData<>(items, page, size, total, pages);
+    }
+
+    /**
+     * 在数据库层按当前筛选条件聚合统计，供运维概览卡片直接展示。
+     */
+    public QaOperationsSummaryResponse summaryLogs(QaOperationsQueryRequest request, AuthenticatedUser currentUser) {
+        Scope scope = requireOpsScope(currentUser);
+        QaOperationsQueryRequest effective = withDefaults(request, false);
+        QaOperationsSummaryResponse summary = operationsMapper.selectSummary(effective, currentUser.id(), scope.adminScope());
+        if (summary == null) {
+            return new QaOperationsSummaryResponse(0L, 0L, 0L, 0L, 0L);
+        }
+        return summary;
     }
 
     public QaOperationLogDetailResponse getLogDetail(Long retrievalLogId, AuthenticatedUser currentUser) {
