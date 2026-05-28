@@ -509,8 +509,9 @@ class QueryTaskManager:
             async for chunk in stream_result:
                 progress_event = _stream_chunk_progress(chunk, request.mode)
                 if progress_event is not None:
-                    progress_events = _append_progress_event(progress_events, progress_event, self._max_log_lines)
                     event_seq = self._publish_event(python_task_id, "progress", progress_event)
+                    progress_event = {**progress_event, "eventSeq": event_seq}
+                    progress_events = _append_progress_event(progress_events, progress_event, self._max_log_lines)
                     await self._update_task(
                         python_task_id,
                         last_heartbeat_at=utc_now(),
@@ -961,14 +962,18 @@ def _progress_event_dict(
     summary: str,
     metrics: dict[str, Any] | None,
     evidence: list[Any] | None,
+    event_seq: int | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "type": str(event_type or "progress"),
         "mode": str(mode or ""),
         "summary": str(summary or "正在读取课程知识库检索过程。"),
         "metrics": _json_object(metrics),
         "evidence": [_json_object(item) for item in list(evidence or []) if isinstance(item, dict)],
     }
+    if event_seq is not None and event_seq > 0:
+        payload["eventSeq"] = event_seq
+    return payload
 
 
 def _normalize_progress_events(logs: Any) -> list[dict[str, Any]]:
@@ -981,8 +986,17 @@ def _normalize_progress_events(logs: Any) -> list[dict[str, Any]]:
                 str(item.get("summary") or ""),
                 item.get("metrics") if isinstance(item.get("metrics"), dict) else {},
                 item.get("evidence") if isinstance(item.get("evidence"), list) else [],
+                _optional_event_seq(item.get("eventSeq", item.get("event_seq"))),
             ))
     return events
+
+
+def _optional_event_seq(value: Any) -> int | None:
+    try:
+        event_seq = int(value or 0)
+    except (TypeError, ValueError):
+        return None
+    return event_seq if event_seq > 0 else None
 
 
 def _json_object(value: Any) -> dict[str, Any]:

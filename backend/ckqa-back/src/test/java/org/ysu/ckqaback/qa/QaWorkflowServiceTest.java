@@ -1185,7 +1185,8 @@ class QaWorkflowServiceTest {
                     "mode": "global",
                     "summary": "已选取 3 份课程报告作为全局总结依据。",
                     "metrics": {"reportCount": 3},
-                    "evidence": [{"kind": "report", "title": "操作系统第一章报告"}]
+                    "evidence": [{"kind": "report", "title": "操作系统第一章报告"}],
+                    "eventSeq": 12
                   }
                 ]
                 """);
@@ -1211,6 +1212,7 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getProgressEvents()).hasSize(1);
         assertThat(responses.get(0).getProgressEvents().get(0).getType()).isEqualTo("context_selected");
         assertThat(responses.get(0).getProgressEvents().get(0).getMetrics().get("reportCount")).isEqualTo(3);
+        assertThat(responses.get(0).getProgressEvents().get(0).getEventSeq()).isEqualTo(12L);
         assertThat(responses.get(0).getPartialResponseText()).isEqualTo("当前已经生成的部分回答");
         assertThat(responses.get(0).getStreamEventSeq()).isEqualTo(12L);
         assertThat(responses.get(1).getTaskStatus()).isNull();
@@ -1262,7 +1264,8 @@ class QaWorkflowServiceTest {
                     "mode": "drift",
                     "summary": "正在综合 DRIFT 检索到的课程上下文。",
                     "metrics": {},
-                    "evidence": []
+                    "evidence": [],
+                    "eventSeq": 18
                   }
                 ]
                 """);
@@ -1293,6 +1296,7 @@ class QaWorkflowServiceTest {
         assertThat(response.getLatestLogs()).containsExactly("正在综合 DRIFT 检索到的课程上下文。");
         assertThat(response.getProgressEvents()).hasSize(1);
         assertThat(response.getProgressEvents().get(0).getType()).isEqualTo("reduce_started");
+        assertThat(response.getProgressEvents().get(0).getEventSeq()).isEqualTo(18L);
     }
 
     private KnowledgeBases buildKnowledgeBase() {

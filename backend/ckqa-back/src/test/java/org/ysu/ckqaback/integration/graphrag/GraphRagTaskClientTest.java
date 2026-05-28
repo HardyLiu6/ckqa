@@ -286,7 +286,8 @@ class GraphRagTaskClientTest {
                               "mode": "basic",
                               "summary": "已选取 1 个课程片段作为回答依据。",
                               "metrics": {"textUnitCount": 1},
-                              "evidence": [{"kind": "text_unit", "title": "操作系统教材"}]
+                              "evidence": [{"kind": "text_unit", "title": "操作系统教材"}],
+                              "eventSeq": 8
                             }
                           ],
                           "streamEventSeq": 8
@@ -301,6 +302,7 @@ class GraphRagTaskClientTest {
         assertThat(snapshot.get().progressEvents().get(0).summary()).contains("课程片段");
         assertThat(snapshot.get().progressEvents().get(0).metrics().get("textUnitCount")).isEqualTo(1);
         assertThat(snapshot.get().progressEvents().get(0).evidence().get(0).get("title")).isEqualTo("操作系统教材");
+        assertThat(snapshot.get().progressEvents().get(0).eventSeq()).isEqualTo(8L);
         server.verify();
     }
 

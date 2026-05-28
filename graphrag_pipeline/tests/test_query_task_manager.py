@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -477,6 +478,34 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(loaded.partial_result_text)
             self.assertEqual(loaded.stream_event_seq, 0)
 
+    async def test_snapshot_store_tolerates_malformed_progress_event_seq(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_dir = Path(temp_dir) / "query-tasks"
+            store = QueryTaskSnapshotStore(store_dir)
+            snapshot = QueryTaskSnapshot(
+                python_task_id="qt_progress",
+                mode="global",
+                prompt="问题",
+                task_status="running",
+                progress_stage="running",
+                process_alive=True,
+                created_at=datetime.now(UTC),
+                latest_logs=[
+                    {
+                        "type": "map_running",
+                        "mode": "global",
+                        "summary": "仍在汇总课程报告。",
+                        "eventSeq": "bad-seq",
+                    }
+                ],
+            )
+
+            store.save(snapshot)
+            payload = json.loads((store_dir / "qt_progress.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(payload["progressEvents"][0]["type"], "map_running")
+            self.assertNotIn("eventSeq", payload["progressEvents"][0])
+
     async def test_ignores_corrupt_persisted_snapshot_and_keeps_new_tasks_available(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             store_dir = Path(temp_dir) / "query-tasks"
@@ -649,6 +678,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[已参考课程知识库]", snapshot.result_text)
         self.assertEqual(snapshot.latest_logs[0]["type"], "context_selected")
         self.assertIn("课程片段", snapshot.latest_logs[0]["summary"])
+        self.assertGreater(snapshot.latest_logs[0]["eventSeq"], 0)
         self.assertEqual(snapshot.partial_result_text, "死锁会导致进程无法推进。")
         self.assertGreater(snapshot.stream_event_seq, 0)
 
@@ -656,6 +686,7 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         unsubscribe()
         progress_events = [item for item in replay if item["event"] == "progress"]
         self.assertEqual(progress_events[0]["data"]["type"], "context_selected")
+        self.assertEqual(snapshot.latest_logs[0]["eventSeq"], progress_events[0]["seq"])
         self.assertEqual(progress_events[0]["data"]["evidence"][0]["title"], "操作系统教材")
         delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
         self.assertEqual(delta_text, "死锁会导致进程无法推进。")

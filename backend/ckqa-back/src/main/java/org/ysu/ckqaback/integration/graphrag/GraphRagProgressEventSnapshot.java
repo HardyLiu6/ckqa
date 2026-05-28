@@ -11,7 +11,8 @@ public record GraphRagProgressEventSnapshot(
         String mode,
         String summary,
         Map<String, Object> metrics,
-        List<Map<String, Object>> evidence
+        List<Map<String, Object>> evidence,
+        Long eventSeq
 ) {
 
     public GraphRagProgressEventSnapshot {

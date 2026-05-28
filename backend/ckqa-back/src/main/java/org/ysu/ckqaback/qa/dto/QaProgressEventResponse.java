@@ -17,19 +17,22 @@ public class QaProgressEventResponse {
     private final String summary;
     private final Map<String, Object> metrics;
     private final List<Map<String, Object>> evidence;
+    private final Long eventSeq;
 
     private QaProgressEventResponse(
             String type,
             String mode,
             String summary,
             Map<String, Object> metrics,
-            List<Map<String, Object>> evidence
+            List<Map<String, Object>> evidence,
+            Long eventSeq
     ) {
         this.type = type;
         this.mode = mode;
         this.summary = summary;
         this.metrics = metrics == null ? Map.of() : Map.copyOf(metrics);
         this.evidence = evidence == null ? List.of() : List.copyOf(evidence);
+        this.eventSeq = eventSeq;
     }
 
     public static QaProgressEventResponse of(
@@ -39,13 +42,24 @@ public class QaProgressEventResponse {
             Map<String, Object> metrics,
             List<Map<String, Object>> evidence
     ) {
-        return new QaProgressEventResponse(type, mode, summary, metrics, evidence);
+        return of(type, mode, summary, metrics, evidence, null);
+    }
+
+    public static QaProgressEventResponse of(
+            String type,
+            String mode,
+            String summary,
+            Map<String, Object> metrics,
+            List<Map<String, Object>> evidence,
+            Long eventSeq
+    ) {
+        return new QaProgressEventResponse(type, mode, summary, metrics, evidence, eventSeq);
     }
 
     public static QaProgressEventResponse from(GraphRagProgressEventSnapshot snapshot) {
         if (snapshot == null) {
             return null;
         }
-        return of(snapshot.type(), snapshot.mode(), snapshot.summary(), snapshot.metrics(), snapshot.evidence());
+        return of(snapshot.type(), snapshot.mode(), snapshot.summary(), snapshot.metrics(), snapshot.evidence(), snapshot.eventSeq());
     }
 }

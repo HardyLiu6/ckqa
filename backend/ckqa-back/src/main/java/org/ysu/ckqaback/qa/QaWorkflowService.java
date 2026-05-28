@@ -744,7 +744,8 @@ public class QaWorkflowService {
                         item.path("mode").asText(""),
                         item.path("summary").asText(""),
                         metrics != null && metrics.isObject() ? OBJECT_MAPPER.convertValue(metrics, MAP_TYPE) : Map.of(),
-                        evidenceItems
+                        evidenceItems,
+                        item.hasNonNull("eventSeq") ? item.get("eventSeq").asLong() : null
                 ));
             }
             return events;
