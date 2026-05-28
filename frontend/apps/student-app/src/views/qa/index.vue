@@ -72,6 +72,7 @@ import {
   normalizeQaFeedback,
   normalizeQaMessage,
   normalizeQaSession,
+  normalizeProgressEvents,
   normalizeStreamEventSeq,
   normalizeTaskLogs,
   resolveSessionLifecycleStatusText,
@@ -167,7 +168,9 @@ const memorySendStatusText = computed(() => {
     memorySizeEstimate: { chars: estimateLearningMemoryChars() },
   })
 })
-const pendingProcessLogs = computed(() => normalizeTaskLogs(pendingTask.value?.latestLogs))
+const pendingProcessEvents = computed(() => normalizeProgressEvents(
+  pendingTask.value?.progressEvents ?? pendingTask.value?.latestLogs,
+))
 const hasActivePendingTask = computed(() => Boolean(
   pendingTask.value && !isTerminalTaskStatus(pendingTask.value.taskStatus),
 ))
@@ -915,12 +918,18 @@ async function resumeRunningTaskFromMessages(sessionId, restoredMessages, reques
       return false
     }
 
+    const progressEvents = mergeProgressEvents(
+      runningUserMessage.progressEvents,
+      detail.progressEvents ?? detail.progress_events ?? detail.latestLogs,
+    )
     pendingTask.value = {
       ...detail,
       sessionId,
       mode: detail.mode || runningUserMessage.mode || '',
       queryText: detail.queryText || runningUserMessage.content,
       streamText: detail.partialResponseText || runningUserMessage.partialResponseText || '',
+      progressEvents,
+      latestLogs: normalizeTaskLogs(detail.latestLogs ?? runningUserMessage.latestLogs, progressEvents),
       lastStreamEventSeq: normalizeStreamEventSeq(detail.streamEventSeq ?? runningUserMessage.streamEventSeq),
     }
     statusMessage.value = '已恢复运行中的问答任务，正在继续接收结果'
@@ -944,8 +953,9 @@ function restoreTerminalPartialTaskFromMessages(sessionId, restoredMessages) {
     return false
   }
   const streamText = lastMessage.partialResponseText || ''
-  const latestLogs = normalizeTaskLogs(lastMessage.latestLogs)
-  if (!streamText && !latestLogs.length) {
+  const progressEvents = normalizeProgressEvents(lastMessage.progressEvents ?? lastMessage.latestLogs)
+  const latestLogs = normalizeTaskLogs(lastMessage.latestLogs, progressEvents)
+  if (!streamText && !progressEvents.length && !latestLogs.length) {
     return false
   }
   pendingTask.value = {
@@ -957,6 +967,7 @@ function restoreTerminalPartialTaskFromMessages(sessionId, restoredMessages) {
     queryText: lastMessage.content,
     streamText,
     latestLogs,
+    progressEvents,
     streamEventSeq: normalizeStreamEventSeq(lastMessage.streamEventSeq),
     lastStreamEventSeq: normalizeStreamEventSeq(lastMessage.streamEventSeq),
     streaming: false,
@@ -1089,12 +1100,18 @@ function startTaskStream(sessionId, taskId, submission) {
       const payloadPartialText = payload.partialResponseText ?? payload.partial_result_text ?? ''
       const currentSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
       const payloadSeq = normalizeStreamEventSeq(payload.streamEventSeq ?? payload.stream_event_seq)
+      const progressEvents = mergeProgressEvents(
+        pendingTask.value?.progressEvents,
+        payload.progressEvents ?? payload.progress_events ?? payload.latestLogs,
+      )
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         ...payload,
         sessionId,
         streaming: true,
         streamText: currentStreamText || payloadPartialText,
+        progressEvents,
+        latestLogs: normalizeTaskLogs(payload.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
         lastStreamEventSeq: Math.max(currentSeq, payloadSeq),
       }
       updateUserMessageTask(payload)
@@ -1108,6 +1125,26 @@ function startTaskStream(sessionId, taskId, submission) {
         sessionId,
         streaming: true,
         lastStreamHeartbeatAt: new Date().toISOString(),
+      }
+    },
+    progress(payload) {
+      if (!isCurrentStream()) {
+        return
+      }
+      const eventSeq = normalizeStreamEventSeq(payload?.eventSeq ?? payload?.event_seq)
+      const lastEventSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
+      if (eventSeq > 0 && eventSeq <= lastEventSeq) {
+        return
+      }
+      const progressEvents = mergeProgressEvents(pendingTask.value?.progressEvents, [payload])
+      pendingTask.value = {
+        ...(pendingTask.value ?? submission),
+        sessionId,
+        streaming: true,
+        progressEvents,
+        latestLogs: normalizeTaskLogs(pendingTask.value?.latestLogs, progressEvents),
+        lastStreamEventSeq: eventSeq || lastEventSeq,
+        streamEventSeq: eventSeq || lastEventSeq,
       }
     },
     delta(payload) {
@@ -1215,11 +1252,17 @@ async function pollTask(sessionId, taskId) {
     const partialStreamText = detail.partialResponseText ?? ''
     const currentSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? pendingTask.value?.streamEventSeq)
     const detailSeq = normalizeStreamEventSeq(detail.streamEventSeq)
+    const progressEvents = mergeProgressEvents(
+      pendingTask.value?.progressEvents,
+      detail.progressEvents ?? detail.progress_events ?? detail.latestLogs,
+    )
     pendingTask.value = {
       ...(pendingTask.value ?? {}),
       ...detail,
       sessionId,
       streamText: currentStreamText || partialStreamText,
+      progressEvents,
+      latestLogs: normalizeTaskLogs(detail.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
       lastStreamEventSeq: Math.max(currentSeq, detailSeq),
     }
     updateUserMessageTask(detail)
@@ -1254,6 +1297,8 @@ async function pollTask(sessionId, taskId) {
       sessionId,
       streaming: false,
       streamText: pendingTask.value?.streamText || detail.partialResponseText || '',
+      progressEvents,
+      latestLogs: normalizeTaskLogs(detail.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
       lastStreamEventSeq: Math.max(
         normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? pendingTask.value?.streamEventSeq),
         normalizeStreamEventSeq(detail.streamEventSeq),
@@ -1275,10 +1320,16 @@ async function refreshAssistantAfterEmptySuccess(sessionId, taskId) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await sleep(700)
     const detail = await getQaTask(sessionId, taskId)
+    const progressEvents = mergeProgressEvents(
+      pendingTask.value?.progressEvents,
+      detail.progressEvents ?? detail.progress_events ?? detail.latestLogs,
+    )
     pendingTask.value = {
       ...(pendingTask.value ?? {}),
       ...detail,
       sessionId,
+      progressEvents,
+      latestLogs: normalizeTaskLogs(detail.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
     }
     if (detail.assistantMessage) {
       messages.value = upsertQaMessage(messages.value, withTaskMode(detail.assistantMessage, detail))
@@ -1299,16 +1350,23 @@ function updateUserMessageTask(detail) {
   }
   messages.value = messages.value.map((message) => (
     message.id === detail.userMessageId
-        ? {
+        ? (() => {
+            const progressEvents = mergeProgressEvents(
+              message.progressEvents,
+              detail.progressEvents ?? detail.progress_events ?? detail.latestLogs,
+            )
+            return {
             ...message,
             mode: detail.mode || message.mode || '',
             taskId: detail.taskId ?? message.taskId ?? null,
             taskStatus: detail.taskStatus,
             progressStage: detail.progressStage,
-            latestLogs: normalizeTaskLogs(detail.latestLogs ?? message.latestLogs),
+            latestLogs: normalizeTaskLogs(detail.latestLogs ?? message.latestLogs, progressEvents),
+            progressEvents,
             partialResponseText: detail.partialResponseText ?? message.partialResponseText ?? '',
             streamEventSeq: normalizeStreamEventSeq(detail.streamEventSeq ?? message.streamEventSeq),
           }
+          })()
       : message
   ))
 }
@@ -1431,60 +1489,55 @@ function withTaskMode(message, task) {
   if (!message) {
     return message
   }
+  const progressEvents = mergeProgressEvents(
+    message.progressEvents ?? message.progress_events,
+    task?.progressEvents ?? task?.progress_events ?? task?.latestLogs,
+  )
   return {
     ...message,
     mode: message.mode || message.queryMode || message.searchMode || task?.mode || '',
-    latestLogs: normalizeTaskLogs(message.latestLogs ?? task?.latestLogs),
+    latestLogs: normalizeTaskLogs(message.latestLogs ?? task?.latestLogs, progressEvents),
+    progressEvents,
   }
 }
 
-function formatTaskLogLine(logLine = '') {
-  const text = String(logLine ?? '').trim()
-  if (!text) {
+function mergeProgressEvents(currentEvents, incomingEvents) {
+  const merged = []
+  const seen = new Set()
+  for (const event of [
+    ...normalizeProgressEvents(currentEvents),
+    ...normalizeProgressEvents(incomingEvents),
+  ]) {
+    const key = event.eventSeq > 0
+      ? `seq:${event.eventSeq}`
+      : `${event.type}:${event.summary}:${JSON.stringify(event.metrics)}`
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    merged.push(event)
+  }
+  return merged.slice(-12)
+}
+
+function formatProgressSummary(event) {
+  return event?.summary || ''
+}
+
+function progressEvidenceLabel(event) {
+  const count = Array.isArray(event?.evidence) ? event.evidence.length : 0
+  if (!count) {
     return ''
   }
-  if (text === 'waiting first streaming chunk') {
-    return '正在等待首个流式片段'
-  }
-  if (text.startsWith('streamed chunk count=')) {
-    return `已接收 ${text.slice('streamed chunk count='.length).trim()} 个流式片段`
-  }
-  if (text.startsWith('started native streaming query task provider=')) {
-    return '已连接 Python 原生流式检索'
-  }
-  if (text === 'finished native streaming query task') {
-    return '原生流式检索已完成'
-  }
-  if (text.startsWith('fallback native streaming to non-streaming task:')) {
-    return `原生流式不可用，已回退为非流式检索：${text.slice('fallback native streaming to non-streaming task:'.length).trim()}`
-  }
-  if (text === 'started local_history query task') {
-    return '已启用 Local 历史增强检索'
-  }
-  if (text === 'finished local_history query task') {
-    return 'Local 历史增强检索已完成'
-  }
-  if (text.startsWith('fallback local_history to cli:')) {
-    return `Local 历史增强不可用，已回退为标准检索：${text.slice('fallback local_history to cli:'.length).trim()}`
-  }
-  if (text === 'started hybrid_v0 query task') {
-    return '已启动混合检索'
-  }
-  if (text === 'finished hybrid_v0 query task') {
-    return '混合检索已完成'
-  }
-  if (text.startsWith('started graphrag query --method ')) {
-    return `已启动 ${text.slice('started graphrag query --method '.length).trim()} 检索`
-  }
-  if (text.startsWith('finished graphrag query --method ')) {
-    const detail = text.slice('finished graphrag query --method '.length).trim()
-    const [modeLabel, exitCodePart] = detail.split(' exit_code=')
-    if (exitCodePart != null) {
-      return `已完成 ${modeLabel.trim()} 检索（退出码 ${exitCodePart.trim()}）`
-    }
-    return `已完成 ${detail} 检索`
-  }
-  return text
+  return `关联依据 ${count} 条`
+}
+
+function progressEvidenceTitle(item) {
+  return item?.title || item?.sourceFile || item?.source_file || item?.id || item?.ref || '课程依据'
+}
+
+function progressEvidenceSnippet(item) {
+  return item?.snippet || item?.summary || item?.text || ''
 }
 
 function estimateLearningMemoryChars() {
@@ -1600,16 +1653,24 @@ function sourceTypeLabel(source) {
                 </li>
               </ol>
             </details>
-            <details v-if="msg.latestLogs?.length" class="process-cards">
-              <summary>检索过程 {{ msg.latestLogs.length }}</summary>
+            <details v-if="msg.progressEvents?.length" class="process-cards">
+              <summary>检索过程 {{ msg.progressEvents.length }}</summary>
               <ol class="process-list">
                 <li
-                  v-for="(logLine, index) in msg.latestLogs"
+                  v-for="(event, index) in msg.progressEvents"
                   :key="`${msg.id}-process-${index}`"
                   class="process-item"
                 >
-                  <span class="process-step">步骤 {{ index + 1 }}</span>
-                  <span class="process-log">{{ formatTaskLogLine(logLine) }}</span>
+                  <span class="process-step">{{ progressEvidenceLabel(event) || messageModeLabel(msg) }}</span>
+                  <span class="process-log">{{ formatProgressSummary(event) }}</span>
+                  <span v-if="event.evidence?.length" class="process-evidence">
+                    <span
+                      v-for="(item, evidenceIndex) in event.evidence.slice(0, 3)"
+                      :key="`${msg.id}-process-${index}-evidence-${evidenceIndex}`"
+                    >
+                      {{ progressEvidenceTitle(item) }}<template v-if="progressEvidenceSnippet(item)">：{{ progressEvidenceSnippet(item) }}</template>
+                    </span>
+                  </span>
                 </li>
               </ol>
             </details>
@@ -1645,16 +1706,24 @@ function sourceTypeLabel(source) {
               :content="pendingTask.streamText"
               class="pending-stream-content"
             />
-            <details v-if="pendingProcessLogs.length" class="process-cards process-cards-pending" open>
-              <summary>检索过程 {{ pendingProcessLogs.length }}</summary>
+            <details v-if="pendingProcessEvents.length" class="process-cards process-cards-pending" open>
+              <summary>检索过程 {{ pendingProcessEvents.length }}</summary>
               <ol class="process-list">
                 <li
-                  v-for="(logLine, index) in pendingProcessLogs"
+                  v-for="(event, index) in pendingProcessEvents"
                   :key="`pending-process-${index}`"
                   class="process-item"
                 >
-                  <span class="process-step">步骤 {{ index + 1 }}</span>
-                  <span class="process-log">{{ formatTaskLogLine(logLine) }}</span>
+                  <span class="process-step">{{ progressEvidenceLabel(event) || messageModeLabel(pendingTask) }}</span>
+                  <span class="process-log">{{ formatProgressSummary(event) }}</span>
+                  <span v-if="event.evidence?.length" class="process-evidence">
+                    <span
+                      v-for="(item, evidenceIndex) in event.evidence.slice(0, 3)"
+                      :key="`pending-process-${index}-evidence-${evidenceIndex}`"
+                    >
+                      {{ progressEvidenceTitle(item) }}<template v-if="progressEvidenceSnippet(item)">：{{ progressEvidenceSnippet(item) }}</template>
+                    </span>
+                  </span>
                 </li>
               </ol>
             </details>
@@ -1975,6 +2044,7 @@ function sourceTypeLabel(source) {
 }
 .process-step { color: #0f766e; font-size: 11px; font-weight: 800; }
 .process-log { color: #334155; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.process-evidence { display: grid; gap: 3px; color: #64748b; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
 
 .message-feedback { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .feedback-action {

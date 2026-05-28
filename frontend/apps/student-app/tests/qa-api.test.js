@@ -237,6 +237,11 @@ test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件',
     await options.onopen({ ok: true, status: 200 })
     options.onmessage({ event: 'ack', data: '{"sessionId":8,"taskId":99}' })
     options.onmessage({ event: 'status', data: '{"taskStatus":"running","mode":"basic"}' })
+    options.onmessage({
+      event: 'progress',
+      data: '{"type":"context_selected","mode":"basic","summary":"已选取 1 个课程片段作为回答依据。","eventSeq":12}',
+      id: '12',
+    })
     options.onmessage({ event: 'delta', data: '{"text":"死锁","eventSeq":13}', id: '13' })
     options.onmessage({ event: 'sources', data: '[{"rankPosition":1,"sourceFile":"操作系统教材"}]' })
     options.onmessage({ event: 'done', data: '{"taskId":99,"taskStatus":"success"}' })
@@ -259,9 +264,11 @@ test('问答任务事件流使用 SSE 路径和鉴权 header，并分发事件',
     'X-CKQA-User-Code': 'STU2026001',
   })
   assert.equal(streamCalls[0].options.signal, 'test-signal')
-  assert.deepEqual(received.map((item) => item.eventName), ['ack', 'status', 'delta', 'sources', 'done'])
-  assert.equal(received[2].payload.text, '死锁')
-  assert.equal(received[2].payload.eventSeq, 13)
+  assert.deepEqual(received.map((item) => item.eventName), ['ack', 'status', 'progress', 'delta', 'sources', 'done'])
+  assert.equal(received[2].payload.summary, '已选取 1 个课程片段作为回答依据。')
+  assert.equal(received[2].payload.eventSeq, 12)
+  assert.equal(received[3].payload.text, '死锁')
+  assert.equal(received[3].payload.eventSeq, 13)
   setAuthSessionProvider(() => null)
 })
 

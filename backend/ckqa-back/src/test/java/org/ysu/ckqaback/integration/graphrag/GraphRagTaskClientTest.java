@@ -239,12 +239,16 @@ class GraphRagTaskClientTest {
                         data: {"pythonTaskId":"qt_1"}
 
                         id: 8
-                        event: delta
-                        data: {"text":"死锁","eventSeq":8}
+                        event: progress
+                        data: {"type":"context_selected","mode":"basic","summary":"已选取 1 个课程片段作为回答依据。","metrics":{"textUnitCount":1},"evidence":[{"kind":"text_unit","title":"操作系统教材"}],"eventSeq":8}
 
                         id: 9
+                        event: delta
+                        data: {"text":"死锁","eventSeq":9}
+
+                        id: 10
                         event: done
-                        data: {"taskStatus":"success","eventSeq":9}
+                        data: {"taskStatus":"success","eventSeq":10}
 
                         """, MediaType.TEXT_EVENT_STREAM));
 
@@ -253,10 +257,50 @@ class GraphRagTaskClientTest {
         client.streamTaskEvents("qt_1", 7L, events::add);
 
         assertThat(events).extracting(GraphRagTaskEvent::eventName)
-                .containsExactly("ack", "delta", "done");
-        assertThat(events.get(1).data().get("text").asText()).isEqualTo("死锁");
+                .containsExactly("ack", "progress", "delta", "done");
+        assertThat(events.get(1).data().get("summary").asText()).contains("课程片段");
         assertThat(events.get(1).eventSeq()).isEqualTo(8L);
+        assertThat(events.get(2).data().get("text").asText()).isEqualTo("死锁");
         assertThat(events.get(2).eventSeq()).isEqualTo(9L);
+        assertThat(events.get(3).eventSeq()).isEqualTo(10L);
+        server.verify();
+    }
+
+    @Test
+    void shouldMapStructuredProgressEventsFromSnapshot() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks/qt_progress"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {
+                          "pythonTaskId": "qt_progress",
+                          "taskStatus": "running",
+                          "progressStage": "streaming",
+                          "processAlive": true,
+                          "createdAt": "2026-05-27T15:20:00",
+                          "latestLogs": ["已选取 1 个课程片段作为回答依据。"],
+                          "progressEvents": [
+                            {
+                              "type": "context_selected",
+                              "mode": "basic",
+                              "summary": "已选取 1 个课程片段作为回答依据。",
+                              "metrics": {"textUnitCount": 1},
+                              "evidence": [{"kind": "text_unit", "title": "操作系统教材"}]
+                            }
+                          ],
+                          "streamEventSeq": 8
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        GraphRagTaskClient client = new GraphRagTaskClient(builder, "http://127.0.0.1:8012", Duration.ofSeconds(5));
+        Optional<GraphRagTaskSnapshot> snapshot = client.getTask("qt_progress");
+
+        assertThat(snapshot).isPresent();
+        assertThat(snapshot.get().progressEvents()).hasSize(1);
+        assertThat(snapshot.get().progressEvents().get(0).summary()).contains("课程片段");
+        assertThat(snapshot.get().progressEvents().get(0).metrics().get("textUnitCount")).isEqualTo(1);
+        assertThat(snapshot.get().progressEvents().get(0).evidence().get(0).get("title")).isEqualTo("操作系统教材");
         server.verify();
     }
 

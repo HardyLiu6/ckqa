@@ -119,6 +119,20 @@ class QaTaskEventStreamServiceTest {
             @SuppressWarnings("unchecked")
             Consumer<GraphRagTaskEvent> consumer = invocation.getArgument(2);
             consumer.accept(new GraphRagTaskEvent(
+                    "progress",
+                    objectMapper.readTree("""
+                            {
+                              "type": "context_selected",
+                              "mode": "basic",
+                              "summary": "已选取 1 个课程片段作为回答依据。",
+                              "metrics": {"textUnitCount": 1},
+                              "evidence": [{"kind": "text_unit", "title": "操作系统教材"}],
+                              "eventSeq": 12
+                            }
+                            """),
+                    12L
+            ));
+            consumer.accept(new GraphRagTaskEvent(
                     "delta",
                     objectMapper.readTree("{\"text\":\"死锁\",\"eventSeq\":13}"),
                     13L
@@ -138,6 +152,11 @@ class QaTaskEventStreamServiceTest {
         scheduledTask.get().run();
 
         then(graphRagTaskClient).should().streamTaskEvents(eq("qt_stream_1"), eq(12L), any());
+        assertThat(service.emitter.renderedEvents).anySatisfy(event -> {
+            assertThat(event).contains("id:12");
+            assertThat(event).contains("event:progress");
+            assertThat(event).contains("已选取 1 个课程片段");
+        });
         assertThat(service.emitter.renderedEvents).anySatisfy(event -> {
             assertThat(event).contains("id:13");
             assertThat(event).contains("event:delta");

@@ -148,6 +148,7 @@ test('消息与任务状态规范化为前端展示模型', () => {
       taskStatus: null,
       progressStage: null,
       latestLogs: [],
+      progressEvents: [],
       partialResponseText: '',
       streamEventSeq: 0,
       sources: [],
@@ -168,13 +169,26 @@ test('消息与任务状态规范化为前端展示模型', () => {
     taskId: 9001,
     taskStatus: 'running',
     progressStage: 'running',
-    latestLogs: ['started native streaming query task provider=native_graphrag', 42, ''],
+    latestLogs: [
+      {
+        type: 'context_selected',
+        mode: 'global',
+        summary: '已选取 3 份课程报告作为全局总结依据。',
+        metrics: { reportCount: 3 },
+        evidence: [{ kind: 'report', title: '操作系统第一章报告' }],
+      },
+      42,
+      '',
+    ],
     partialResponseText: '当前已经生成的部分回答',
     streamEventSeq: '12',
   })
   assert.equal(runningMessage.taskId, 9001)
   assert.equal(runningMessage.taskStatus, 'running')
-  assert.deepEqual(runningMessage.latestLogs, ['started native streaming query task provider=native_graphrag', '42'])
+  assert.deepEqual(runningMessage.latestLogs, ['已选取 3 份课程报告作为全局总结依据。', '42'])
+  assert.equal(runningMessage.progressEvents[0].type, 'context_selected')
+  assert.equal(runningMessage.progressEvents[0].metrics.reportCount, 3)
+  assert.equal(runningMessage.progressEvents[0].evidence[0].title, '操作系统第一章报告')
   assert.equal(runningMessage.partialResponseText, '当前已经生成的部分回答')
   assert.equal(runningMessage.streamEventSeq, 12)
 })

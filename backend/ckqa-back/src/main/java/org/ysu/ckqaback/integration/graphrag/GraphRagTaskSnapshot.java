@@ -13,6 +13,7 @@ public record GraphRagTaskSnapshot(
         boolean processAlive,
         LocalDateTime lastHeartbeatAt,
         List<String> latestLogs,
+        List<GraphRagProgressEventSnapshot> progressEvents,
         String resultText,
         String errorMessage,
         Integer returnCode,
@@ -51,6 +52,7 @@ public record GraphRagTaskSnapshot(
                 processAlive,
                 lastHeartbeatAt,
                 latestLogs,
+                List.of(),
                 resultText,
                 errorMessage,
                 returnCode,
@@ -91,6 +93,7 @@ public record GraphRagTaskSnapshot(
                 processAlive,
                 lastHeartbeatAt,
                 latestLogs,
+                List.of(),
                 resultText,
                 errorMessage,
                 returnCode,
@@ -111,6 +114,7 @@ public record GraphRagTaskSnapshot(
     }
 
     public GraphRagTaskSnapshot {
+        progressEvents = progressEvents == null ? List.of() : List.copyOf(progressEvents);
         sources = sources == null ? List.of() : List.copyOf(sources);
         historyApplied = Boolean.TRUE.equals(historyApplied);
         historyTurnsUsed = historyTurnsUsed == null ? 0 : historyTurnsUsed;

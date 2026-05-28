@@ -394,9 +394,8 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
             query_engine_strategy="local_history",
             conversation_history=[{"role": "user", "content": "上一轮"}],
         )
-        await asyncio.sleep(0.15)
 
-        snapshot = manager.get_snapshot(created.python_task_id)
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
         self.assertEqual(adapter_calls, 0)
         self.assertEqual(len(command_calls), 1)
         self.assertEqual(command_calls[0].mode, "global")
@@ -607,6 +606,21 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_streaming_task_publishes_filtered_delta_and_final_snapshot(self):
         async def streaming_runner(request: QueryTaskRequest):
+            yield type(
+                "Chunk",
+                (),
+                {
+                    "text": "",
+                    "event": "progress",
+                    "progress": {
+                        "type": "context_selected",
+                        "mode": "basic",
+                        "summary": "已选取 1 个课程片段作为回答依据。",
+                        "metrics": {"textUnitCount": 1},
+                        "evidence": [{"kind": "text_unit", "title": "操作系统教材", "snippet": "死锁"}],
+                    },
+                },
+            )()
             yield type("Chunk", (), {"text": "死锁"})()
             yield type("Chunk", (), {"text": "[Data: Sources (156)]"})()
             yield type("Chunk", (), {"text": "会导致进程无法推进。"})()
@@ -633,16 +647,73 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.streaming_provider, "native_graphrag")
         self.assertIsNone(snapshot.streaming_fallback_reason)
         self.assertIn("[已参考课程知识库]", snapshot.result_text)
+        self.assertEqual(snapshot.latest_logs[0]["type"], "context_selected")
+        self.assertIn("课程片段", snapshot.latest_logs[0]["summary"])
         self.assertEqual(snapshot.partial_result_text, "死锁会导致进程无法推进。")
         self.assertGreater(snapshot.stream_event_seq, 0)
 
         replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
         unsubscribe()
+        progress_events = [item for item in replay if item["event"] == "progress"]
+        self.assertEqual(progress_events[0]["data"]["type"], "context_selected")
+        self.assertEqual(progress_events[0]["data"]["evidence"][0]["title"], "操作系统教材")
         delta_text = "".join(item["data"].get("text", "") for item in replay if item["event"] == "delta")
         self.assertEqual(delta_text, "死锁会导致进程无法推进。")
         self.assertNotIn("[Data:", delta_text)
         self.assertTrue(all("seq" in item for item in replay))
         self.assertTrue(all(item["data"].get("eventSeq") == item["seq"] for item in replay))
+
+    async def test_native_streaming_progress_events_can_resume_after_event_seq(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            yield {
+                "event": "progress",
+                "progress": {
+                    "type": "map_started",
+                    "mode": "global",
+                    "summary": "正在汇总 2 组课程报告。",
+                    "metrics": {"reportGroupCount": 2},
+                    "evidence": [],
+                },
+            }
+            yield {"text": "第一段。"}
+            yield {
+                "event": "progress",
+                "progress": {
+                    "type": "reduce_started",
+                    "mode": "global",
+                    "summary": "正在综合课程报告形成回答。",
+                    "metrics": {},
+                    "evidence": [],
+                },
+            }
+            yield {"text": "第二段。"}
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: {},
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "global",
+            "解释操作系统",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        await asyncio.sleep(0.08)
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        first_progress_seq = next(item["seq"] for item in replay if item["event"] == "progress")
+
+        resumed, _, unsubscribe = manager.subscribe_events(created.python_task_id, after_event_seq=first_progress_seq)
+        unsubscribe()
+
+        self.assertNotEqual(resumed[0]["seq"], first_progress_seq)
+        self.assertEqual([item["event"] for item in resumed], ["delta", "progress", "delta", "status", "sources", "done"])
+        self.assertEqual(resumed[1]["data"]["type"], "reduce_started")
 
     async def test_subscribe_events_can_resume_after_event_seq(self):
         async def streaming_runner(request: QueryTaskRequest):

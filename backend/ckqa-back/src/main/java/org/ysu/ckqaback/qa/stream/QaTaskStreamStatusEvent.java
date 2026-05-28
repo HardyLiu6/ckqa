@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.qa.stream;
 
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
+import org.ysu.ckqaback.qa.dto.QaProgressEventResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ public record QaTaskStreamStatusEvent(
         String retrievalStatus,
         String mode,
         List<String> latestLogs,
+        List<QaProgressEventResponse> progressEvents,
         LocalDateTime startedAt,
         LocalDateTime lastHeartbeatAt,
         LocalDateTime finishedAt,
@@ -46,6 +48,7 @@ public record QaTaskStreamStatusEvent(
                 detail.getRetrievalStatus(),
                 detail.getMode(),
                 detail.getLatestLogs(),
+                detail.getProgressEvents(),
                 detail.getStartedAt(),
                 detail.getLastHeartbeatAt(),
                 detail.getFinishedAt(),

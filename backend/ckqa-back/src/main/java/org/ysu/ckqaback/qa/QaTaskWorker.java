@@ -235,14 +235,14 @@ public class QaTaskWorker {
                     QaMessages assistant = qaMessagesService.appendAssistantMessage(sessionId, snapshot.resultText());
                     qaSessionsService.touchLastMessageAt(sessionId);
                     persistSources(taskId, snapshot);
-                    qaRetrievalLogsService.markSuccess(taskId, assistant.getId(), joinLatestLogs(snapshot.latestLogs()), "success");
+                    qaRetrievalLogsService.markSuccess(taskId, assistant.getId(), serializeProgressEventsOrLogs(snapshot), "success");
                     triggerSummaryRefresh(sessionId);
                     triggerLearningMemoryCapture(task, assistant);
                     return;
                 }
 
                 if ("failed".equals(snapshot.taskStatus())) {
-                    qaRetrievalLogsService.markFailed(taskId, "failed", snapshot.errorMessage(), joinLatestLogs(snapshot.latestLogs()));
+                    qaRetrievalLogsService.markFailed(taskId, "failed", snapshot.errorMessage(), serializeProgressEventsOrLogs(snapshot));
                     return;
                 }
 
@@ -251,7 +251,7 @@ public class QaTaskWorker {
                             taskId,
                             "failed",
                             "Python 任务进程已结束但未返回终态",
-                            joinLatestLogs(snapshot.latestLogs())
+                            serializeProgressEventsOrLogs(snapshot)
                     );
                     return;
                 }
@@ -259,7 +259,7 @@ public class QaTaskWorker {
                 LocalDateTime heartbeatAt = snapshot.lastHeartbeatAt() == null ? snapshot.startedAt() : snapshot.lastHeartbeatAt();
                 if (heartbeatAt != null
                         && Duration.between(heartbeatAt, LocalDateTime.now(clock)).compareTo(taskStaleThreshold) > 0) {
-                    qaRetrievalLogsService.markFailed(taskId, "stale", timeoutMessage, joinLatestLogs(snapshot.latestLogs()));
+                    qaRetrievalLogsService.markFailed(taskId, "stale", timeoutMessage, serializeProgressEventsOrLogs(snapshot));
                     return;
                 }
 
@@ -267,7 +267,7 @@ public class QaTaskWorker {
                     Thread.sleep(taskPollInterval.toMillis());
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    qaRetrievalLogsService.markFailed(taskId, "failed", "Java 后台任务被中断", joinLatestLogs(snapshot.latestLogs()));
+                    qaRetrievalLogsService.markFailed(taskId, "failed", "Java 后台任务被中断", serializeProgressEventsOrLogs(snapshot));
                     return;
                 }
             }
@@ -276,7 +276,7 @@ public class QaTaskWorker {
                     taskId,
                     "failed",
                     exception.getMessage() == null ? "Java 后台任务执行失败" : exception.getMessage(),
-                    latestSnapshot == null ? "" : joinLatestLogs(latestSnapshot.latestLogs())
+                    latestSnapshot == null ? "" : serializeProgressEventsOrLogs(latestSnapshot)
             );
             throw exception;
         }
@@ -287,6 +287,17 @@ public class QaTaskWorker {
             return "";
         }
         return String.join("\n", latestLogs);
+    }
+
+    private String serializeProgressEventsOrLogs(GraphRagTaskSnapshot snapshot) {
+        if (snapshot.progressEvents() != null && !snapshot.progressEvents().isEmpty()) {
+            try {
+                return OBJECT_MAPPER.writeValueAsString(snapshot.progressEvents());
+            } catch (JsonProcessingException ex) {
+                return joinLatestLogs(snapshot.latestLogs());
+            }
+        }
+        return joinLatestLogs(snapshot.latestLogs());
     }
 
     private void triggerSummaryRefresh(Long sessionId) {

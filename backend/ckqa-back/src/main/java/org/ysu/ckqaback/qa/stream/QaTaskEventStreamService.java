@@ -211,6 +211,15 @@ public class QaTaskEventStreamService {
     }
 
     private void forwardPythonEvent(SseEmitter emitter, GraphRagTaskEvent event, AtomicBoolean pythonDeltaForwarded) {
+        if ("progress".equals(event.eventName()) && event.data() != null) {
+            try {
+                Long eventSeq = resolveEventSeq(event);
+                sendEvent(emitter, "progress", event.data(), eventSeq);
+            } catch (IOException ex) {
+                log.debug("转发 Python QA progress 失败: {}", ex.getMessage());
+            }
+            return;
+        }
         if (!"delta".equals(event.eventName()) || event.data() == null || !event.data().has("text")) {
             return;
         }
@@ -220,10 +229,7 @@ public class QaTaskEventStreamService {
         }
         try {
             pythonDeltaForwarded.set(true);
-            Long eventSeq = event.eventSeq();
-            if (eventSeq == null && event.data().has("eventSeq")) {
-                eventSeq = event.data().get("eventSeq").asLong();
-            }
+            Long eventSeq = resolveEventSeq(event);
             if (eventSeq == null) {
                 sendEvent(emitter, "delta", Map.of("text", text));
             } else {
@@ -232,6 +238,14 @@ public class QaTaskEventStreamService {
         } catch (IOException ex) {
             log.debug("转发 Python QA delta 失败: {}", ex.getMessage());
         }
+    }
+
+    private Long resolveEventSeq(GraphRagTaskEvent event) {
+        Long eventSeq = event.eventSeq();
+        if (eventSeq == null && event.data() != null && event.data().has("eventSeq")) {
+            eventSeq = event.data().get("eventSeq").asLong();
+        }
+        return eventSeq;
     }
 
     private QaTaskDetailResponse resolveTerminalDetail(

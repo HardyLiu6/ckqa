@@ -182,6 +182,9 @@ export function selectReadyKnowledgeBase(knowledgeBases, selectedKnowledgeBaseId
 }
 
 export function normalizeQaMessage(message) {
+  const progressEvents = normalizeProgressEvents(
+    message.progressEvents ?? message.progress_events ?? message.latestLogs ?? message.latest_logs,
+  )
   return {
     id: message.id,
     role: message.role === 'ai' ? 'assistant' : message.role,
@@ -191,7 +194,8 @@ export function normalizeQaMessage(message) {
     taskId: message.taskId ?? null,
     taskStatus: message.taskStatus ?? null,
     progressStage: message.progressStage ?? null,
-    latestLogs: normalizeTaskLogs(message.latestLogs ?? message.latest_logs),
+    latestLogs: normalizeTaskLogs(message.latestLogs ?? message.latest_logs, progressEvents),
+    progressEvents,
     partialResponseText: String(message.partialResponseText ?? message.partial_response_text ?? ''),
     streamEventSeq: normalizeStreamEventSeq(message.streamEventSeq ?? message.stream_event_seq),
     sources: normalizeQaSources(message.sources),
@@ -204,11 +208,34 @@ export function normalizeStreamEventSeq(value) {
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
 }
 
-export function normalizeTaskLogs(logs) {
-  const list = Array.isArray(logs) ? logs : []
+export function normalizeProgressEvents(events) {
+  const list = Array.isArray(events) ? events : []
   return list
+    .filter((event) => event && typeof event === 'object')
+    .map((event) => ({
+      type: String(event.type ?? 'progress'),
+      mode: String(event.mode ?? ''),
+      summary: String(event.summary ?? '').trim(),
+      metrics: event.metrics && typeof event.metrics === 'object' ? { ...event.metrics } : {},
+      evidence: Array.isArray(event.evidence)
+        ? event.evidence.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }))
+        : [],
+      eventSeq: normalizeStreamEventSeq(event.eventSeq ?? event.event_seq),
+    }))
+    .filter((event) => event.summary)
+}
+
+export function normalizeTaskLogs(logs, progressEvents = null) {
+  const events = Array.isArray(progressEvents) ? progressEvents : normalizeProgressEvents(logs)
+  const list = Array.isArray(logs) ? logs : []
+  const legacyLogs = list
+    .filter((log) => !log || typeof log !== 'object')
     .map((log) => String(log ?? '').trim())
     .filter(Boolean)
+  if (events.length > 0) {
+    return [...new Set([...events.map((event) => event.summary), ...legacyLogs])]
+  }
+  return legacyLogs
 }
 
 export function normalizeQaMessageMode(message = {}) {

@@ -47,7 +47,7 @@ class QueryTaskSnapshot:
     started_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
     finished_at: datetime | None = None
-    latest_logs: list[str] | None = None
+    latest_logs: list[Any] | None = None
     result_text: str | None = None
     sources: list[dict[str, Any]] | None = None
     error_message: str | None = None
@@ -487,7 +487,7 @@ class QueryTaskManager:
             process_alive=True,
             started_at=utc_now(),
             last_heartbeat_at=utc_now(),
-            latest_logs=[started_log],
+            latest_logs=[],
             streaming_enabled=True,
             streaming_provider=request.stream_source,
         )
@@ -500,13 +500,24 @@ class QueryTaskManager:
         raw_chunks: list[str] = []
         visible_chunks: list[str] = []
         response_sources: list[dict[str, Any]] = []
+        progress_events: list[dict[str, Any]] = []
         delta_filter = _DataCitationDeltaFilter()
-        latest_progress_log = "waiting first streaming chunk"
         try:
             stream_result = self._native_streaming_runner(request)
             if inspect.isawaitable(stream_result):
                 stream_result = await stream_result
             async for chunk in stream_result:
+                progress_event = _stream_chunk_progress(chunk, request.mode)
+                if progress_event is not None:
+                    progress_events = _append_progress_event(progress_events, progress_event, self._max_log_lines)
+                    event_seq = self._publish_event(python_task_id, "progress", progress_event)
+                    await self._update_task(
+                        python_task_id,
+                        last_heartbeat_at=utc_now(),
+                        latest_logs=progress_events,
+                        stream_event_seq=event_seq,
+                    )
+                    continue
                 raw_text = _stream_chunk_text(chunk)
                 chunk_sources = _stream_chunk_sources(chunk)
                 if chunk_sources:
@@ -517,16 +528,11 @@ class QueryTaskManager:
                 visible = delta_filter.feed(raw_text)
                 if visible:
                     visible_chunks.append(visible)
-                    latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
                     event_seq = self._publish_event(python_task_id, "delta", {"text": visible})
                     await self._update_task(
                         python_task_id,
                         last_heartbeat_at=utc_now(),
-                        latest_logs=trim_log_tail(
-                            [started_log, latest_progress_log],
-                            max_lines=self._max_log_lines,
-                            max_chars=self._max_log_chars,
-                        ),
+                        latest_logs=progress_events,
                         streamed_text_length=sum(len(part) for part in visible_chunks),
                         partial_result_text="".join(visible_chunks),
                         stream_event_seq=event_seq,
@@ -534,16 +540,11 @@ class QueryTaskManager:
             tail = delta_filter.finish()
             if tail:
                 visible_chunks.append(tail)
-                latest_progress_log = f"streamed chunk count={len(visible_chunks)}"
                 event_seq = self._publish_event(python_task_id, "delta", {"text": tail})
                 await self._update_task(
                     python_task_id,
                     last_heartbeat_at=utc_now(),
-                    latest_logs=trim_log_tail(
-                        [started_log, latest_progress_log],
-                        max_lines=self._max_log_lines,
-                        max_chars=self._max_log_chars,
-                    ),
+                    latest_logs=progress_events,
                     streamed_text_length=sum(len(part) for part in visible_chunks),
                     partial_result_text="".join(visible_chunks),
                     stream_event_seq=event_seq,
@@ -557,17 +558,20 @@ class QueryTaskManager:
                 fallback_query=request.retrieval_query or request.prompt,
             )
             final_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else response_sources
-            finished_log = "finished native streaming query task"
+            if not progress_events:
+                progress_events = [_progress_event_dict(
+                    "completed",
+                    request.mode,
+                    "已完成课程知识库检索与回答生成。",
+                    {"streamedTextLength": sum(len(part) for part in visible_chunks)},
+                    [],
+                )]
             await self._update_task(
                 python_task_id,
                 task_status="success",
                 progress_stage="done",
                 process_alive=False,
-                latest_logs=trim_log_tail(
-                    [started_log, latest_progress_log, finished_log],
-                    max_lines=self._max_log_lines,
-                    max_chars=self._max_log_chars,
-                ),
+                latest_logs=progress_events,
                 result_text=resolved_answer.display_text,
                 sources=final_sources,
                 error_message=None,
@@ -792,6 +796,7 @@ def _snapshot_to_json(snapshot: QueryTaskSnapshot) -> dict[str, Any]:
     for field in fields(QueryTaskSnapshot):
         value = getattr(snapshot, field.name)
         payload[_camelize(field.name)] = _json_value(value)
+    payload["progressEvents"] = _normalize_progress_events(snapshot.latest_logs)
     return payload
 
 
@@ -919,6 +924,80 @@ def _stream_chunk_sources(chunk: Any) -> list[dict[str, Any]]:
     else:
         sources = getattr(chunk, "sources", None)
     return list(sources or []) if isinstance(sources, list) else []
+
+
+def _stream_chunk_progress(chunk: Any, mode: str) -> dict[str, Any] | None:
+    if isinstance(chunk, dict):
+        event_name = str(chunk.get("event") or "").strip()
+        progress = chunk.get("progress") or (chunk if event_name == "progress" else None)
+    else:
+        event_name = str(getattr(chunk, "event", "") or "").strip()
+        progress = getattr(chunk, "progress", None)
+    if event_name != "progress" or progress is None:
+        return None
+    if not isinstance(progress, dict):
+        return _progress_event_dict("progress", mode, str(progress), {}, [])
+    return _progress_event_dict(
+        str(progress.get("type") or "progress"),
+        str(progress.get("mode") or mode),
+        str(progress.get("summary") or "正在读取课程知识库检索过程。"),
+        progress.get("metrics") if isinstance(progress.get("metrics"), dict) else {},
+        progress.get("evidence") if isinstance(progress.get("evidence"), list) else [],
+    )
+
+
+def _append_progress_event(
+    events: list[dict[str, Any]],
+    event: dict[str, Any],
+    max_events: int,
+) -> list[dict[str, Any]]:
+    max_count = max(1, max_events)
+    return [*events, event][-max_count:]
+
+
+def _progress_event_dict(
+    event_type: str,
+    mode: str,
+    summary: str,
+    metrics: dict[str, Any] | None,
+    evidence: list[Any] | None,
+) -> dict[str, Any]:
+    return {
+        "type": str(event_type or "progress"),
+        "mode": str(mode or ""),
+        "summary": str(summary or "正在读取课程知识库检索过程。"),
+        "metrics": _json_object(metrics),
+        "evidence": [_json_object(item) for item in list(evidence or []) if isinstance(item, dict)],
+    }
+
+
+def _normalize_progress_events(logs: Any) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for item in logs or []:
+        if isinstance(item, dict):
+            events.append(_progress_event_dict(
+                str(item.get("type") or "progress"),
+                str(item.get("mode") or ""),
+                str(item.get("summary") or ""),
+                item.get("metrics") if isinstance(item.get("metrics"), dict) else {},
+                item.get("evidence") if isinstance(item.get("evidence"), list) else [],
+            ))
+    return events
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, item in value.items():
+        normalized[str(key)] = _json_scalar(item)
+    return normalized
+
+
+def _json_scalar(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 class _DataCitationDeltaFilter:

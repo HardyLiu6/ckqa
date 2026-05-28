@@ -520,7 +520,8 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "startedAt": _serialize_api_local_datetime(snapshot.started_at),
         "lastHeartbeatAt": _serialize_api_local_datetime(snapshot.last_heartbeat_at),
         "finishedAt": _serialize_api_local_datetime(snapshot.finished_at),
-        "latestLogs": list(snapshot.latest_logs or []),
+        "latestLogs": _progress_event_summaries(snapshot.latest_logs),
+        "progressEvents": [item for item in list(snapshot.latest_logs or []) if isinstance(item, dict)],
         "resultText": snapshot.result_text,
         "sources": list(snapshot.sources or []),
         "errorMessage": snapshot.error_message,
@@ -541,6 +542,20 @@ def _serialize_task_snapshot(snapshot) -> dict[str, object]:
         "partialResultText": snapshot.partial_result_text,
         "streamEventSeq": snapshot.stream_event_seq,
     }
+
+
+def _progress_event_summaries(logs) -> list[str]:
+    summaries: list[str] = []
+    for item in list(logs or []):
+        if isinstance(item, dict):
+            summary = str(item.get("summary") or "").strip()
+            if summary:
+                summaries.append(summary)
+        else:
+            text = str(item or "").strip()
+            if text:
+                summaries.append(text)
+    return summaries
 
 
 def _sse_event(event_name: str, payload: dict[str, Any], event_seq: int | None = None) -> str:

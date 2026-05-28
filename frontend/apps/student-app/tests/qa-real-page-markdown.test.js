@@ -30,11 +30,12 @@ test('真实问答页恢复历史会话时会重新接入运行中任务', () =>
 })
 
 test('真实问答页会展示可折叠的检索过程日志', () => {
-  assert.match(qaPageSource, /<details v-if="msg\.latestLogs\?\.length" class="process-cards">/)
-  assert.match(qaPageSource, /<details v-if="pendingProcessLogs\.length" class="process-cards process-cards-pending" open>/)
-  assert.match(qaPageSource, /formatTaskLogLine\(logLine\)/)
-  assert.match(qaPageSource, /streamed chunk count=/)
-  assert.match(qaPageSource, /finished graphrag query --method/)
+  assert.match(qaPageSource, /<details v-if="msg\.progressEvents\?\.length" class="process-cards">/)
+  assert.match(qaPageSource, /<details v-if="pendingProcessEvents\.length" class="process-cards process-cards-pending" open>/)
+  assert.match(qaPageSource, /formatProgressSummary\(event\)/)
+  assert.match(qaPageSource, /progress\(payload\)/)
+  assert.doesNotMatch(qaPageSource, /步骤 \{\{ index \+ 1 \}\}/)
+  assert.doesNotMatch(qaPageSource, /streamed chunk count=/)
 })
 
 test('真实问答页在回答成功后刷新长期学习记忆列表', () => {

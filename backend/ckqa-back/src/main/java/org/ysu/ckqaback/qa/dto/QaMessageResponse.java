@@ -23,6 +23,7 @@ public class QaMessageResponse {
     private final String taskStatus;
     private final String progressStage;
     private final List<String> latestLogs;
+    private final List<QaProgressEventResponse> progressEvents;
     private final String partialResponseText;
     private final Long streamEventSeq;
     private final List<QaSourceResponse> sources;
@@ -40,6 +41,7 @@ public class QaMessageResponse {
             String taskStatus,
             String progressStage,
             List<String> latestLogs,
+            List<QaProgressEventResponse> progressEvents,
             String partialResponseText,
             Long streamEventSeq,
             List<QaSourceResponse> sources,
@@ -56,6 +58,7 @@ public class QaMessageResponse {
         this.taskStatus = taskStatus;
         this.progressStage = progressStage;
         this.latestLogs = latestLogs == null ? List.of() : List.copyOf(latestLogs);
+        this.progressEvents = progressEvents == null ? List.of() : List.copyOf(progressEvents);
         this.partialResponseText = partialResponseText;
         this.streamEventSeq = streamEventSeq == null ? 0L : streamEventSeq;
         this.sources = sources == null ? List.of() : List.copyOf(sources);
@@ -128,6 +131,7 @@ public class QaMessageResponse {
                 taskStatus,
                 progressStage,
                 List.of(),
+                List.of(),
                 null,
                 0L,
                 sources,
@@ -165,6 +169,7 @@ public class QaMessageResponse {
             String taskStatus,
             String progressStage,
             List<String> latestLogs,
+            List<QaProgressEventResponse> progressEvents,
             String partialResponseText,
             Long streamEventSeq,
             List<QaSourceResponse> sources,
@@ -182,11 +187,33 @@ public class QaMessageResponse {
                 taskStatus,
                 progressStage,
                 latestLogs,
+                progressEvents,
                 partialResponseText,
                 streamEventSeq,
                 sources,
                 feedback
         );
+    }
+
+    public static QaMessageResponse of(
+            Long id,
+            Long sessionId,
+            String role,
+            Integer sequenceNo,
+            String content,
+            LocalDateTime createdAt,
+            String mode,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            List<String> latestLogs,
+            String partialResponseText,
+            Long streamEventSeq,
+            List<QaSourceResponse> sources,
+            QaFeedbackResponse feedback
+    ) {
+        return of(id, sessionId, role, sequenceNo, content, createdAt, mode, taskId, taskStatus, progressStage,
+                latestLogs, List.of(), partialResponseText, streamEventSeq, sources, feedback);
     }
 
     public static QaMessageResponse fromEntity(QaMessages message) {

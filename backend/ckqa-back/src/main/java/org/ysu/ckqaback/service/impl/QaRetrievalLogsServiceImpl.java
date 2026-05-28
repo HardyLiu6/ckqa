@@ -2,6 +2,8 @@ package org.ysu.ckqaback.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -34,6 +36,7 @@ import java.util.function.Function;
 public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMapper, QaRetrievalLogs> implements QaRetrievalLogsService {
 
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Override
     public QaRetrievalLogs createPendingTask(
@@ -129,7 +132,7 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
         updateWrapper.eq(QaRetrievalLogs::getId, taskId)
                 .set(QaRetrievalLogs::getTaskStatus, snapshot.taskStatus())
                 .set(QaRetrievalLogs::getProgressStage, snapshot.progressStage())
-                .set(QaRetrievalLogs::getLatestLogs, joinLatestLogs(snapshot.latestLogs()))
+                .set(QaRetrievalLogs::getLatestLogs, serializeProgressEventsOrLogs(snapshot))
                 .set(QaRetrievalLogs::getPartialResponseText, snapshot.partialResultText())
                 .set(QaRetrievalLogs::getStreamEventSeq, snapshot.streamEventSeq())
                 .set(QaRetrievalLogs::getStartedAt, snapshot.startedAt())
@@ -263,6 +266,17 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             return "";
         }
         return String.join("\n", latestLogs);
+    }
+
+    private String serializeProgressEventsOrLogs(GraphRagTaskSnapshot snapshot) {
+        if (snapshot.progressEvents() != null && !snapshot.progressEvents().isEmpty()) {
+            try {
+                return OBJECT_MAPPER.writeValueAsString(snapshot.progressEvents());
+            } catch (JsonProcessingException ex) {
+                return joinLatestLogs(snapshot.latestLogs());
+            }
+        }
+        return joinLatestLogs(snapshot.latestLogs());
     }
 
     private String shortenMessage(String rawMessage) {

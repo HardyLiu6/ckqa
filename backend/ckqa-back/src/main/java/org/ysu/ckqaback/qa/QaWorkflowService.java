@@ -1,6 +1,8 @@
 package org.ysu.ckqaback.qa;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +40,7 @@ import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaProgressEventResponse;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
@@ -73,6 +76,8 @@ public class QaWorkflowService {
 
     private static final ZoneId SHANGHAI_ZONE = ZoneId.of("Asia/Shanghai");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
     private static final int ROUTING_SNAPSHOT_MAX_CHARS = 4000;
 
     private final QaSessionsService qaSessionsService;
@@ -573,6 +578,9 @@ public class QaWorkflowService {
                     List<QaSourceResponse> sources = "assistant".equals(message.getRole())
                             ? sourcesByAssistantMessage.getOrDefault(message.getId(), List.of())
                             : List.of();
+                    List<QaProgressEventResponse> progressEvents = task == null
+                            ? List.of()
+                            : parseProgressEvents(task.getLatestLogs());
                     return QaMessageResponse.of(
                             message.getId(),
                             message.getSessionId(),
@@ -584,7 +592,8 @@ public class QaWorkflowService {
                             task == null ? null : task.getId(),
                             userMessage && task != null ? task.getTaskStatus() : null,
                             userMessage && task != null ? task.getProgressStage() : null,
-                            task == null ? List.of() : splitLatestLogs(task.getLatestLogs()),
+                            latestLogSummaries(task == null ? null : task.getLatestLogs(), progressEvents),
+                            progressEvents,
                             userMessage && task != null ? task.getPartialResponseText() : null,
                             task == null ? 0L : task.getStreamEventSeq(),
                             sources,
@@ -651,7 +660,8 @@ public class QaWorkflowService {
             assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback, task.getQueryMode());
         }
 
-        List<String> latestLogs = splitLatestLogs(task.getLatestLogs());
+        List<QaProgressEventResponse> progressEvents = parseProgressEvents(task.getLatestLogs());
+        List<String> latestLogs = latestLogSummaries(task.getLatestLogs(), progressEvents);
         QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(task.getQueryMode());
         String contextStrategy = StringUtils.hasText(task.getContextStrategy()) ? task.getContextStrategy() : "none";
 
@@ -665,6 +675,7 @@ public class QaWorkflowService {
                 task.getQueryMode(),
                 task.getQueryText(),
                 latestLogs,
+                progressEvents,
                 task.getStartedAt(),
                 task.getLastHeartbeatAt(),
                 task.getFinishedAt(),
@@ -690,5 +701,55 @@ public class QaWorkflowService {
         return StringUtils.hasText(latestLogs)
                 ? Arrays.stream(latestLogs.split("\\R")).toList()
                 : List.of();
+    }
+
+    private List<String> latestLogSummaries(String latestLogs, List<QaProgressEventResponse> progressEvents) {
+        if (progressEvents != null && !progressEvents.isEmpty()) {
+            return progressEvents.stream()
+                    .map(QaProgressEventResponse::getSummary)
+                    .filter(StringUtils::hasText)
+                    .toList();
+        }
+        return splitLatestLogs(latestLogs);
+    }
+
+    private List<QaProgressEventResponse> parseProgressEvents(String latestLogs) {
+        if (!StringUtils.hasText(latestLogs)) {
+            return List.of();
+        }
+        String trimmed = latestLogs.trim();
+        if (!trimmed.startsWith("[")) {
+            return List.of();
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(trimmed);
+            if (!root.isArray()) {
+                return List.of();
+            }
+            java.util.ArrayList<QaProgressEventResponse> events = new java.util.ArrayList<>();
+            for (JsonNode item : root) {
+                if (!item.isObject()) {
+                    continue;
+                }
+                JsonNode metrics = item.get("metrics");
+                JsonNode evidence = item.get("evidence");
+                List<Map<String, Object>> evidenceItems = evidence != null && evidence.isArray()
+                        ? java.util.stream.StreamSupport.stream(evidence.spliterator(), false)
+                        .filter(JsonNode::isObject)
+                        .map(node -> OBJECT_MAPPER.convertValue(node, MAP_TYPE))
+                        .toList()
+                        : List.of();
+                events.add(QaProgressEventResponse.of(
+                        item.path("type").asText("progress"),
+                        item.path("mode").asText(""),
+                        item.path("summary").asText(""),
+                        metrics != null && metrics.isObject() ? OBJECT_MAPPER.convertValue(metrics, MAP_TYPE) : Map.of(),
+                        evidenceItems
+                ));
+            }
+            return events;
+        } catch (JsonProcessingException ex) {
+            return List.of();
+        }
     }
 }

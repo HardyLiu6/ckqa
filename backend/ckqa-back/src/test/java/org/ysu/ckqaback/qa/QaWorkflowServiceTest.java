@@ -1178,7 +1178,17 @@ class QaWorkflowServiceTest {
         task.setQueryMode("global");
         task.setTaskStatus("running");
         task.setProgressStage("running");
-        task.setLatestLogs("started native streaming query task provider=native_graphrag\nstreamed chunk count=2");
+        task.setLatestLogs("""
+                [
+                  {
+                    "type": "context_selected",
+                    "mode": "global",
+                    "summary": "已选取 3 份课程报告作为全局总结依据。",
+                    "metrics": {"reportCount": 3},
+                    "evidence": [{"kind": "report", "title": "操作系统第一章报告"}]
+                  }
+                ]
+                """);
         task.setPartialResponseText("当前已经生成的部分回答");
         task.setStreamEventSeq(12L);
 
@@ -1197,20 +1207,18 @@ class QaWorkflowServiceTest {
         assertThat(responses.get(0).getProgressStage()).isEqualTo("running");
         assertThat(responses.get(0).getMode()).isEqualTo("global");
         assertThat(responses.get(0).getTaskId()).isEqualTo(9001L);
-        assertThat(responses.get(0).getLatestLogs()).containsExactly(
-                "started native streaming query task provider=native_graphrag",
-                "streamed chunk count=2"
-        );
+        assertThat(responses.get(0).getLatestLogs()).containsExactly("已选取 3 份课程报告作为全局总结依据。");
+        assertThat(responses.get(0).getProgressEvents()).hasSize(1);
+        assertThat(responses.get(0).getProgressEvents().get(0).getType()).isEqualTo("context_selected");
+        assertThat(responses.get(0).getProgressEvents().get(0).getMetrics().get("reportCount")).isEqualTo(3);
         assertThat(responses.get(0).getPartialResponseText()).isEqualTo("当前已经生成的部分回答");
         assertThat(responses.get(0).getStreamEventSeq()).isEqualTo(12L);
         assertThat(responses.get(1).getTaskStatus()).isNull();
         assertThat(responses.get(1).getProgressStage()).isNull();
         assertThat(responses.get(1).getMode()).isEqualTo("global");
         assertThat(responses.get(1).getTaskId()).isEqualTo(9001L);
-        assertThat(responses.get(1).getLatestLogs()).containsExactly(
-                "started native streaming query task provider=native_graphrag",
-                "streamed chunk count=2"
-        );
+        assertThat(responses.get(1).getLatestLogs()).containsExactly("已选取 3 份课程报告作为全局总结依据。");
+        assertThat(responses.get(1).getProgressEvents()).hasSize(1);
         assertThat(responses.get(1).getPartialResponseText()).isNull();
         assertThat(responses.get(1).getStreamEventSeq()).isEqualTo(12L);
         assertThat(responses.get(1).getSources()).hasSize(1);
@@ -1247,7 +1255,17 @@ class QaWorkflowServiceTest {
         task.setProgressStage("running");
         task.setQueryMode("drift");
         task.setQueryText("请用 drift 模式回答");
-        task.setLatestLogs("drift still running");
+        task.setLatestLogs("""
+                [
+                  {
+                    "type": "reduce_started",
+                    "mode": "drift",
+                    "summary": "正在综合 DRIFT 检索到的课程上下文。",
+                    "metrics": {},
+                    "evidence": []
+                  }
+                ]
+                """);
         task.setPartialResponseText("drift 已生成的部分回答");
         task.setStreamEventSeq(18L);
         task.setMemoryApplied(true);
@@ -1272,6 +1290,9 @@ class QaWorkflowServiceTest {
         assertThat(response.getMemorySizeEstimate()).isEqualTo(88);
         assertThat(response.getPartialResponseText()).isEqualTo("drift 已生成的部分回答");
         assertThat(response.getStreamEventSeq()).isEqualTo(18L);
+        assertThat(response.getLatestLogs()).containsExactly("正在综合 DRIFT 检索到的课程上下文。");
+        assertThat(response.getProgressEvents()).hasSize(1);
+        assertThat(response.getProgressEvents().get(0).getType()).isEqualTo("reduce_started");
     }
 
     private KnowledgeBases buildKnowledgeBase() {
