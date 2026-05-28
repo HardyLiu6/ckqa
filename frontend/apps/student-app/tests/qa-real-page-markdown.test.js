@@ -30,12 +30,24 @@ test('真实问答页恢复历史会话时会重新接入运行中任务', () =>
 })
 
 test('真实问答页会展示可折叠的检索过程日志', () => {
-  assert.match(qaPageSource, /<details v-if="msg\.progressEvents\?\.length" class="process-cards">/)
-  assert.match(qaPageSource, /<details v-if="pendingProcessEvents\.length" class="process-cards process-cards-pending" open>/)
-  assert.match(qaPageSource, /formatProgressSummary\(event\)/)
+  assert.match(qaPageSource, /import QaRetrievalTrace from '\.\/QaRetrievalTrace\.vue'/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:events="msg\.progressEvents"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:events="pendingProcessEvents"/)
+  assert.match(qaPageSource, /:default-open="!pendingTask\.streamText"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*<QaMarkdownContent[\s\S]*:content="pendingTask\.streamText"/)
   assert.match(qaPageSource, /progress\(payload\)/)
   assert.doesNotMatch(qaPageSource, /步骤 \{\{ index \+ 1 \}\}/)
   assert.doesNotMatch(qaPageSource, /streamed chunk count=/)
+})
+
+test('真实问答页流式输出时尊重用户滚动位置', () => {
+  assert.match(qaPageSource, /@scroll="handleMainScroll"/)
+  assert.match(qaPageSource, /followLatestAnswerIfPinned/)
+  assert.match(qaPageSource, /handleJumpToLatest/)
+  assert.match(qaPageSource, /回到最新回答/)
+  const deltaBlock = qaPageSource.match(/delta\(payload\) \{[\s\S]*?\n    \},\n    sources\(payload\)/)?.[0] ?? ''
+  assert.match(deltaBlock, /followLatestAnswerIfPinned\(\)/)
+  assert.doesNotMatch(deltaBlock, /scrollToBottom\(\)/)
 })
 
 test('真实问答页在回答成功后刷新长期学习记忆列表', () => {

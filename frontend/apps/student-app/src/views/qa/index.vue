@@ -56,6 +56,12 @@ import {
   withoutQaSessionQuery,
 } from './qa-route-query-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
+import QaRetrievalTrace from './QaRetrievalTrace.vue'
+import {
+  isNearScrollBottom,
+  resolveAutoScrollAfterUserScroll,
+  shouldAutoFollowNewContent,
+} from './qa-scroll-model'
 import {
   isTerminalTaskStatus,
   hasActiveIndexChanged,
@@ -124,6 +130,8 @@ const feedbackSubmittingMessageId = ref(null)
 const errorMessage = ref('')
 const statusMessage = ref('')
 const memoryErrorMessage = ref('')
+const autoScrollPinned = ref(true)
+const showJumpToLatest = ref(false)
 let pollTimer = null
 let taskStreamController = null
 let knowledgeBaseLoadRequestId = 0
@@ -518,7 +526,7 @@ async function send() {
     const domainGuardHint = domainGuardResult.statusMessage ? `${domainGuardResult.statusMessage}。` : ''
     statusMessage.value = `${domainGuardHint}${submitStatus}${confidenceHint}`
     input.value = ''
-    await scrollToBottom()
+    await scrollToBottom({ force: true })
     startTaskStream(session.id, submission.taskId, submission)
   } catch (error) {
     errorMessage.value = error?.message || '问答请求失败，请稍后重试'
@@ -880,7 +888,7 @@ async function restoreSessionFromQuery(routeSessionId = normalizeQaRouteQuery(ro
         ? '已恢复上次未完成任务的部分回答和检索过程，可以继续提问'
         : (activeSessionReadOnlyMessage.value || '已恢复历史会话，可以继续提问')
     }
-    await scrollToBottom()
+    await scrollToBottom({ force: true, behavior: 'auto' })
   } catch (error) {
     if (isCurrentSessionRestore(requestId, sessionId)) {
       errorMessage.value = error?.message || '历史会话恢复失败'
@@ -1168,7 +1176,7 @@ function startTaskStream(sessionId, taskId, submission) {
         lastStreamEventSeq: eventSeq || lastEventSeq,
         streamEventSeq: eventSeq || lastEventSeq,
       }
-      scrollToBottom()
+      followLatestAnswerIfPinned()
     },
     sources(payload) {
       if (!isCurrentStream()) {
@@ -1211,7 +1219,7 @@ function startTaskStream(sessionId, taskId, submission) {
       }
       statusMessage.value = `回答已生成。${resolveContextStatusText(pendingTask.value || payload)}。${resolveMemoryStatusText(pendingTask.value || payload)}`
       pendingTask.value = null
-      await scrollToBottom()
+      await followLatestAnswerIfPinned()
     },
     error(payloadOrError) {
       if (!isCurrentStream()) {
@@ -1283,7 +1291,7 @@ async function pollTask(sessionId, taskId) {
       }
       statusMessage.value = `回答已生成。${resolveContextStatusText(detail)}。${resolveMemoryStatusText(detail)}`
       pendingTask.value = null
-      await scrollToBottom()
+      await followLatestAnswerIfPinned()
       return
     }
 
@@ -1437,9 +1445,54 @@ async function refreshScope() {
   }
 }
 
-async function scrollToBottom() {
+function readMainScrollMetrics() {
+  const el = mainRef.value
+  if (!el) {
+    return null
+  }
+  return {
+    scrollTop: el.scrollTop,
+    clientHeight: el.clientHeight,
+    scrollHeight: el.scrollHeight,
+  }
+}
+
+function handleMainScroll() {
+  const state = resolveAutoScrollAfterUserScroll(readMainScrollMetrics())
+  autoScrollPinned.value = state.autoScrollPinned
+  if (state.autoScrollPinned) {
+    showJumpToLatest.value = false
+  }
+}
+
+async function scrollToBottom(options = {}) {
+  const { force = false, behavior = 'smooth' } = options
   await nextTick()
-  mainRef.value?.scrollTo({ top: mainRef.value.scrollHeight, behavior: 'smooth' })
+  const el = mainRef.value
+  if (!el) {
+    return
+  }
+  el.scrollTo({ top: el.scrollHeight, behavior })
+  if (force || isNearScrollBottom(readMainScrollMetrics())) {
+    autoScrollPinned.value = true
+    showJumpToLatest.value = false
+  }
+}
+
+async function followLatestAnswerIfPinned() {
+  await nextTick()
+  if (shouldAutoFollowNewContent({
+    autoScrollPinned: autoScrollPinned.value,
+    metrics: readMainScrollMetrics(),
+  })) {
+    await scrollToBottom({ behavior: 'auto' })
+    return
+  }
+  showJumpToLatest.value = true
+}
+
+async function handleJumpToLatest() {
+  await scrollToBottom({ force: true })
 }
 
 function autoResizeInput(event) {
@@ -1520,26 +1573,6 @@ function mergeProgressEvents(currentEvents, incomingEvents) {
   return merged.slice(-12)
 }
 
-function formatProgressSummary(event) {
-  return event?.summary || ''
-}
-
-function progressEvidenceLabel(event) {
-  const count = Array.isArray(event?.evidence) ? event.evidence.length : 0
-  if (!count) {
-    return ''
-  }
-  return `关联依据 ${count} 条`
-}
-
-function progressEvidenceTitle(item) {
-  return item?.title || item?.sourceFile || item?.source_file || item?.id || item?.ref || '课程依据'
-}
-
-function progressEvidenceSnippet(item) {
-  return item?.snippet || item?.summary || item?.text || ''
-}
-
 function estimateLearningMemoryChars() {
   return learningMemoryItems.value.reduce((total, item) => total + String(item.memoryText ?? '').length, 0)
 }
@@ -1605,7 +1638,7 @@ function sourceTypeLabel(source) {
 <template>
   <div class="qa-ask-page">
     <!-- 主对话区 -->
-    <div ref="mainRef" class="qa-main" aria-live="polite">
+    <div ref="mainRef" class="qa-main" aria-live="polite" @scroll="handleMainScroll">
       <!-- 空态占位（让 composer 居中） -->
       <div v-if="isEmpty" class="empty-spacer"></div>
 
@@ -1634,6 +1667,10 @@ function sourceTypeLabel(source) {
                 {{ messageModeLabel(msg) }}
               </ModuleTag>
             </div>
+            <QaRetrievalTrace
+              :events="msg.progressEvents"
+              :mode-label="messageModeLabel(msg)"
+            />
             <QaMarkdownContent :content="msg.content" />
             <details v-if="msg.sources?.length" class="source-cards">
               <summary>参考来源 {{ msg.sources.length }}</summary>
@@ -1650,27 +1687,6 @@ function sourceTypeLabel(source) {
                   </div>
                   <div v-if="sourceMeta(source)" class="source-card-meta">{{ sourceMeta(source) }}</div>
                   <p v-if="source.snippet" class="source-snippet">{{ source.snippet }}</p>
-                </li>
-              </ol>
-            </details>
-            <details v-if="msg.progressEvents?.length" class="process-cards">
-              <summary>检索过程 {{ msg.progressEvents.length }}</summary>
-              <ol class="process-list">
-                <li
-                  v-for="(event, index) in msg.progressEvents"
-                  :key="`${msg.id}-process-${index}`"
-                  class="process-item"
-                >
-                  <span class="process-step">{{ progressEvidenceLabel(event) || messageModeLabel(msg) }}</span>
-                  <span class="process-log">{{ formatProgressSummary(event) }}</span>
-                  <span v-if="event.evidence?.length" class="process-evidence">
-                    <span
-                      v-for="(item, evidenceIndex) in event.evidence.slice(0, 3)"
-                      :key="`${msg.id}-process-${index}-evidence-${evidenceIndex}`"
-                    >
-                      {{ progressEvidenceTitle(item) }}<template v-if="progressEvidenceSnippet(item)">：{{ progressEvidenceSnippet(item) }}</template>
-                    </span>
-                  </span>
                 </li>
               </ol>
             </details>
@@ -1701,32 +1717,17 @@ function sourceTypeLabel(source) {
             <div class="pending-copy">
               {{ pendingTask.routeReason || pendingTask.timeoutMessage || '后端正在执行 GraphRAG 查询任务。' }}
             </div>
+            <QaRetrievalTrace
+              :events="pendingProcessEvents"
+              :mode-label="messageModeLabel(pendingTask)"
+              :default-open="!pendingTask.streamText"
+              live
+            />
             <QaMarkdownContent
               v-if="pendingTask.streamText"
               :content="pendingTask.streamText"
               class="pending-stream-content"
             />
-            <details v-if="pendingProcessEvents.length" class="process-cards process-cards-pending" open>
-              <summary>检索过程 {{ pendingProcessEvents.length }}</summary>
-              <ol class="process-list">
-                <li
-                  v-for="(event, index) in pendingProcessEvents"
-                  :key="`pending-process-${index}`"
-                  class="process-item"
-                >
-                  <span class="process-step">{{ progressEvidenceLabel(event) || messageModeLabel(pendingTask) }}</span>
-                  <span class="process-log">{{ formatProgressSummary(event) }}</span>
-                  <span v-if="event.evidence?.length" class="process-evidence">
-                    <span
-                      v-for="(item, evidenceIndex) in event.evidence.slice(0, 3)"
-                      :key="`pending-process-${index}-evidence-${evidenceIndex}`"
-                    >
-                      {{ progressEvidenceTitle(item) }}<template v-if="progressEvidenceSnippet(item)">：{{ progressEvidenceSnippet(item) }}</template>
-                    </span>
-                  </span>
-                </li>
-              </ol>
-            </details>
             <div class="msg-meta">
               <el-icon><Clock /></el-icon>
               <span v-if="pendingTask.streaming">模式 {{ pendingTask.mode }}，事件流连接中</span>
@@ -1735,6 +1736,14 @@ function sourceTypeLabel(source) {
           </GlassCard>
         </div>
       </template>
+      <button
+        v-if="showJumpToLatest"
+        class="jump-latest"
+        type="button"
+        @click="handleJumpToLatest"
+      >
+        回到最新回答
+      </button>
     </div>
 
     <!-- 底部 Composer -->
@@ -2030,22 +2039,6 @@ function sourceTypeLabel(source) {
 .source-type { flex: 0 0 auto; border-radius: 999px; background: rgba(147, 51, 234, 0.1); padding: 2px 7px; color: #7e22ce; font-size: 11px; font-weight: 800; }
 .source-card-meta { margin-top: 5px; color: #64748b; font-size: 11px; line-height: 1.55; }
 .source-snippet { margin: 7px 0 0; color: #475569; font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
-.process-cards { margin-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.18); padding-top: 10px; }
-.process-cards summary { width: max-content; cursor: pointer; color: #0f766e; font-size: 12px; font-weight: 800; }
-.process-cards-pending summary { color: var(--qa-teal); }
-.process-list { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
-.process-item {
-  display: grid;
-  gap: 5px;
-  border: 1px solid rgba(20, 184, 166, 0.18);
-  border-radius: $radius-md;
-  background: rgba(240, 253, 250, 0.9);
-  padding: 9px 10px;
-}
-.process-step { color: #0f766e; font-size: 11px; font-weight: 800; }
-.process-log { color: #334155; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.process-evidence { display: grid; gap: 3px; color: #64748b; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
-
 .message-feedback { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .feedback-action {
   height: 26px; padding: 0 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700;
@@ -2065,6 +2058,23 @@ function sourceTypeLabel(source) {
 .pending-head { display: inline-flex; align-items: center; gap: 8px; color: var(--qa-teal); font-size: 13px; font-weight: 800; }
 .pending-copy { margin-top: 8px; color: #475569; font-size: 13px; line-height: 1.65; }
 .pending-stream-content { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.18); }
+
+.jump-latest {
+  position: sticky;
+  bottom: 104px;
+  z-index: 8;
+  align-self: center;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+  color: #2563eb;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 14px;
+}
 
 .is-loading { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

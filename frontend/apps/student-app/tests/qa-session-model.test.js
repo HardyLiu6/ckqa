@@ -171,10 +171,17 @@ test('消息与任务状态规范化为前端展示模型', () => {
     progressStage: 'running',
     latestLogs: [
       {
-        type: 'context_selected',
+        type: 'retrieval_started',
         mode: 'global',
-        summary: '已选取 3 份课程报告作为全局总结依据。',
-        metrics: { reportCount: 3 },
+        summary: '正在请求课程整体脉络，推荐全局综述模式。',
+        metrics: { strategy: 'global' },
+        evidence: [],
+      },
+      {
+        type: 'answer_running',
+        mode: 'global',
+        summary: '仍在基于 3 份课程报告组织回答，已处理约 8 秒。',
+        metrics: { reportCount: 3, elapsedSeconds: 8 },
         evidence: [{ kind: 'report', title: '操作系统第一章报告' }],
       },
       42,
@@ -185,10 +192,15 @@ test('消息与任务状态规范化为前端展示模型', () => {
   })
   assert.equal(runningMessage.taskId, 9001)
   assert.equal(runningMessage.taskStatus, 'running')
-  assert.deepEqual(runningMessage.latestLogs, ['已选取 3 份课程报告作为全局总结依据。', '42'])
-  assert.equal(runningMessage.progressEvents[0].type, 'context_selected')
-  assert.equal(runningMessage.progressEvents[0].metrics.reportCount, 3)
-  assert.equal(runningMessage.progressEvents[0].evidence[0].title, '操作系统第一章报告')
+  assert.deepEqual(runningMessage.latestLogs, [
+    '正在请求课程整体脉络，推荐全局综述模式。',
+    '仍在基于 3 份课程报告组织回答，已处理约 8 秒。',
+    '42',
+  ])
+  assert.equal(runningMessage.progressEvents[0].type, 'retrieval_started')
+  assert.equal(runningMessage.progressEvents[1].type, 'answer_running')
+  assert.equal(runningMessage.progressEvents[1].metrics.reportCount, 3)
+  assert.equal(runningMessage.progressEvents[1].evidence[0].title, '操作系统第一章报告')
   assert.equal(runningMessage.partialResponseText, '当前已经生成的部分回答')
   assert.equal(runningMessage.streamEventSeq, 12)
 })
