@@ -244,7 +244,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             return _progress_event(
                 "map_running",
                 self._mode,
-                f"仍在汇总 {count} 组课程报告，已处理约 {elapsed} 秒；完成后会合并共同结论。",
+                f"仍在汇总 {count} 个课程报告批次，已处理约 {elapsed} 秒；完成后会合并共同结论。",
                 {**self._active_metrics, "elapsedSeconds": elapsed},
                 [],
             )
@@ -269,7 +269,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
         return None
 
     def mark_answer_started(self) -> None:
-        if self._active_phase == "answer":
+        if self._active_phase in {"answer", "reduce"}:
             self._active_phase = None
 
     def on_context(self, context: Any) -> None:
@@ -297,7 +297,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "map_started",
                 self._mode,
-                f"正在汇总 {count} 组课程报告，先提取与问题相关的要点。",
+                f"正在汇总 {count} 个课程报告批次，先提取与问题相关的要点。",
                 metrics,
                 [_context_item_to_evidence(item, "report_group") for item in list(map_response_contexts or [])[:5]],
             )
@@ -310,11 +310,23 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "map_finished",
                 self._mode,
-                f"已完成 {count} 组课程报告的初步归纳，准备合并共同结论。",
+                f"已完成 {count} 个课程报告批次的初步归纳，准备合并共同结论。",
                 {"mapResultCount": count},
                 [_context_item_to_evidence(item, "map_result") for item in list(map_response_outputs or [])[:5]],
             )
         )
+        if self._mode == "global":
+            metrics = {"mapResultCount": count}
+            self._set_active_phase("reduce", metrics)
+            self._emit(
+                _progress_event(
+                    "reduce_started",
+                    self._mode,
+                    "正在综合课程报告要点，形成最终回答。",
+                    metrics,
+                    [_context_item_to_evidence(item, "map_result") for item in list(map_response_outputs or [])[:5]],
+                )
+            )
 
     def on_reduce_response_start(self, reduce_response_context: Any) -> None:
         metrics, evidence = _context_metrics_and_evidence(reduce_response_context)
@@ -366,6 +378,8 @@ async def _stream_with_progress(
     queue: asyncio.Queue[NativeStreamingChunk | BaseException | object] = asyncio.Queue()
     done = object()
     heartbeat_seconds = _progress_heartbeat_seconds()
+    delta_chars = _stream_delta_chars()
+    delta_sleep_seconds = _stream_delta_sleep_seconds()
 
     def push_progress(event: dict[str, Any]) -> None:
         queue.put_nowait(NativeStreamingChunk(event="progress", progress=event))
@@ -378,7 +392,11 @@ async def _stream_with_progress(
                 text = str(chunk)
                 if text:
                     callbacks.mark_answer_started()
-                queue.put_nowait(NativeStreamingChunk(text=text))
+                parts = _split_stream_text(text, delta_chars)
+                for index, part in enumerate(parts):
+                    queue.put_nowait(NativeStreamingChunk(text=part))
+                    if delta_sleep_seconds > 0 and index < len(parts) - 1:
+                        await asyncio.sleep(delta_sleep_seconds)
         except Exception as exc:  # noqa: BLE001 - 透传给外层任务管理器处理回退
             queue.put_nowait(exc)
         finally:
@@ -471,6 +489,33 @@ def _progress_heartbeat_seconds() -> float | None:
     return value
 
 
+def _stream_delta_chars() -> int:
+    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_CHARS", "64")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = 64
+    return max(1, value)
+
+
+def _stream_delta_sleep_seconds() -> float:
+    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_SLEEP_SECONDS", "0.01")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 0.01
+    return max(0.0, value)
+
+
+def _split_stream_text(text: str, max_chars: int) -> list[str]:
+    if not text:
+        return []
+    limit = max(1, int(max_chars or 64))
+    if len(text) <= limit:
+        return [text]
+    return [text[index:index + limit] for index in range(0, len(text), limit)]
+
+
 def _context_metrics_and_evidence(context: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     sections = _context_sections(context)
     metrics: dict[str, Any] = {}
@@ -527,6 +572,8 @@ def _context_item_to_evidence(item: Any, kind: str) -> dict[str, Any]:
     if item is None:
         return {}
     if isinstance(item, str):
+        if kind == "report_group":
+            return _report_group_string_to_evidence(item)
         return {
             "kind": kind,
             "title": kind.replace("_", " "),
@@ -573,6 +620,46 @@ def _context_item_to_evidence(item: Any, kind: str) -> dict[str, Any]:
         "title": str(title),
         "snippet": _shorten(str(snippet), 180),
     }
+
+
+def _report_group_string_to_evidence(item: str) -> dict[str, Any]:
+    raw = str(item or "").strip()
+    content = raw.removeprefix("report group:").strip()
+    parts = [part.strip() for part in content.split("|") if part.strip()]
+    title = ""
+    snippet = ""
+    ref = None
+    rank_part = next((part for part in parts if part.casefold().startswith("rank ")), "")
+    if rank_part:
+        ref = rank_part.split(maxsplit=1)[-1].strip() or None
+        rank_index = parts.index(rank_part)
+        if len(parts) > rank_index + 1:
+            title = parts[rank_index + 1]
+    content_part = next((part for part in parts if part.startswith("#")), "")
+    if content_part:
+        snippet = content_part.lstrip("#").strip()
+        if not title:
+            title = snippet.split(" ", 1)[0]
+    if not title and len(parts) >= 2:
+        title = parts[1]
+    title = _clean_report_group_text(title or "课程报告批次")
+    snippet = _clean_report_group_text(snippet or raw)
+    evidence = {
+        "kind": "report_group",
+        "title": _shorten(title, 80),
+        "snippet": _shorten(snippet, 180),
+    }
+    if ref:
+        evidence["ref"] = ref
+    return evidence
+
+
+def _clean_report_group_text(text: str) -> str:
+    cleaned = str(text or "").strip()
+    cleaned = cleaned.removeprefix("#").strip()
+    cleaned = cleaned.replace("'", "").replace('"', "")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned
 
 
 def _source_to_evidence(source: dict[str, Any]) -> dict[str, Any]:

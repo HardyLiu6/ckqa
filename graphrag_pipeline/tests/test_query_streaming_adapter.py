@@ -156,9 +156,80 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         progress = [chunk.progress for chunk in chunks if chunk.event == "progress"]
         self.assertEqual([item["type"] for item in progress], ["retrieval_started", "map_started", "reduce_started"])
         self.assertIn("课程整体脉络", progress[0]["summary"])
-        self.assertIn("2 组课程报告", progress[1]["summary"])
+        self.assertIn("2 个课程报告批次", progress[1]["summary"])
         self.assertIn("综合", progress[2]["summary"])
         self.assertEqual(chunks[-1].text, "全局总结")
+
+    async def test_global_streaming_cleans_report_group_string_evidence(self):
+        async def fake_global(**kwargs):
+            callbacks = kwargs.get("callbacks")
+            self.assertIsNotNone(callbacks)
+            callback = callbacks[0] if isinstance(callbacks, list) else callbacks
+            callback.on_map_response_start([
+                (
+                    "report group: id|title|occurrence weight|content|rank "
+                    "175|'进程'核心概念及其资源管理与同步生态体系|0.15677966101694915|"
+                    "# '进程'核心概念及其资源管理与同步生态体系 本社区以操作系统核心实体“进程”为绝对中心，"
+                    "构建了一个高度内聚的知识生态网络。"
+                )
+            ])
+            yield "全局总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"global": fake_global},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("global"))]
+
+        map_started = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "map_started"
+        )
+        evidence = map_started["evidence"][0]
+        self.assertEqual(evidence["kind"], "report_group")
+        self.assertIn("进程", evidence["title"])
+        self.assertNotIn("id|title|occurrence", evidence["snippet"])
+        self.assertIn("知识生态网络", evidence["snippet"])
+
+    async def test_global_streaming_splits_large_answer_chunk(self):
+        async def fake_global(**kwargs):
+            yield "全局总结第一段。全局总结第二段。全局总结第三段。"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"global": fake_global},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch.dict(os.environ, {
+            "CKQA_GRAPHRAG_STREAM_DELTA_CHARS": "8",
+            "CKQA_GRAPHRAG_STREAM_DELTA_SLEEP_SECONDS": "0",
+        }), patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("global"))]
+
+        text_chunks = [chunk.text for chunk in chunks if chunk.text]
+        self.assertGreater(len(text_chunks), 1)
+        self.assertTrue(all(len(part) <= 8 for part in text_chunks))
+        self.assertEqual("".join(text_chunks), "全局总结第一段。全局总结第二段。全局总结第三段。")
 
     async def test_progress_callback_is_emitted_before_delayed_first_answer_token(self):
         async def fake_global(**kwargs):
@@ -195,7 +266,7 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_chunk.progress["type"], "retrieval_started")
         self.assertIn("课程整体脉络", first_chunk.progress["summary"])
         self.assertEqual(remaining_chunks[0].progress["type"], "map_started")
-        self.assertIn("2 组课程报告", remaining_chunks[0].progress["summary"])
+        self.assertIn("2 个课程报告批次", remaining_chunks[0].progress["summary"])
         self.assertEqual(remaining_chunks[-1].text, "全局总结")
 
     async def test_long_global_phase_emits_periodic_progress_heartbeat(self):
@@ -234,10 +305,60 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_chunk.progress["type"], "retrieval_started")
         self.assertEqual(second_chunk.event, "progress")
         self.assertEqual(second_chunk.progress["type"], "map_started")
-        self.assertIn("正在汇总 2 组课程报告", second_chunk.progress["summary"])
+        self.assertIn("正在汇总 2 个课程报告批次", second_chunk.progress["summary"])
         running_chunk = next(chunk for chunk in remaining_chunks if chunk.event == "progress" and chunk.progress["type"] == "map_running")
-        self.assertIn("仍在汇总 2 组课程报告", running_chunk.progress["summary"])
+        self.assertIn("仍在汇总 2 个课程报告批次", running_chunk.progress["summary"])
         self.assertEqual(remaining_chunks[-1].text, "全局总结")
+
+    async def test_global_streaming_infers_reduce_progress_after_map_before_first_token(self):
+        async def fake_global(**kwargs):
+            callbacks = kwargs.get("callbacks")
+            self.assertIsNotNone(callbacks)
+            callback = callbacks[0] if isinstance(callbacks, list) else callbacks
+            callback.on_map_response_start([
+                {"title": "操作系统第一章整体报告"},
+                {"title": "进程管理主题报告"},
+            ])
+            callback.on_map_response_end([
+                {"response": [{"answer": "进程管理负责调度。", "score": 80}]},
+                {"response": [{"answer": "同步互斥用于协作。", "score": 70}]},
+            ])
+            callback.on_context({
+                "reports": [
+                    {"title": "操作系统第一章整体报告", "summary": "OS 总体目标。"},
+                    {"title": "进程管理主题报告", "summary": "进程、线程、同步。"},
+                ]
+            })
+            await asyncio.sleep(0.08)
+            yield "全局总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"global": fake_global},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch.dict(os.environ, {"CKQA_GRAPHRAG_PROGRESS_HEARTBEAT_SECONDS": "0.02"}), \
+                patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("global"))]
+
+        progress = [chunk.progress for chunk in chunks if chunk.event == "progress"]
+        progress_types = [item["type"] for item in progress]
+        self.assertIn("reduce_started", progress_types)
+        self.assertIn("reduce_running", progress_types)
+        reduce_started = next(item for item in progress if item["type"] == "reduce_started")
+        self.assertIn("综合课程报告", reduce_started["summary"])
+        reduce_running = next(item for item in progress if item["type"] == "reduce_running")
+        self.assertIn("稍后会开始输出回答", reduce_running["summary"])
+        self.assertEqual(chunks[-1].text, "全局总结")
 
     async def test_local_streaming_emits_answer_running_with_context_metrics(self):
         async def fake_local(**kwargs):
