@@ -110,6 +110,15 @@
         <if test="request != null and request.reviewPriority != null and request.reviewPriority != ''">
             AND l.routing_review_priority = #{request.reviewPriority}
         </if>
+        <if test="request != null and request.keyword != null and request.keyword != ''">
+            AND (
+              c.course_name LIKE CONCAT('%', #{request.keyword}, '%')
+              OR kb.name LIKE CONCAT('%', #{request.keyword}, '%')
+              OR u.username LIKE CONCAT('%', #{request.keyword}, '%')
+              OR u.display_name LIKE CONCAT('%', #{request.keyword}, '%')
+              OR CAST(l.id AS CHAR) LIKE CONCAT('%', #{request.keyword}, '%')
+            )
+        </if>
         <if test="!adminScope">
             AND (
               c.access_policy = 'public'
@@ -128,6 +137,19 @@
 
     <select id="countLogs" resultType="long">
         SELECT COUNT(*)
+        <include refid="QaOperationFrom" />
+        <include refid="QaOperationWhere" />
+    </select>
+
+    <select id="selectSummary" resultType="org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse">
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN l.task_status = 'success' THEN 1 ELSE 0 END) AS success,
+          SUM(CASE WHEN l.task_status IN ('failed', 'stale') THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN l.routing_confidence_band = 'low_confidence' THEN 1 ELSE 0 END) AS lowConfidence,
+          SUM(CASE WHEN l.routing_review_priority IS NOT NULL
+                    AND l.routing_review_priority &lt;&gt; ''
+                    AND l.routing_review_priority &lt;&gt; 'normal' THEN 1 ELSE 0 END) AS needReview
         <include refid="QaOperationFrom" />
         <include refid="QaOperationWhere" />
     </select>
