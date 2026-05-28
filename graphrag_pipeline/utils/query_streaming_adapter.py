@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import asyncio
+import time
 from collections.abc import AsyncGenerator, Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,7 +13,7 @@ from typing import Any
 import pandas as pd
 
 from graphrag_pipeline.scripts.hybrid_qa.prompt_builder import build_hybrid_v0_basic_injection_prompt
-from graphrag_pipeline.scripts.hybrid_qa.types import EvidenceCandidate
+from graphrag_pipeline.scripts.hybrid_qa.types import EvidenceCandidate, HybridLayer
 from query_task_manager import QueryTaskRequest
 
 try:
@@ -92,6 +95,10 @@ class NativeGraphRagStreamingAdapter:
         query = request.retrieval_query or request.prompt
         hybrid_sources: list[dict[str, Any]] = []
         effective_mode = request.mode
+        yield NativeStreamingChunk(
+            event="progress",
+            progress=_retrieval_started_event(request.mode),
+        )
         if request.mode == "hybrid_v0":
             query, hybrid_sources = self._build_hybrid_basic_query(request, data_dir)
             effective_mode = "basic"
@@ -212,11 +219,58 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
     def __init__(self, mode: str) -> None:
         self._mode = mode
         self._events: list[dict[str, Any]] = []
+        self._event_sink: Callable[[dict[str, Any]], None] | None = None
+        self._active_phase: str | None = None
+        self._active_metrics: dict[str, Any] = {}
+        self._phase_started_at = time.monotonic()
 
     def drain(self) -> list[dict[str, Any]]:
         events = self._events
         self._events = []
         return events
+
+    def attach_sink(self, sink: Callable[[dict[str, Any]], None]) -> None:
+        self._event_sink = sink
+        for event in self.drain():
+            sink(event)
+
+    def detach_sink(self) -> None:
+        self._event_sink = None
+
+    def heartbeat_event(self) -> dict[str, Any] | None:
+        if self._active_phase == "map":
+            count = int(self._active_metrics.get("reportGroupCount") or 0)
+            elapsed = max(1, int(time.monotonic() - self._phase_started_at))
+            return _progress_event(
+                "map_running",
+                self._mode,
+                f"仍在汇总 {count} 组课程报告，已处理约 {elapsed} 秒；完成后会合并共同结论。",
+                {**self._active_metrics, "elapsedSeconds": elapsed},
+                [],
+            )
+        if self._active_phase == "reduce":
+            elapsed = max(1, int(time.monotonic() - self._phase_started_at))
+            return _progress_event(
+                "reduce_running",
+                self._mode,
+                f"仍在综合课程报告和片段，已处理约 {elapsed} 秒；稍后会开始输出回答。",
+                {**self._active_metrics, "elapsedSeconds": elapsed},
+                [],
+            )
+        if self._active_phase == "answer":
+            elapsed = max(1, int(time.monotonic() - self._phase_started_at))
+            return _progress_event(
+                "answer_running",
+                self._mode,
+                _answer_running_summary(self._active_metrics, elapsed),
+                {**self._active_metrics, "elapsedSeconds": elapsed},
+                [],
+            )
+        return None
+
+    def mark_answer_started(self) -> None:
+        if self._active_phase == "answer":
+            self._active_phase = None
 
     def on_context(self, context: Any) -> None:
         metrics, evidence = _context_metrics_and_evidence(context)
@@ -231,23 +285,28 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             )
         else:
             summary = "已构建课程知识库上下文，准备生成回答。"
-        self._events.append(_progress_event("context_selected", self._mode, summary, metrics, evidence))
+        self._emit(_progress_event("context_selected", self._mode, summary, metrics, evidence))
+        if self._mode in {"basic", "local", "hybrid_v0"}:
+            self._set_active_phase("answer", metrics)
 
     def on_map_response_start(self, map_response_contexts: list[Any]) -> None:
         count = len(map_response_contexts or [])
-        self._events.append(
+        metrics = {"reportGroupCount": count}
+        self._set_active_phase("map", metrics)
+        self._emit(
             _progress_event(
                 "map_started",
                 self._mode,
                 f"正在汇总 {count} 组课程报告，先提取与问题相关的要点。",
-                {"reportGroupCount": count},
+                metrics,
                 [_context_item_to_evidence(item, "report_group") for item in list(map_response_contexts or [])[:5]],
             )
         )
 
     def on_map_response_end(self, map_response_outputs: list[Any]) -> None:
         count = len(map_response_outputs or [])
-        self._events.append(
+        self._active_phase = None
+        self._emit(
             _progress_event(
                 "map_finished",
                 self._mode,
@@ -261,7 +320,8 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
         metrics, evidence = _context_metrics_and_evidence(reduce_response_context)
         if not metrics:
             metrics = {"contextCount": _safe_len(reduce_response_context)}
-        self._events.append(
+        self._set_active_phase("reduce", metrics)
+        self._emit(
             _progress_event(
                 "reduce_started",
                 self._mode,
@@ -272,7 +332,8 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
         )
 
     def on_reduce_response_end(self, reduce_response_output: str) -> None:
-        self._events.append(
+        self._active_phase = None
+        self._emit(
             _progress_event(
                 "reduce_finished",
                 self._mode,
@@ -285,18 +346,68 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
     def on_llm_new_token(self, token) -> None:  # noqa: ANN001 - GraphRAG callback 签名由上游定义
         return None
 
+    def _emit(self, event: dict[str, Any]) -> None:
+        if self._event_sink is not None:
+            self._event_sink(event)
+            return
+        self._events.append(event)
+
+    def _set_active_phase(self, phase: str, metrics: dict[str, Any]) -> None:
+        self._active_phase = phase
+        self._active_metrics = dict(metrics)
+        self._phase_started_at = time.monotonic()
+
 
 async def _stream_with_progress(
     search_function: Callable[..., AsyncGenerator[Any, None]],
     callbacks: _GraphRagProgressCallbacks,
     **kwargs: Any,
 ) -> AsyncGenerator[NativeStreamingChunk, None]:
-    async for chunk in search_function(**kwargs, callbacks=[callbacks]):
-        for event in callbacks.drain():
-            yield NativeStreamingChunk(event="progress", progress=event)
-        yield NativeStreamingChunk(text=str(chunk))
-    for event in callbacks.drain():
-        yield NativeStreamingChunk(event="progress", progress=event)
+    queue: asyncio.Queue[NativeStreamingChunk | BaseException | object] = asyncio.Queue()
+    done = object()
+    heartbeat_seconds = _progress_heartbeat_seconds()
+
+    def push_progress(event: dict[str, Any]) -> None:
+        queue.put_nowait(NativeStreamingChunk(event="progress", progress=event))
+
+    callbacks.attach_sink(push_progress)
+
+    async def produce() -> None:
+        try:
+            async for chunk in search_function(**kwargs, callbacks=[callbacks]):
+                text = str(chunk)
+                if text:
+                    callbacks.mark_answer_started()
+                queue.put_nowait(NativeStreamingChunk(text=text))
+        except Exception as exc:  # noqa: BLE001 - 透传给外层任务管理器处理回退
+            queue.put_nowait(exc)
+        finally:
+            for event in callbacks.drain():
+                queue.put_nowait(NativeStreamingChunk(event="progress", progress=event))
+            queue.put_nowait(done)
+
+    producer_task = asyncio.create_task(produce())
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=heartbeat_seconds)
+            except TimeoutError:
+                heartbeat = callbacks.heartbeat_event()
+                if heartbeat is not None:
+                    yield NativeStreamingChunk(event="progress", progress=heartbeat)
+                continue
+
+            if item is done:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        callbacks.detach_sink()
+        if not producer_task.done():
+            producer_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await producer_task
 
 
 def _progress_event(
@@ -313,6 +424,51 @@ def _progress_event(
         "metrics": _json_ready_dict(metrics or {}),
         "evidence": [item for item in list(evidence or []) if item],
     }
+
+
+def _retrieval_started_event(mode: str) -> dict[str, Any]:
+    summaries = {
+        "basic": "正在检索课程片段和向量匹配结果，准备构建回答依据。",
+        "local": "正在检索课程概念、关系和片段，准备构建局部上下文。",
+        "global": "正在请求课程整体脉络，推荐全局综述模式。",
+        "drift": "正在沿课程报告和概念线索展开追问式检索。",
+        "hybrid_v0": "正在检索混合证据，结合片段匹配和课程上下文。",
+    }
+    return _progress_event(
+        "retrieval_started",
+        mode,
+        summaries.get(mode, "正在读取课程知识库检索上下文。"),
+        {"strategy": mode},
+        [],
+    )
+
+
+def _answer_running_summary(metrics: dict[str, Any], elapsed: int) -> str:
+    text_units = int(metrics.get("textUnitCount") or 0)
+    entities = int(metrics.get("entityCount") or 0)
+    relationships = int(metrics.get("relationshipCount") or 0)
+    reports = int(metrics.get("reportCount") or 0)
+    if text_units and not entities and not relationships:
+        return f"仍在基于 {text_units} 个课程片段组织回答，已处理约 {elapsed} 秒。"
+    if entities or relationships:
+        return (
+            f"仍在基于 {entities} 个课程概念、{relationships} 条关系"
+            f"和 {text_units} 个课程片段组织回答，已处理约 {elapsed} 秒。"
+        )
+    if reports:
+        return f"仍在基于 {reports} 份课程报告组织回答，已处理约 {elapsed} 秒。"
+    return f"仍在基于课程知识库上下文组织回答，已处理约 {elapsed} 秒。"
+
+
+def _progress_heartbeat_seconds() -> float | None:
+    raw = os.getenv("CKQA_GRAPHRAG_PROGRESS_HEARTBEAT_SECONDS", "8")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 8.0
+    if value <= 0:
+        return None
+    return value
 
 
 def _context_metrics_and_evidence(context: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
