@@ -502,7 +502,6 @@ function queryStrategyText(row = {}) {
             :loading="loading || summaryLoading"
             :icon="RefreshCw"
             native-type="button"
-            :disabled="!hasActiveFilters && !loading"
             @click="resetFilters"
           >
             重置筛选
@@ -819,21 +818,32 @@ function queryStrategyText(row = {}) {
   font-size: 12px;
 }
 
-/* 在 ops-filters 内部覆盖 toolbar 的 flex 基准，使每个筛选项更紧凑 */
+/* 在 ops-filters 内部覆盖 toolbar 为 12 列网格，让两行整齐对齐 */
 .ops-filters :deep(.table-toolbar) {
-  row-gap: var(--ckqa-space-3);
+  display: grid;
+  /* 12 列基础网格；搜索 4 + 模式 2 + 状态 2 + 反馈 2 + 标签 2 = 12（第一行）
+     第二行：置信度 2 + 复核 2 + 日期 2×2 + 操作 4 = 12 */
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--ckqa-space-3);
+  align-items: center;
+}
+
+.ops-filters :deep(.table-toolbar-field--search) {
+  grid-column: span 4;
+  flex: initial;
+  max-width: none;
 }
 
 .ops-filters :deep(.table-toolbar-field--filter) {
-  flex: 1 1 180px;
-  min-width: 0;
-  max-width: 240px;
+  grid-column: span 2;
+  flex: initial;
+  max-width: none;
 }
 
 .ops-filters :deep(.table-toolbar-field--date) {
-  flex: 1 1 160px;
-  min-width: 0;
-  max-width: 200px;
+  grid-column: span 2;
+  flex: initial;
+  max-width: none;
 }
 
 .ops-filters :deep(.table-toolbar-field--filter .table-filter-select),
@@ -862,10 +872,11 @@ function queryStrategyText(row = {}) {
 }
 
 .table-toolbar-actions {
+  grid-column: span 4;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--ckqa-space-2);
-  margin-left: auto;
 }
 
 .ops-alert {
@@ -963,6 +974,25 @@ function queryStrategyText(row = {}) {
   .ops-overview {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  /* 中等屏幕：12 → 6 列网格，3 行布局更紧凑 */
+  .ops-filters :deep(.table-toolbar) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .ops-filters :deep(.table-toolbar-field--search) {
+    grid-column: span 6;
+  }
+
+  .ops-filters :deep(.table-toolbar-field--filter),
+  .ops-filters :deep(.table-toolbar-field--date) {
+    grid-column: span 2;
+  }
+
+  .table-toolbar-actions {
+    grid-column: span 6;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 960px) {
@@ -991,15 +1021,19 @@ function queryStrategyText(row = {}) {
     grid-template-columns: 1fr;
   }
 
+  /* 小屏：每个字段单独占一行 */
+  .ops-filters :deep(.table-toolbar) {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-filters :deep(.table-toolbar-field--search),
   .ops-filters :deep(.table-toolbar-field--filter),
   .ops-filters :deep(.table-toolbar-field--date) {
-    flex: 1 1 100%;
-    max-width: none;
+    grid-column: span 1;
   }
 
   .table-toolbar-actions {
-    margin-left: 0;
-    width: 100%;
+    grid-column: span 1;
     justify-content: flex-end;
   }
 }
