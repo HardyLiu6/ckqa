@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Copy, Download, Filter, RefreshCw, Search, Eye } from 'lucide-vue-next'
@@ -88,6 +88,42 @@ onMounted(() => {
   refreshAll()
 })
 
+/**
+ * 自动筛选：监听筛选条件变化即触发查询。
+ * - 关键字使用防抖，避免每个按键都触发请求
+ * - 其他选择类条件（select / date）即时生效
+ * - 通过 skipNextWatch 标记跳过重置 / 初始化后的回环
+ */
+const FILTER_DEBOUNCE_MS = 350
+let keywordTimer = null
+let skipNextWatch = false
+
+watch(
+  () => ({ ...filters }),
+  (next, prev) => {
+    if (skipNextWatch) {
+      skipNextWatch = false
+      return
+    }
+    const keywordChanged = (next.keyword ?? '') !== (prev?.keyword ?? '')
+    const otherChanged = Object.keys(next).some(
+      (key) => key !== 'keyword' && next[key] !== prev?.[key],
+    )
+    if (keywordChanged && !otherChanged) {
+      // 关键字单独变化时防抖
+      clearTimeout(keywordTimer)
+      keywordTimer = setTimeout(() => refreshAll(1), FILTER_DEBOUNCE_MS)
+      return
+    }
+    if (otherChanged) {
+      // 选择类条件即时生效
+      clearTimeout(keywordTimer)
+      refreshAll(1)
+    }
+  },
+  { deep: true },
+)
+
 /** 刷新当前页 + 概览统计；筛选 / 重置 / 顶部刷新都走这一入口。 */
 async function refreshAll(page = pagination.page) {
   await Promise.all([loadLogs(page), loadSummary()])
@@ -146,10 +182,14 @@ function activeFilters() {
 }
 
 function applyFilters() {
+  // 仍保留：搜索框 enter 立即提交（绕过 350ms 防抖）
+  clearTimeout(keywordTimer)
   refreshAll(1)
 }
 
 function resetFilters() {
+  // 重置时一次性清空，标记跳过 watch 触发，再手动刷新一次即可
+  skipNextWatch = true
   Object.assign(filters, {
     keyword: '',
     mode: '',
@@ -161,6 +201,7 @@ function resetFilters() {
     createdFrom: '',
     createdTo: '',
   })
+  clearTimeout(keywordTimer)
   refreshAll(1)
 }
 
@@ -316,96 +357,155 @@ function queryStrategyText(row = {}) {
       </article>
     </section>
 
-    <!-- 筛选与搜索：紧凑两行布局 -->
+    <!-- 筛选与搜索：复用系统 .table-toolbar 圆润胶囊样式 -->
     <section class="ops-filters" aria-label="问答运维筛选">
       <div class="filters-header">
         <div class="filters-title">
           <component :is="Filter" :size="16" />
           <span>筛选与搜索</span>
+          <span class="filters-auto-hint">条件变更即时生效</span>
         </div>
         <span v-if="hasActiveFilters" class="filters-hint">已应用自定义筛选条件</span>
       </div>
 
-      <!-- 第一行：关键字搜索 + 模式 + 任务状态 + 反馈 + 反馈标签 -->
-      <div class="filters-row">
-        <el-input
-          v-model="filters.keyword"
-          class="filter-search"
-          clearable
-          placeholder="搜索课程 / 知识库 / 学生 / 日志 ID"
-          :prefix-icon="Search"
-          @keyup.enter="applyFilters"
-        />
-        <el-select v-model="filters.mode" clearable placeholder="模式">
-          <el-option label="basic" value="basic" />
-          <el-option label="local" value="local" />
-          <el-option label="global" value="global" />
-          <el-option label="drift" value="drift" />
-          <el-option label="hybrid_v0" value="hybrid_v0" />
-        </el-select>
-        <el-select v-model="filters.taskStatus" clearable placeholder="任务状态">
-          <el-option label="成功" value="success" />
-          <el-option label="进行中" value="running" />
-          <el-option label="失败" value="failed" />
-          <el-option label="失效" value="stale" />
-        </el-select>
-        <el-select v-model="filters.feedbackRating" clearable placeholder="反馈">
-          <el-option label="有用" value="helpful" />
-          <el-option label="无用" value="unhelpful" />
-          <el-option label="待改进" value="needs_improvement" />
-        </el-select>
-        <el-select v-model="filters.feedbackTag" clearable placeholder="反馈标签">
-          <el-option label="来源不相关" value="source_irrelevant" />
-          <el-option label="太长" value="too_long" />
-          <el-option label="希望举例" value="wants_example" />
-          <el-option label="不清楚" value="unclear" />
-          <el-option label="不正确" value="incorrect" />
-        </el-select>
-      </div>
+      <div class="table-toolbar" role="group">
+        <label class="table-toolbar-field table-toolbar-field--search">
+          <el-input
+            v-model="filters.keyword"
+            class="table-search-input"
+            clearable
+            placeholder="搜索课程 / 知识库 / 学生 / 日志 ID"
+            :prefix-icon="Search"
+            @keyup.enter="applyFilters"
+          />
+        </label>
 
-      <!-- 第二行：路由置信度 + 复核优先级 + 日期区间 + 操作按钮 -->
-      <div class="filters-row">
-        <el-select v-model="filters.routingConfidenceBand" clearable placeholder="路由置信度">
-          <el-option label="高置信" value="high_confidence" />
-          <el-option label="中置信" value="medium_confidence" />
-          <el-option label="低置信" value="low_confidence" />
-          <el-option label="不确定" value="uncertain" />
-        </el-select>
-        <el-select v-model="filters.reviewPriority" clearable placeholder="复核优先级">
-          <el-option label="普通" value="normal" />
-          <el-option label="低置信度" value="low_confidence" />
-          <el-option label="Hybrid 未就绪" value="hybrid_not_ready" />
-        </el-select>
-        <el-date-picker
-          v-model="filters.createdFrom"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="开始日期"
-        />
-        <el-date-picker
-          v-model="filters.createdTo"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="结束日期"
-        />
-        <div class="filters-actions">
-          <el-button
-            class="ckqa-el-button ckqa-el-button--primary"
-            :loading="loading"
-            type="primary"
-            :icon="Search"
-            native-type="button"
-            @click="applyFilters"
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="info" effect="light">模式</el-tag>
+          <el-select
+            v-model="filters.mode"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
           >
-            筛选
-          </el-button>
+            <el-option label="全部" value="" />
+            <el-option label="basic" value="basic" />
+            <el-option label="local" value="local" />
+            <el-option label="global" value="global" />
+            <el-option label="drift" value="drift" />
+            <el-option label="hybrid_v0" value="hybrid_v0" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="primary" effect="light">状态</el-tag>
+          <el-select
+            v-model="filters.taskStatus"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="成功" value="success" />
+            <el-option label="进行中" value="running" />
+            <el-option label="失败" value="failed" />
+            <el-option label="失效" value="stale" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="success" effect="light">反馈</el-tag>
+          <el-select
+            v-model="filters.feedbackRating"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="有用" value="helpful" />
+            <el-option label="无用" value="unhelpful" />
+            <el-option label="待改进" value="needs_improvement" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="warning" effect="light">标签</el-tag>
+          <el-select
+            v-model="filters.feedbackTag"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="来源不相关" value="source_irrelevant" />
+            <el-option label="太长" value="too_long" />
+            <el-option label="希望举例" value="wants_example" />
+            <el-option label="不清楚" value="unclear" />
+            <el-option label="不正确" value="incorrect" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="success" effect="light">置信度</el-tag>
+          <el-select
+            v-model="filters.routingConfidenceBand"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="高置信" value="high_confidence" />
+            <el-option label="中置信" value="medium_confidence" />
+            <el-option label="低置信" value="low_confidence" />
+            <el-option label="不确定" value="uncertain" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--filter">
+          <el-tag class="table-toolbar-tag" type="danger" effect="light">复核</el-tag>
+          <el-select
+            v-model="filters.reviewPriority"
+            class="table-filter-select"
+            clearable
+            placeholder="全部"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="普通" value="normal" />
+            <el-option label="低置信度" value="low_confidence" />
+            <el-option label="Hybrid 未就绪" value="hybrid_not_ready" />
+          </el-select>
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--date">
+          <el-date-picker
+            v-model="filters.createdFrom"
+            class="table-filter-date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="开始日期"
+          />
+        </label>
+
+        <label class="table-toolbar-field table-toolbar-field--date">
+          <el-date-picker
+            v-model="filters.createdTo"
+            class="table-filter-date"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="结束日期"
+          />
+        </label>
+
+        <div class="table-toolbar-actions">
           <el-button
             class="ckqa-el-button ckqa-el-button--secondary"
+            :loading="loading || summaryLoading"
             :icon="RefreshCw"
             native-type="button"
+            :disabled="!hasActiveFilters && !loading"
             @click="resetFilters"
           >
-            重置
+            重置筛选
           </el-button>
         </div>
       </div>
@@ -457,12 +557,13 @@ function queryStrategyText(row = {}) {
             {{ row.displayName || row.username || row.userCode || row.userId || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="模式" width="120" align="center" header-align="center">
+        <el-table-column label="模式" width="140" align="center" header-align="center" class-name="col-nowrap">
           <template #default="{ row }">
             <span
               v-if="row.queryMode"
-              class="status-badge"
+              class="status-badge mode-badge"
               :data-tone="MODE_TONE[row.queryMode] || 'blocked'"
+              :title="row.queryMode"
             >
               {{ row.queryMode }}
             </span>
@@ -548,21 +649,16 @@ function queryStrategyText(row = {}) {
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
+      <!-- 分页：居中显示，左下角附"共 x 条"信息 -->
       <footer class="ops-pagination">
-        <span class="pagination-info">
-          共 <strong>{{ pagination.total }}</strong> 条
-          ·
-          第 <strong>{{ pagination.page }}</strong> / {{ pagination.pages || 1 }} 页
-        </span>
         <el-pagination
           background
-          layout="sizes, prev, pager, next, jumper"
+          layout="total, sizes, prev, pager, next, jumper"
           :current-page="pagination.page"
           :page-size="pagination.size"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          :pager-count="5"
+          :pager-count="7"
           :disabled="loading"
           @current-change="handlePageChange"
           @size-change="handlePageSizeChange"
@@ -684,14 +780,10 @@ function queryStrategyText(row = {}) {
   }
 }
 
-/* 筛选区：紧凑两行 */
+/* 筛选区：复用系统 .table-toolbar 圆润胶囊样式，仅做布局微调 */
 .ops-filters {
   display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-  border: 1px solid var(--ckqa-border);
-  border-radius: var(--ckqa-radius-md);
-  background: var(--ckqa-surface);
+  gap: 10px;
 }
 
 .filters-header {
@@ -699,6 +791,7 @@ function queryStrategyText(row = {}) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-left: 4px;
 }
 
 .filters-title {
@@ -710,39 +803,68 @@ function queryStrategyText(row = {}) {
   font-weight: 600;
 }
 
+.filters-auto-hint {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
+  color: var(--ckqa-accent);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
 .filters-hint {
   color: var(--ckqa-accent);
   font-size: 12px;
 }
 
-.filters-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+/* 在 ops-filters 内部覆盖 toolbar 的 flex 基准，使每个筛选项更紧凑 */
+.ops-filters :deep(.table-toolbar) {
+  row-gap: var(--ckqa-space-3);
 }
 
-/* 单元格基线宽度：让 flex 自动平铺，溢出再换行 */
-.filters-row :deep(.el-select),
-.filters-row :deep(.el-date-editor),
-.filters-row :deep(.el-input):not(.filter-search) {
+.ops-filters :deep(.table-toolbar-field--filter) {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 240px;
+}
+
+.ops-filters :deep(.table-toolbar-field--date) {
   flex: 1 1 160px;
-  min-width: 140px;
-  max-width: 220px;
+  min-width: 0;
+  max-width: 200px;
 }
 
-.filter-search {
-  /* 关键字搜索器更宽 */
-  flex: 2 1 260px;
-  min-width: 220px;
-  max-width: 380px;
+.ops-filters :deep(.table-toolbar-field--filter .table-filter-select),
+.ops-filters :deep(.table-toolbar-field--date .table-filter-date) {
+  width: 100%;
+  min-width: 0;
 }
 
-.filters-actions {
-  display: flex;
-  flex: 1 1 200px;
-  justify-content: flex-end;
-  gap: 8px;
+.ops-filters :deep(.table-filter-date.el-input .el-input__wrapper) {
+  border-radius: var(--ckqa-radius-full);
+  padding: 2px var(--ckqa-space-3);
+  background: var(--ckqa-surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ckqa-border) 80%, transparent);
+}
+
+.ops-filters :deep(.table-filter-date.el-input .el-input__wrapper:hover) {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--ckqa-accent) 32%, var(--ckqa-border)),
+    0 2px 6px color-mix(in srgb, var(--ckqa-accent) 8%, transparent);
+}
+
+.ops-filters :deep(.table-filter-date.el-input.is-focus .el-input__wrapper) {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ckqa-accent) 50%, transparent),
+    0 4px 10px color-mix(in srgb, var(--ckqa-accent) 14%, transparent);
+}
+
+.table-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ckqa-space-2);
   margin-left: auto;
 }
 
@@ -804,23 +926,35 @@ function queryStrategyText(row = {}) {
   flex-wrap: wrap;
 }
 
-/* 分页 */
+/* 模式徽章：等宽字体，最大宽度收敛，过长自动收缩 */
+.mode-badge {
+  max-width: 100%;
+  font-family: var(--ckqa-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 分页：居中显示 */
 .ops-pagination {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 4px;
+  justify-content: center;
+  padding: 12px 0 4px;
   color: var(--ckqa-text-muted);
   flex-wrap: wrap;
+  gap: 12px;
 
-  .pagination-info {
-    font-size: 13px;
-
-    strong {
-      color: var(--ckqa-text);
-      font-weight: 700;
-    }
+  :deep(.el-pagination) {
+    --el-pagination-bg-color: var(--ckqa-surface-muted);
+    --el-pagination-button-bg-color: var(--ckqa-surface-muted);
+    --el-pagination-hover-color: var(--ckqa-accent);
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
   }
 }
 
@@ -848,7 +982,7 @@ function queryStrategyText(row = {}) {
 
   .ops-pagination {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
   }
 }
 
@@ -857,17 +991,16 @@ function queryStrategyText(row = {}) {
     grid-template-columns: 1fr;
   }
 
-  .filters-row :deep(.el-select),
-  .filters-row :deep(.el-date-editor),
-  .filters-row :deep(.el-input):not(.filter-search) {
-    flex-basis: 100%;
+  .ops-filters :deep(.table-toolbar-field--filter),
+  .ops-filters :deep(.table-toolbar-field--date) {
+    flex: 1 1 100%;
     max-width: none;
   }
 
-  .filter-search,
-  .filters-actions {
-    flex-basis: 100%;
-    max-width: none;
+  .table-toolbar-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 </style>
