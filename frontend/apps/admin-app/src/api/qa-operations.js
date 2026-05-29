@@ -15,6 +15,28 @@ export async function getQaOperationsSummary(params = {}, client = http) {
   return unwrapApiResponse(await client.get('/qa-operations/logs/summary', { params }))
 }
 
+/**
+ * 下载扁平 CSV 样本：返回 Blob，调用方负责触发浏览器保存。
+ */
+export async function downloadQaOperationLogsCsv(params = {}, client = http) {
+  const response = await client.get('/qa-operations/logs/export.csv', {
+    params,
+    responseType: 'blob',
+  })
+  return response.data
+}
+
+/**
+ * 下载扁平 Excel (xlsx) 样本：返回 Blob，调用方负责触发浏览器保存。
+ */
+export async function downloadQaOperationLogsXlsx(params = {}, client = http) {
+  const response = await client.get('/qa-operations/logs/export.xlsx', {
+    params,
+    responseType: 'blob',
+  })
+  return response.data
+}
+
 export async function getQaOperationLog(retrievalLogId, client = http) {
   return unwrapApiResponse(await client.get(`/qa-operations/logs/${encodeURIComponent(retrievalLogId)}`))
 }

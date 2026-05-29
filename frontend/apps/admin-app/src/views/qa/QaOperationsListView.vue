@@ -2,10 +2,12 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Copy, Download, Filter, RefreshCw, Search, Eye } from 'lucide-vue-next'
+import { ChevronDown, Copy, Download, Filter, RefreshCw, Search, Eye } from 'lucide-vue-next'
 
 import StatusBadge from '../../components/common/StatusBadge.vue'
 import {
+  downloadQaOperationLogsCsv,
+  downloadQaOperationLogsXlsx,
   exportQaOperationLogs,
   getQaOperationsSummary,
   listQaOperationLogs,
@@ -236,31 +238,44 @@ async function copyLogId(row) {
   }
 }
 
-async function exportSamples() {
+async function exportSamples(format = 'json') {
   if (hasActiveFilters.value) {
     try {
-      await ElMessageBox.confirm('将按当前筛选条件导出问答样本，是否继续？', '导出确认', {
-        confirmButtonText: '继续导出',
-        cancelButtonText: '取消',
-        type: 'info',
-      })
+      const formatLabel = format === 'csv' ? 'CSV' : format === 'xlsx' ? 'Excel' : 'JSON'
+      await ElMessageBox.confirm(
+        `将按当前筛选条件导出问答样本（${formatLabel} 格式），是否继续？`,
+        '导出确认',
+        {
+          confirmButtonText: '继续导出',
+          cancelButtonText: '取消',
+          type: 'info',
+        },
+      )
     } catch {
       return
     }
   }
   exporting.value = true
   try {
+    const date = new Date().toISOString().slice(0, 10)
+    if (format === 'csv') {
+      const blob = await downloadQaOperationLogsCsv(buildParams(1))
+      triggerDownload(blob, `qa-operation-samples-${date}.csv`)
+      ElMessage.success('已导出 CSV 样本')
+      return
+    }
+    if (format === 'xlsx') {
+      const blob = await downloadQaOperationLogsXlsx(buildParams(1))
+      triggerDownload(blob, `qa-operation-samples-${date}.xlsx`)
+      ElMessage.success('已导出 Excel 样本')
+      return
+    }
+    // 默认：JSON 完整快照（含 sources / feedback / reviews 子表）
     const samples = await exportQaOperationLogs(buildParams(1))
-    const blob = new Blob([JSON.stringify(samples, null, 2)], {
-      type: 'application/json;charset=utf-8',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `qa-operation-samples-${new Date().toISOString().slice(0, 10)}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-    ElMessage.success(`已导出 ${Array.isArray(samples) ? samples.length : 0} 条样本`)
+    const json = JSON.stringify(samples, null, 2)
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+    triggerDownload(blob, `qa-operation-samples-${date}.json`)
+    ElMessage.success(`已导出 ${Array.isArray(samples) ? samples.length : 0} 条 JSON 样本`)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error?.message || '样本导出失败')
@@ -268,6 +283,25 @@ async function exportSamples() {
   } finally {
     exporting.value = false
   }
+}
+
+/**
+ * 触发浏览器下载：把 Blob 写到一个临时 anchor 并立即点击。
+ */
+function triggerDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+/** 下拉菜单点击分发 */
+function handleExportCommand(command) {
+  exportSamples(command)
 }
 
 function formatFeedbackSummary(summaryRow = {}) {
@@ -331,16 +365,39 @@ function queryStrategyText(row = {}) {
         >
           刷新
         </el-button>
-        <el-button
-          class="ckqa-el-button ckqa-el-button--primary"
-          type="primary"
-          :loading="exporting"
-          :icon="Download"
-          native-type="button"
-          @click="exportSamples"
+        <el-dropdown
+          trigger="click"
+          placement="bottom-end"
+          :disabled="exporting"
+          @command="handleExportCommand"
         >
-          导出样本
-        </el-button>
+          <el-button
+            class="ckqa-el-button ckqa-el-button--primary"
+            type="primary"
+            :loading="exporting"
+            native-type="button"
+          >
+            <component :is="Download" class="button-icon" :size="15" aria-hidden="true" />
+            导出样本
+            <component :is="ChevronDown" class="button-icon" :size="14" aria-hidden="true" />
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="xlsx">
+                <span class="export-menu-title">Excel (.xlsx)</span>
+                <span class="export-menu-hint">扁平表，便于人工查看与统计</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="csv">
+                <span class="export-menu-title">CSV (.csv)</span>
+                <span class="export-menu-hint">UTF-8 + BOM，跨工具兼容</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="json" divided>
+                <span class="export-menu-title">JSON (.json)</span>
+                <span class="export-menu-hint">完整快照，含来源与反馈</span>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </header>
 
@@ -1036,5 +1093,33 @@ function queryStrategyText(row = {}) {
     grid-column: span 1;
     justify-content: flex-end;
   }
+}
+</style>
+
+
+<!--
+  导出下拉菜单 dropdown 是被 Element Plus teleport 到 body 的，
+  scoped 样式无法命中；这里用普通 style 块定向到 .export-menu-* 类名，
+  没有副作用。
+-->
+<style>
+.el-dropdown-menu .el-dropdown-menu__item .export-menu-title {
+  display: block;
+  color: var(--ckqa-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.el-dropdown-menu .el-dropdown-menu__item .export-menu-hint {
+  display: block;
+  color: var(--ckqa-text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.el-dropdown-menu .el-dropdown-menu__item {
+  padding: 8px 16px;
 }
 </style>
