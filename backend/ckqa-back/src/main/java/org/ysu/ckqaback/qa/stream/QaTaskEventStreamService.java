@@ -211,6 +211,14 @@ public class QaTaskEventStreamService {
     }
 
     private void forwardPythonEvent(SseEmitter emitter, GraphRagTaskEvent event, AtomicBoolean pythonDeltaForwarded) {
+        if ("status".equals(event.eventName()) && event.data() != null) {
+            try {
+                sendEvent(emitter, "status", event.data(), resolveEventSeq(event));
+            } catch (IOException ex) {
+                log.debug("转发 Python QA status 失败: {}", ex.getMessage());
+            }
+            return;
+        }
         if ("progress".equals(event.eventName()) && event.data() != null) {
             try {
                 Long eventSeq = resolveEventSeq(event);

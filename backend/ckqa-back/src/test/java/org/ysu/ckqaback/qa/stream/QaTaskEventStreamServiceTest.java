@@ -165,6 +165,75 @@ class QaTaskEventStreamServiceTest {
     }
 
     @Test
+    void shouldForwardPythonStatusSnapshotWhenRestoredDbProgressIsStale() {
+        QaWorkflowService workflowService = mock(QaWorkflowService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        GraphRagTaskClient graphRagTaskClient = mock(GraphRagTaskClient.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        @SuppressWarnings("unchecked")
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
+        QaTaskStreamProperties properties = new QaTaskStreamProperties();
+        properties.setStatusIntervalSeconds(2L);
+
+        given(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(2L), eq(TimeUnit.SECONDS)))
+                .willAnswer(invocation -> {
+                    scheduledTask.set(invocation.getArgument(0));
+                    return scheduledFuture;
+                });
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningDetail());
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setPythonTaskId("qt_stream_1");
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        ObjectMapper objectMapper = new ObjectMapper();
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<GraphRagTaskEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new GraphRagTaskEvent(
+                    "status",
+                    objectMapper.readTree("""
+                            {
+                              "taskStatus": "running",
+                              "progressStage": "streaming",
+                              "latestLogs": ["仍在汇总 57 个课程报告批次，已处理约 64 秒；完成后会合并共同结论。"],
+                              "progressEvents": [
+                                {
+                                  "type": "map_running",
+                                  "mode": "global",
+                                  "summary": "仍在汇总 57 个课程报告批次，已处理约 64 秒；完成后会合并共同结论。",
+                                  "metrics": {"reportGroupCount": 57, "elapsedSeconds": 64},
+                                  "eventSeq": 38
+                                }
+                              ],
+                              "partialResultText": "",
+                              "streamEventSeq": 38
+                            }
+                            """),
+                    39L
+            ));
+            return null;
+        }).when(graphRagTaskClient).streamTaskEvents(eq("qt_stream_1"), eq(12L), any());
+
+        TestableQaTaskEventStreamService service = new TestableQaTaskEventStreamService(
+                workflowService,
+                retrievalLogsService,
+                graphRagTaskClient,
+                properties,
+                scheduler,
+                new SyncTaskExecutor()
+        );
+        service.openStream(5L, 9001L, 7L, 12L);
+        scheduledTask.get().run();
+
+        assertThat(service.emitter.renderedEvents).anySatisfy(event -> {
+            assertThat(event).contains("id:39");
+            assertThat(event).contains("event:status");
+            assertThat(event).contains("map_running");
+            assertThat(event).contains("已处理约 64 秒");
+        });
+    }
+
+    @Test
     void shouldNotReplayFallbackDeltasWhenResumingAfterPythonStreamSeq() {
         QaWorkflowService workflowService = mock(QaWorkflowService.class);
         QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
