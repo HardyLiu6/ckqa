@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Copy, Download, Filter, RefreshCw, Search, Eye } from 'lucide-vue-next'
@@ -88,6 +88,42 @@ onMounted(() => {
   refreshAll()
 })
 
+/**
+ * 自动筛选：监听筛选条件变化即触发查询。
+ * - 关键字使用防抖，避免每个按键都触发请求
+ * - 其他选择类条件（select / date）即时生效
+ * - 通过 skipNextWatch 标记跳过重置 / 初始化后的回环
+ */
+const FILTER_DEBOUNCE_MS = 350
+let keywordTimer = null
+let skipNextWatch = false
+
+watch(
+  () => ({ ...filters }),
+  (next, prev) => {
+    if (skipNextWatch) {
+      skipNextWatch = false
+      return
+    }
+    const keywordChanged = (next.keyword ?? '') !== (prev?.keyword ?? '')
+    const otherChanged = Object.keys(next).some(
+      (key) => key !== 'keyword' && next[key] !== prev?.[key],
+    )
+    if (keywordChanged && !otherChanged) {
+      // 关键字单独变化时防抖
+      clearTimeout(keywordTimer)
+      keywordTimer = setTimeout(() => refreshAll(1), FILTER_DEBOUNCE_MS)
+      return
+    }
+    if (otherChanged) {
+      // 选择类条件即时生效
+      clearTimeout(keywordTimer)
+      refreshAll(1)
+    }
+  },
+  { deep: true },
+)
+
 /** 刷新当前页 + 概览统计；筛选 / 重置 / 顶部刷新都走这一入口。 */
 async function refreshAll(page = pagination.page) {
   await Promise.all([loadLogs(page), loadSummary()])
@@ -146,10 +182,14 @@ function activeFilters() {
 }
 
 function applyFilters() {
+  // 仍保留：搜索框 enter 立即提交（绕过 350ms 防抖）
+  clearTimeout(keywordTimer)
   refreshAll(1)
 }
 
 function resetFilters() {
+  // 重置时一次性清空，标记跳过 watch 触发，再手动刷新一次即可
+  skipNextWatch = true
   Object.assign(filters, {
     keyword: '',
     mode: '',
@@ -161,6 +201,7 @@ function resetFilters() {
     createdFrom: '',
     createdTo: '',
   })
+  clearTimeout(keywordTimer)
   refreshAll(1)
 }
 
@@ -322,6 +363,7 @@ function queryStrategyText(row = {}) {
         <div class="filters-title">
           <component :is="Filter" :size="16" />
           <span>筛选与搜索</span>
+          <span class="filters-auto-hint">条件变更即时生效</span>
         </div>
         <span v-if="hasActiveFilters" class="filters-hint">已应用自定义筛选条件</span>
       </div>
@@ -456,22 +498,14 @@ function queryStrategyText(row = {}) {
 
         <div class="table-toolbar-actions">
           <el-button
-            class="ckqa-el-button ckqa-el-button--primary"
-            :loading="loading"
-            type="primary"
-            :icon="Search"
-            native-type="button"
-            @click="applyFilters"
-          >
-            筛选
-          </el-button>
-          <el-button
             class="ckqa-el-button ckqa-el-button--secondary"
+            :loading="loading || summaryLoading"
             :icon="RefreshCw"
             native-type="button"
+            :disabled="!hasActiveFilters && !loading"
             @click="resetFilters"
           >
-            重置
+            重置筛选
           </el-button>
         </div>
       </div>
@@ -615,21 +649,16 @@ function queryStrategyText(row = {}) {
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
+      <!-- 分页：居中显示，左下角附"共 x 条"信息 -->
       <footer class="ops-pagination">
-        <span class="pagination-info">
-          共 <strong>{{ pagination.total }}</strong> 条
-          ·
-          第 <strong>{{ pagination.page }}</strong> / {{ pagination.pages || 1 }} 页
-        </span>
         <el-pagination
           background
-          layout="sizes, prev, pager, next, jumper"
+          layout="total, sizes, prev, pager, next, jumper"
           :current-page="pagination.page"
           :page-size="pagination.size"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          :pager-count="5"
+          :pager-count="7"
           :disabled="loading"
           @current-change="handlePageChange"
           @size-change="handlePageSizeChange"
@@ -774,6 +803,17 @@ function queryStrategyText(row = {}) {
   font-weight: 600;
 }
 
+.filters-auto-hint {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ckqa-accent) 12%, transparent);
+  color: var(--ckqa-accent);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
 .filters-hint {
   color: var(--ckqa-accent);
   font-size: 12px;
@@ -898,23 +938,23 @@ function queryStrategyText(row = {}) {
   text-overflow: ellipsis;
 }
 
-/* 分页 */
+/* 分页：居中显示 */
 .ops-pagination {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 4px;
+  justify-content: center;
+  padding: 12px 0 4px;
   color: var(--ckqa-text-muted);
   flex-wrap: wrap;
+  gap: 12px;
 
-  .pagination-info {
-    font-size: 13px;
-
-    strong {
-      color: var(--ckqa-text);
-      font-weight: 700;
-    }
+  :deep(.el-pagination) {
+    --el-pagination-bg-color: var(--ckqa-surface-muted);
+    --el-pagination-button-bg-color: var(--ckqa-surface-muted);
+    --el-pagination-hover-color: var(--ckqa-accent);
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
   }
 }
 
@@ -942,7 +982,7 @@ function queryStrategyText(row = {}) {
 
   .ops-pagination {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
   }
 }
 
