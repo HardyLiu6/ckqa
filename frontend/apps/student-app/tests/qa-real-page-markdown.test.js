@@ -55,14 +55,21 @@ test('真实问答页用中文业务状态展示失败任务', () => {
   assert.match(qaPageSource, /taskStatus: errorPayload\.taskStatus \|\| 'failed'/)
   assert.doesNotMatch(qaPageSource, /taskStatus: pendingTask\.value\?\.taskStatus \|\| 'failed'/)
   assert.match(qaPageSource, /readableTaskFailureMessage/)
+  assert.match(qaPageSource, /:class="\{ 'is-loading': !isTerminalTaskStatus\(pendingTask\.taskStatus\) \}"/)
+  assert.match(qaPageSource, /<WarningFilled v-else \/>/)
 })
 
 test('真实问答页会展示可折叠的检索过程日志', () => {
   assert.match(qaPageSource, /import QaRetrievalTrace from '\.\/QaRetrievalTrace\.vue'/)
   assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:events="msg\.progressEvents"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:task-status="msg\.taskStatus"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:has-answer="Boolean\(msg\.content\)"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:source-count="msg\.sources\?\.length \|\| 0"/)
   assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:events="pendingProcessEvents"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*:task-status="pendingTask\.taskStatus"/)
   assert.match(qaPageSource, /:default-open="!pendingTask\.streamText"/)
   assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*<QaMarkdownContent[\s\S]*:content="pendingTask\.streamText"/)
+  assert.match(qaPageSource, /<QaRetrievalTrace[\s\S]*<QaMarkdownContent[\s\S]*:streaming="Boolean\(pendingTask\.streaming\)"/)
   assert.match(qaPageSource, /progress\(payload\)/)
   assert.doesNotMatch(qaPageSource, /步骤 \{\{ index \+ 1 \}\}/)
   assert.doesNotMatch(qaPageSource, /streamed chunk count=/)
@@ -70,14 +77,31 @@ test('真实问答页会展示可折叠的检索过程日志', () => {
 
 test('检索过程组件使用阶段归并模型而不是直接按数组最后一项展示', () => {
   const traceSource = readFileSync(resolve(__dirname, '../src/views/qa/QaRetrievalTrace.vue'), 'utf8')
-  assert.match(traceSource, /compactRetrievalTraceEvents/)
-  assert.match(traceSource, /latestRetrievalTraceEvent/)
+  assert.match(traceSource, /buildRetrievalTimeline/)
+  assert.match(traceSource, /buildRetrievalTraceSummary/)
+  assert.match(traceSource, /taskStatus/)
+  assert.match(traceSource, /effectiveLive/)
+  assert.match(traceSource, /setInterval/)
+  assert.match(traceSource, /clearInterval/)
+  assert.match(traceSource, /retrieval-timeline/)
+  assert.match(traceSource, /class="timeline-evidence-label"/)
+  assert.match(traceSource, /<strong class="trace-evidence-title">/)
+  assert.match(traceSource, /summary\.text/)
+  assert.doesNotMatch(traceSource, /item\.evidence\.slice\(0, 3\)/)
+  assert.doesNotMatch(traceSource, /latestRetrievalTraceEvent/)
   assert.doesNotMatch(traceSource, /visibleEvents\.value\.at\(-1\)/)
+})
+
+test('Markdown 组件支持流式渲染并按帧合并频繁更新', () => {
+  const markdownSource = readFileSync(resolve(__dirname, '../src/views/qa/QaMarkdownContent.vue'), 'utf8')
+  assert.match(markdownSource, /streaming/)
+  assert.match(markdownSource, /requestAnimationFrame/)
+  assert.match(markdownSource, /renderQaMarkdown\(props\.content, \{ streaming: props\.streaming \}\)/)
 })
 
 test('真实问答页不会因状态快照游标丢弃较早的检索过程事件', () => {
   const progressBlock = qaPageSource.match(/progress\(payload\) \{[\s\S]*?\n    \},\n    delta\(payload\)/)?.[0] ?? ''
-  assert.match(progressBlock, /mergeProgressEvents\(pendingTask\.value\?\.progressEvents, \[payload\]\)/)
+  assert.match(progressBlock, /mergeProgressEvents\(pendingTask\.value\?\.progressEvents, \[payload\], \{ stampReceivedAt: true \}\)/)
   assert.doesNotMatch(progressBlock, /eventSeq > 0 && eventSeq <= lastEventSeq/)
 })
 

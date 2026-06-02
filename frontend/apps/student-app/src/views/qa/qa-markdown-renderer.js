@@ -51,9 +51,23 @@ markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 let browserPurifier = null
 
 export function renderQaMarkdown(content, options = {}) {
-  const rawHtml = markdown.render(stripDangerousMarkdownInput(String(content ?? '')))
+  const markdownInput = options.streaming
+    ? normalizeStreamingMarkdownInput(content)
+    : String(content ?? '')
+  const rawHtml = markdown.render(stripDangerousMarkdownInput(markdownInput))
   const htmlWithSources = decorateSourceMarkers(rawHtml)
   return sanitizeQaHtml(htmlWithSources, options)
+}
+
+export function normalizeStreamingMarkdownInput(markdownText) {
+  let normalized = String(markdownText ?? '')
+  if (hasUnclosedFence(normalized, '```')) {
+    normalized += '\n```'
+  }
+  if (hasUnclosedFence(normalized, '~~~')) {
+    normalized += '\n~~~'
+  }
+  return normalized
 }
 
 export function stripDangerousMarkdownInput(markdownText) {
@@ -62,6 +76,12 @@ export function stripDangerousMarkdownInput(markdownText) {
     .replace(/<[^>]+\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)[^>]*>/gi, '')
     .replace(/\[([^\]]+)]\(\s*javascript:[^)]+\)/gi, '$1')
     .replace(/javascript:/gi, '')
+}
+
+function hasUnclosedFence(markdownText, fence) {
+  const escapedFence = fence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const matches = String(markdownText ?? '').match(new RegExp(`(^|\\n)${escapedFence}`, 'g')) ?? []
+  return matches.length % 2 === 1
 }
 
 export function decorateSourceMarkers(html) {

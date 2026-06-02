@@ -57,7 +57,10 @@ import {
 } from './qa-route-query-model'
 import QaMarkdownContent from './QaMarkdownContent.vue'
 import QaRetrievalTrace from './QaRetrievalTrace.vue'
-import { mergeRetrievalTraceEvents } from './qa-retrieval-trace-model'
+import {
+  markRetrievalTraceEventsReceived,
+  mergeRetrievalTraceEvents,
+} from './qa-retrieval-trace-model'
 import {
   isNearScrollBottom,
   resolveAutoScrollAfterUserScroll,
@@ -1153,7 +1156,7 @@ function startTaskStream(sessionId, taskId, submission) {
       const eventSeq = normalizeStreamEventSeq(payload?.eventSeq ?? payload?.event_seq)
       const lastEventSeq = normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq)
       const nextEventSeq = Math.max(lastEventSeq, eventSeq)
-      const progressEvents = mergeProgressEvents(pendingTask.value?.progressEvents, [payload])
+      const progressEvents = mergeProgressEvents(pendingTask.value?.progressEvents, [payload], { stampReceivedAt: true })
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         sessionId,
@@ -1601,10 +1604,13 @@ function withTaskMode(message, task) {
   }
 }
 
-function mergeProgressEvents(currentEvents, incomingEvents) {
+function mergeProgressEvents(currentEvents, incomingEvents, options = {}) {
+  const normalizedIncomingEvents = normalizeProgressEvents(incomingEvents)
   return mergeRetrievalTraceEvents(
     normalizeProgressEvents(currentEvents),
-    normalizeProgressEvents(incomingEvents),
+    options.stampReceivedAt
+      ? markRetrievalTraceEventsReceived(normalizedIncomingEvents)
+      : normalizedIncomingEvents,
   )
 }
 
@@ -1711,6 +1717,11 @@ function sourceTypeLabel(source) {
             <QaRetrievalTrace
               :events="msg.progressEvents"
               :mode-label="messageModeLabel(msg)"
+              :task-status="msg.taskStatus"
+              :started-at="msg.startedAt || msg.createdAt"
+              :finished-at="msg.finishedAt || msg.updatedAt || msg.createdAt"
+              :has-answer="Boolean(msg.content)"
+              :source-count="msg.sources?.length || 0"
             />
             <QaMarkdownContent :content="msg.content" />
             <details v-if="msg.sources?.length" class="source-cards">
@@ -1752,7 +1763,10 @@ function sourceTypeLabel(source) {
         <div v-if="pendingTask" class="msg-row role-assistant">
           <GlassCard tier="base" padding="md" class="ai-bubble pending-bubble">
             <div class="pending-head">
-              <el-icon class="is-loading"><Loading /></el-icon>
+              <el-icon :class="{ 'is-loading': !isTerminalTaskStatus(pendingTask.taskStatus) }">
+                <Loading v-if="!isTerminalTaskStatus(pendingTask.taskStatus)" />
+                <WarningFilled v-else />
+              </el-icon>
               <span>{{ taskStatusText(pendingTask) }}</span>
             </div>
             <div class="pending-copy">
@@ -1761,12 +1775,17 @@ function sourceTypeLabel(source) {
             <QaRetrievalTrace
               :events="pendingProcessEvents"
               :mode-label="messageModeLabel(pendingTask)"
+              :task-status="pendingTask.taskStatus"
               :default-open="!pendingTask.streamText"
-              live
+              :started-at="pendingTask.startedAt || pendingTask.createdAt"
+              :finished-at="pendingTask.finishedAt"
+              :has-answer="Boolean(pendingTask.streamText)"
+              :live="!isTerminalTaskStatus(pendingTask.taskStatus)"
             />
             <QaMarkdownContent
               v-if="pendingTask.streamText"
               :content="pendingTask.streamText"
+              :streaming="Boolean(pendingTask.streaming)"
               class="pending-stream-content"
             />
             <div class="msg-meta">

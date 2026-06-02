@@ -3,12 +3,15 @@ import assert from 'node:assert/strict'
 import createDOMPurify from 'dompurify'
 import { JSDOM } from 'jsdom'
 
-import { renderQaMarkdown } from '../src/views/qa/qa-markdown-renderer.js'
+import {
+  normalizeStreamingMarkdownInput,
+  renderQaMarkdown,
+} from '../src/views/qa/qa-markdown-renderer.js'
 
-function render(markdown) {
+function render(markdown, options = {}) {
   const window = new JSDOM('').window
   const purifier = createDOMPurify(window)
-  return renderQaMarkdown(markdown, { purifier })
+  return renderQaMarkdown(markdown, { purifier, ...options })
 }
 
 test('问答 Markdown 渲染支持学习材料常用格式', () => {
@@ -58,4 +61,11 @@ test('sanitizer 移除脚本、事件属性和危险协议链接', () => {
   assert.doesNotMatch(html, /javascript:/i)
   assert.match(html, /href="https:\/\/example.com\/course"/)
   assert.match(html, /rel="noopener noreferrer"/)
+})
+
+test('流式 Markdown 会临时补齐未闭合代码围栏', () => {
+  const partialMarkdown = '```text\nwait(P1)'
+
+  assert.equal(normalizeStreamingMarkdownInput(partialMarkdown), '```text\nwait(P1)\n```')
+  assert.match(render(partialMarkdown, { streaming: true }), /<pre><code class="language-text">wait\(P1\)\n<\/code><\/pre>/)
 })

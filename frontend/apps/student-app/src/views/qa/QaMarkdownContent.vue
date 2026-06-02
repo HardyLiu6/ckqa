@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 import { renderQaMarkdown } from './qa-markdown-renderer'
 
@@ -8,9 +8,52 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  streaming: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-const html = computed(() => renderQaMarkdown(props.content))
+const html = ref('')
+let renderFrameId = 0
+
+watch(
+  () => [props.content, props.streaming],
+  () => {
+    scheduleRender()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  cancelScheduledRender()
+})
+
+function scheduleRender() {
+  if (props.streaming && typeof window !== 'undefined' && window.requestAnimationFrame) {
+    cancelScheduledRender()
+    renderFrameId = window.requestAnimationFrame(() => {
+      renderFrameId = 0
+      renderNow()
+    })
+    return
+  }
+  cancelScheduledRender()
+  renderNow()
+}
+
+function renderNow() {
+  html.value = renderQaMarkdown(props.content, { streaming: props.streaming })
+}
+
+function cancelScheduledRender() {
+  if (!renderFrameId || typeof window === 'undefined' || !window.cancelAnimationFrame) {
+    renderFrameId = 0
+    return
+  }
+  window.cancelAnimationFrame(renderFrameId)
+  renderFrameId = 0
+}
 </script>
 
 <template>
