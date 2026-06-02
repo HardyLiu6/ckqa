@@ -15,11 +15,17 @@ class CkqaIntegrationPropertiesTest {
 
         assertThat(properties.resolveQueryTaskModePolicy("global").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("global").staleTimeoutSeconds()).isEqualTo(1800L);
-        assertThat(properties.resolveQueryTaskModePolicy("global").timeoutMessage()).contains("10 到 20 分钟");
+        assertThat(properties.resolveQueryTaskModePolicy("global").timeoutMessage())
+                .contains("长时间未更新")
+                .doesNotContain("10 到 20 分钟")
+                .doesNotContain("前端低频轮询");
 
         assertThat(properties.resolveQueryTaskModePolicy("drift").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").staleTimeoutSeconds()).isEqualTo(1800L);
-        assertThat(properties.resolveQueryTaskModePolicy("drift").timeoutMessage()).contains("10 到 20 分钟");
+        assertThat(properties.resolveQueryTaskModePolicy("drift").timeoutMessage())
+                .contains("长时间未更新")
+                .doesNotContain("10 到 20 分钟")
+                .doesNotContain("前端低频轮询");
 
         assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").staleTimeoutSeconds()).isEqualTo(1800L);

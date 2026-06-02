@@ -383,7 +383,7 @@ GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}
   "errorMessage": null,
   "recommendedPollingIntervalSeconds": 30,
   "staleTimeoutSeconds": 1800,
-  "timeoutMessage": "global 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。"
+  "timeoutMessage": "global 模式任务长时间未更新时会被标记为 stale，已生成内容会尽量保留。"
 }
 ```
 

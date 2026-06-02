@@ -59,7 +59,7 @@ public class CkqaIntegrationProperties {
         }
         if ("hybrid_v0".equals(mode)) {
             return "混合检索 Beta 模式通常耗时更长，任务心跳超过 " + staleTimeoutSeconds
-                    + " 秒未更新后会被标记为 stale；建议前端低频轮询并展示长耗时提示。";
+                    + " 秒未更新后会被标记为 stale。";
         }
         return mode + " 模式任务心跳超过 " + staleTimeoutSeconds + " 秒未更新后会被标记为 stale。";
     }
@@ -147,9 +147,9 @@ public class CkqaIntegrationProperties {
         private Map<String, String> queryTaskModeTimeoutMessages = new LinkedHashMap<>(Map.of(
                 "local", "local 模式实测可能需要 2 分钟左右；任务心跳超过阈值未更新后会被标记为 stale。",
                 "basic", "basic 模式沿用轻量查询策略；任务心跳超过阈值未更新后会被标记为 stale。",
-                "global", "global 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
-                "drift", "drift 模式实测可能需要 10 到 20 分钟；建议前端低频轮询并展示长耗时提示。",
-                "hybrid_v0", "混合检索 Beta 模式会融合多路证据，可能需要较长时间；建议前端低频轮询并等待后台完成。"
+                "global", "global 模式任务长时间未更新时会被标记为 stale，已生成内容会尽量保留。",
+                "drift", "drift 模式任务长时间未更新时会被标记为 stale，已生成内容会尽量保留。",
+                "hybrid_v0", "混合检索 Beta 模式会融合多路证据，任务长时间未更新时会被标记为 stale。"
         ));
     }
 
