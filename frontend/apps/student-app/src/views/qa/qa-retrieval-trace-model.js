@@ -4,6 +4,7 @@ const PROGRESS_TYPE_ORDER = {
   map_running: 30,
   map_finished: 40,
   context_selected: 50,
+  drift_followup_finished: 55,
   reduce_started: 60,
   reduce_running: 70,
   reduce_finished: 80,
@@ -57,6 +58,33 @@ const STAGE_DEFINITIONS = {
     activeText: '模型服务繁忙，正在等待重试',
     pendingSummary: '等待模型服务恢复。',
     types: new Set(['model_rate_limit', 'model_rate_limit_failed']),
+  },
+}
+
+const DRIFT_STAGE_DEFINITIONS = {
+  primer: {
+    key: 'drift_primer',
+    title: '定位起点',
+    activeText: '正在定位起点',
+    pendingSummary: '等待定位课程报告、概念和片段线索。',
+    completedSummary: '已定位课程报告、概念和片段线索。',
+    types: new Set(['retrieval_started']),
+  },
+  followup: {
+    key: 'drift_followup',
+    title: '追问扩展',
+    activeText: '正在追问扩展',
+    pendingSummary: '等待沿相关线索扩展课程依据。',
+    completedSummary: '已完成追问扩展。',
+    types: new Set(['context_selected', 'map_started', 'map_running', 'map_finished', 'drift_followup_finished']),
+  },
+  answer: {
+    key: 'drift_answer',
+    title: '汇总回答',
+    activeText: '正在汇总回答',
+    pendingSummary: '等待汇总追问结果。',
+    completedSummary: '回答已生成。',
+    types: new Set(['reduce_started', 'reduce_running', 'reduce_finished', 'answer_running']),
   },
 }
 
@@ -139,13 +167,14 @@ export function buildRetrievalTimeline(events, options = {}) {
   const failedTask = isFailedTraceTaskStatus(taskStatus)
   const successfulTask = isSuccessfulTraceTaskStatus(taskStatus)
   const mode = inferTraceMode(normalizedEvents, options.mode)
-  const stageDefs = resolveStageDefinitions(mode, normalizedEvents)
+  const timelineEvents = expandTraceEventsForTimeline(normalizedEvents, mode)
+  const stageDefs = resolveStageDefinitions(mode, timelineEvents)
   const stageBuckets = new Map(stageDefs.map((stage) => [stage.key, {
     definition: stage,
     events: [],
   }]))
 
-  for (const event of normalizedEvents) {
+  for (const event of timelineEvents) {
     const stage = stageDefs.find((definition) => definition.types.has(event.type))
     if (!stage) {
       continue
@@ -159,7 +188,7 @@ export function buildRetrievalTimeline(events, options = {}) {
     || (failedTask ? latestReachedStageKey : '')
   const live = Boolean(options.live) && !failedStageKey && !isTerminalTraceTaskStatus(taskStatus)
   const hasCompletedAnswer = (Boolean(options.hasAnswer) || successfulTask) && !failedStageKey && !failedTask
-  const completedAnswerIndex = stageDefs.findIndex((stage) => stage.key === STAGE_DEFINITIONS.answer.key)
+  const completedAnswerIndex = stageDefs.findIndex(isAnswerStageDefinition)
   const effectiveLatestReachedIndex = hasCompletedAnswer && completedAnswerIndex >= 0
     ? Math.max(latestReachedIndex, completedAnswerIndex)
     : latestReachedIndex
@@ -180,19 +209,27 @@ export function buildRetrievalTimeline(events, options = {}) {
       live,
     })
     const evidenceEvent = [...bucketEvents].reverse().find((event) => event.evidence?.length) ?? latestEvent
-    const evidenceLabel = evidenceEvent?.evidence?.length
-      ? retrievalTraceEvidenceLabel(evidenceEvent, stage.title, visibleEvidenceLimit)
-      : ''
-    const evidence = isModelRateLimitEvent(latestEvent?.type)
+    const displayEvidence = isModelRateLimitEvent(latestEvent?.type)
       ? []
-      : [...(evidenceEvent?.evidence ?? [])].slice(0, visibleEvidenceLimit)
+      : displayableTraceEvidence(evidenceEvent?.evidence ?? [])
+    const evidenceLabel = displayEvidence.length
+      ? retrievalTraceEvidenceLabel({ ...evidenceEvent, evidence: displayEvidence }, stage.title, visibleEvidenceLimit)
+      : ''
+    const evidence = displayEvidence.slice(0, visibleEvidenceLimit)
     const startedAtMs = resolveEventTime(firstEvent) ?? timing.startedAtMs
     const endedAtMs = resolveStageEndTime(stageDefs, stageBuckets, index, timing)
     return {
       key: stage.key,
       type: latestEvent?.type ?? '',
       title: stage.title,
-      summary: latestEvent?.summary || (isCompletedInferredStage ? stage.completedSummary : stage.pendingSummary),
+      activeText: stage.activeText,
+      summary: resolveStageSummary({
+        stage,
+        latestEvent,
+        isCompletedInferredStage,
+        hasCompletedAnswer,
+        mode,
+      }),
       status,
       startedAtLocal: startedAtMs,
       endedAtLocal: endedAtMs,
@@ -299,6 +336,14 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索', vis
     const total = normalizePositiveInteger(event?.metrics?.mapResultCount)
     const totalCount = total || count
     return totalCount > visibleCount ? `精选展示 ${visibleCount} / 共 ${totalCount} 组` : `整理要点 ${visibleCount} 条`
+  }
+  if (kinds.has('drift_answer')) {
+    const total = normalizePositiveInteger(event?.metrics?.driftNodeCount)
+    const answered = normalizePositiveInteger(event?.metrics?.answeredNodeCount) || count
+    if (total) {
+      return `可用依据 ${answered} / 追问线索 ${total} 条`
+    }
+    return count > visibleCount ? `追问结果 ${visibleCount} / 共 ${count} 条` : `追问结果 ${count} 条`
   }
   if (kinds.has('text_unit')) {
     return count > visibleCount ? `课程片段 ${visibleCount} / 共 ${count} 条` : `课程片段 ${count} 条`
@@ -571,8 +616,14 @@ function inferTraceMode(events, fallbackMode = '') {
 }
 
 function resolveStageDefinitions(mode, events) {
+  if (mode === 'drift') {
+    return withOptionalModelStage([
+      DRIFT_STAGE_DEFINITIONS.primer,
+      DRIFT_STAGE_DEFINITIONS.followup,
+      DRIFT_STAGE_DEFINITIONS.answer,
+    ], events)
+  }
   const hasMapStage = mode === 'global'
-    || mode === 'drift'
     || events.some((event) => STAGE_DEFINITIONS.map.types.has(event.type))
   const stages = [
     STAGE_DEFINITIONS.retrieval,
@@ -582,10 +633,168 @@ function resolveStageDefinitions(mode, events) {
     stages.push(STAGE_DEFINITIONS.map)
   }
   stages.push(STAGE_DEFINITIONS.answer)
+  return withOptionalModelStage(stages, events)
+}
+
+function expandTraceEventsForTimeline(events, mode) {
+  if (mode !== 'drift') {
+    return events
+  }
+  const expanded = []
+  for (const event of events) {
+    const driftEvidence = event.type === 'reduce_started'
+      ? normalizeDriftFollowupEvidence(event.evidence ?? [])
+      : []
+    if (event.type === 'reduce_started' && driftEvidence.length) {
+      expanded.push({
+        ...event,
+        type: 'drift_followup_finished',
+        summary: driftFollowupCompletedSummary(event, driftEvidence.length),
+        evidence: driftEvidence,
+        __traceOrder: PROGRESS_TYPE_ORDER.drift_followup_finished,
+      })
+      expanded.push({
+        ...event,
+        evidence: [],
+      })
+      continue
+    }
+    expanded.push(event)
+  }
+  return expanded
+}
+
+function normalizeDriftFollowupEvidence(evidence) {
+  return displayableTraceEvidence(evidence)
+    .map((item) => ({
+      ...item,
+      kind: 'drift_answer',
+    }))
+    .filter(isAnsweredDriftEvidenceItem)
+}
+
+function isAnsweredDriftEvidenceItem(item) {
+  const snippet = String(item?.snippet ?? item?.summary ?? item?.text ?? '').trim()
+  return Boolean(snippet) && !isPlaceholderContextSnippet(snippet)
+}
+
+function withOptionalModelStage(stages, events) {
   if (events.some((event) => STAGE_DEFINITIONS.model.types.has(event.type))) {
     stages.push(STAGE_DEFINITIONS.model)
   }
   return stages
+}
+
+function isAnswerStageDefinition(stage) {
+  return stage?.key === STAGE_DEFINITIONS.answer.key || stage?.key === DRIFT_STAGE_DEFINITIONS.answer.key
+}
+
+function resolveStageSummary({ stage, latestEvent, isCompletedInferredStage, hasCompletedAnswer, mode }) {
+  if (hasCompletedAnswer && isAnswerStageDefinition(stage)) {
+    return stage.completedSummary
+  }
+  if (isCompletedInferredStage) {
+    return stage.completedSummary
+  }
+  if (mode === 'drift') {
+    const summary = driftStageSummary(stage, latestEvent)
+    if (summary) {
+      return summary
+    }
+  }
+  return latestEvent?.summary || stage.pendingSummary
+}
+
+function driftStageSummary(stage, latestEvent) {
+  if (!latestEvent) {
+    return ''
+  }
+  if (stage.key === DRIFT_STAGE_DEFINITIONS.primer.key) {
+    return '正在定位课程报告、概念和片段线索，准备展开追问式检索。'
+  }
+  if (stage.key === DRIFT_STAGE_DEFINITIONS.followup.key) {
+    if (latestEvent.type === 'context_selected') {
+      return driftContextSelectedSummary(latestEvent.metrics)
+    }
+    if (latestEvent.type === 'drift_followup_finished') {
+      return driftFollowupCompletedSummary(latestEvent, displayableTraceEvidence(latestEvent.evidence ?? []).length)
+    }
+    if (latestEvent.type === 'map_finished') {
+      return '追问扩展已完成，已形成可汇总的课程依据。'
+    }
+    return '正在沿相关课程线索继续追问，补充可用于回答的依据。'
+  }
+  if (stage.key === DRIFT_STAGE_DEFINITIONS.answer.key) {
+    if (latestEvent.type === 'reduce_finished') {
+      return '追问结果已汇总，准备开始输出回答。'
+    }
+    return '正在汇总追问得到的课程依据，准备输出回答。'
+  }
+  return ''
+}
+
+function driftFollowupCompletedSummary(event, evidenceCount = 0) {
+  const total = normalizePositiveInteger(event?.metrics?.driftNodeCount)
+  const answered = normalizePositiveInteger(event?.metrics?.answeredNodeCount) || normalizePositiveInteger(evidenceCount)
+  if (total && answered) {
+    return `已生成 ${total} 条追问线索，其中 ${answered} 条形成可用依据。`
+  }
+  if (total) {
+    return `已生成 ${total} 条追问线索，正在汇总已有课程依据。`
+  }
+  if (answered) {
+    return `已形成 ${answered} 条可用追问依据。`
+  }
+  return '追问扩展已完成，已形成可汇总的课程依据。'
+}
+
+function driftContextSelectedSummary(metrics = {}) {
+  const reports = normalizePositiveInteger(metrics.reportCount)
+  const textUnits = normalizePositiveInteger(metrics.textUnitCount)
+  const entities = normalizePositiveInteger(metrics.entityCount)
+  const relationships = normalizePositiveInteger(metrics.relationshipCount)
+  if (reports) {
+    return `已围绕问题选取 ${reports} 份课程报告，继续扩展相关依据。`
+  }
+  if (textUnits) {
+    return `已围绕问题选取 ${textUnits} 个课程片段，继续扩展相关依据。`
+  }
+  if (entities || relationships) {
+    return `已围绕问题选取 ${entities} 个课程概念和 ${relationships} 条关系，继续扩展相关依据。`
+  }
+  return '已构建追问式检索上下文，继续扩展相关课程依据。'
+}
+
+function displayableTraceEvidence(evidence) {
+  if (!Array.isArray(evidence)) {
+    return []
+  }
+  return evidence.filter(isDisplayableTraceEvidence)
+}
+
+function isDisplayableTraceEvidence(item) {
+  if (!item || typeof item !== 'object') {
+    return false
+  }
+  const kind = String(item.kind ?? '').trim().toLowerCase()
+  const title = String(item.title ?? item.sourceFile ?? item.source_file ?? item.id ?? item.ref ?? '').trim()
+  const snippet = String(item.snippet ?? item.summary ?? item.text ?? '').trim()
+  if (!title && !snippet) {
+    return false
+  }
+  const titleIsContext = /^context$/i.test(title) || kind === 'context'
+  if (titleIsContext && isPlaceholderContextSnippet(snippet)) {
+    return false
+  }
+  if (kind === 'drift_answer' && !snippet) {
+    return false
+  }
+  return true
+}
+
+function isPlaceholderContextSnippet(value) {
+  const text = String(value ?? '').trim()
+  return Boolean(text) && /^[\d\s,，、;；]+$/.test(text)
 }
 
 function findLatestReachedStageIndex(stageDefs, stageBuckets) {
@@ -744,7 +953,7 @@ function currentStageText(item, timeline = {}) {
   if (item.status === 'failed' || item.key === 'model') {
     return STAGE_DEFINITIONS.model.activeText
   }
-  return STAGE_DEFINITIONS[item.key]?.activeText || item.title
+  return item.activeText || STAGE_DEFINITIONS[item.key]?.activeText || item.title
 }
 
 function stableStringify(value) {

@@ -1548,12 +1548,32 @@ function taskPendingCopy(task) {
     return readableTaskFailureMessage(task) || '问答任务执行失败，已保留可用的部分内容。'
   }
   if (status === 'stale') {
-    return task.timeoutMessage || '任务等待时间过长，已停止自动接收，已保留可用的部分内容。'
+    return '任务等待时间过长，已停止自动接收，已保留可用的部分内容。'
   }
   if (task.streamingFallbackReason) {
     return readableStreamingFallbackMessage(task.streamingFallbackReason)
   }
-  return task.routeReason || task.timeoutMessage || '后端正在执行 GraphRAG 查询任务。'
+  return readableRunningTaskMessage(task)
+}
+
+function readableRunningTaskMessage(task) {
+  const mode = String(task?.mode ?? '').toLowerCase()
+  if (mode === 'basic') {
+    return '正在检索课程片段并生成回答，等待时间较长时会继续保留已生成内容。'
+  }
+  if (mode === 'local') {
+    return '正在结合课程片段、概念和关系生成回答，等待时间较长时会继续保留已生成内容。'
+  }
+  if (mode === 'global') {
+    return '正在汇总课程报告与主题要点，等待时间较长时会继续保留已生成内容。'
+  }
+  if (mode === 'drift') {
+    return '正在沿相关线索展开追问检索，等待时间较长时会继续保留已生成内容。'
+  }
+  if (mode === 'hybrid_v0') {
+    return '正在融合多路课程证据生成回答，等待时间较长时会继续保留已生成内容。'
+  }
+  return '正在检索课程内容并生成回答，等待时间较长时会继续保留已生成内容。'
 }
 
 function readableStreamingFallbackMessage(reason) {
