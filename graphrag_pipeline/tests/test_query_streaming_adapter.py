@@ -155,9 +155,9 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
 
         progress = [chunk.progress for chunk in chunks if chunk.event == "progress"]
         self.assertEqual([item["type"] for item in progress], ["retrieval_started", "map_started", "reduce_started"])
-        self.assertIn("课程整体脉络", progress[0]["summary"])
-        self.assertIn("2 个课程报告批次", progress[1]["summary"])
-        self.assertIn("综合", progress[2]["summary"])
+        self.assertIn("整门课程", progress[0]["summary"])
+        self.assertIn("2 组相关课程内容", progress[1]["summary"])
+        self.assertIn("完整回答", progress[2]["summary"])
         self.assertEqual(chunks[-1].text, "全局总结")
 
     async def test_global_streaming_cleans_report_group_string_evidence(self):
@@ -264,9 +264,9 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(first_chunk.event, "progress")
         self.assertEqual(first_chunk.progress["type"], "retrieval_started")
-        self.assertIn("课程整体脉络", first_chunk.progress["summary"])
+        self.assertIn("整门课程", first_chunk.progress["summary"])
         self.assertEqual(remaining_chunks[0].progress["type"], "map_started")
-        self.assertIn("2 个课程报告批次", remaining_chunks[0].progress["summary"])
+        self.assertIn("2 组相关课程内容", remaining_chunks[0].progress["summary"])
         self.assertEqual(remaining_chunks[-1].text, "全局总结")
 
     async def test_long_global_phase_emits_periodic_progress_heartbeat(self):
@@ -305,9 +305,9 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first_chunk.progress["type"], "retrieval_started")
         self.assertEqual(second_chunk.event, "progress")
         self.assertEqual(second_chunk.progress["type"], "map_started")
-        self.assertIn("正在汇总 2 个课程报告批次", second_chunk.progress["summary"])
+        self.assertIn("2 组相关课程内容", second_chunk.progress["summary"])
         running_chunk = next(chunk for chunk in remaining_chunks if chunk.event == "progress" and chunk.progress["type"] == "map_running")
-        self.assertIn("仍在汇总 2 个课程报告批次", running_chunk.progress["summary"])
+        self.assertIn("逐组整理课程要点", running_chunk.progress["summary"])
         self.assertEqual(remaining_chunks[-1].text, "全局总结")
 
     async def test_global_streaming_infers_reduce_progress_after_map_before_first_token(self):
@@ -355,9 +355,9 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("reduce_started", progress_types)
         self.assertIn("reduce_running", progress_types)
         reduce_started = next(item for item in progress if item["type"] == "reduce_started")
-        self.assertIn("综合课程报告", reduce_started["summary"])
+        self.assertIn("完整回答", reduce_started["summary"])
         reduce_running = next(item for item in progress if item["type"] == "reduce_running")
-        self.assertIn("稍后会开始输出回答", reduce_running["summary"])
+        self.assertIn("开始显示正文", reduce_running["summary"])
         self.assertEqual(chunks[-1].text, "全局总结")
 
     async def test_local_streaming_emits_answer_running_with_context_metrics(self):

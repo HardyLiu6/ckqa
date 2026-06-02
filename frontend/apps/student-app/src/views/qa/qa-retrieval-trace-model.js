@@ -50,10 +50,12 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索') {
   }
   const kinds = new Set(evidence.map((item) => String(item?.kind ?? '')))
   if (kinds.has('report_group')) {
-    return `课程报告批次 ${count} 条`
+    const total = normalizePositiveInteger(event?.metrics?.reportGroupCount)
+    return total > count ? `精选展示 ${count} / 共 ${total} 组` : `相关主题 ${count} 条`
   }
   if (kinds.has('map_result')) {
-    return `报告归纳 ${count} 条`
+    const total = normalizePositiveInteger(event?.metrics?.mapResultCount)
+    return total > count ? `精选展示 ${count} / 共 ${total} 组` : `整理要点 ${count} 条`
   }
   if (kinds.has('text_unit')) {
     return `课程片段 ${count} 条`
@@ -102,6 +104,12 @@ function normalizeTraceEvent(event, index) {
 }
 
 function traceEventKey(event) {
+  if (event.type === 'map_running' || event.type === 'map_finished') {
+    return `stage:map-progress:${event.mode}`
+  }
+  if (event.type === 'reduce_started' || event.type === 'reduce_running' || event.type === 'reduce_finished') {
+    return `stage:answer-progress:${event.mode}`
+  }
   if (event.type.endsWith('_running')) {
     return `running:${event.type}:${event.mode}`
   }
@@ -115,6 +123,9 @@ function traceEventKey(event) {
 }
 
 function shouldReplaceTraceEvent(existing, incoming) {
+  if (traceEventKey(existing) === traceEventKey(incoming) && incoming.__traceOrder >= existing.__traceOrder) {
+    return true
+  }
   if (incoming.type.endsWith('_running')) {
     return true
   }
@@ -142,6 +153,11 @@ function stripTraceMeta(event) {
 }
 
 function normalizeEventSeq(value) {
+  const number = Number(value ?? 0)
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
+}
+
+function normalizePositiveInteger(value) {
   const number = Number(value ?? 0)
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
 }

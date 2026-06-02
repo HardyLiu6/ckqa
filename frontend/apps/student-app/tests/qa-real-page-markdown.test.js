@@ -24,9 +24,37 @@ test('真实问答页恢复历史会话时会重新接入运行中任务', () =>
   assert.match(qaPageSource, /getQaTask\(sessionId, runningUserMessage\.taskId\)/)
   assert.match(qaPageSource, /startTaskStream\(sessionId, runningUserMessage\.taskId, pendingTask\.value\)/)
   assert.match(qaPageSource, /partialResponseText/)
+  assert.match(qaPageSource, /mergePartialStreamText/)
   assert.match(qaPageSource, /afterEventSeq/)
   assert.match(qaPageSource, /eventSeq <=/)
   assert.match(qaPageSource, /Math\.min\(2, resolvePollingDelaySeconds/)
+})
+
+test('真实问答页切换到轮询时继续补齐部分回答并更新连接状态', () => {
+  const fallbackBlock = qaPageSource.match(/const fallbackToPolling = [\s\S]*?\n  \}/)?.[0] ?? ''
+  assert.match(fallbackBlock, /streaming: false/)
+  assert.match(qaPageSource, /事件流连接已关闭，问答仍在后台运行/)
+  assert.match(qaPageSource, /事件流连接中断，正在改用轮询继续接收/)
+  const pollBlock = qaPageSource.match(/async function pollTask[\s\S]*?async function refreshAssistantAfterEmptySuccess/)?.[0] ?? ''
+  assert.match(pollBlock, /mergePartialStreamText\(currentStreamText, partialStreamText\)/)
+  assert.doesNotMatch(pollBlock, /streamText: currentStreamText \|\| partialStreamText/)
+})
+
+test('真实问答页会把流式 fallback 原因转成用户可理解的等待提示', () => {
+  assert.match(qaPageSource, /function taskPendingCopy\(task\)/)
+  assert.match(qaPageSource, /streamingFallbackReason/)
+  assert.match(qaPageSource, /readableStreamingFallbackMessage/)
+  assert.match(qaPageSource, /事件流暂不可用，正在改用轮询继续接收回答/)
+  assert.match(qaPageSource, /\{\{ taskPendingCopy\(pendingTask\) \}\}/)
+})
+
+test('真实问答页用中文业务状态展示失败任务', () => {
+  assert.match(qaPageSource, /qaMessageTaskStatusLabel\(msg\)/)
+  assert.match(qaPageSource, /qaTaskStatusHeadline\(task\)/)
+  assert.doesNotMatch(qaPageSource, /\{\{ msg\.taskStatus \}\}/)
+  assert.match(qaPageSource, /taskStatus: errorPayload\.taskStatus \|\| 'failed'/)
+  assert.doesNotMatch(qaPageSource, /taskStatus: pendingTask\.value\?\.taskStatus \|\| 'failed'/)
+  assert.match(qaPageSource, /readableTaskFailureMessage/)
 })
 
 test('真实问答页会展示可折叠的检索过程日志', () => {

@@ -244,7 +244,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             return _progress_event(
                 "map_running",
                 self._mode,
-                f"仍在汇总 {count} 个课程报告批次，已处理约 {elapsed} 秒；完成后会合并共同结论。",
+                f"仍在逐组整理课程要点，已处理约 {elapsed} 秒；完成后会合并成完整回答。",
                 {**self._active_metrics, "elapsedSeconds": elapsed},
                 [],
             )
@@ -253,7 +253,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             return _progress_event(
                 "reduce_running",
                 self._mode,
-                f"仍在综合课程报告和片段，已处理约 {elapsed} 秒；稍后会开始输出回答。",
+                f"仍在整理完整回答，已处理约 {elapsed} 秒；马上会开始显示正文。",
                 {**self._active_metrics, "elapsedSeconds": elapsed},
                 [],
             )
@@ -297,7 +297,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "map_started",
                 self._mode,
-                f"正在汇总 {count} 个课程报告批次，先提取与问题相关的要点。",
+                f"已找到 {count} 组相关课程内容，正在分别提炼要点。",
                 metrics,
                 [_context_item_to_evidence(item, "report_group") for item in list(map_response_contexts or [])[:5]],
             )
@@ -310,7 +310,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "map_finished",
                 self._mode,
-                f"已完成 {count} 个课程报告批次的初步归纳，准备合并共同结论。",
+                f"已整理 {count} 组课程要点，准备合并重复内容和共同结论。",
                 {"mapResultCount": count},
                 [_context_item_to_evidence(item, "map_result") for item in list(map_response_outputs or [])[:5]],
             )
@@ -322,7 +322,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
                 _progress_event(
                     "reduce_started",
                     self._mode,
-                    "正在综合课程报告要点，形成最终回答。",
+                    "正在把分散的课程要点组织成完整回答。",
                     metrics,
                     [_context_item_to_evidence(item, "map_result") for item in list(map_response_outputs or [])[:5]],
                 )
@@ -337,7 +337,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "reduce_started",
                 self._mode,
-                "正在综合课程报告和片段，形成最终回答。",
+                "正在把分散的课程要点组织成完整回答。",
                 metrics,
                 evidence,
             )
@@ -349,7 +349,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "reduce_finished",
                 self._mode,
-                "已完成课程知识库综合，准备输出最终回答。",
+                "课程要点已整理完成，准备开始输出回答。",
                 {"outputChars": len(str(reduce_response_output or ""))},
                 [],
             )
@@ -448,7 +448,7 @@ def _retrieval_started_event(mode: str) -> dict[str, Any]:
     summaries = {
         "basic": "正在检索课程片段和向量匹配结果，准备构建回答依据。",
         "local": "正在检索课程概念、关系和片段，准备构建局部上下文。",
-        "global": "正在请求课程整体脉络，推荐全局综述模式。",
+        "global": "正在从整门课程中寻找和问题相关的章节主题。",
         "drift": "正在沿课程报告和概念线索展开追问式检索。",
         "hybrid_v0": "正在检索混合证据，结合片段匹配和课程上下文。",
     }
@@ -490,20 +490,20 @@ def _progress_heartbeat_seconds() -> float | None:
 
 
 def _stream_delta_chars() -> int:
-    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_CHARS", "64")
+    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_CHARS", "48")
     try:
         value = int(raw)
     except (TypeError, ValueError):
-        value = 64
+        value = 48
     return max(1, value)
 
 
 def _stream_delta_sleep_seconds() -> float:
-    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_SLEEP_SECONDS", "0.01")
+    raw = os.getenv("CKQA_GRAPHRAG_STREAM_DELTA_SLEEP_SECONDS", "0.04")
     try:
         value = float(raw)
     except (TypeError, ValueError):
-        value = 0.01
+        value = 0.04
     return max(0.0, value)
 
 

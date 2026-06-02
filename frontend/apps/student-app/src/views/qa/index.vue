@@ -82,6 +82,9 @@ import {
   normalizeProgressEvents,
   normalizeStreamEventSeq,
   normalizeTaskLogs,
+  mergePartialStreamText,
+  qaMessageTaskStatusLabel,
+  qaTaskStatusHeadline,
   resolveSessionLifecycleStatusText,
   resolveContextStatusText,
   resolveMemoryStatusText,
@@ -1076,12 +1079,19 @@ function startTaskStream(sessionId, taskId, submission) {
     && String(activeSession.value?.id ?? '') === String(sessionId)
   )
 
-  const fallbackToPolling = (reason = '事件流暂不可用，已切换为轮询。') => {
+  const fallbackToPolling = (reason = '事件流连接已关闭，问答仍在后台运行，已切换为轮询继续接收。') => {
     if (state.terminal || state.fallbackStarted || controller.signal.aborted || !isCurrentStream()) {
       return
     }
     state.fallbackStarted = true
     statusMessage.value = reason
+    pendingTask.value = {
+      ...(pendingTask.value ?? submission),
+      sessionId,
+      streaming: false,
+      streamText: pendingTask.value?.streamText ?? initialStreamText,
+      lastStreamEventSeq: normalizeStreamEventSeq(pendingTask.value?.lastStreamEventSeq ?? initialEventSeq),
+    }
     scheduleTaskPoll(sessionId, taskId, Math.min(2, resolvePollingDelaySeconds(pendingTask.value || submission)))
   }
 
@@ -1118,7 +1128,7 @@ function startTaskStream(sessionId, taskId, submission) {
         ...payload,
         sessionId,
         streaming: true,
-        streamText: currentStreamText || payloadPartialText,
+        streamText: mergePartialStreamText(currentStreamText, payloadPartialText),
         progressEvents,
         latestLogs: normalizeTaskLogs(payload.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
         lastStreamEventSeq: Math.max(currentSeq, payloadSeq),
@@ -1226,18 +1236,20 @@ function startTaskStream(sessionId, taskId, submission) {
       }
       const isNetworkError = payloadOrError instanceof Error
       if (isNetworkError) {
-        fallbackToPolling('事件流连接中断，已切换为轮询。')
+        fallbackToPolling('事件流连接中断，正在改用轮询继续接收；如果任务失败会显示具体原因。')
         return
       }
       state.terminal = true
       clearTaskStream()
-      errorMessage.value = payloadOrError?.message || '问答任务执行失败'
       const errorPayload = payloadOrError && typeof payloadOrError === 'object' ? payloadOrError : {}
+      const failedMessage = readableTaskFailureMessage(errorPayload) || '问答任务执行失败'
+      errorMessage.value = failedMessage
       pendingTask.value = {
         ...(pendingTask.value ?? submission),
         ...errorPayload,
         sessionId,
-        taskStatus: pendingTask.value?.taskStatus || 'failed',
+        taskStatus: errorPayload.taskStatus || 'failed',
+        errorMessage: failedMessage,
         streaming: false,
       }
     },
@@ -1248,7 +1260,7 @@ function startTaskStream(sessionId, taskId, submission) {
     signal: controller.signal,
     afterEventSeq: initialEventSeq,
   }).catch(() => {
-    fallbackToPolling('事件流连接失败，已切换为轮询。')
+    fallbackToPolling('事件流连接失败，正在改用轮询继续接收；如果任务失败会显示具体原因。')
   })
 }
 
@@ -1267,7 +1279,7 @@ async function pollTask(sessionId, taskId) {
       ...(pendingTask.value ?? {}),
       ...detail,
       sessionId,
-      streamText: currentStreamText || partialStreamText,
+      streamText: mergePartialStreamText(currentStreamText, partialStreamText),
       progressEvents,
       latestLogs: normalizeTaskLogs(detail.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
       lastStreamEventSeq: Math.max(currentSeq, detailSeq),
@@ -1303,7 +1315,7 @@ async function pollTask(sessionId, taskId) {
       ...detail,
       sessionId,
       streaming: false,
-      streamText: pendingTask.value?.streamText || detail.partialResponseText || '',
+      streamText: mergePartialStreamText(pendingTask.value?.streamText, detail.partialResponseText),
       progressEvents,
       latestLogs: normalizeTaskLogs(detail.latestLogs ?? pendingTask.value?.latestLogs, progressEvents),
       lastStreamEventSeq: Math.max(
@@ -1521,16 +1533,52 @@ function formatMessageTime(value) {
 }
 
 function taskStatusText(task) {
+  return qaTaskStatusHeadline(task)
+}
+
+function taskPendingCopy(task) {
   if (!task) {
-    return ''
+    return '后端正在执行 GraphRAG 查询任务。'
   }
-  if (task.taskStatus === 'pending') {
-    return '任务已排队'
+  const status = String(task.taskStatus ?? '').toLowerCase()
+  if (status === 'failed') {
+    return readableTaskFailureMessage(task) || '问答任务执行失败，已保留可用的部分内容。'
   }
-  if (task.taskStatus === 'running') {
-    return '正在检索与生成'
+  if (status === 'stale') {
+    return task.timeoutMessage || '任务等待时间过长，已停止自动接收，已保留可用的部分内容。'
   }
-  return task.progressStage || task.taskStatus || '处理中'
+  if (task.streamingFallbackReason) {
+    return readableStreamingFallbackMessage(task.streamingFallbackReason)
+  }
+  return task.routeReason || task.timeoutMessage || '后端正在执行 GraphRAG 查询任务。'
+}
+
+function readableStreamingFallbackMessage(reason) {
+  const text = String(reason ?? '')
+  if (/429|rate limit|quota|insufficient|too many requests/i.test(text)) {
+    return '模型服务触发限流或额度限制，正在改用轮询等待最终结果。'
+  }
+  if (/timeout|timed out|read timed/i.test(text)) {
+    return '事件流等待时间较长，正在改用轮询继续接收回答。'
+  }
+  return '事件流暂不可用，正在改用轮询继续接收回答。'
+}
+
+function readableTaskFailureMessage(task) {
+  const raw = String(task?.errorMessage ?? task?.message ?? '').trim()
+  if (!raw && task?.streamingFallbackReason) {
+    return readableStreamingFallbackMessage(task.streamingFallbackReason)
+  }
+  if (/429|rate limit|quota|insufficient|too many requests/i.test(raw)) {
+    return '模型服务触发限流或额度限制，本次问答未能完成。'
+  }
+  if (/timeout|timed out|stale|heartbeat/i.test(raw)) {
+    return '任务等待时间过长，本次问答未能完成。'
+  }
+  if (/exit code|process.*ended|进程已结束|未返回终态/i.test(raw)) {
+    return '后端查询进程异常结束，本次问答未能完成。'
+  }
+  return raw
 }
 
 function messageModeLabel(message) {
@@ -1641,7 +1689,13 @@ function sourceTypeLabel(source) {
             <div class="msg-text">{{ msg.content }}</div>
             <div class="msg-meta">
               <span>{{ formatMessageTime(msg.createdAt) }}</span>
-              <span v-if="msg.taskStatus">{{ msg.taskStatus }}</span>
+              <span
+                v-if="qaMessageTaskStatusLabel(msg)"
+                class="msg-task-status"
+                :class="`task-status-${String(msg.taskStatus ?? '').toLowerCase()}`"
+              >
+                {{ qaMessageTaskStatusLabel(msg) }}
+              </span>
             </div>
           </div>
 
@@ -1702,7 +1756,7 @@ function sourceTypeLabel(source) {
               <span>{{ taskStatusText(pendingTask) }}</span>
             </div>
             <div class="pending-copy">
-              {{ pendingTask.routeReason || pendingTask.timeoutMessage || '后端正在执行 GraphRAG 查询任务。' }}
+              {{ taskPendingCopy(pendingTask) }}
             </div>
             <QaRetrievalTrace
               :events="pendingProcessEvents"
@@ -2040,6 +2094,9 @@ function sourceTypeLabel(source) {
 
 .msg-meta { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; color: #94a3b8; font-size: 11px; }
 .user-bubble .msg-meta { color: rgba(255, 255, 255, 0.78); }
+.msg-task-status { font-weight: 700; }
+.msg-task-status.task-status-failed,
+.msg-task-status.task-status-stale { color: #fecdd3; }
 
 .pending-bubble { border-color: rgba(13, 148, 136, 0.28) !important; }
 .pending-head { display: inline-flex; align-items: center; gap: 8px; color: var(--qa-teal); font-size: 13px; font-weight: 800; }

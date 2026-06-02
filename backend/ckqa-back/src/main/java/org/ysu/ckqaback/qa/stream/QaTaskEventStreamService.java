@@ -73,16 +73,31 @@ public class QaTaskEventStreamService {
         SseEmitter emitter = createEmitter(properties.timeoutMillis());
         AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
         AtomicReference<String> bridgedPythonTaskId = new AtomicReference<>();
+        AtomicReference<String> closeReason = new AtomicReference<>("client-closed");
         AtomicBoolean pythonDeltaForwarded = new AtomicBoolean(false);
         AtomicLong lastHeartbeatEpochMillis = new AtomicLong(0L);
-        Runnable cleanup = () -> cancelScheduled(futureRef);
+        Runnable cleanup = () -> {
+            cancelScheduled(futureRef);
+            log.debug("QA 任务事件流关闭, sessionId={}, taskId={}, reason={}", sessionId, taskId, closeReason.get());
+        };
 
         emitter.onCompletion(cleanup);
         emitter.onTimeout(() -> {
+            closeReason.set("timeout");
+            log.info(
+                    "QA 任务事件流超时关闭, sessionId={}, taskId={}, timeoutSeconds={}; 任务可继续通过轮询获取状态",
+                    sessionId,
+                    taskId,
+                    properties.getTimeoutSeconds()
+            );
             cleanup.run();
             emitter.complete();
         });
-        emitter.onError(error -> cleanup.run());
+        emitter.onError(error -> {
+            closeReason.set(error == null ? "emitter-error" : "emitter-error:" + error.getClass().getSimpleName());
+            log.debug("QA 任务事件流连接异常, sessionId={}, taskId={}, reason={}", sessionId, taskId, closeReason.get());
+            cleanup.run();
+        });
 
         try {
             sendEvent(emitter, "ack", Map.of("sessionId", sessionId, "taskId", taskId));
@@ -100,6 +115,7 @@ public class QaTaskEventStreamService {
                         emitter,
                         futureRef,
                         bridgedPythonTaskId,
+                        closeReason,
                         pythonDeltaForwarded,
                         lastHeartbeatEpochMillis,
                         afterEventSeq == null ? 0L : Math.max(0L, afterEventSeq)
@@ -123,6 +139,7 @@ public class QaTaskEventStreamService {
             SseEmitter emitter,
             AtomicReference<ScheduledFuture<?>> futureRef,
             AtomicReference<String> bridgedPythonTaskId,
+            AtomicReference<String> closeReason,
             AtomicBoolean pythonDeltaForwarded,
             AtomicLong lastHeartbeatEpochMillis,
             Long afterEventSeq
@@ -145,21 +162,25 @@ public class QaTaskEventStreamService {
                 sendEvent(emitter, "sources", terminalDetail.getAssistantMessage().getSources());
                 sendEvent(emitter, "message", terminalDetail.getAssistantMessage());
                 sendEvent(emitter, "done", Map.of("taskId", taskId, "taskStatus", "success"));
+                closeReason.set("terminal-success");
             } else {
                 sendEvent(emitter, "error", Map.of(
                         "taskId", taskId,
                         "taskStatus", terminalDetail.getTaskStatus(),
                         "message", terminalErrorMessage(terminalDetail)
                 ));
+                closeReason.set("terminal-error:" + terminalDetail.getTaskStatus());
             }
             cancelScheduled(futureRef);
             emitter.complete();
         } catch (IOException ex) {
             cancelScheduled(futureRef);
+            closeReason.set("connection-not-writable");
             log.debug("QA 任务事件流连接已不可写, sessionId={}, taskId={}: {}", sessionId, taskId, ex.getMessage());
             completeQuietly(emitter);
         } catch (RuntimeException ex) {
             cancelScheduled(futureRef);
+            closeReason.set("push-failed");
             log.warn("QA 任务事件推送失败, sessionId={}, taskId={}", sessionId, taskId, ex);
             sendErrorEventAndComplete(emitter, taskId, "QA 任务事件流中断，前端可回退到轮询");
         }

@@ -12,6 +12,9 @@ import {
   normalizeQaSessionList,
   normalizeQaSources,
   normalizeQaSession,
+  mergePartialStreamText,
+  qaMessageTaskStatusLabel,
+  qaTaskStatusHeadline,
   formatRelativeSessionTime,
   normalizeLearningMemory,
   learningMemoryTypeLabel,
@@ -203,6 +206,23 @@ test('消息与任务状态规范化为前端展示模型', () => {
   assert.equal(runningMessage.progressEvents[1].evidence[0].title, '操作系统第一章报告')
   assert.equal(runningMessage.partialResponseText, '当前已经生成的部分回答')
   assert.equal(runningMessage.streamEventSeq, 12)
+})
+
+test('轮询快照会用更完整的部分回答补齐当前流式文本', () => {
+  assert.equal(mergePartialStreamText('', '第一段回答'), '第一段回答')
+  assert.equal(mergePartialStreamText('第一段', '第一段回答继续生成'), '第一段回答继续生成')
+  assert.equal(mergePartialStreamText('第一段回答继续生成', '第一段回答'), '第一段回答继续生成')
+  assert.equal(mergePartialStreamText('前端已有不同内容', '后端快照内容'), '前端已有不同内容')
+})
+
+test('任务终态展示优先使用中文业务状态而不是底层阶段', () => {
+  assert.equal(qaMessageTaskStatusLabel({}), '')
+  assert.equal(qaMessageTaskStatusLabel({ taskStatus: 'failed' }), '失败')
+  assert.equal(qaMessageTaskStatusLabel({ taskStatus: 'stale' }), '已超时')
+  assert.equal(qaMessageTaskStatusLabel({ taskStatus: 'running' }), '运行中')
+  assert.equal(qaTaskStatusHeadline({ taskStatus: 'failed', progressStage: 'done' }), '问答失败')
+  assert.equal(qaTaskStatusHeadline({ taskStatus: 'stale', progressStage: 'done' }), '任务超时')
+  assert.equal(qaTaskStatusHeadline({ taskStatus: 'running', progressStage: 'done' }), '正在检索与生成')
 })
 
 test('学生反馈规范化为消息内轻量状态', () => {

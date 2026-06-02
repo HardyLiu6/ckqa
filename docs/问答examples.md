@@ -25,6 +25,14 @@
 | 简述 PCB 的含义。 | `definition_intent` |
 | 解释一下临界区。 | `definition_intent` |
 | 介绍一下虚拟内存的概念。 | `definition_intent` |
+| 什么是系统调用？ | `definition_intent` |
+| 什么是中断？ | `definition_intent`，短问题加权 |
+| 线程是什么？ | `definition_intent`，短问题加权 |
+| 简述文件控制块 FCB 的作用。 | `definition_intent` |
+| 什么是页面置换？ | `definition_intent` |
+| 解释一下缓冲区的含义。 | `definition_intent` |
+| 什么是设备驱动程序？ | `definition_intent` |
+| 简述分时系统的概念。 | `definition_intent` |
 
 ### `local` — 精确定位
 
@@ -36,6 +44,14 @@
 | 给定页面访问序列 7,0,1,2,0,3,0,4,2,3 和 3 个物理块，LRU 的缺页次数是多少？ | `material_locator`（访问序列 + 缺页） |
 | 死锁产生的四个必要条件分别是什么，破坏了哪一个就能预防？ | `material_locator`（条件 + 破坏了哪个） |
 | 逻辑地址 0x1A3F 在二级页表下的页号和偏移是多少？ | `material_locator`（逻辑地址 + 页号 + 偏移） |
+| 请根据第 2 章说明信号量 P/V 操作如何实现进程互斥。 | `material_locator`（第 N 章 + 机制） |
+| 课件里生产者-消费者问题的同步关系和互斥关系分别是什么？ | `material_locator`（课件 + 关系 + 机制） |
+| 给定磁道访问序列 98,183,37,122,14,124,65,67，SSTF 的移动磁道数怎么算？ | `material_locator`（访问序列 + 磁道 + 算法） |
+| 教材中 FIFO 页面置换算法的例题是怎样计算缺页率的？ | `material_locator`（教材 + 例题 + 缺页率） |
+| 第 4 章里页表、快表和地址转换过程的步骤是什么？ | `material_locator`（第 N 章 + 步骤 + 地址转换） |
+| 课件中目录项和 FCB 的区别在哪一页讲到？ | `material_locator`（课件 + 页号 + 区别） |
+| 请按教材原文解释索引文件的查找过程。 | `material_locator`（教材 + 原文 + 过程） |
+| I/O 中断处理流程在课件中的步骤是什么？ | `material_locator`（I/O + 课件 + 步骤） |
 
 ### `global` — 全局综述
 
@@ -46,6 +62,14 @@
 | 概括存储管理章节涉及的核心主题 | `summary_intent`（概括 + 主题） |
 | 操作系统课程的知识体系是怎样组织的，给我一个 overview | `summary_intent`（知识体系 + overview） |
 | 整体上文件系统这一部分包含哪些主题？ | `summary_intent`（整体 + 主题） |
+| 请总结第一章操作系统引论从目标、作用到发展历程的整体脉络。 | `summary_intent`（总结 + 整体 + 脉络） |
+| 概括进程管理章节从进程概念到调度与同步的知识框架。 | `summary_intent`（概括 + 知识框架） |
+| 请综述存储管理中连续分配、分页、分段和虚拟存储之间的主题关系。 | `summary_intent`（综述 + 主题 + 关系） |
+| 按章节梳理进程管理、存储管理、文件系统和设备管理之间的主线。 | `summary_intent`（梳理 + 主线） |
+| 请从管理对象、核心机制、典型算法三个角度总结 I/O 设备管理章节。 | `summary_intent`（总结 + 章节） |
+| 文件系统章节从文件组织到磁盘空间管理，整体知识结构是什么？ | `summary_intent`（整体 + 知识结构） |
+| 请概括操作系统课程中“资源管理”这一主线贯穿了哪些内容。 | `summary_intent`（概括 + 主线） |
+| 给我一个操作系统期末复习的全局知识地图。 | `summary_intent`（全局 + 知识地图） |
 
 ### `drift` — 探索扩展
 
@@ -57,6 +81,14 @@
 | 自旋锁和互斥量的区别在哪些应用场景下值得权衡？ | `exploration_intent`（区别 + 场景 + 应用） |
 | 多级反馈队列调度是怎么从短作业优先和时间片轮转扩展演化出来的？ | `exploration_intent`（扩展 + 迁移） |
 | LRU 和 Clock 算法相比有什么瓶颈和局限？ | `exploration_intent`（对比 + 瓶颈 + 局限） |
+| 为什么死锁避免通常比死锁预防更灵活，但运行时开销也更高？ | `exploration_intent`（为什么 + 灵活 + 开销） |
+| 内存局部性原理和页面置换算法之间有什么联系？ | `exploration_intent`（联系） |
+| 文件系统目录结构和数据库索引在设计目标上有什么异同？ | `exploration_intent`（异同 + 设计） |
+| 磁盘调度算法为什么需要在吞吐量和公平性之间权衡？ | `exploration_intent`（为什么 + 权衡） |
+| 分页、分段和段页式管理分别适合解决什么设计问题？ | `exploration_intent`（适合 + 设计） |
+| 用户态和内核态的切换对系统调用性能有什么影响？ | `exploration_intent`（影响） |
+| 读写锁和互斥锁相比，在什么场景下更合适？ | `exploration_intent`（相比 + 场景 + 合适） |
+| 虚拟内存为什么能让程序看起来拥有比物理内存更大的地址空间？ | `exploration_intent`（为什么 + 原因） |
 
 ### `hybrid_v0` — 证据融合（Beta）
 
@@ -69,6 +101,14 @@
 | 分页与分段的优缺点对比，请引用课件出处并交叉验证 | `evidence_relation_intent` + `evidence_material_fusion`（优缺点 + 对比 + 引用 + 出处） |
 | 请综合比较自旋锁和互斥量在多核系统中的影响，给出材料依据 | `evidence_relation_intent`（比较 + 影响 + 材料依据） |
 | 工作集模型和缺页率两种页面置换控制策略的关系，请给出来源引用作为佐证 | `evidence_relation_intent`（关系 + 来源 + 引用 + 佐证） |
+| 请引用教材和课件依据，比较 FIFO、LRU、Clock 三种页面置换算法的优缺点。 | `evidence_relation_intent` + `evidence_material_fusion`（引用 + 依据 + 比较 + 优缺点） |
+| 请用课程材料佐证分页和分段在地址转换方式上的差异。 | `evidence_relation_intent`（材料佐证 + 差异） |
+| 请结合两处材料验证银行家算法为什么可以避免死锁，并说明它和死锁预防的区别。 | `evidence_relation_intent`（验证 + 区别 + 材料） |
+| 请引用课件出处，对比连续分配、链接分配和索引分配三种文件存储方式。 | `evidence_relation_intent` + `evidence_material_fusion`（引用 + 出处 + 对比） |
+| 请给出课程来源，说明进程调度和内存调度在“资源分配”上的共同点与差异。 | `evidence_relation_intent`（来源 + 共同点 + 差异） |
+| 请交叉验证教材中关于中断、陷入和系统调用关系的表述。 | `evidence_relation_intent`（交叉验证 + 关系 + 教材） |
+| 请结合材料依据说明 SCAN 和 C-SCAN 磁盘调度算法为何会影响公平性。 | `evidence_relation_intent`（材料依据 + 影响） |
+| 请引用原文比较顺序文件、索引文件和索引顺序文件的适用场景。 | `evidence_relation_intent` + `evidence_material_fusion`（引用原文 + 比较 + 场景） |
 
 ## 三、其他打分细则
 

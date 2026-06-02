@@ -10,6 +10,32 @@ const MODE_POLLING_DEFAULTS = {
 
 const QA_MESSAGE_MODES = new Set(['basic', 'local', 'global', 'drift', 'hybrid_v0'])
 
+const QA_TASK_STATUS_LABELS = {
+  pending: '排队中',
+  queued: '排队中',
+  running: '运行中',
+  success: '已完成',
+  failed: '失败',
+  stale: '已超时',
+}
+
+const QA_TASK_HEADLINE_LABELS = {
+  pending: '任务已排队',
+  queued: '任务已排队',
+  running: '正在检索与生成',
+  success: '已完成',
+  failed: '问答失败',
+  stale: '任务超时',
+}
+
+const QA_PROGRESS_STAGE_LABELS = {
+  queued: '排队中',
+  pending: '排队中',
+  running: '处理中',
+  streaming: '正在生成回答',
+  done: '已结束',
+}
+
 export function normalizeCourseList(payload) {
   const list = Array.isArray(payload) ? payload : payload?.items ?? payload?.records ?? []
   return list.map((course) => ({
@@ -203,9 +229,52 @@ export function normalizeQaMessage(message) {
   }
 }
 
+function normalizeTaskStatus(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+export function qaMessageTaskStatusLabel(messageOrStatus) {
+  const rawStatus = typeof messageOrStatus === 'object' ? messageOrStatus?.taskStatus : messageOrStatus
+  const status = normalizeTaskStatus(rawStatus)
+  if (!status) {
+    return ''
+  }
+  return QA_TASK_STATUS_LABELS[status] ?? String(rawStatus ?? '').trim()
+}
+
+export function qaTaskStatusHeadline(task) {
+  if (!task) {
+    return ''
+  }
+  const status = normalizeTaskStatus(task.taskStatus)
+  if (QA_TASK_HEADLINE_LABELS[status]) {
+    return QA_TASK_HEADLINE_LABELS[status]
+  }
+  const stage = normalizeTaskStatus(task.progressStage)
+  if (QA_PROGRESS_STAGE_LABELS[stage]) {
+    return QA_PROGRESS_STAGE_LABELS[stage]
+  }
+  return qaMessageTaskStatusLabel(status) || '处理中'
+}
+
 export function normalizeStreamEventSeq(value) {
   const number = Number(value ?? 0)
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0
+}
+
+export function mergePartialStreamText(currentText = '', partialText = '') {
+  const current = String(currentText ?? '')
+  const partial = String(partialText ?? '')
+  if (!partial) {
+    return current
+  }
+  if (!current) {
+    return partial
+  }
+  if (partial.length > current.length && partial.startsWith(current)) {
+    return partial
+  }
+  return current
 }
 
 export function normalizeProgressEvents(events) {
