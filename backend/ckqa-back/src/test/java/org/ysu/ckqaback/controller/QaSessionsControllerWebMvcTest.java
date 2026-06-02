@@ -314,7 +314,7 @@ class QaSessionsControllerWebMvcTest {
                 "drift",
                 15L,
                 1800L,
-                "drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"
+                "drift 模式正在沿相关线索展开追问检索，等待时间较长时会尽量保留已生成内容。"
         );
         given(qaWorkflowService.sendMessage(eq(5L), any(), eq(authenticatedStudent()))).willReturn(response);
 
@@ -333,7 +333,7 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.taskStatus").value("pending"))
                 .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(15))
                 .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(1800))
-                .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式在真实环境里通常耗时更长，请按较低频率轮询并等待后台完成"))
+                .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式正在沿相关线索展开追问检索，等待时间较长时会尽量保留已生成内容。"))
                 .andExpect(jsonPath("$.data.assistantMessage").doesNotExist());
     }
 

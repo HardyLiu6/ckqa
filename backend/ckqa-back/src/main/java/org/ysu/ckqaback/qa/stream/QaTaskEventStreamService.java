@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.qa.stream;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -34,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 public class QaTaskEventStreamService {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final QaWorkflowService qaWorkflowService;
     private final QaRetrievalLogsService qaRetrievalLogsService;
     private final GraphRagTaskClient graphRagTaskClient;
@@ -355,12 +358,19 @@ public class QaTaskEventStreamService {
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data, Long eventSeq) throws IOException {
         synchronized (emitter) {
-            SseEmitter.SseEventBuilder builder = SseEmitter.event().name(eventName).data(data);
+            SseEmitter.SseEventBuilder builder = SseEmitter.event().name(eventName).data(normalizeSseData(data));
             if (eventSeq != null) {
                 builder.id(String.valueOf(eventSeq));
             }
             emitter.send(builder);
         }
+    }
+
+    private Object normalizeSseData(Object data) {
+        if (data instanceof JsonNode node) {
+            return objectMapper.convertValue(node, Object.class);
+        }
+        return data;
     }
 
     private void sendErrorEventAndComplete(SseEmitter emitter, Long taskId, String message) {

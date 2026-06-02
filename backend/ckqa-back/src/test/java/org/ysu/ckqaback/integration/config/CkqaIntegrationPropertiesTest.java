@@ -2,6 +2,10 @@ package org.ysu.ckqaback.integration.config;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class CkqaIntegrationPropertiesTest {
@@ -16,20 +20,41 @@ class CkqaIntegrationPropertiesTest {
         assertThat(properties.resolveQueryTaskModePolicy("global").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("global").staleTimeoutSeconds()).isEqualTo(1800L);
         assertThat(properties.resolveQueryTaskModePolicy("global").timeoutMessage())
-                .contains("长时间未更新")
+                .contains("汇总课程报告")
+                .contains("尽量保留已生成内容")
                 .doesNotContain("10 到 20 分钟")
                 .doesNotContain("前端低频轮询");
 
         assertThat(properties.resolveQueryTaskModePolicy("drift").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").staleTimeoutSeconds()).isEqualTo(1800L);
         assertThat(properties.resolveQueryTaskModePolicy("drift").timeoutMessage())
-                .contains("长时间未更新")
+                .contains("追问检索")
+                .contains("尽量保留已生成内容")
                 .doesNotContain("10 到 20 分钟")
                 .doesNotContain("前端低频轮询");
 
         assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").recommendedPollingIntervalSeconds()).isEqualTo(30L);
         assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").staleTimeoutSeconds()).isEqualTo(1800L);
         assertThat(properties.resolveQueryTaskModePolicy("hybrid_v0").timeoutMessage()).contains("混合检索");
+    }
+
+    @Test
+    void shouldKeepApplicationDefaultTimeoutMessagesStudentFacing() throws Exception {
+        List<String> timeoutMessageLines = Files.readAllLines(Path.of("src/main/resources/application.properties"))
+                .stream()
+                .filter(line -> line.contains("query-task-mode-timeout-messages."))
+                .toList();
+
+        assertThat(timeoutMessageLines).isNotEmpty();
+        assertThat(String.join("\n", timeoutMessageLines))
+                .doesNotContain("实测")
+                .doesNotContain("10 \\u5230 20 \\u5206\\u949f")
+                .doesNotContain("前端")
+                .doesNotContain("\\u524d\\u7aef")
+                .doesNotContain("低频轮询")
+                .doesNotContain("\\u4f4e\\u9891\\u8f6e\\u8be2")
+                .doesNotContain("stale")
+                .contains("已生成内容");
     }
 
     @Test

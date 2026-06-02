@@ -54,14 +54,12 @@ public class CkqaIntegrationProperties {
 
     private String defaultTimeoutMessage(String mode, long staleTimeoutSeconds) {
         if ("drift".equals(mode)) {
-            return "drift 模式通常耗时更长，任务心跳超过 " + staleTimeoutSeconds
-                    + " 秒未更新后会被标记为 stale；可调大 QUERY_TASK_STALE_SECONDS_DRIFT 并降低前端轮询频率。";
+            return "drift 模式正在沿相关线索展开追问检索，等待时间较长时会尽量保留已生成内容。";
         }
         if ("hybrid_v0".equals(mode)) {
-            return "混合检索 Beta 模式通常耗时更长，任务心跳超过 " + staleTimeoutSeconds
-                    + " 秒未更新后会被标记为 stale。";
+            return "混合检索 Beta 模式正在融合多路证据，等待时间较长时会尽量保留已生成内容。";
         }
-        return mode + " 模式任务心跳超过 " + staleTimeoutSeconds + " 秒未更新后会被标记为 stale。";
+        return mode + " 模式正在检索课程内容并生成回答，等待时间较长时会尽量保留已生成内容。";
     }
 
     public record QueryTaskModePolicy(
@@ -145,11 +143,11 @@ public class CkqaIntegrationProperties {
                 "hybrid_v0", 1800L
         ));
         private Map<String, String> queryTaskModeTimeoutMessages = new LinkedHashMap<>(Map.of(
-                "local", "local 模式实测可能需要 2 分钟左右；任务心跳超过阈值未更新后会被标记为 stale。",
-                "basic", "basic 模式沿用轻量查询策略；任务心跳超过阈值未更新后会被标记为 stale。",
-                "global", "global 模式任务长时间未更新时会被标记为 stale，已生成内容会尽量保留。",
-                "drift", "drift 模式任务长时间未更新时会被标记为 stale，已生成内容会尽量保留。",
-                "hybrid_v0", "混合检索 Beta 模式会融合多路证据，任务长时间未更新时会被标记为 stale。"
+                "local", "local 模式正在结合课程上下文生成回答，等待时间较长时会尽量保留已生成内容。",
+                "basic", "basic 模式正在检索课程片段并生成回答，等待时间较长时会尽量保留已生成内容。",
+                "global", "global 模式正在汇总课程报告与主题要点，等待时间较长时会尽量保留已生成内容。",
+                "drift", "drift 模式正在沿相关线索展开追问检索，等待时间较长时会尽量保留已生成内容。",
+                "hybrid_v0", "混合检索 Beta 模式正在融合多路证据，等待时间较长时会尽量保留已生成内容。"
         ));
     }
 

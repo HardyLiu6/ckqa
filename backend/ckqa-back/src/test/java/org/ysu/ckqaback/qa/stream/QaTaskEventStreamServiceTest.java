@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -157,6 +158,13 @@ class QaTaskEventStreamServiceTest {
             assertThat(event).contains("event:progress");
             assertThat(event).contains("已选取 1 个课程片段");
         });
+        assertThat(service.emitter.payloads).anySatisfy(payload -> {
+            assertThat(payload).isInstanceOf(Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> progress = (Map<String, Object>) payload;
+            assertThat(progress).containsEntry("type", "context_selected");
+            assertThat(progress).containsEntry("summary", "已选取 1 个课程片段作为回答依据。");
+        });
         assertThat(service.emitter.renderedEvents).anySatisfy(event -> {
             assertThat(event).contains("id:13");
             assertThat(event).contains("event:delta");
@@ -230,6 +238,13 @@ class QaTaskEventStreamServiceTest {
             assertThat(event).contains("event:status");
             assertThat(event).contains("map_running");
             assertThat(event).contains("已处理约 64 秒");
+        });
+        assertThat(service.emitter.payloads).anySatisfy(payload -> {
+            assertThat(payload).isInstanceOf(Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> status = (Map<String, Object>) payload;
+            assertThat(status).containsEntry("taskStatus", "running");
+            assertThat(status).containsKey("progressEvents");
         });
     }
 
@@ -420,6 +435,7 @@ class QaTaskEventStreamServiceTest {
 
     private static final class RecordingSseEmitter extends SseEmitter {
         private final List<SseEventBuilder> events = new ArrayList<>();
+        private final List<Object> payloads = new ArrayList<>();
         private boolean completed;
         private boolean completedWithError;
 
@@ -444,6 +460,7 @@ class QaTaskEventStreamServiceTest {
         private String render(SseEventBuilder builder) {
             StringBuilder text = new StringBuilder();
             for (ResponseBodyEmitter.DataWithMediaType item : builder.build()) {
+                payloads.add(item.getData());
                 text.append(item.getData());
             }
             return text.toString();
