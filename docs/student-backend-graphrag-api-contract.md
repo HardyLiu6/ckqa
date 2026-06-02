@@ -1,6 +1,6 @@
 # Student App 到后端与 GraphRAG API 契约
 
-> 审查日期：2026-05-21
+> 审查日期：2026-06-02
 > 适用范围：`frontend/apps/student-app/`、`backend/ckqa-back/`、`graphrag_pipeline/`
 
 本文档定义学员端前端、Java 编排后端和 GraphRAG Python 服务之间的最小稳定契约。当前约定是：`student-app` 只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
@@ -335,7 +335,7 @@ Content-Type: application/json
 ### 订阅问答任务事件流
 
 ```http
-GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events
+GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events?afterEventSeq=<lastSeenEventSeq>
 Accept: text/event-stream
 Authorization: Bearer <token>
 ```
@@ -344,16 +344,18 @@ Authorization: Bearer <token>
 
 | event | 前端行为 |
 | --- | --- |
-| `open` | 标记任务进入 streaming 状态。 |
+| `open` | 客户端连接成功回调，不是服务端 SSE event；用于标记任务进入 streaming 状态。 |
+| `ack` | 服务端确认已建立当前 session/task 事件流。 |
 | `status` | 更新 `pendingTask`、用户消息上的 `taskStatus/progressStage`。 |
 | `heartbeat` | 记录最近事件流心跳。 |
+| `progress` | 更新检索进度轨迹，通常携带 `eventSeq`，前端展示在 `QaRetrievalTrace`。 |
 | `delta` | 追加临时流式文本。 |
 | `sources` | 更新来源列表。 |
 | `message` | 使用后端返回的 assistant 消息更新消息流。 |
 | `done` | 结束事件流，必要时再拉取任务详情或消息列表补齐 assistant 消息。 |
 | `error` | 展示错误；网络错误时切回轮询。 |
 
-事件流不可用、连接关闭或浏览器环境不支持 `AbortController` 时，前端必须回退到下面的任务详情轮询接口。
+事件流不可用、连接关闭或浏览器环境不支持 `AbortController` 时，前端必须回退到下面的任务详情轮询接口。若前端已经收到带 `eventSeq` 的 `progress` / `delta`，重连时应把最后一个已消费序号作为 `afterEventSeq` 查询参数传回 Java，避免重复拼接已展示文本；后端会把该序号继续传给 Python `/v1/query-tasks/{pythonTaskId}/events`。
 
 ### 轮询问答任务
 
@@ -705,7 +707,7 @@ GET /health
 - 前端直接触发 GraphRAG `graphrag index`。
 - `full` 查询模式。
 - WebSocket 双向通道。
-- `qa_retrieval_hits` 的完整引用来源管理视图。
+- 完整引用来源管理工作台；当前 `qa_retrieval_hits` / `qa_source_reviews` 已作为来源持久化和复核基础表存在，admin-app 已有问答运维列表，但检索日志详情与来源复核体验仍需继续补齐。
 
 ## 最小验证命令
 
@@ -746,7 +748,7 @@ curl --noproxy '*' -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/message
 如果要检查事件流，把返回的 `taskId` 替换到下面命令，并带上实际 JWT：
 
 ```bash
-curl --noproxy '*' -N http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/9001/events \
+curl --noproxy '*' -N 'http://127.0.0.1:8080/api/v1/qa-sessions/5/tasks/9001/events?afterEventSeq=0' \
   -H 'Accept: text/event-stream' \
   -H 'Authorization: Bearer <token>'
 ```

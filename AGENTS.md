@@ -20,21 +20,21 @@ This repository currently has seven notable areas, with the two Python modules a
 2. `graphrag_pipeline/`
    - Main knowledge graph Q&A pipeline.
    - Dependency source of truth is `pyproject.toml`, currently pinned to Microsoft GraphRAG `3.0.9`.
-   - Builds indexes and serves an OpenAI-compatible FastAPI endpoint.
+   - Builds indexes and serves an OpenAI-compatible FastAPI endpoint plus internal query-task, streaming, hybrid, and course-routing helpers for Java.
 3. `frontend/apps/student-app/`
    - Student-facing Vue 3 + Vite prototype managed directly inside the CKQA root repository.
    - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
-   - Auth, course read APIs, QA sessions/task events, learning memory, mode recommendation, and knowledge graph browsing are now partially wired to Java `/api/v1`; community, analysis, and some user flows remain explicit placeholders.
+   - Auth, course read APIs, QA sessions/task events, retrieval progress traces, stream resume, learning memory, mode recommendation, and knowledge graph browsing are now partially wired to Java `/api/v1`; community, analysis, and some user flows remain explicit placeholders.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
-   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, unified 403/404/500 pages, and Playwright browser fault-injection tests.
+   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, QA operations list, unified 403/404/500 pages, and Playwright browser fault-injection tests.
    - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
-   - Provides `/api/v1` course, PDF, knowledge-base, index, async QA, QA smoke session, and system health endpoints.
+   - Provides `/api/v1` course, PDF, knowledge-base, index, course routing, QA routing, async QA, QA stream, QA operations, QA smoke session, and system health endpoints.
    - Still depends on `pdf_ingest/` and `graphrag_pipeline/` for real parsing, indexing, and QA work.
 6. `infra/`
-   - Repository-root Docker Compose entrypoint for local MySQL, MinIO, One API, and Neo4j.
+   - Repository-root Docker Compose entrypoint for local MySQL, MinIO, One API, Neo4j, and Redis.
    - Runtime data directories are ignored by Git; preserve bind mounts when changing deployment.
 7. `sql/`
    - Repository-root MySQL schema and migration scripts.
@@ -79,9 +79,10 @@ Environment and commands:
 
 Notes:
 
-- The unified compose manages `mysql`, `minio`, `one-api`, and `neo4j` with the existing local ports.
+- The unified compose manages `mysql`, `minio`, `one-api`, `neo4j`, and `redis` with the existing local ports.
 - MySQL and MinIO defaults preserve the current external bind mounts `/home/sunlight/mysql/data` and `/home/sunlight/minio/data`.
-- Neo4j and One API data live under `infra/neo4j/neo4j/` and `infra/one-api/one-api/data/`; these paths are runtime data and must not be committed.
+- Neo4j, One API, and Redis data live under `infra/neo4j/neo4j/`, `infra/one-api/one-api/data/`, and `infra/redis/data/`; these paths are runtime data and must not be committed.
+- Redis is used for login/email short-state and low-risk student read caches; it must not become the source of truth for QA answers, course data, or GraphRAG artifacts.
 - Do not run `docker compose down -v` unless explicitly asked to destroy local data.
 
 ### `sql/`
@@ -89,19 +90,13 @@ Notes:
 Important files:
 
 - `ocqa.sql`
-- `migrations/20260423_course_materials.sql`
-- `migrations/20260429_qa_session_type.sql`
-- `migrations/20260504_role_user_test_data.sql`
-- `migrations/20260505_kb_build_runs.sql`
-- `migrations/20260506_course_cover.sql`
-- `migrations/20260506_course_member_access_test_data.sql`
-- `migrations/20260506_jwt_auth_credentials.sql`
-- `migrations/20260506_user_avatar_course_material_management.sql`
+- `migrations/`
 
 Notes:
 
 - `sql/ocqa.sql` is now at the repository root, not under `pdf_ingest/`.
 - From `pdf_ingest/`, use `../sql/ocqa.sql` and `../sql/migrations/...`.
+- Active migrations now cover course materials, course covers, JWT/users, parse progress, knowledge-base build runs, prompt tuning, QA context/session summaries, retrieval hits/source reviews, `hybrid_v0`, course route profiles, and QA stream resume. Do not treat the older 2026-05-06 list as complete.
 
 ### `pdf_ingest/`
 
@@ -146,6 +141,8 @@ Important files:
 - `settings.yaml`
 - `.env`
 - `utils/fetch_from_minio.py`
+- `utils/query_task_manager.py`
+- `utils/query_streaming_adapter.py`
 - `utils/neo4jTest.py`
 - `utils/graphrag3dknowledge.py`
 
@@ -176,7 +173,9 @@ Notes:
 - `GRAPHRAG_BUILD_RUNS_ROOT` defaults to `${GRAPHRAG_ROOT}/runtime/kb-build-runs`; keep this runtime path ignored by Git and do not expose absolute workspace paths to browser clients.
 - Java passes build-run query context to Python as `indexRunId` plus backend-only `dataDirUri`; Python must reject absolute paths and path traversal outside `GRAPHRAG_BUILD_RUNS_ROOT`.
 - Build-run concurrency and activation are controlled by `GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS` and `GRAPHRAG_AUTO_ACTIVATION_POLICY`; the default activation policy is `latest-build-only`.
-- Neo4j and One API containers are managed by the repository-root `infra/docker-compose.yml`; do not reintroduce module-local compose files under `graphrag_pipeline/`.
+- `/v1/query-tasks` supports Java-internal async QA for `basic/local/global/drift/hybrid_v0`; native streaming emits progress/delta/source events for Java to bridge to browser SSE. Browser clients still go through Java `/api/v1`.
+- Course-routing internal endpoints under `/v1/internal/course-routing/*` are backend-only helpers; do not wire student/admin browser code directly to them.
+- Neo4j, One API, and Redis containers are managed by the repository-root `infra/docker-compose.yml`; do not reintroduce module-local compose files under `graphrag_pipeline/`.
 - After a local reset, `input/`, `output/`, `prompts/candidates/`, prompt tuning reports, and `prompts/final/active_prompt.json` may be absent or empty. Regenerate them from the current course extraction instead of assuming old `os` / `ds` artifacts exist.
 - The reset default prompt state is `base`, pointing directly to `prompts/*.txt`; only use `finalize_candidate_prompt.py` after new candidates have been generated.
 - When updating active guidance files or runtime defaults, run `python scripts/audit_repo_drift.py --strict`.
@@ -192,7 +191,8 @@ Notes:
 - Current route tree is broader than the actual implemented views; unopened routes should use the explicit "未开放" status page rather than blank pages.
 - `src/axios/index.js` injects JWT auth headers from the Pinia user store; `src/api/auth.js`, `src/api/courses.js`, `src/api/qa.js`, and `src/api/graph.js` are the current Java `/api/v1` browser boundary.
 - The QA page should preserve `courseId`, `sessionId`, `mode`, and `topic` in route query via `src/views/qa/qa-route-query-model.js`; avoid remounting the whole module view for query-only changes.
-- QA task streaming prefers `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` and must keep task polling as the fallback path.
+- QA task streaming prefers `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`; preserve `afterEventSeq` resume semantics for progress/delta events and keep task polling as the fallback path.
+- `smart` is a student-app selection state for `/api/v1/qa-routing/recommend`, not a final GraphRAG query mode. Final modes are `basic/local/global/drift/hybrid_v0`.
 
 ### `frontend/apps/admin-app/`
 
@@ -201,6 +201,7 @@ Notes:
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
 - Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, live material detail, live parse-results detail, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- QA operations list is implemented against Java `/api/v1/qa-operations/logs` and `/logs/summary`; list filters and overview metrics should stay backend-aggregated rather than computed from the current page.
 - Material detail and parse-results pages should stay aligned with Java `/api/v1/pdf-files/*` compatibility routes: the detail page surfaces parse status plus `parseProgress`, while the parse-results page remains a read-only artifact list unless the task explicitly expands that scope.
 - Course material upload currently accepts PDF only and defaults to a single-file 200MB limit; keep `frontend/apps/admin-app/src/views/pages/material-file-model.js`, Java `CourseMaterialProperties`, and Spring multipart config aligned when changing this limit.
 - Knowledge-base build wizard state should be driven by Java build-run APIs and the URL `buildRunId`, not by browser-only query/sessionStorage state once a build run exists.
@@ -211,10 +212,11 @@ Notes:
 - Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 phase-1 orchestration backend.
 - Unified response envelope is `code / message / data / timestamp`; business success code is `200`.
 - Async QA uses Python GraphRAG `/v1/query-tasks`; cross-service task timestamps are exposed as Asia/Shanghai offset-free `LocalDateTime` strings.
-- Local admin-app integration expects MySQL, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, `GRAPHRAG_BUILD_RUNS_ROOT`, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
-- `/api/v1/system/health` is a lightweight dependency check and no longer requires shared `GRAPHRAG_ROOT/output/lancedb`; `/api/v1/system/readiness` includes that shared CLI/debug output check.
+- Local admin-app/student-app integration expects MySQL, Redis, `PDF_INGEST_ROOT`, `GRAPHRAG_ROOT`, `GRAPHRAG_BUILD_RUNS_ROOT`, and `GRAPHRAG_API_BASE_URL` to be configured before `/api/v1/system/health` is fully ready.
+- `/api/v1/system/health` is a lightweight dependency check and no longer requires shared `GRAPHRAG_ROOT/output/lancedb`; `/api/v1/system/readiness` includes that shared CLI/debug output check. Redis is cache/short-state infrastructure, not a business fact source.
 - Knowledge-base build runs isolate input, output, logs, artifacts, active-index metadata, and QA smoke snapshots under `GRAPHRAG_BUILD_RUNS_ROOT`.
 - Course material upload v1 accepts PDF only and defaults to 200MB per file; `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES`, `CKQA_MULTIPART_MAX_FILE_SIZE`, and `CKQA_MULTIPART_MAX_REQUEST_SIZE` must stay compatible with the admin-app upload validator.
+- QA SSE uses `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` and may bridge Python native streaming; partial tokens are transient UI state, while MySQL stores final assistant messages, retrieval logs, and retrieval hits/source reviews.
 - Treat it as secondary to the Python parsing/indexing chain unless the user explicitly wants Java backend, `/api/v1`, orchestration, or frontend integration work.
 
 ## Cross-Module Contract

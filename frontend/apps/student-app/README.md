@@ -50,7 +50,7 @@
 | `src/layouts/moduleSideNavLoaders.js` | 模块副导航懒加载与顶栏预加载共用的 loader |
 | `src/layouts/route-view-key.js` | 控制模块视图 key，避免 query-only 变化导致整页重挂 |
 | `src/stores/` | Pinia store，包含学生 JWT 会话与本地页面状态 |
-| `vite.config.js` | Vite 配置，默认监听 `0.0.0.0:5174`，并将 `/api/v1` 代理到 Java 后端 |
+| `vite.config.js` | Vite 配置，默认监听 `0.0.0.0:5174`，将 `/api/v1` 代理到 Java 后端，并按 Vue、Element Plus、Graph、Markdown、请求层等依赖拆分手工 chunk |
 | `jsconfig.json` | `@/` 路径别名配置 |
 
 ## 路由现状
@@ -124,14 +124,15 @@ http://127.0.0.1:5174
 - 页面视觉层已经明显超出 Vite 默认模板，适合继续往正式学员端演进
 - 路由、菜单、页面结构已经初步成型
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
-- 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `delta`，不可用时自动回退到 task 轮询或最终答案分段
+- 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `progress/delta/sources`，不可用时自动回退到 task 轮询或最终答案分段
+- 事件流会记录 `eventSeq`，断线重连时通过 `afterEventSeq` 只请求后续 progress/delta，避免重复拼接已展示的流式文本；检索进度通过 `QaRetrievalTrace` 组件展示
 - 问答页在没有 URL、手动选择或历史会话 `courseId` 时，会先调用 Java `/api/v1/course-routing/recommend`；高置信 `matched` 自动选课，分数够但分差不足的 `needs_confirmation` 展示候选课程，确认后保留当前 QA mode 并继续发送原问题；明显非课程问题会得到 `no_match`，前端提示先选择课程，不直接发送正式问答
 - 问答页在已选课程、已从 URL/历史会话恢复课程，或已通过课程画像路由解析出课程后，应先调用 Java `/api/v1/qa-routing/domain-check` 做课程问答域校验
 - `domain-check` 返回 `allowed` 时才继续创建 session、发送消息并启动 task；返回 `out_of_scope` 时不创建 session、不发送消息、不启动 task，而是提示该问题不适合当前课程知识库问答
 - `domain-check` 暂不可用、超时或返回不可解析结果时，学生端按 fail-open 处理，继续走原有提交链路
 - 强负样本如 `今天晚上吃什么`、`今天晚上食堂有什么菜？`、`帮我写一首关于春天的短诗`、`我的头像应该怎么换？`、`这门课什么时候期末考试？` 应由后端策略返回 `out_of_scope`
 - 问答页会把 `courseId`、`sessionId`、`mode`、`topic` 写入路由 query；从图谱节点、问答侧栏、刷新页面返回时可以恢复课程与会话上下文
-- 顶栏会在首屏稳定后预加载课程、问答、知识图谱模块和副导航，G6 图谱画布也改为进入图谱页后再延迟加载
+- 顶栏会在首屏稳定后预加载课程、问答、知识图谱模块和副导航，G6 图谱画布也改为进入图谱页后再延迟加载；`vite.config.js` 已把图谱、Markdown、请求层和通用 vendor 拆成更可控的 chunk
 - 未实现路由现在会落到统一状态页，不再以空白页或注释组件的形式存在
 - 已形成面向学生端问答的 Java `/api/v1` 契约；浏览器不直连 `graphrag_pipeline` Python `/v1`
 

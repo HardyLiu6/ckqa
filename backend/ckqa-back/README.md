@@ -9,7 +9,7 @@
 3. 索引构建与陈旧任务恢复
 4. GraphRAG 问答代理
 5. 课程入口与系统健康检查
-6. 管理端 live API 所需课程、资料、知识库和 QA 冒烟验证聚合接口
+6. 管理端 live API 所需课程、资料、知识库、QA 冒烟验证和问答运维聚合接口
 
 如果你需要了解整个仓库的主链路，请同时查看：
 
@@ -47,13 +47,25 @@
 - `DELETE /api/v1/courses/{courseId}/materials/{materialId}`
 - `GET /api/v1/courses/{courseId}/pdf-files`
 - `GET /api/v1/courses/{courseId}/knowledge-bases`
+- `GET /api/v1/courses/{courseId}/chapters`
+- `GET /api/v1/courses/{courseId}/progress/me`
 - `GET /api/v1/knowledge-bases`
+- `POST /api/v1/knowledge-bases`
 - `GET /api/v1/knowledge-bases/{id}`
+- `PUT /api/v1/knowledge-bases/{id}`
+- `DELETE /api/v1/knowledge-bases/{id}`
+- `POST /api/v1/knowledge-bases/{id}/active-index-run`
+- `GET /api/v1/knowledge-bases/{id}/prompt-tune-availability`
+- `GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/overview`
+- `GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/entities/{entityId}`
+- `GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/entities/{entityId}/neighborhood`
 - `GET /api/v1/pdf-files/{id}`
 - `GET /api/v1/pdf-files/{id}/results`
 - `GET /api/v1/pdf-files/{id}/results/{resultId}/preview`
 - `GET /api/v1/pdf-files/{id}/results/{resultId}/download`
 - `POST /api/v1/pdf-files/{id}/parse`
+- `POST /api/v1/pdf-files/{id}/parse-events/token`
+- `GET /api/v1/pdf-files/{id}/parse-events`
 - `POST /api/v1/pdf-files/{id}/export-graphrag`
 - `POST /api/v1/course-routing/recommend`
 - `POST /api/v1/qa-routing/domain-check`
@@ -69,18 +81,50 @@
 - `POST /api/v1/knowledge-base-build-runs/{id}/parse-check`
 - `POST /api/v1/knowledge-base-build-runs/{id}/graph-input`
 - `POST /api/v1/knowledge-base-build-runs/{id}/prompt-confirmation`
+- `PUT /api/v1/knowledge-base-build-runs/{id}/custom-prompt-draft`
 - `POST /api/v1/knowledge-base-build-runs/{id}/index-runs`
 - `POST /api/v1/knowledge-base-build-runs/{id}/qa-smoke`
+- `POST /api/v1/knowledge-base-build-runs/{id}/prompt-tune`
+- `GET /api/v1/knowledge-base-build-runs/{id}/prompt-tune`
+- `POST /api/v1/knowledge-base-build-runs/{id}/prompt-tune-samples`
+- `POST /api/v1/knowledge-base-build-runs/{id}/audit-set`
+- `GET /api/v1/knowledge-base-build-runs/{id}/audit-samples`
+- `PUT /api/v1/knowledge-base-build-runs/{id}/audit-samples/{sampleId}`
+- `POST /api/v1/knowledge-base-build-runs/{id}/audit-samples/{sampleId}/ai-suggestions`
+- `GET /api/v1/knowledge-base-build-runs/{id}/seed-availability`
+- `POST /api/v1/knowledge-base-build-runs/{id}/candidates`
+- `GET /api/v1/knowledge-base-build-runs/{id}/candidates`
+- `GET /api/v1/knowledge-base-build-runs/{id}/candidates/{candidateId}/prompt`
+- `POST /api/v1/knowledge-base-build-runs/{id}/extraction-eval`
+- `GET /api/v1/knowledge-base-build-runs/{id}/extraction-eval/status`
+- `GET /api/v1/knowledge-base-build-runs/{id}/extraction-eval/report`
+- `POST /api/v1/knowledge-base-build-runs/{id}/extraction-eval/cancel`
+- `POST /api/v1/knowledge-base-build-runs/{id}/extraction-eval/retry-scoring`
+- `POST /api/v1/knowledge-base-build-runs/{id}/finalize`
 - `GET /api/v1/index-runs/{id}`
 - `GET /api/v1/index-runs/{id}/artifacts`
 - `GET /api/v1/index-artifacts/{id}`
 - `DELETE /api/v1/index-artifacts/{id}`
 - `POST /api/v1/qa-sessions`
+- `GET /api/v1/qa-sessions`
+- `POST /api/v1/qa-sessions/hybrid-warmup`
 - `GET /api/v1/qa-sessions/{id}`
+- `PATCH /api/v1/qa-sessions/{id}`
 - `GET /api/v1/qa-sessions/{id}/messages`
 - `POST /api/v1/qa-sessions/{id}/messages`
 - `GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}`
 - `GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`
+- `GET /api/v1/qa-memory/preferences`
+- `PUT /api/v1/qa-memory/preferences`
+- `GET /api/v1/qa-memory/items`
+- `DELETE /api/v1/qa-memory/items/{id}`
+- `POST /api/v1/qa-message-feedback`
+- `DELETE /api/v1/qa-message-feedback/{messageId}`
+- `GET /api/v1/qa-operations/logs`
+- `GET /api/v1/qa-operations/logs/summary`
+- `GET /api/v1/qa-operations/logs/export`
+- `GET /api/v1/qa-operations/logs/{retrievalLogId}`
+- `PUT /api/v1/qa-operations/source-reviews/{retrievalHitId}`
 
 其中 `/api/v1/pdf-files` 与 `/api/v1/courses/{courseId}/pdf-files` 目前都保留兼容语义：对外仍沿用旧路径，内部数据源已经切换为 `course_materials`，并通过 `material_objects` 复用同一份物理资料对象。新业务文档和后续前端接入应优先按“课程资料”理解。
 
@@ -369,9 +413,15 @@ export CKQA_COURSE_ROUTING_EXCLUDED_COURSE_TAGS=course-routing-excluded,internal
 GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events
 ```
 
-事件流返回 `text/event-stream`，不包统一 `ApiResponse`。浏览器必须携带正常 JWT `Authorization` header；后端仍校验当前用户是 session owner。事件包括 `ack`、`status`、`heartbeat`、`delta`、`sources`、`message`、`done` 和 `error`。
+事件流返回 `text/event-stream`，不包统一 `ApiResponse`。浏览器必须携带正常 JWT `Authorization` header；后端仍校验当前用户是 session owner。事件包括 `ack`、`status`、`heartbeat`、`progress`、`delta`、`sources`、`message`、`done` 和 `error`。
 
 阶段 2 开始，Java 会在支持的 mode 上请求 Python GraphRAG 原生 streaming，并把 Python 内部 `/v1/query-tasks/{pythonTaskId}/events` 的安全 `delta` 转发给浏览器；如果 Python streaming 不可用或断线，Java 自动回退阶段 1 行为，在任务成功后把最终回答安全分段为 `delta`。
+
+浏览器可在重连时带 `afterEventSeq` 查询参数，只请求该序号之后的 Python progress/delta 事件，避免断线后重复拼接已展示的流式文本：
+
+```text
+GET /api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events?afterEventSeq=12
+```
 
 配置项：
 
@@ -387,6 +437,18 @@ export CKQA_QA_PYTHON_STREAM_REPLAY_MAX_CHARS=12000
 ```
 
 SSE 连接失败、关闭或被禁用时，前端应回退到原有 task 轮询；数据库仍只保存最终 assistant message 和来源，不保存 partial token。
+
+## 管理端 QA 运维接口
+
+`/api/v1/qa-operations/*` 面向 admin-app 的问答运维列表和来源复核，不是学生端问答主链路。当前列表页使用：
+
+- `GET /api/v1/qa-operations/logs`：分页查询问答检索日志，支持关键字、课程、知识库、mode、taskStatus、反馈、路由置信度、复核优先级和时间范围筛选。
+- `GET /api/v1/qa-operations/logs/summary`：按相同筛选条件做全库聚合，返回 total / success / failed / lowConfidence / needReview，避免前端用当前页伪造概览指标。
+- `GET /api/v1/qa-operations/logs/export`：按筛选条件导出明细。
+- `GET /api/v1/qa-operations/logs/{retrievalLogId}`：读取单条日志详情。
+- `PUT /api/v1/qa-operations/source-reviews/{retrievalHitId}`：对引用来源写入或更新人工复核结果。
+
+列表和聚合统计以 MySQL 中的 `qa_retrieval_logs`、`qa_retrieval_hits`、`qa_source_reviews` 为事实源；前端只负责呈现、筛选和局部操作反馈。
 
 ## GraphRAG build-run 隔离
 
@@ -428,6 +490,7 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/qa-sessions/5/messages \
 - `global`
 - `drift`
 - `basic`
+- `hybrid_v0`
 
 `full` 当前已归档为后续扩展模式，不在 Java 编排链路内公开支持。
 
@@ -519,6 +582,6 @@ export CKQA_SMOKE_PARSE_RESULT_EXPECT_CONTAINS='content'
 - `parse` 与 `index` 仍是同步长任务，一期主要靠命令超时与陈旧任务恢复兜底
 - 问答链路已改成异步任务模式，修的是“超时语义”，不是 `global` / `drift` 查询速度
 - Python 任务快照目前仍是进程内内存态，Python 服务重启会导致 Java 把对应任务标记为 `failed`
-- `qa_retrieval_hits` 尚未落地
+- `qa_retrieval_hits` 与 `qa_source_reviews` 已作为来源持久化和复核基础表落地；管理端列表已可查看聚合来源摘要，但完整检索日志详情与来源复核工作台仍待继续补齐
 - `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活
-- Java 侧还没有承接上传链路，仍以已有课程资料记录为起点；`/api/v1/pdf-files` 现在只是兼容路由，内部实际读写的是 `course_materials` / `material_objects`
+- Java 侧已经承接课程资料 PDF 上传 v1；非 PDF、多文件批量上传和更细的上传后处理仍待后续扩展。`/api/v1/pdf-files` 现在只是兼容路由，内部实际读写的是 `course_materials` / `material_objects`

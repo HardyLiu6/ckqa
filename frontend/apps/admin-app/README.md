@@ -6,7 +6,7 @@
 
 - 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程资料上传、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、构建向导、QA 冒烟验证和统一错误页
+- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程资料上传、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、构建向导、QA 冒烟验证、问答运维列表和统一错误页
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
@@ -44,8 +44,10 @@
 | `src/stores/pinia.js` | admin-app 共享 Pinia 实例 |
 | `src/axios/index.js` | Axios 实例、认证头注入和错误收敛 |
 | `src/api/` | Java `/api/v1` 认证与业务 API 边界、ApiResponse 解包 |
+| `src/api/qa-operations.js` | 问答运维日志、聚合统计、导出和来源复核接口封装 |
 | `src/views/pages/module-loaders.js` | 按路由加载 live 数据并映射页面状态 |
 | `src/views/pages/material-file-model.js` | 课程资料上传文件校验，当前与后端保持单 PDF 200MB 上限 |
+| `src/views/qa/QaOperationsListView.vue` | 问答运维列表页，筛选自动生效，概览统计来自后端全库聚合 |
 | `e2e/local-operation-errors.spec.js` | Playwright 浏览器级故障注入验收 |
 | `src/views/` | 登录、工作台、系统健康、通用页面、未开放状态页和统一错误页 |
 | `src/views/status/UnifiedErrorView.vue` | 403 / 404 / 500 统一错误页 |
@@ -122,11 +124,12 @@ VITE_API_TIMEOUT=15000
 17. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
 18. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
 19. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
-20. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
+20. 问答运维列表走 Java `/api/v1/qa-operations/logs` 与 `/qa-operations/logs/summary`；筛选条件自动生效，概览卡片按后端全库聚合统计，不再基于当前页估算。
+21. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 
 1. 课程资料上传 v1 仅支持 PDF；如果后端调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 multipart 限制，需要同步 `src/views/pages/material-file-model.js`。
-2. 授权审计日志、索引运行列表、检索日志详情和用户详情目前是“未开放”路由。
+2. 授权审计日志、用户详情和完整检索日志详情仍是“未开放”或后续补齐路由；问答运维列表本身已经是 live 数据页。
 3. 403 页面已支持展示缺失权限；若需要精确权限文案，需要路由守卫跳转时附带 `required` 查询参数。
 4. 细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。

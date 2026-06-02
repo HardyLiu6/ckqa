@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Knowledge graph Q&A system built around Microsoft GraphRAG, currently pinned to `graphrag==3.0.9` in `pyproject.toml`. The project uses an OpenAI-compatible LLM / embedding endpoint (often routed through OneAPI) and exposes an OpenAI-compatible FastAPI API with `local`, `global`, `drift`, and `basic` search modes.
+Knowledge graph Q&A system built around Microsoft GraphRAG, currently pinned to `graphrag==3.0.9` in `pyproject.toml`. The project uses an OpenAI-compatible LLM / embedding endpoint (often routed through OneAPI) and exposes an OpenAI-compatible FastAPI API with `local`, `global`, `drift`, and `basic` search modes. Java-internal query-task APIs additionally support `hybrid_v0` and native streaming events for browser-facing SSE through `backend/ckqa-back`.
 
 **Language:** Chinese (comments, prompts, docs, and commit messages are in Chinese).
 **Build system:** `pyproject.toml` (setuptools) with `.env` / `settings.yaml` for GraphRAG CLI, plus a small runtime config layer in `utils/main.py`.
@@ -39,6 +39,9 @@ graphrag query --root . --method basic "问题"
 
 # Start the API server (port 8012)
 python utils/main.py
+
+# Java-internal async query task API supports basic/local/global/drift/hybrid_v0.
+# Browser clients must still call Java /api/v1, not these Python endpoints directly.
 
 # Prompt tuning helpers
 python scripts/build_prompt_tuning_samples.py
@@ -84,12 +87,13 @@ pdf_ingest 导出的 json
 
 1. **Input sync**: `utils/fetch_from_minio.py` 从 MinIO 下载 `section_docs.json` / `page_docs.json` / `normalized_docs.json`，并把 GraphRAG 常用 metadata 提升到顶层。
 2. **Indexing**: `graphrag index` 读取 `input/` 里的 JSON 数组，生成 parquet 文件和 `output/lancedb/`。
-3. **Serving**: `utils/main.py` 启动 FastAPI 服务，对外暴露 `/v1/chat/completions`、`/v1/models`、`/health`。
+3. **Serving**: `utils/main.py` 启动 FastAPI 服务，对外暴露 `/v1/chat/completions`、`/v1/models`、`/v1/query-tasks`、`/health`。
 4. **Search routing**: API 请求中的 `model` 用来选择搜索模式：
    - `graphrag-local-search:latest`
    - `graphrag-global-search:latest`
    - `graphrag-drift-search:latest`
    - `graphrag-basic-search:latest`
+5. **Java task bridge**: `/v1/query-tasks` 是 Java 后端内部异步问答入口，支持 `basic/local/global/drift/hybrid_v0`，并可通过 `/v1/query-tasks/{taskId}/events` 输出 `progress/delta/sources` 等事件。浏览器正式边界仍是 Java `/api/v1`。
 
 ### Compatibility Reality
 
@@ -108,6 +112,8 @@ pdf_ingest 导出的 json
 - **`scripts/run_graphrag_prompt_tune.py`**：统一封装 GraphRAG 官方 prompt-tune。
 - **`scripts/finalize_candidate_prompt.py`**：把候选 Prompt 固化到 `prompts/final/`，并更新 `.env` 中当前活动 Prompt 路径；清理旧调优产物后，候选目录可能为空。
 - **`utils/main.py`**：主 FastAPI 服务。默认读取仓库内 `output/`，统一通过 GraphRAG CLI 执行查询。
+- **`utils/query_task_manager.py`**：Python 异步查询任务生命周期、心跳、事件序号和任务快照。
+- **`utils/query_streaming_adapter.py`**：GraphRAG 原生 streaming 到 query-task `progress/delta/sources` 事件的适配层。
 - **`settings.yaml`**：GraphRAG CLI 索引配置，使用 `.env` 变量。
 - **`.env`**：GraphRAG CLI 所需的模型、目录和凭据变量。
 - **`utils/fetch_from_minio.py`**：从 MinIO 下载 JSON 输入，兼容历史 `*.jsonl`。
@@ -179,3 +185,5 @@ pip install -e ".[all]"    # 全部依赖
 - 旧输入、旧索引和旧调优产物可能被清空以准备重新抽取；不要假设 `input/`、`output/`、`prompts/candidates/` 或 `prompts/final/active_prompt.json` 一定存在。
 - 若已经完成提示词调优并选定候选 Prompt，先执行 `python scripts/finalize_candidate_prompt.py --candidate <name>`，再执行 `graphrag index --root .`。
 - `output/` 中的 parquet 与 `lancedb/` 需要同时保留，API 服务依赖二者并存。
+- `hybrid_v0` 是 Java query-task 路径上的业务 mode，默认使用 BM25 证据注入 GraphRAG Basic；不要把它写成 `/v1/models` 中的 OpenAI 兼容模型名。
+- `/v1/internal/course-routing/*` 只供 Java 后端做课程画像路由和 hints 抽取，student-app/admin-app 不应直接访问。

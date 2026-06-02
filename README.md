@@ -1,6 +1,6 @@
 # CKQA 项目入口文档
 
-> 审计日期：2026-05-21
+> 审计日期：2026-06-02
 > 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
 
 CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
@@ -12,11 +12,11 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 
 其余目录目前属于编排入口、基础设施或配套前端/后端工作区：
 
-- `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j；运行态数据目录不入库。
+- `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API、Neo4j 和 Redis；运行态数据目录不入库。
 - `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
-- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话/任务事件流、学习记忆、无显式课程时的课程画像路由和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、资料详情解析进度、解析结果详情、知识库、构建向导、QA 冒烟验证和统一错误页。
-- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、异步 QA、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
+- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话、SSE 任务事件流、检索进度轨迹、断线恢复、学习记忆、无显式课程时的课程画像路由和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、资料详情解析进度、解析结果详情、知识库、构建向导、QA 冒烟验证、问答运维列表和统一错误页。
+- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、课程路由、QA 模式推荐、异步 QA、QA 事件流、QA 运维聚合、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
 
 如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
 
@@ -26,17 +26,17 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 | --- | --- | --- | --- |
 | `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
 | `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
-| `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
+| `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，含 MySQL / MinIO / One API / Neo4j / Redis，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
 | `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程画像路由、课程只读和知识图谱基础浏览已接 Java `/api/v1`，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，资料详情已展示解析进度并支持进入解析结果详情，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
-| `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
+| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程画像路由、课程只读和知识图谱基础浏览已接 Java `/api/v1`，SSE 支持检索进度、原生流式 delta、断线恢复和轮询兜底，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
+| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，资料详情已展示解析进度并支持进入解析结果详情，问答运维列表已接后端筛选/聚合，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
+| `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，含学生端路由、缓存、QA 事件流和管理端运维聚合，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
 
 ## 本机启动前后端服务
 
 开发阶段推荐把入口分成三层：
 
-默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`，student-app `5174`。
+默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`，student-app `5174`，Redis `16379`。
 
 - 基础设施容器统一由根目录 `infra/docker-compose.yml` 管理。
 - 前端用 `pnpm` 原生命令启动，不额外包一层 shell 脚本。
@@ -50,7 +50,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 ```bash
 cd infra
 cp .env.example .env
-# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码
+# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码；Redis 密码可按本地需要留空或设置
 ```
 
 统一启动：
@@ -64,14 +64,14 @@ docker compose ps
 如果当前机器已经存在旧容器，第一次切换到统一 compose 时只删除容器对象，不删除数据目录：
 
 ```bash
-docker stop neo4j one-api mysql minio
-docker rm neo4j one-api mysql minio
+docker stop neo4j one-api mysql minio redis
+docker rm neo4j one-api mysql minio redis
 
 cd infra
 docker compose up -d
 ```
 
-当前数据保留策略见 [infra/README.md](infra/README.md)：MySQL 继续挂载 `/home/sunlight/mysql/data`，MinIO 继续挂载 `/home/sunlight/minio/data`，One API 和 Neo4j 数据已经随 `infra/` 迁到仓库根目录下。
+当前数据保留策略见 [infra/README.md](infra/README.md)：MySQL 继续挂载 `/home/sunlight/mysql/data`，MinIO 继续挂载 `/home/sunlight/minio/data`，One API、Neo4j 和 Redis 数据位于仓库根目录 `infra/` 下。
 
 ### 1. 一键启动前端
 
@@ -106,6 +106,10 @@ export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+export CKQA_REDIS_HOST=127.0.0.1
+export CKQA_REDIS_PORT=16379
+export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+export CKQA_STUDENT_CACHE_ENABLED=true
 
 export MINIO_ENDPOINT=localhost:9000
 export MINIO_ACCESS_KEY=admin
@@ -139,7 +143,7 @@ export CKQA_JWT_SECRET=please-change-this-local-jwt-secret-at-least-32-chars
 
 #### 3.1 确认基础依赖
 
-MySQL、MinIO、One API、Neo4j 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，`GRAPHRAG_ROOT` 指向可用的 `graphrag_pipeline/`，并为构建流水线准备本地运行目录 `graphrag_pipeline/runtime/kb-build-runs/`。共享 `graphrag_pipeline/output/` 现在主要作为 CLI 手工排障路径；管理端构建向导会优先使用每个 build run 自己的 `index/output/`。
+MySQL、MinIO、One API、Neo4j、Redis 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，Redis 暴露在 `127.0.0.1:16379`，`GRAPHRAG_ROOT` 指向可用的 `graphrag_pipeline/`，并为构建流水线准备本地运行目录 `graphrag_pipeline/runtime/kb-build-runs/`。共享 `graphrag_pipeline/output/` 现在主要作为 CLI 手工排障路径；管理端构建向导会优先使用每个 build run 自己的 `index/output/`。
 
 ```bash
 docker ps
@@ -185,6 +189,10 @@ export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
 export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
+export CKQA_REDIS_HOST=127.0.0.1
+export CKQA_REDIS_PORT=16379
+export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+export CKQA_STUDENT_CACHE_ENABLED=true
 
 export MINIO_ENDPOINT=localhost:9000
 export MINIO_ACCESS_KEY=admin
@@ -217,7 +225,7 @@ curl http://127.0.0.1:8080/api/v1/courses
 curl http://127.0.0.1:8080/api/v1/knowledge-bases
 ```
 
-`/api/v1/system/health` 现在保持轻量，重点确认 `mysql`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api`、`graphrag-ready`。如果需要检查共享 CLI 调试产物，再调用 `/api/v1/system/readiness`；其中 `graphrag-output` 只代表 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 的手工排障状态，不再是管理端 build-run 流程的唯一就绪条件。
+`/api/v1/system/health` 现在保持轻量，重点确认 `mysql`、`redis`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api`、`graphrag-ready` 和 `neo4j`。如果需要检查共享 CLI 调试产物，再调用 `/api/v1/system/readiness`；其中 `graphrag-output` 只代表 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 的手工排障状态，不再是管理端 build-run 流程的唯一就绪条件。
 
 #### 3.4 手工启动 admin-app 前端
 
@@ -263,8 +271,8 @@ conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.
 - 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
 - `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
 - `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
-- `frontend/apps/student-app/` 仍是学员端原型，但已不只是静态页面：登录注册、课程只读入口、问答会话/任务事件流、模式推荐、学习记忆和知识图谱浏览都已有 Java `/api/v1` 接入；社区、学习分析、部分用户中心页面仍以“未开放”状态页兜底。
-- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、资料上传校验、构建向导、QA 冒烟验证、统一 403/404/500 错误页和 Playwright 浏览器级故障注入验收。
+- `frontend/apps/student-app/` 仍是学员端原型，但已不只是静态页面：登录注册、课程只读入口、问答会话/任务事件流、检索进度轨迹、SSE 断线恢复、模式推荐、学习记忆和知识图谱浏览都已有 Java `/api/v1` 接入；社区、学习分析、部分用户中心页面仍以“未开放”状态页兜底。
+- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、资料上传校验、构建向导、QA 冒烟验证、问答运维列表、统一 403/404/500 错误页和 Playwright 浏览器级故障注入验收。
 - 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
 
 ## 人类与机器入口
@@ -356,16 +364,16 @@ ckqa/
 
 ### `infra/`
 
-- 角色：本地 MySQL、MinIO、One API、Neo4j 统一容器入口
+- 角色：本地 MySQL、MinIO、One API、Neo4j、Redis 统一容器入口
 - 主入口：`docker-compose.yml`
-- 运行态数据：MySQL 与 MinIO 保留本机既有外部挂载，Neo4j 与 One API 数据位于 `infra/` 下并被 Git 忽略
+- 运行态数据：MySQL 与 MinIO 保留本机既有外部挂载，Neo4j、One API 与 Redis 数据位于 `infra/` 下并被 Git 忽略
 - 文档入口：[infra/README.md](infra/README.md)
 
 ### `sql/`
 
 - 角色：仓库级 MySQL schema 与迁移脚本来源
 - 主入口：`ocqa.sql`
-- 当前迁移：课程资料、QA 会话类型、角色测试数据、知识库 build-run、课程封面、成员权限测试数据、JWT 凭据、用户头像和课程资料管理
+- 当前迁移：课程资料、QA 会话类型、角色测试数据、知识库 build-run、课程封面、成员权限测试数据、JWT 凭据、用户头像、资料管理、解析进度、Prompt tuning、QA 上下文、引用来源、hybrid_v0、课程画像路由和 QA stream resume
 - 使用边界：从 `pdf_ingest/` 或 Java 后端引用 SQL 时都应回到仓库根目录 `sql/`
 
 ### `pdf_ingest/`
@@ -384,6 +392,7 @@ ckqa/
 - 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`、`scripts/finalize_candidate_prompt.py`
 - 脚本分层：实现代码见 `graphrag_pipeline/scripts/README.md`，根目录同名脚本保留兼容入口
 - 关键产物：手工 CLI 调试使用 `input/*.json`、`output/*.parquet`、`output/lancedb/`；Java 管理端构建使用 `runtime/kb-build-runs/user_*/kb_*/build_*/index/input|output|logs`
+- 当前服务能力：`/v1/query-tasks` 支持 `basic/local/global/drift/hybrid_v0`，并可向 Java 转发 GraphRAG 原生 streaming `delta`、`progress`、`sources` 等事件；课程画像路由内部接口只供 Java `/api/v1` 调用
 - 当前重建前状态：旧输入、旧索引和旧调优产物已清空，默认 Prompt 回到 `prompts/*.txt` 基础模板
 - 运行环境：`graphrag-oneapi`
 - 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
@@ -392,14 +401,14 @@ ckqa/
 
 - 角色：学员端前端原型
 - 主入口：`src/main.js`、`src/router/index.js`
-- 当前状态：登录/注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；路由 query 会保留 `courseId/sessionId/mode/topic`，便于从图谱、侧栏和刷新场景恢复上下文
+- 当前状态：登录/注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、检索进度轨迹、事件序号断线恢复、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；路由 query 会保留 `courseId/sessionId/mode/topic`，便于从图谱、侧栏和刷新场景恢复上下文
 - 文档入口：[frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
 
 ### `frontend/apps/admin-app/`
 
 - 角色：管理员端/教师端共用控制台前端
 - 主入口：`src/App.vue`
-- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、课程资料上传、知识库构建向导、QA 冒烟验证、统一错误页和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
+- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、课程资料上传、知识库构建向导、QA 冒烟验证、问答运维列表、统一错误页和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
 - 文档入口：[frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
 - 结构设计入口：[docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
 
@@ -407,7 +416,7 @@ ckqa/
 
 - 角色：Java 一期编排后端
 - 主入口：`src/main/java/org/ysu/ckqaback/CkqaBackApplication.java`
-- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、课程/资料/知识库读接口、PDF/索引/异步问答编排、QA 冒烟会话和系统健康检查；仍不是 Python 主链路的替代实现
+- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、课程/资料/知识库读接口、PDF/索引/异步问答编排、学生端缓存、课程画像路由、QA 模式推荐、QA SSE 事件流、QA 运维聚合、QA 冒烟会话和系统健康检查；仍不是 Python 主链路的替代实现
 - 文档入口：[backend/ckqa-back/README.md](backend/ckqa-back/README.md)
 
 ## 端到端最短跑通路径
@@ -475,11 +484,15 @@ curl http://127.0.0.1:8080/api/v1/system/health
 - 本地重新抽取前如果要清空旧课程运行态数据，使用 `cd pdf_ingest && python scripts/cleanup_legacy_course_data.py --env-file .env` 先 dry-run，再加 `--execute` 执行；默认会把不符合 `crs-YYYYMMDD-HHMMSS` 的课程 ID 当作旧课程。
 - `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 对手工 CLI 查询缺一不可；Java 管理端构建会把输入、输出、日志和 QA smoke 快照隔离到 `runtime/kb-build-runs/` 下。
 - `backend/ckqa-back/` 的问答链路通过 `graphrag_pipeline` 的 `/v1/query-tasks` 异步任务接口工作；跨服务时间字段对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
+- 学生端 QA 事件流优先走 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`，Java 可桥接 Python 原生 streaming；前端用 `afterEventSeq` 恢复断线后的 `progress` / `delta`，事件流不可用时必须回退轮询。
+- `hybrid_v0` 当前默认走 BM25 证据注入 GraphRAG Basic 的路径；它是 Java 和 GraphRAG 内部支持的 QA mode，`smart` 只属于学生端触发模式推荐的前端选择项。
+- Redis 已进入本地基础设施：后端用它做登录限频、邮箱验证码短期状态和学生端低风险读缓存。Redis 异常时业务应回源 MySQL / GraphRAG，不应把它当作事实源。
 - `backend/ckqa-back/` 与 `frontend/apps/admin-app/` 的课程资料上传上限已经统一为单个 PDF 默认 200MB；如果调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 Spring multipart 限制，需要同步前端 `material-file-model.js` 校验文案。
 - 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
 - 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
 - `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。
 - `pdf_ingest` 和 `graphrag_pipeline` 都已进入课程资料模型：`material_objects` 按 MD5 去重物理对象，`course_materials` 维护课程内资料关系，解析状态、导出产物和日志按 `course_material_id` 隔离。
+- 管理端问答运维列表已接 Java `/api/v1/qa-operations/logs` 与 `/logs/summary`；列表筛选和概览统计来自后端聚合，检索日志详情/全量审计页面仍按未开放或后续补齐处理。
 - 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
 - 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
 

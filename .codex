@@ -3,11 +3,11 @@
 本仓库当前有七块主要目录。知识生产与检索主线仍然是两个 Python 子项目，Java 后端负责一期业务编排，前端仍以原型为主：
 
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
-- `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API。
-- `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，登录注册、课程只读入口、问答会话/任务事件流、学习记忆、模式推荐和知识图谱浏览已部分接入 Java `/api/v1`。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、资料详情解析进度、解析结果详情、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
-- `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、课程资料、PDF、索引、异步问答与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
-- `infra/`：仓库根目录统一 Docker Compose 入口，管理 MySQL、MinIO、One API 和 Neo4j。
+- `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API；同时提供 Java 内部使用的 query-task、streaming、hybrid_v0 和课程画像路由辅助接口。
+- `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，登录注册、课程只读入口、问答会话/任务事件流、检索进度轨迹、断线恢复、学习记忆、模式推荐和知识图谱浏览已部分接入 Java `/api/v1`。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、资料详情解析进度、解析结果详情、问答运维列表、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
+- `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、课程资料、PDF、索引、课程路由、QA 路由、异步问答、SSE 事件流、QA 运维与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
+- `infra/`：仓库根目录统一 Docker Compose 入口，管理 MySQL、MinIO、One API、Neo4j 和 Redis。
 - `sql/`：仓库级 MySQL 初始化脚本和迁移脚本来源，`sql/ocqa.sql` 是 schema 基线。
 
 ## 必读顺序
@@ -38,7 +38,8 @@
 - `graphrag_pipeline/utils/main.py` 当前已经收口为纯 GraphRAG CLI 查询包装层，不再尝试 2.x 风格的内部 API。
 - `pdf_ingest` 导出时会同时生成标准化中间结果 `normalized_docs.json`，以及面向 GraphRAG 的 `section_docs.json` / `page_docs.json`。
 - 本地完整重抽取前，旧版课程 ID 的 MySQL / MinIO 数据可用 `pdf_ingest/scripts/cleanup_legacy_course_data.py` 先 dry-run 后执行清理；不要默认假设 `os`、`ds` 仍是当前可用课程。
-- `frontend/apps/admin-app/` 仍不是主业务链路；`frontend/apps/student-app/` 已开始消费 Java `/api/v1` 的真实问答与图谱接口，但真实解析、索引和问答能力仍由两个 Python 模块提供，`backend/ckqa-back/` 负责业务编排。
+- `frontend/apps/admin-app/` 仍不是知识生产主链路；`frontend/apps/student-app/` 已开始消费 Java `/api/v1` 的真实问答、课程路由、图谱接口和 SSE 事件流，但真实解析、索引和问答能力仍由两个 Python 模块提供，`backend/ckqa-back/` 负责业务编排。
+- Redis 已纳入本地基础设施，用于登录/邮箱短期状态和学生端低风险读缓存；Redis 失败时后端应回源，不要把它当作课程、问答或图谱事实源。
 
 ## 仓库级工作规则
 
@@ -101,6 +102,8 @@
 - `settings.yaml`：GraphRAG CLI 的索引配置
 - `.env`：GraphRAG CLI 使用的环境变量
 - `utils/fetch_from_minio.py`：从 MinIO 拉取 `section_docs.json` / `page_docs.json` / `normalized_docs.json`
+- `utils/query_task_manager.py`：Python 异步查询任务生命周期与事件序号
+- `utils/query_streaming_adapter.py`：GraphRAG 原生 streaming 到 query-task 事件的适配
 - `utils/neo4jTest.py`：导入 Neo4j
 - `utils/graphrag3dknowledge.py`：3D 可视化
 
@@ -127,6 +130,8 @@
 - 当前共享开发环境里的 `graphrag-oneapi` 已安装 `pytest`，因此仓库内可直接跑测试；如果重建环境，请在安装项目依赖后额外补装 `pytest`。
 - `utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认读取仓库内 `output/`，并统一委托 `graphrag query` 执行查询。
 - `output/` 下的 parquet 与 `output/lancedb/` 都是 API 服务必需品。
+- `/v1/query-tasks` 支持 Java 内部 async QA，当前业务 mode 为 `basic/local/global/drift/hybrid_v0`；原生 streaming 的 `progress/delta/sources` 由 Java 桥接给浏览器，不要让前端直连 Python。
+- `/v1/internal/course-routing/*` 是 Java 后端内部课程画像路由接口，student-app/admin-app 的正式边界仍是 Java `/api/v1`。
 - 重新抽取准备阶段可能会清空 `input/`、`output/`、`prompts/candidates/`、调优报告和 `prompts/final/active_prompt.json`；后续必须从当前课程导出重新生成，不要复用旧课程材料的调优产物。
 - 旧调优产物清空后，默认活动 Prompt 是 `.env` 中的 `base`，指向 `prompts/*.txt` 基础模板；新候选生成后再运行 `finalize_candidate_prompt.py`。
 - 当前公开 API 模型名是 `graphrag-local-search:latest`、`graphrag-global-search:latest`、`graphrag-drift-search:latest`、`graphrag-basic-search:latest`；`full-model:latest` 已归档为后续扩展模式，不再对外宣称可用。
@@ -137,7 +142,8 @@
 - 当前是学员端 Vue 3 + Vite 原型，技术栈包含 Element Plus、Pinia、Vue Router、Sass。
 - `src/axios/index.js` 会从 Pinia 用户会话注入 `Authorization` 与 `X-CKQA-User-Code`；Java `/api/v1` 请求封装分布在 `src/api/auth.js`、`src/api/courses.js`、`src/api/qa.js`、`src/api/graph.js`。
 - 问答页使用 `src/views/qa/qa-route-query-model.js` 保持 `courseId/sessionId/mode/topic` 路由状态；切换 query 不应强制重挂整个模块视图。
-- 问答任务优先消费 `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` 事件流，不可用时回退到任务轮询。
+- 问答任务优先消费 `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` 事件流，不可用时回退到任务轮询；保留 `afterEventSeq` 以恢复断线后的 `progress/delta`。
+- `smart` 是前端触发 `/api/v1/qa-routing/recommend` 的选择态，不是最终 GraphRAG 查询 mode；最终 mode 使用 `basic/local/global/drift/hybrid_v0`。
 - 顶栏会预加载常用模块与副导航 chunk；新增或移动模块入口时，同步维护 `src/router/routes.js` 与 `src/layouts/moduleSideNavLoaders.js`。
 - 常用命令：
   - `cd frontend/apps/student-app`
@@ -156,7 +162,8 @@
   - `pnpm test`
   - `pnpm build`
   - `pnpm dev`
-- 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证等核心运维页的 Java `/api/v1` 真实接入；资料详情会展示解析进度，解析结果详情页也已走 live 数据；正式浏览器接口边界仍是 Java `/api/v1`。
+- 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证/问答运维列表等核心运维页的 Java `/api/v1` 真实接入；资料详情会展示解析进度，解析结果详情页也已走 live 数据；正式浏览器接口边界仍是 Java `/api/v1`。
+- 问答运维列表使用 `/api/v1/qa-operations/logs` 和 `/logs/summary`；筛选和概览指标来自后端聚合，不要用当前页数据伪造全库统计。
 - 课程资料上传 UI 已接 Java `/api/v1/courses/{courseId}/materials`，当前只接受 PDF，单文件默认 200MB；修改限制时要同步后端 `CourseMaterialProperties`、Spring multipart 配置和前端 `material-file-model.js`。
 - 403/404/500 已使用统一错误页承载，权限和缺失页面体验不要再回退到旧的通用“未开放”页。
 - `node_modules/` 已出现在仓库中，但它不是源码，不要把依赖目录当成改动目标。
@@ -165,15 +172,17 @@
 
 - 当前是 Java 21 + Spring Boot 4.0.5 + MyBatis-Plus 3.5.16 一期编排后端。
 - 统一响应格式为 `code / message / data / timestamp`，业务成功码为 `200`。
-- 已落地 `/api/v1/system/health`、课程/PDF 查询、解析触发、GraphRAG 导出、索引任务、问答会话与异步问答任务接口。
+- 已落地 `/api/v1/system/health`、课程/PDF 查询、解析触发、GraphRAG 导出、索引任务、课程画像路由、QA 路由推荐、问答会话、异步问答任务、SSE 事件流和 QA 运维接口。
 - 课程资料上传默认单 PDF 200MB，上限由 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 与 Spring multipart 限制共同约束；前端 admin-app 校验必须保持一致。
 - 异步问答通过 `graphrag_pipeline` 的 `/v1/query-tasks` 工作；跨服务任务时间对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
+- QA SSE partial token 只作为前端临时态；MySQL 保存最终 assistant message、retrieval log、retrieval hits 和 source reviews。
 - 若用户请求未明确指向 Java 后端、`/api/v1`、编排或前端联调，优先排查两个 Python 模块。
 
 ### 6. `infra/`
 
-- 统一 Docker Compose 入口在 `infra/docker-compose.yml`，管理 MySQL、MinIO、One API 和 Neo4j。
+- 统一 Docker Compose 入口在 `infra/docker-compose.yml`，管理 MySQL、MinIO、One API、Neo4j 和 Redis。
 - 本机数据挂载不要随意变更，尤其是 MySQL `/home/sunlight/mysql/data` 与 MinIO `/home/sunlight/minio/data`。
+- Redis 数据位于 `infra/redis/data`，用于缓存和短期状态，不是业务事实源。
 - 不要运行 `docker compose down -v`，除非用户明确要求销毁本地数据。
 
 ### 7. `sql/`
@@ -203,5 +212,5 @@
 
 - 这次改动影响的是哪个模块
 - 是否涉及跨模块接口兼容性
-- 是否需要特定 conda 环境、Node、数据库、MinIO、Neo4j 或 OneAPI/OpenAI 兼容服务才能验证
+- 是否需要特定 conda 环境、Node、数据库、MinIO、Redis、Neo4j 或 OneAPI/OpenAI 兼容服务才能验证
 - 如果没跑测试或没启动服务，要明确说明原因
