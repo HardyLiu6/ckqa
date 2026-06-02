@@ -188,10 +188,10 @@ drift_search:
   prompt: "prompts/drift_search_system_prompt.txt"
   reduce_prompt: "prompts/drift_reduce_prompt.txt"
   data_max_tokens: 4000
-  drift_k_followups: 1
+  drift_k_followups: 3
   primer_folds: 1
   primer_llm_max_tokens: 3000
-  n_depth: 0
+  n_depth: 2
   local_search_top_k_mapped_entities: 4
   local_search_top_k_relationships: 4
   local_search_max_data_tokens: 3000

@@ -139,6 +139,82 @@ def test_resolves_global_report_and_adds_fallback_text_units(tmp_path):
     assert resolved.sources[1].to_dict()["source_type"] == "global_fallback_text_unit"
 
 
+def test_drift_adds_query_ranked_fallback_even_when_answer_has_source_refs(tmp_path):
+    output_dir = tmp_path / "index-output"
+    output_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "text-unit-1",
+                "human_readable_id": 1,
+                "text": (
+                    "source_file: 操作系统教材. heading_path_text: 第一章 > 操作系统引论. "
+                    "page_start: 9. page_end: 10. 操作系统引论提到处理机调度是资源管理的一部分。"
+                ),
+                "document_id": "doc-os",
+            },
+            {
+                "id": "text-unit-31",
+                "human_readable_id": 31,
+                "text": (
+                    "source_file: 操作系统教材. heading_path_text: 第三章 > 处理机调度 > 抢占式调度与非抢占式调度. "
+                    "page_start: 88. page_end: 90. 抢占式调度允许高优先级进程中断当前进程，响应快但调度开销较高；"
+                    "非抢占式调度实现简单但响应性较差。"
+                ),
+                "document_id": "doc-os",
+            },
+        ]
+    ).to_parquet(output_dir / "text_units.parquet")
+
+    resolved = resolve_answer_citations(
+        "抢占式调度响应更快 [Data: Sources (1)]。",
+        output_dir,
+        mode="drift",
+        fallback_query="抢占式调度和非抢占式调度各有什么优缺点？",
+        fallback_text_unit_limit=1,
+    )
+
+    assert [source.kind for source in resolved.sources] == [
+        "global_fallback_text_unit",
+        "graphrag_citation",
+    ]
+    assert resolved.display_text.startswith("抢占式调度响应更快 [来源 2]。")
+    assert resolved.sources[0].heading_path == "第三章 > 处理机调度 > 抢占式调度与非抢占式调度"
+    assert resolved.sources[0].page_start == 88
+    assert resolved.sources[1].heading_path == "第一章 > 操作系统引论"
+
+
+def test_drift_uses_fallback_only_when_source_refs_cannot_be_resolved(tmp_path):
+    output_dir = tmp_path / "index-output"
+    output_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "text-unit-31",
+                "human_readable_id": 31,
+                "text": (
+                    "source_file: 操作系统教材. heading_path_text: 第三章 > 处理机调度 > 抢占式调度与非抢占式调度. "
+                    "page_start: 88. page_end: 90. 抢占式调度允许高优先级进程中断当前进程，响应快但调度开销较高；"
+                    "非抢占式调度实现简单但响应性较差。"
+                ),
+                "document_id": "doc-os",
+            },
+        ]
+    ).to_parquet(output_dir / "text_units.parquet")
+
+    resolved = resolve_answer_citations(
+        "抢占式调度响应更快 [Data: Sources (999)]。",
+        output_dir,
+        mode="drift",
+        fallback_query="抢占式调度和非抢占式调度各有什么优缺点？",
+        fallback_text_unit_limit=1,
+    )
+
+    assert [source.kind for source in resolved.sources] == ["global_fallback_text_unit"]
+    assert resolved.display_text.startswith("抢占式调度响应更快 [来源 1]。")
+    assert resolved.sources[0].heading_path == "第三章 > 处理机调度 > 抢占式调度与非抢占式调度"
+
+
 def test_resolves_entity_and_relationship_references(tmp_path):
     output_dir = tmp_path / "index-output"
     output_dir.mkdir()

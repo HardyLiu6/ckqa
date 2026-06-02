@@ -286,7 +286,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             return _progress_event(
                 "reduce_running",
                 self._mode,
-                f"仍在整理完整回答，已处理约 {elapsed} 秒；马上会开始显示正文。",
+                _reduce_running_summary(self._mode, elapsed),
                 {**self._active_metrics, "elapsedSeconds": elapsed},
                 [],
             )
@@ -362,6 +362,20 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             )
 
     def on_reduce_response_start(self, reduce_response_context: Any) -> None:
+        if self._mode == "drift":
+            metrics, evidence = _drift_response_state_metrics_and_evidence(reduce_response_context)
+            if metrics or evidence:
+                self._set_active_phase("reduce", metrics)
+                self._emit(
+                    _progress_event(
+                        "reduce_started",
+                        self._mode,
+                        _drift_reduce_started_summary(metrics),
+                        metrics,
+                        evidence,
+                    )
+                )
+                return
         metrics, evidence = _context_metrics_and_evidence(reduce_response_context)
         if not metrics:
             metrics = {"contextCount": _safe_len(reduce_response_context)}
@@ -382,7 +396,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
             _progress_event(
                 "reduce_finished",
                 self._mode,
-                "课程要点已整理完成，准备开始输出回答。",
+                _reduce_finished_summary(self._mode),
                 {"outputChars": len(str(reduce_response_output or ""))},
                 [],
             )
@@ -622,6 +636,18 @@ def _answer_running_summary(metrics: dict[str, Any], elapsed: int) -> str:
     return f"仍在基于课程知识库上下文组织回答，已处理约 {elapsed} 秒。"
 
 
+def _reduce_running_summary(mode: str, elapsed: int) -> str:
+    if mode == "drift":
+        return f"仍在汇总追问得到的课程依据，已处理约 {elapsed} 秒；马上会开始显示正文。"
+    return f"仍在整理完整回答，已处理约 {elapsed} 秒；马上会开始显示正文。"
+
+
+def _reduce_finished_summary(mode: str) -> str:
+    if mode == "drift":
+        return "追问结果已汇总，准备开始输出回答。"
+    return "课程要点已整理完成，准备开始输出回答。"
+
+
 def _progress_heartbeat_seconds() -> float | None:
     raw = os.getenv("CKQA_GRAPHRAG_PROGRESS_HEARTBEAT_SECONDS", "8")
     try:
@@ -679,6 +705,113 @@ def _context_metrics_and_evidence(context: Any) -> tuple[dict[str, Any], list[di
     if not metrics and context is not None:
         metrics["contextCount"] = _safe_len(context)
     return metrics, evidence[:5]
+
+
+def _drift_response_state_metrics_and_evidence(context: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    nodes = _drift_response_nodes(context)
+    if not nodes:
+        return {}, []
+    evidence: list[dict[str, Any]] = []
+    answered_count = 0
+    for node in nodes:
+        item = _drift_node_to_evidence(node, answered_count + 1)
+        if item:
+            answered_count += 1
+        if item and len(evidence) < 5:
+            evidence.append(item)
+    return {
+        "driftNodeCount": len(nodes),
+        "answeredNodeCount": answered_count,
+        "pendingNodeCount": max(len(nodes) - answered_count, 0),
+    }, evidence
+
+
+def _drift_response_nodes(context: Any) -> list[Any]:
+    if isinstance(context, dict):
+        nodes = context.get("nodes")
+        if isinstance(nodes, list):
+            return nodes
+        actions = context.get("actions")
+        if isinstance(actions, list):
+            return actions
+        responses = context.get("responses")
+        if isinstance(responses, list):
+            return responses
+    if isinstance(context, list):
+        return context
+    return []
+
+
+def _drift_node_to_evidence(node: Any, index: int) -> dict[str, Any]:
+    if isinstance(node, dict):
+        title = (
+            _clean_drift_text(node.get("query"))
+            or _clean_drift_text(node.get("question"))
+            or _clean_drift_text(node.get("title"))
+            or _drift_fallback_title(node.get("id"), index)
+        )
+        snippet = _drift_node_answer_snippet(node)
+        if not snippet:
+            return {}
+        evidence: dict[str, Any] = {
+            "kind": "drift_answer",
+            "title": _shorten(title or f"追问结果 {index}", 80),
+            "snippet": _shorten(snippet, 180),
+        }
+        if node.get("id") is not None:
+            evidence["ref"] = str(node.get("id"))
+        if node.get("score") is not None:
+            evidence["score"] = node.get("score")
+        return evidence
+    text = _drift_node_answer_snippet(node)
+    if not text:
+        return {}
+    return {
+        "kind": "drift_answer",
+        "title": f"追问结果 {index}",
+        "snippet": _shorten(text, 180),
+    }
+
+
+def _drift_node_answer_snippet(node: Any) -> str:
+    if isinstance(node, dict):
+        return (
+            _clean_drift_text(node.get("answer"))
+            or _clean_drift_text(node.get("intermediate_answer"))
+            or _clean_drift_text(node.get("response"))
+            or _clean_drift_text(node.get("summary"))
+            or _clean_drift_text(node.get("text"))
+            or _clean_drift_text(node.get("content"))
+        )
+    text = _clean_drift_text(node)
+    return "" if _is_placeholder_context_text(text) else text
+
+
+def _drift_fallback_title(raw_id: Any, index: int) -> str:
+    text = _clean_drift_text(raw_id)
+    if text and not _is_placeholder_context_text(text):
+        return text
+    return f"追问结果 {index}"
+
+
+def _clean_drift_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _is_placeholder_context_text(value: str) -> bool:
+    return bool(value) and re.fullmatch(r"[\d\s,，、;；]+", value) is not None
+
+
+def _drift_reduce_started_summary(metrics: dict[str, Any]) -> str:
+    total = int(metrics.get("driftNodeCount") or 0)
+    answered = int(metrics.get("answeredNodeCount") or 0)
+    if total and answered:
+        return f"已生成 {total} 条追问线索，完成 {answered} 条可用依据，正在汇总回答。"
+    if total:
+        return f"已生成 {total} 条追问线索，暂未形成可展示的追问答案，正在汇总已有课程依据。"
+    return "已完成追问扩展，正在汇总课程依据。"
 
 
 def _context_sections(context: Any) -> dict[str, Any]:

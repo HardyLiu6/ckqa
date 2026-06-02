@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -96,26 +96,49 @@ def resolve_answer_citations(
         if row is not None:
             sources.append(_source_from_relationship(row, ref, len(sources) + 1))
 
+    fallback_sources: list[QueryCitationSource] = []
     if _should_add_global_fallback(mode, fallback_query, sources):
         fallback_rows = _rank_fallback_text_units(output_dir, fallback_query or "", fallback_text_unit_limit)
+        existing_text_refs = {
+            source.ref
+            for source in sources
+            if source.kind in {"graphrag_citation", "global_fallback_text_unit"}
+        }
         for row in fallback_rows:
             fallback_ref = _normalize_ref_value(row.get("human_readable_id")) or _clean_string(row.get("id"))
             if not fallback_ref:
                 fallback_ref = f"fallback-{len(sources) + 1}"
+            if fallback_ref in existing_text_refs:
+                continue
             source_key = ("fallback_text_units", fallback_ref)
             if source_key in seen:
                 continue
             seen.add(source_key)
-            sources.append(
+            existing_text_refs.add(fallback_ref)
+            fallback_sources.append(
                 _source_from_text_unit(
                     row,
                     fallback_ref,
-                    len(sources) + 1,
+                    len(sources) + len(fallback_sources) + 1,
                     kind="global_fallback_text_unit",
                 )
             )
 
-    display_text = _append_source_notes(_replace_data_blocks(raw_answer, sources), sources)
+    drift_fallback_ranks: list[int] = []
+    if _is_drift_mode(mode) and fallback_sources:
+        sources = _rerank_sources([*fallback_sources, *sources])
+        drift_fallback_ranks = [
+            source.rank
+            for source in sources
+            if source.kind == "global_fallback_text_unit"
+        ][:1]
+    else:
+        sources = _rerank_sources([*sources, *fallback_sources])
+
+    display_text = _append_source_notes(
+        _replace_data_blocks(raw_answer, sources, fallback_source_ranks=drift_fallback_ranks),
+        sources,
+    )
     return ResolvedAnswerCitations(display_text=display_text, sources=sources)
 
 
@@ -283,7 +306,17 @@ def _should_add_global_fallback(
         return False
     if not (fallback_query or "").strip():
         return False
+    if normalized_mode == "drift":
+        return True
     return not any(source.kind == "graphrag_citation" for source in sources)
+
+
+def _is_drift_mode(mode: str | None) -> bool:
+    return (mode or "").lower() == "drift"
+
+
+def _rerank_sources(sources: list[QueryCitationSource]) -> list[QueryCitationSource]:
+    return [replace(source, rank=index + 1) for index, source in enumerate(sources)]
 
 
 def _rank_fallback_text_units(
@@ -402,7 +435,12 @@ def _shorten_snippet(text: str) -> str:
     return normalized[: _SNIPPET_MAX_CHARS - 1].rstrip() + "…"
 
 
-def _replace_data_blocks(answer: str, sources: list[QueryCitationSource]) -> str:
+def _replace_data_blocks(
+    answer: str,
+    sources: list[QueryCitationSource],
+    *,
+    fallback_source_ranks: list[int] | None = None,
+) -> str:
     ref_to_rank = {
         _rank_key(_source_segment_kind(source.kind), source.ref): source.rank
         for source in sources
@@ -417,6 +455,10 @@ def _replace_data_blocks(answer: str, sources: list[QueryCitationSource]) -> str
             for token in _DATA_TOKEN_RE.findall(raw_ids):
                 rank = ref_to_rank.get(_rank_key(kind, token))
                 if rank is not None and rank not in ranks:
+                    ranks.append(rank)
+        if not ranks and fallback_source_ranks:
+            for rank in fallback_source_ranks:
+                if rank not in ranks:
                     ranks.append(rank)
         if ranks:
             joined = "、".join(str(rank) for rank in ranks)

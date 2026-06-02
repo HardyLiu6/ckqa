@@ -162,6 +162,111 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("完整回答", progress[2]["summary"])
         self.assertEqual(chunks[-1].text, "全局总结")
 
+    async def test_drift_streaming_turns_response_state_into_user_readable_progress(self):
+        async def fake_drift(**kwargs):
+            callbacks = kwargs.get("callbacks")
+            self.assertIsNotNone(callbacks)
+            callback = callbacks[0] if isinstance(callbacks, list) else callbacks
+            callback.on_reduce_response_start({
+                "nodes": [
+                    {
+                        "id": 1,
+                        "query": "抢占式调度的优缺点",
+                        "answer": "抢占式调度能提高响应性，但会增加调度开销。",
+                    },
+                    {
+                        "id": 2,
+                        "query": "非抢占式调度的优缺点",
+                        "answer": "非抢占式调度实现简单，但交互响应较差。",
+                    },
+                ],
+                "edges": [{"source": 1, "target": 2}],
+            })
+            yield "追问总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"drift": fake_drift},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("drift"))]
+
+        reduce_started = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "reduce_started"
+        )
+        self.assertIn("追问", reduce_started["summary"])
+        self.assertEqual(reduce_started["metrics"]["driftNodeCount"], 2)
+        self.assertEqual(reduce_started["evidence"][0]["kind"], "drift_answer")
+        self.assertEqual(reduce_started["evidence"][0]["title"], "抢占式调度的优缺点")
+        self.assertIn("提高响应性", reduce_started["evidence"][0]["snippet"])
+        self.assertNotEqual(reduce_started["evidence"][0]["title"], "context")
+        self.assertEqual(chunks[-1].text, "追问总结")
+
+    async def test_drift_progress_distinguishes_answered_and_pending_followups(self):
+        async def fake_drift(**kwargs):
+            callbacks = kwargs.get("callbacks")
+            self.assertIsNotNone(callbacks)
+            callback = callbacks[0] if isinstance(callbacks, list) else callbacks
+            callback.on_reduce_response_start({
+                "nodes": [
+                    {
+                        "id": 1,
+                        "query": "抢占式调度和非抢占式调度各有什么优缺点？",
+                        "answer": "抢占式调度响应更快，非抢占式调度实现更简单。",
+                    },
+                    {
+                        "id": 2,
+                        "query": "什么是多级反馈队列调度？",
+                    },
+                    {
+                        "id": 3,
+                        "query": "上下文切换的开销有哪些？",
+                        "answer": "",
+                    },
+                ],
+            })
+            yield "追问总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"drift": fake_drift},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("drift"))]
+
+        reduce_started = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "reduce_started"
+        )
+        self.assertEqual(reduce_started["metrics"]["driftNodeCount"], 3)
+        self.assertEqual(reduce_started["metrics"]["answeredNodeCount"], 1)
+        self.assertEqual(reduce_started["metrics"]["pendingNodeCount"], 2)
+        self.assertIn("已生成 3 条追问线索", reduce_started["summary"])
+        self.assertIn("完成 1 条可用依据", reduce_started["summary"])
+        self.assertEqual(len(reduce_started["evidence"]), 1)
+        self.assertEqual(reduce_started["evidence"][0]["title"], "抢占式调度和非抢占式调度各有什么优缺点？")
+
     async def test_global_streaming_cleans_report_group_string_evidence(self):
         async def fake_global(**kwargs):
             callbacks = kwargs.get("callbacks")
