@@ -16,6 +16,30 @@ from typing import Any, Callable
 from query_citation_resolver import QueryCitationSource, resolve_answer_citations
 
 
+_RATE_LIMIT_SIGNAL_RE = re.compile(
+    r"("
+    r"(?<!\d)429(?!\d)|"
+    r"ratelimiterror|"
+    r"rate[-_\s]*limit|"
+    r"too\s+many\s+requests|"
+    r"retry[-_\s]*after|"
+    r"限流|"
+    r"insufficient[_\s-]*quota|"
+    r"quota\s+exceeded|"
+    r"exceeded\b.{0,80}\bquota|"
+    r"额度\s*(?:不足|已用尽|超限|超出|已超限)"
+    r")",
+    re.IGNORECASE,
+)
+_RETRY_AFTER_RE = re.compile(
+    r"retry[-_\s]*after[^\d]{0,20}(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+_STATUS_429_RE = re.compile(r"(?<!\d)429(?!\d)")
+_RATE_LIMIT_RETRY_SUMMARY = "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。"
+_RATE_LIMIT_FAILED_SUMMARY = "模型服务持续繁忙，本次课程问答未能完成。"
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -135,35 +159,50 @@ class QueryTaskSnapshotStore:
         return self._store_dir / f"{python_task_id}.json"
 
 
-def trim_log_tail(lines: list[str], *, max_lines: int, max_chars: int) -> list[str]:
+def trim_log_tail(lines: list[Any], *, max_lines: int, max_chars: int) -> list[Any]:
     trimmed = list(lines[-max_lines:])
-    while trimmed and len("\n".join(trimmed)) > max_chars:
+    while trimmed and len(_log_items_text(trimmed)) > max_chars:
         trimmed.pop(0)
     if not trimmed and lines:
-        return [lines[-1][-max_chars:]]
+        last = lines[-1]
+        if isinstance(last, str):
+            return [last[-max_chars:]]
+        return [last]
     return trimmed
 
 
 def merge_log_tail(
-    preserved_lines: list[str],
-    stream_lines: list[str],
+    preserved_lines: list[Any],
+    stream_lines: list[Any],
     *,
     max_lines: int,
     max_chars: int,
-) -> list[str]:
+) -> list[Any]:
     """合并历史策略诊断与 CLI 输出，优先保留回退原因。"""
     preserved = list(preserved_lines)
     if len(preserved) >= max_lines:
         return trim_log_tail(preserved, max_lines=max_lines, max_chars=max_chars)
     stream_tail = list(stream_lines[-(max_lines - len(preserved)):])
     merged = preserved + stream_tail
-    while merged and len("\n".join(merged)) > max_chars:
+    while merged and len(_log_items_text(merged)) > max_chars:
         if len(merged) > len(preserved):
             merged.pop(len(preserved))
         else:
             merged.pop(0)
             preserved = preserved[1:]
     return merged
+
+
+def _log_items_text(items: list[Any]) -> str:
+    return "\n".join(_log_item_text(item) for item in items)
+
+
+def _log_item_text(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        return json.dumps(item, ensure_ascii=False, sort_keys=True)
+    return str(item)
 
 
 class QueryTaskManager:
@@ -349,7 +388,7 @@ class QueryTaskManager:
         return seq
 
     async def _run_task(self, python_task_id: str) -> None:
-        logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
+        logs: deque[Any] = deque(maxlen=self._max_log_lines * 4)
         try:
             request = self._task_requests[python_task_id]
             if request.stream_response:
@@ -358,7 +397,7 @@ class QueryTaskManager:
                     return
                 logs.extend(fallback_logs)
             if request.mode == "hybrid_v0":
-                await self._run_hybrid_task(python_task_id, request)
+                await self._run_hybrid_task(python_task_id, request, initial_logs=list(logs))
                 return
             if request.mode == "local" and request.query_engine_strategy == "local_history":
                 fallback_logs = await self._try_run_local_history_task(python_task_id, request)
@@ -388,11 +427,13 @@ class QueryTaskManager:
         python_task_id: str,
         request: QueryTaskRequest,
         *,
-        initial_logs: list[str] | None = None,
+        initial_logs: list[Any] | None = None,
     ) -> None:
-        logs: deque[str] = deque(maxlen=self._max_log_lines * 4)
+        logs: deque[Any] = deque(maxlen=self._max_log_lines * 4)
         stdout_lines: list[str] = []
         heartbeat: asyncio.Task[None] | None = None
+        rate_limit_state: dict[str, Any] = {"occurrence_count": 0, "emitted": False}
+        latest_progress_event_seq: int | None = None
         started_log = f"started graphrag query --method {request.mode}"
         preserved_logs = trim_log_tail(
             [*(initial_logs or []), started_log],
@@ -420,16 +461,56 @@ class QueryTaskManager:
             )
 
             heartbeat = asyncio.create_task(self._heartbeat_loop(python_task_id, process))
-            stdout_task = asyncio.create_task(self._read_stream(process.stdout, python_task_id, logs, stdout_lines))
-            stderr_task = asyncio.create_task(self._read_stream(process.stderr, python_task_id, logs, None))
+            stdout_task = asyncio.create_task(
+                self._read_stream(
+                    process.stdout,
+                    python_task_id,
+                    logs,
+                    stdout_lines,
+                    mode=request.mode,
+                    stream_kind="stdout",
+                    rate_limit_state=rate_limit_state,
+                )
+            )
+            stderr_task = asyncio.create_task(
+                self._read_stream(
+                    process.stderr,
+                    python_task_id,
+                    logs,
+                    None,
+                    mode=request.mode,
+                    stream_kind="stderr",
+                    rate_limit_state=rate_limit_state,
+                )
+            )
 
             await asyncio.gather(stdout_task, stderr_task)
             return_code = await process.wait()
 
             finished_log = f"finished graphrag query --method {request.mode} exit_code={return_code}"
+            stream_log_items = list(logs)
+            if return_code != 0 and rate_limit_state["occurrence_count"] > 0:
+                failed_event = _rate_limit_progress_event(
+                    "model_rate_limit_failed",
+                    request.mode,
+                    "cli_stderr",
+                    int(rate_limit_state["occurrence_count"] or 1),
+                    str(rate_limit_state.get("last_text") or ""),
+                )
+                event_seq = self._publish_event(python_task_id, "progress", failed_event)
+                latest_progress_event_seq = event_seq
+                stream_log_items = [
+                    item
+                    for item in stream_log_items
+                    if not (isinstance(item, dict) and item.get("type") == "model_rate_limit")
+                ]
+                stream_log_items.append({**failed_event, "eventSeq": event_seq})
+            elif isinstance(rate_limit_state.get("last_event_seq"), int):
+                latest_progress_event_seq = int(rate_limit_state["last_event_seq"])
+
             final_logs = merge_log_tail(
                 preserved_logs,
-                list(logs),
+                stream_log_items,
                 max_lines=self._max_log_lines,
                 max_chars=self._max_log_chars,
             )
@@ -445,6 +526,9 @@ class QueryTaskManager:
                 mode=request.mode,
                 fallback_query=request.retrieval_query or request.prompt,
             )
+            final_changes: dict[str, Any] = {}
+            if latest_progress_event_seq is not None:
+                final_changes["stream_event_seq"] = latest_progress_event_seq
             await self._update_task(
                 python_task_id,
                 task_status="success" if return_code == 0 else "failed",
@@ -456,6 +540,7 @@ class QueryTaskManager:
                 error_message=None if return_code == 0 else f"graphrag query exit code={return_code}",
                 return_code=return_code,
                 finished_at=utc_now(),
+                **final_changes,
             )
             if return_code == 0:
                 self._publish_event(
@@ -478,7 +563,7 @@ class QueryTaskManager:
         self,
         python_task_id: str,
         request: QueryTaskRequest,
-    ) -> list[str] | None:
+    ) -> list[Any] | None:
         started_log = f"started native streaming query task provider={request.stream_source}"
         await self._update_task(
             python_task_id,
@@ -496,6 +581,7 @@ class QueryTaskManager:
                 python_task_id,
                 started_log,
                 "native streaming runner is not configured",
+                progress_events=[],
             )
         raw_chunks: list[str] = []
         visible_chunks: list[str] = []
@@ -585,17 +671,24 @@ class QueryTaskManager:
             self._publish_event(python_task_id, "done", {"taskStatus": "success"})
             return None
         except Exception as exc:  # noqa: BLE001 - native streaming 失败时回退原有非流式链路
-            return await self._record_streaming_fallback(python_task_id, started_log, str(exc))
+            return await self._record_streaming_fallback(
+                python_task_id,
+                started_log,
+                str(exc),
+                progress_events=progress_events,
+            )
 
     async def _record_streaming_fallback(
         self,
         python_task_id: str,
         started_log: str,
         reason: str,
-    ) -> list[str]:
+        *,
+        progress_events: list[dict[str, Any]] | None = None,
+    ) -> list[Any]:
         fallback_reason = reason or "native streaming unavailable"
         fallback_log = f"fallback native streaming to non-streaming task: {fallback_reason}"
-        logs = [started_log, fallback_log]
+        logs: list[Any] = [*(progress_events or []), started_log, fallback_log]
         await self._update_task(
             python_task_id,
             process_alive=False,
@@ -705,9 +798,21 @@ class QueryTaskManager:
         )
         return logs
 
-    async def _run_hybrid_task(self, python_task_id: str, request: QueryTaskRequest) -> None:
+    async def _run_hybrid_task(
+        self,
+        python_task_id: str,
+        request: QueryTaskRequest,
+        *,
+        initial_logs: list[Any] | None = None,
+    ) -> None:
         if self._hybrid_answer_runner is None:
             raise RuntimeError("hybrid_v0 task runner is not configured")
+        started_log = "started hybrid_v0 query task"
+        running_logs = trim_log_tail(
+            [*(initial_logs or []), started_log],
+            max_lines=self._max_log_lines,
+            max_chars=self._max_log_chars,
+        )
         await self._update_task(
             python_task_id,
             task_status="running",
@@ -715,7 +820,7 @@ class QueryTaskManager:
             process_alive=True,
             started_at=utc_now(),
             last_heartbeat_at=utc_now(),
-            latest_logs=["started hybrid_v0 query task"],
+            latest_logs=running_logs,
         )
         result = self._hybrid_answer_runner(request)
         if inspect.isawaitable(result):
@@ -729,12 +834,17 @@ class QueryTaskManager:
         )
         hybrid_sources = _serialize_hybrid_sources(list(getattr(result, "sources", []) or []))
         response_sources = _serialize_sources(resolved_answer.sources) if resolved_answer.sources else hybrid_sources
+        final_logs = trim_log_tail(
+            [*running_logs, "finished hybrid_v0 query task"],
+            max_lines=self._max_log_lines,
+            max_chars=self._max_log_chars,
+        )
         await self._update_task(
             python_task_id,
             task_status="success",
             progress_stage="done",
             process_alive=False,
-            latest_logs=["started hybrid_v0 query task", "finished hybrid_v0 query task"],
+            latest_logs=final_logs,
             result_text=resolved_answer.display_text,
             sources=response_sources,
             error_message=None,
@@ -768,8 +878,12 @@ class QueryTaskManager:
         self,
         stream,
         python_task_id: str,
-        logs: deque[str],
+        logs: deque[Any],
         captured_lines: list[str] | None,
+        *,
+        mode: str,
+        stream_kind: str,
+        rate_limit_state: dict[str, Any] | None = None,
     ) -> None:
         while True:
             line = await stream.readline()
@@ -781,10 +895,35 @@ class QueryTaskManager:
             logs.append(text)
             if captured_lines is not None:
                 captured_lines.append(text)
+            progress_event_seq: int | None = None
+            if stream_kind == "stderr" and rate_limit_state is not None and _is_rate_limit_signal(text):
+                rate_limit_state["occurrence_count"] = int(rate_limit_state.get("occurrence_count") or 0) + 1
+                rate_limit_state["last_text"] = text
+                if not bool(rate_limit_state.get("emitted")):
+                    progress_event = _rate_limit_progress_event(
+                        "model_rate_limit",
+                        mode,
+                        "cli_stderr",
+                        int(rate_limit_state["occurrence_count"]),
+                        text,
+                    )
+                    progress_event_seq = self._publish_event(python_task_id, "progress", progress_event)
+                    rate_limit_state["emitted"] = True
+                    rate_limit_state["last_event_seq"] = progress_event_seq
+                    logs.append({**progress_event, "eventSeq": progress_event_seq})
+            update_changes: dict[str, Any] = {
+                "latest_logs": trim_log_tail(
+                    list(logs),
+                    max_lines=self._max_log_lines,
+                    max_chars=self._max_log_chars,
+                ),
+                "last_heartbeat_at": utc_now(),
+            }
+            if progress_event_seq is not None:
+                update_changes["stream_event_seq"] = progress_event_seq
             await self._update_task(
                 python_task_id,
-                latest_logs=trim_log_tail(list(logs), max_lines=self._max_log_lines, max_chars=self._max_log_chars),
-                last_heartbeat_at=utc_now(),
+                **update_changes,
             )
 
 
@@ -945,6 +1084,44 @@ def _stream_chunk_progress(chunk: Any, mode: str) -> dict[str, Any] | None:
         progress.get("metrics") if isinstance(progress.get("metrics"), dict) else {},
         progress.get("evidence") if isinstance(progress.get("evidence"), list) else [],
     )
+
+
+def _is_rate_limit_signal(text: str) -> bool:
+    return bool(text and _RATE_LIMIT_SIGNAL_RE.search(text))
+
+
+def _rate_limit_progress_event(
+    event_type: str,
+    mode: str,
+    source: str,
+    occurrence_count: int,
+    text: str,
+) -> dict[str, Any]:
+    metrics: dict[str, Any] = {
+        "reasonType": "rate_limit",
+        "source": source,
+        "occurrenceCount": max(1, occurrence_count),
+    }
+    if _STATUS_429_RE.search(text or ""):
+        metrics["statusCode"] = 429
+    retry_after = _extract_retry_after_seconds(text)
+    if retry_after is not None:
+        metrics["retryAfterSeconds"] = retry_after
+    summary = _RATE_LIMIT_FAILED_SUMMARY if event_type == "model_rate_limit_failed" else _RATE_LIMIT_RETRY_SUMMARY
+    return _progress_event_dict(event_type, mode, summary, metrics, [])
+
+
+def _extract_retry_after_seconds(text: str) -> int | None:
+    match = _RETRY_AFTER_RE.search(text or "")
+    if not match:
+        return None
+    try:
+        value = float(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return int(value)
 
 
 def _append_progress_event(

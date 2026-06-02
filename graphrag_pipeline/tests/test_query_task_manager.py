@@ -19,7 +19,7 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot, QueryTaskSnapshotStore
+from query_task_manager import QueryTaskManager, QueryTaskRequest, QueryTaskSnapshot, QueryTaskSnapshotStore, _snapshot_to_json
 
 
 def _python_cmd(code: str) -> list[str]:
@@ -125,6 +125,91 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.task_status, "success")
         self.assertIn("warn", snapshot.latest_logs)
         self.assertEqual(snapshot.result_text, "done")
+
+    async def test_cli_stderr_rate_limit_with_zero_exit_keeps_progress_and_success(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd(
+                "import sys; "
+                "sys.stderr.write('openai.RateLimitError: 429 Too Many Requests retry-after: 7\\n'); "
+                "sys.stderr.flush(); "
+                "print('answer ok', flush=True)"
+            ),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+        )
+
+        created = await manager.create_task("global", "图谱主题")
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
+
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "answer ok")
+        rate_limit_events = [
+            item for item in snapshot.latest_logs
+            if isinstance(item, dict) and item.get("type") == "model_rate_limit"
+        ]
+        self.assertEqual(len(rate_limit_events), 1)
+        self.assertEqual(rate_limit_events[0]["summary"], "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。")
+        self.assertEqual(rate_limit_events[0]["metrics"]["statusCode"], 429)
+        self.assertEqual(rate_limit_events[0]["metrics"]["retryAfterSeconds"], 7)
+        self.assertNotIn("Too Many Requests", rate_limit_events[0]["summary"])
+        self.assertEqual(_snapshot_to_json(snapshot)["progressEvents"][0]["type"], "model_rate_limit")
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        progress_events = [item for item in replay if item["event"] == "progress"]
+        self.assertEqual(progress_events[0]["data"]["type"], "model_rate_limit")
+        self.assertEqual(progress_events[0]["seq"], rate_limit_events[0]["eventSeq"])
+        self.assertEqual(snapshot.stream_event_seq, progress_events[0]["seq"])
+
+    async def test_cli_stderr_rate_limit_with_non_zero_exit_marks_failed_progress(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd(
+                "import sys; "
+                "sys.stderr.write('insufficient_quota: exceeded monthly quota\\n'); "
+                "sys.stderr.flush(); "
+                "sys.exit(2)"
+            ),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+        )
+
+        created = await manager.create_task("local", "线程")
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "failed")
+
+        self.assertEqual(snapshot.task_status, "failed")
+        self.assertEqual(snapshot.return_code, 2)
+        rate_limit_events = [
+            item for item in snapshot.latest_logs
+            if isinstance(item, dict) and item.get("type") == "model_rate_limit_failed"
+        ]
+        self.assertEqual(len(rate_limit_events), 1)
+        self.assertEqual(rate_limit_events[0]["summary"], "模型服务持续繁忙，本次课程问答未能完成。")
+        self.assertEqual(rate_limit_events[0]["metrics"]["reasonType"], "rate_limit")
+        self.assertNotIn("insufficient_quota", rate_limit_events[0]["summary"])
+        self.assertEqual(_snapshot_to_json(snapshot)["progressEvents"][0]["type"], "model_rate_limit_failed")
+
+    async def test_cli_stdout_quota_text_does_not_emit_rate_limit_progress(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd(
+                "print('本课程介绍磁盘 quota 管理，不涉及模型限流。', flush=True)"
+            ),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+        )
+
+        created = await manager.create_task("basic", "quota 是什么")
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
+
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "本课程介绍磁盘 quota 管理，不涉及模型限流。")
+        self.assertFalse([
+            item for item in snapshot.latest_logs
+            if isinstance(item, dict) and str(item.get("type", "")).startswith("model_rate_limit")
+        ])
+        self.assertEqual(_snapshot_to_json(snapshot)["progressEvents"], [])
 
     async def test_preserves_indented_stdout_in_result_text(self):
         manager = QueryTaskManager(
@@ -842,6 +927,106 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.result_text, "fallback answer")
         self.assertEqual(snapshot.streaming_fallback_reason, "stream failed")
         self.assertEqual(len(command_calls), 1)
+
+    async def test_native_streaming_rate_limit_progress_survives_cli_fallback_success(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            yield {
+                "event": "progress",
+                "progress": {
+                    "type": "model_rate_limit",
+                    "mode": "basic",
+                    "summary": "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。",
+                    "metrics": {"reasonType": "rate_limit", "source": "native_exception", "occurrenceCount": 1},
+                    "evidence": [],
+                },
+            }
+            raise RuntimeError("RateLimitError: 429 Too Many Requests")
+
+        command_calls: list[QueryTaskRequest] = []
+
+        def command_factory(request: QueryTaskRequest):
+            command_calls.append(request)
+            return _python_cmd("print('fallback answer', flush=True)")
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=command_factory,
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "basic",
+            "什么是死锁？",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
+
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "fallback answer")
+        self.assertEqual(len(command_calls), 1)
+        rate_limit_events = [
+            item for item in snapshot.latest_logs
+            if isinstance(item, dict) and item.get("type") == "model_rate_limit"
+        ]
+        self.assertEqual(len(rate_limit_events), 1)
+        self.assertEqual(rate_limit_events[0]["summary"], "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。")
+        self.assertNotIn("Too Many Requests", rate_limit_events[0]["summary"])
+        self.assertEqual(_snapshot_to_json(snapshot)["progressEvents"][0]["type"], "model_rate_limit")
+
+        replay, _, unsubscribe = manager.subscribe_events(created.python_task_id)
+        unsubscribe()
+        progress_events = [item for item in replay if item["event"] == "progress"]
+        self.assertTrue(any(item["data"]["type"] == "model_rate_limit" for item in progress_events))
+
+    async def test_native_streaming_rate_limit_progress_survives_hybrid_fallback_success(self):
+        async def streaming_runner(request: QueryTaskRequest):
+            yield {
+                "event": "progress",
+                "progress": {
+                    "type": "model_rate_limit",
+                    "mode": "hybrid_v0",
+                    "summary": "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。",
+                    "metrics": {"reasonType": "rate_limit", "source": "native_exception", "occurrenceCount": 1},
+                    "evidence": [],
+                },
+            }
+            raise RuntimeError("RateLimitError: 429 Too Many Requests")
+
+        hybrid_calls: list[QueryTaskRequest] = []
+
+        async def hybrid_runner(request: QueryTaskRequest):
+            hybrid_calls.append(request)
+            return type("HybridAnswer", (), {"answer": "hybrid fallback answer", "sources": []})()
+
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.01,
+            command_factory=lambda request: _python_cmd("raise SystemExit('should not run cli')"),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+            hybrid_answer_runner=hybrid_runner,
+            native_streaming_runner=streaming_runner,
+        )
+
+        created = await manager.create_task(
+            "hybrid_v0",
+            "什么是死锁？",
+            stream_response=True,
+            stream_source="native_graphrag",
+        )
+        snapshot = await _wait_for_task_status(manager, created.python_task_id, "success")
+
+        self.assertEqual(snapshot.task_status, "success")
+        self.assertEqual(snapshot.result_text, "hybrid fallback answer")
+        self.assertEqual(len(hybrid_calls), 1)
+        rate_limit_events = [
+            item for item in snapshot.latest_logs
+            if isinstance(item, dict) and item.get("type") == "model_rate_limit"
+        ]
+        self.assertEqual(len(rate_limit_events), 1)
+        self.assertEqual(_snapshot_to_json(snapshot)["progressEvents"][0]["type"], "model_rate_limit")
 
     async def test_rejects_task_data_dir_path_escape(self):
         manager = QueryTaskManager(

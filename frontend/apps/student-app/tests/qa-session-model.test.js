@@ -9,6 +9,7 @@ import {
   normalizeCourseList,
   normalizeKnowledgeBaseList,
   normalizeQaMessage,
+  normalizeProgressEvents,
   normalizeQaSessionList,
   normalizeQaSources,
   normalizeQaSession,
@@ -213,6 +214,29 @@ test('轮询快照会用更完整的部分回答补齐当前流式文本', () =>
   assert.equal(mergePartialStreamText('第一段', '第一段回答继续生成'), '第一段回答继续生成')
   assert.equal(mergePartialStreamText('第一段回答继续生成', '第一段回答'), '第一段回答继续生成')
   assert.equal(mergePartialStreamText('前端已有不同内容', '后端快照内容'), '前端已有不同内容')
+})
+
+test('限流检索事件规范化为中文脱敏摘要', () => {
+  const events = normalizeProgressEvents([
+    {
+      type: 'model_rate_limit',
+      mode: 'global',
+      summary: 'openai.RateLimitError: 429 Too Many Requests retry-after: 7',
+      metrics: { statusCode: 429, retryAfterSeconds: 7 },
+      evidence: [{ kind: 'stderr', snippet: 'raw provider log' }],
+    },
+    {
+      type: 'model_rate_limit_failed',
+      mode: 'global',
+      summary: 'insufficient_quota: exceeded monthly quota',
+      metrics: { reasonType: 'rate_limit' },
+    },
+  ])
+
+  assert.equal(events[0].summary, '模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。')
+  assert.equal(events[1].summary, '模型服务持续繁忙，本次课程问答未能完成。')
+  assert.deepEqual(events[0].evidence, [])
+  assert.doesNotMatch(events.map((event) => event.summary).join('\n'), /RateLimitError|insufficient_quota|Too Many Requests/)
 })
 
 test('任务终态展示优先使用中文业务状态而不是底层阶段', () => {

@@ -8,7 +8,12 @@ const PROGRESS_TYPE_ORDER = {
   reduce_running: 70,
   reduce_finished: 80,
   answer_running: 90,
+  model_rate_limit: 95,
+  model_rate_limit_failed: 110,
 }
+
+const RATE_LIMIT_SUMMARY = '模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。'
+const RATE_LIMIT_FAILED_SUMMARY = '模型服务持续繁忙，本次课程问答未能完成。'
 
 export function compactRetrievalTraceEvents(events) {
   const entries = new Map()
@@ -43,6 +48,9 @@ export function mergeRetrievalTraceEvents(currentEvents, incomingEvents, maxEven
 }
 
 export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索') {
+  if (isModelRateLimitEvent(event?.type)) {
+    return '模型服务'
+  }
   const evidence = Array.isArray(event?.evidence) ? event.evidence : []
   const count = evidence.length
   if (!count) {
@@ -88,15 +96,16 @@ function normalizeTraceEvent(event, index) {
   }
   const type = String(event.type || 'progress')
   const metrics = event.metrics && typeof event.metrics === 'object' ? { ...event.metrics } : {}
+  const evidence = Array.isArray(event.evidence)
+    ? event.evidence.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }))
+    : []
   return {
     ...event,
     type,
     mode: String(event.mode ?? ''),
-    summary,
+    summary: normalizeTraceSummary(type, summary),
     metrics,
-    evidence: Array.isArray(event.evidence)
-      ? event.evidence.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }))
-      : [],
+    evidence: isModelRateLimitEvent(type) ? [] : evidence,
     eventSeq: normalizeEventSeq(event.eventSeq ?? event.event_seq),
     __traceIndex: index,
     __traceOrder: PROGRESS_TYPE_ORDER[type] ?? 100,
@@ -104,6 +113,9 @@ function normalizeTraceEvent(event, index) {
 }
 
 function traceEventKey(event) {
+  if (isModelRateLimitEvent(event.type)) {
+    return `stage:model-rate-limit:${event.mode}`
+  }
   if (event.type === 'map_running' || event.type === 'map_finished') {
     return `stage:map-progress:${event.mode}`
   }
@@ -120,6 +132,20 @@ function traceEventKey(event) {
     event.summary,
     stableStringify(event.metrics),
   ].join(':')
+}
+
+function normalizeTraceSummary(type, summary) {
+  if (type === 'model_rate_limit_failed') {
+    return RATE_LIMIT_FAILED_SUMMARY
+  }
+  if (type === 'model_rate_limit') {
+    return RATE_LIMIT_SUMMARY
+  }
+  return summary
+}
+
+function isModelRateLimitEvent(type) {
+  return type === 'model_rate_limit' || type === 'model_rate_limit_failed'
 }
 
 function shouldReplaceTraceEvent(existing, incoming) {

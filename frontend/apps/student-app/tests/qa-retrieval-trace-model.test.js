@@ -195,3 +195,39 @@ test('global 主题依据使用学生可读标签和清洗后的标题摘要', (
     '本社区以操作系统核心实体“进程”为中心，构建了高度内聚的知识生态网络。',
   )
 })
+
+test('模型限流事件展示为中文模型服务阶段并折叠重复记录', () => {
+  const events = [
+    {
+      type: 'model_rate_limit',
+      mode: 'global',
+      summary: 'openai.RateLimitError: 429 Too Many Requests retry-after: 7',
+      metrics: { statusCode: 429, retryAfterSeconds: 7 },
+      evidence: [{ kind: 'stderr', snippet: 'raw provider log' }],
+      eventSeq: 8,
+    },
+    {
+      type: 'model_rate_limit',
+      mode: 'global',
+      summary: 'second raw stderr should not appear',
+      metrics: { statusCode: 429, retryAfterSeconds: 8 },
+      eventSeq: 9,
+    },
+    {
+      type: 'model_rate_limit_failed',
+      mode: 'global',
+      summary: 'insufficient_quota: exceeded monthly quota',
+      metrics: { reasonType: 'rate_limit' },
+      eventSeq: 10,
+    },
+  ]
+
+  const compacted = compactRetrievalTraceEvents(events)
+
+  assert.equal(compacted.length, 1)
+  assert.equal(compacted[0].type, 'model_rate_limit_failed')
+  assert.equal(compacted[0].summary, '模型服务持续繁忙，本次课程问答未能完成。')
+  assert.deepEqual(compacted[0].evidence, [])
+  assert.equal(retrievalTraceEvidenceLabel(compacted[0], 'Global'), '模型服务')
+  assert.equal(latestRetrievalTraceEvent(events).summary, '模型服务持续繁忙，本次课程问答未能完成。')
+})

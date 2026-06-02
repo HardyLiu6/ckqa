@@ -4,6 +4,9 @@ import os
 import re
 import asyncio
 import time
+import logging
+import contextvars
+import threading
 from collections.abc import AsyncGenerator, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -26,6 +29,36 @@ except Exception:  # pragma: no cover - 仅用于缺少 GraphRAG 运行依赖的
 
 
 _DATA_BLOCK_RE = re.compile(r"\[Data:\s*[^\]]*\]", re.IGNORECASE)
+_RATE_LIMIT_SIGNAL_RE = re.compile(
+    r"("
+    r"(?<!\d)429(?!\d)|"
+    r"ratelimiterror|"
+    r"rate[-_\s]*limit|"
+    r"too\s+many\s+requests|"
+    r"retry[-_\s]*after|"
+    r"限流|"
+    r"insufficient[_\s-]*quota|"
+    r"quota\s+exceeded|"
+    r"exceeded\b.{0,80}\bquota|"
+    r"额度\s*(?:不足|已用尽|超限|超出|已超限)"
+    r")",
+    re.IGNORECASE,
+)
+_RETRY_AFTER_RE = re.compile(
+    r"retry[-_\s]*after[^\d]{0,20}(\d+(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+_STATUS_429_RE = re.compile(r"(?<!\d)429(?!\d)")
+_RATE_LIMIT_LOGGER_NAMES = (
+    "graphrag",
+    "fnllm",
+    "openai",
+)
+_RATE_LIMIT_SUMMARY = "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。"
+_ACTIVE_RATE_LIMIT_MONITOR: contextvars.ContextVar[object | None] = contextvars.ContextVar(
+    "ckqa_active_rate_limit_monitor",
+    default=None,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,8 +418,10 @@ async def _stream_with_progress(
         queue.put_nowait(NativeStreamingChunk(event="progress", progress=event))
 
     callbacks.attach_sink(push_progress)
+    rate_limit_monitor = _ScopedRateLimitLogMonitor(callbacks._mode, push_progress)
 
     async def produce() -> None:
+        rate_limit_monitor.install()
         try:
             async for chunk in search_function(**kwargs, callbacks=[callbacks]):
                 text = str(chunk)
@@ -398,8 +433,10 @@ async def _stream_with_progress(
                     if delta_sleep_seconds > 0 and index < len(parts) - 1:
                         await asyncio.sleep(delta_sleep_seconds)
         except Exception as exc:  # noqa: BLE001 - 透传给外层任务管理器处理回退
+            rate_limit_monitor.emit_exception_if_rate_limited(exc)
             queue.put_nowait(exc)
         finally:
+            rate_limit_monitor.uninstall()
             for event in callbacks.drain():
                 queue.put_nowait(NativeStreamingChunk(event="progress", progress=event))
             queue.put_nowait(done)
@@ -426,6 +463,113 @@ async def _stream_with_progress(
             producer_task.cancel()
             with suppress(asyncio.CancelledError):
                 await producer_task
+
+
+class _ScopedRateLimitLogMonitor(logging.Handler):
+    """单次 native streaming 查询内的模型限流日志监听器。"""
+
+    def __init__(self, mode: str, sink: Callable[[dict[str, Any]], None]) -> None:
+        super().__init__(level=logging.WARNING)
+        self._mode = mode
+        self._sink = sink
+        self._installed_loggers: list[logging.Logger] = []
+        self._occurrence_count = 0
+        self._emitted_event = False
+        self._context_id = object()
+        self._context_token: contextvars.Token[object | None] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_thread_id: int | None = None
+
+    def install(self) -> None:
+        self._loop = asyncio.get_running_loop()
+        self._loop_thread_id = threading.get_ident()
+        self._context_token = _ACTIVE_RATE_LIMIT_MONITOR.set(self._context_id)
+        for name in _RATE_LIMIT_LOGGER_NAMES:
+            logger = logging.getLogger(name)
+            logger.addHandler(self)
+            self._installed_loggers.append(logger)
+
+    def uninstall(self) -> None:
+        for logger in self._installed_loggers:
+            with suppress(ValueError):
+                logger.removeHandler(self)
+        self._installed_loggers = []
+        if self._context_token is not None:
+            _ACTIVE_RATE_LIMIT_MONITOR.reset(self._context_token)
+            self._context_token = None
+
+    def emit(self, record: logging.LogRecord) -> None:
+        active_monitor = _ACTIVE_RATE_LIMIT_MONITOR.get()
+        if active_monitor is not None and active_monitor is not self._context_id:
+            return
+        text = _log_record_detection_text(record)
+        if not _is_rate_limit_signal(text):
+            return
+        self._occurrence_count += 1
+        if self._emitted_event:
+            return
+        self._emitted_event = True
+        self._emit_progress(_rate_limit_progress_event(self._mode, "graphrag_log", self._occurrence_count, text))
+
+    def emit_exception_if_rate_limited(self, exc: BaseException) -> None:
+        text = _exception_detection_text(exc)
+        if not _is_rate_limit_signal(text):
+            return
+        self._occurrence_count += 1
+        if self._emitted_event:
+            return
+        self._emitted_event = True
+        self._emit_progress(_rate_limit_progress_event(self._mode, "native_exception", self._occurrence_count, text))
+
+    def _emit_progress(self, event: dict[str, Any]) -> None:
+        if self._loop is not None and self._loop_thread_id != threading.get_ident():
+            self._loop.call_soon_threadsafe(self._sink, event)
+            return
+        self._sink(event)
+
+
+def _log_record_detection_text(record: logging.LogRecord) -> str:
+    parts = [record.getMessage()]
+    if record.exc_info and record.exc_info[1] is not None:
+        exc = record.exc_info[1]
+        parts.append(type(exc).__name__)
+        parts.append(str(exc))
+    return " ".join(part for part in parts if part)
+
+
+def _exception_detection_text(exc: BaseException) -> str:
+    return f"{type(exc).__name__} {exc}"
+
+
+def _is_rate_limit_signal(text: str) -> bool:
+    return bool(text and _RATE_LIMIT_SIGNAL_RE.search(text))
+
+
+def _rate_limit_progress_event(mode: str, source: str, occurrence_count: int, text: str) -> dict[str, Any]:
+    metrics: dict[str, Any] = {
+        "reasonType": "rate_limit",
+        "source": source,
+        "occurrenceCount": max(1, occurrence_count),
+    }
+    if _STATUS_429_RE.search(text):
+        metrics["statusCode"] = 429
+    retry_after = _extract_retry_after_seconds(text)
+    if retry_after is not None:
+        metrics["retryAfterSeconds"] = retry_after
+    return _progress_event("model_rate_limit", mode, _RATE_LIMIT_SUMMARY, metrics, [])
+
+
+def _extract_retry_after_seconds(text: str) -> int | None:
+    match = _RETRY_AFTER_RE.search(text or "")
+    if not match:
+        return None
+    try:
+        value = float(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return int(value)
 
 
 def _progress_event(

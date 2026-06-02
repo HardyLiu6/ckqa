@@ -36,6 +36,11 @@ const QA_PROGRESS_STAGE_LABELS = {
   done: '已结束',
 }
 
+const QA_RATE_LIMIT_PROGRESS_SUMMARIES = {
+  model_rate_limit: '模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。',
+  model_rate_limit_failed: '模型服务持续繁忙，本次课程问答未能完成。',
+}
+
 export function normalizeCourseList(payload) {
   const list = Array.isArray(payload) ? payload : payload?.items ?? payload?.records ?? []
   return list.map((course) => ({
@@ -281,17 +286,29 @@ export function normalizeProgressEvents(events) {
   const list = Array.isArray(events) ? events : []
   return list
     .filter((event) => event && typeof event === 'object')
-    .map((event) => ({
-      type: String(event.type ?? 'progress'),
-      mode: String(event.mode ?? ''),
-      summary: String(event.summary ?? '').trim(),
-      metrics: event.metrics && typeof event.metrics === 'object' ? { ...event.metrics } : {},
-      evidence: Array.isArray(event.evidence)
+    .map((event) => {
+      const type = String(event.type ?? 'progress')
+      const evidence = Array.isArray(event.evidence)
         ? event.evidence.filter((item) => item && typeof item === 'object').map((item) => ({ ...item }))
-        : [],
-      eventSeq: normalizeStreamEventSeq(event.eventSeq ?? event.event_seq),
-    }))
+        : []
+      return {
+        type,
+        mode: String(event.mode ?? ''),
+        summary: normalizeProgressSummary(type, String(event.summary ?? '').trim()),
+        metrics: event.metrics && typeof event.metrics === 'object' ? { ...event.metrics } : {},
+        evidence: isRateLimitProgressType(type) ? [] : evidence,
+        eventSeq: normalizeStreamEventSeq(event.eventSeq ?? event.event_seq),
+      }
+    })
     .filter((event) => event.summary)
+}
+
+function normalizeProgressSummary(type, summary) {
+  return QA_RATE_LIMIT_PROGRESS_SUMMARIES[type] ?? summary
+}
+
+function isRateLimitProgressType(type) {
+  return type === 'model_rate_limit' || type === 'model_rate_limit_failed'
 }
 
 export function normalizeTaskLogs(logs, progressEvents = null) {

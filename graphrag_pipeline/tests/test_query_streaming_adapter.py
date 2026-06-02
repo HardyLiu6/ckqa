@@ -9,6 +9,8 @@ import sys
 import unittest
 import inspect
 import asyncio
+import logging
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -442,6 +444,162 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(progress[1]["type"], "context_selected")
         self.assertIn("混合检索依据", progress[1]["summary"])
         self.assertTrue(any(item["type"] == "answer_running" for item in progress))
+
+    async def test_global_streaming_emits_rate_limit_progress_from_graphrag_logger(self):
+        async def fake_global(**kwargs):
+            logging.getLogger("graphrag.query.structured_search.global_search.search").warning(
+                "429 too many requests; retry-after: 7 seconds"
+            )
+            yield "全局总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"global": fake_global},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("global"))]
+
+        rate_limit = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "model_rate_limit"
+        )
+        self.assertIn("模型服务当前繁忙", rate_limit["summary"])
+        self.assertEqual(rate_limit["metrics"]["reasonType"], "rate_limit")
+        self.assertEqual(rate_limit["metrics"]["source"], "graphrag_log")
+        self.assertEqual(rate_limit["metrics"]["occurrenceCount"], 1)
+        self.assertEqual(rate_limit["metrics"]["statusCode"], 429)
+        self.assertEqual(rate_limit["metrics"]["retryAfterSeconds"], 7)
+        self.assertEqual(rate_limit["evidence"], [])
+        self.assertEqual(chunks[-1].text, "全局总结")
+
+    async def test_search_exception_emits_rate_limit_progress_before_reraising(self):
+        async def fake_basic(**kwargs):
+            raise RuntimeError("RateLimitError: 429 quota exceeded retry-after 3 seconds")
+            yield "不会输出"  # pragma: no cover
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"basic": fake_basic},
+        )
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._read_parquet", return_value=pd.DataFrame()):
+            iterator = adapter.stream(_request_for_mode("basic"))
+            first_chunk = await anext(iterator)
+            second_chunk = await anext(iterator)
+            with self.assertRaises(RuntimeError):
+                await anext(iterator)
+
+        self.assertEqual(first_chunk.progress["type"], "retrieval_started")
+        self.assertEqual(second_chunk.progress["type"], "model_rate_limit")
+        self.assertEqual(second_chunk.progress["metrics"]["reasonType"], "rate_limit")
+        self.assertEqual(second_chunk.progress["metrics"]["source"], "native_exception")
+        self.assertEqual(second_chunk.progress["metrics"]["occurrenceCount"], 1)
+        self.assertEqual(second_chunk.progress["metrics"]["statusCode"], 429)
+        self.assertEqual(second_chunk.progress["metrics"]["retryAfterSeconds"], 3)
+        self.assertEqual(second_chunk.progress["evidence"], [])
+
+    async def test_repeated_rate_limit_logs_and_exception_emit_one_progress(self):
+        async def fake_basic(**kwargs):
+            logger = logging.getLogger("openai.resources.chat.completions")
+            logger.warning("429 too many requests; retry-after: 5 seconds")
+            logger.warning("RateLimitError 429 too many requests; retry-after: 5 seconds")
+            raise RuntimeError("RateLimitError: 429 too many requests")
+            yield "不会输出"  # pragma: no cover
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"basic": fake_basic},
+        )
+        chunks = []
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._read_parquet", return_value=pd.DataFrame()):
+            iterator = adapter.stream(_request_for_mode("basic"))
+            while True:
+                try:
+                    chunks.append(await anext(iterator))
+                except RuntimeError:
+                    break
+
+        rate_limit_events = [
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "model_rate_limit"
+        ]
+        self.assertEqual(len(rate_limit_events), 1)
+        self.assertEqual(rate_limit_events[0]["metrics"]["source"], "graphrag_log")
+        self.assertEqual(rate_limit_events[0]["metrics"]["occurrenceCount"], 1)
+
+    async def test_plain_quota_warning_does_not_emit_rate_limit_progress(self):
+        async def fake_global(**kwargs):
+            logging.getLogger("fnllm.openai.cache").warning(
+                "quota configuration loaded for daily reporting"
+            )
+            yield "全局总结"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"global": fake_global},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("global"))]
+
+        rate_limit_events = [
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "model_rate_limit"
+        ]
+        self.assertEqual(rate_limit_events, [])
+        self.assertEqual(chunks[-1].text, "全局总结")
+
+    async def test_rate_limit_log_from_worker_thread_uses_progress_queue_safely(self):
+        async def fake_basic(**kwargs):
+            def log_from_thread():
+                logging.getLogger("fnllm.openai.client").warning(
+                    "insufficient_quota retry-after: 4 seconds"
+                )
+
+            thread = threading.Thread(target=log_from_thread)
+            thread.start()
+            thread.join()
+            await asyncio.sleep(0)
+            yield "基础回答"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"basic": fake_basic},
+        )
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._read_parquet", return_value=pd.DataFrame()):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("basic"))]
+
+        rate_limit = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "model_rate_limit"
+        )
+        self.assertEqual(rate_limit["metrics"]["source"], "graphrag_log")
+        self.assertEqual(rate_limit["metrics"]["retryAfterSeconds"], 4)
+        self.assertEqual(chunks[-1].text, "基础回答")
 
 
 if __name__ == "__main__":
