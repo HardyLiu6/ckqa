@@ -8,9 +8,11 @@ import {
   loadHybridBetaPreference,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveResolvedMode,
   resolveHybridWarmupText,
   resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
+  resolveSubmitMode,
   saveHybridBetaPreference,
 } from '../src/views/qa/qa-mode-model.js'
 
@@ -196,4 +198,38 @@ test('学习记忆策略只跟随最终 Local 模式，不新增问答模式', (
   assert.equal(resolveMemoryPolicyForMode('local', false), 'off')
   assert.equal(resolveMemoryPolicyForMode('global', true), 'off')
   assert.equal(resolveMemoryPolicyForMode('hybrid_v0', true), 'off')
+})
+
+test('智能推荐提交给后端 smart，同时 pending 展示推荐实际模式', () => {
+  const modeResolution = {
+    mode: 'drift',
+    fromSmart: true,
+    reason: '问题强调关联或扩展探索，使用 drift 拓展相关知识。',
+  }
+
+  assert.equal(resolveSubmitMode(SMART_QA_MODE, modeResolution), SMART_QA_MODE)
+  assert.equal(resolveResolvedMode(null, modeResolution), 'drift')
+  assert.equal(resolveMemoryPolicyForMode(resolveResolvedMode(null, modeResolution), true), 'off')
+})
+
+test('手动选择后端模式时直接提交该模式', () => {
+  const modeResolution = {
+    mode: 'local',
+    fromSmart: false,
+    reason: '已手动选择 local 模式。',
+  }
+
+  assert.equal(resolveSubmitMode('local', modeResolution), 'local')
+  assert.equal(resolveResolvedMode({ mode: 'local' }, modeResolution), 'local')
+  assert.equal(resolveMemoryPolicyForMode(resolveResolvedMode({ mode: 'local' }, modeResolution), true), 'auto')
+})
+
+test('后端 resolvedMode 优先覆盖本地推荐展示模式', () => {
+  const modeResolution = {
+    mode: 'local',
+    fromSmart: true,
+    reason: '服务端智能推荐为 local 模式。',
+  }
+
+  assert.equal(resolveResolvedMode({ mode: 'local', resolvedMode: 'global' }, modeResolution), 'global')
 })
