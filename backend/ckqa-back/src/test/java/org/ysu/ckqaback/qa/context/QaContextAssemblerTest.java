@@ -106,7 +106,7 @@ class QaContextAssemblerTest {
 
         assertThat(assembly.strategy()).isEqualTo("recent");
         assertThat(assembly.latestTopic()).isEqualTo("死锁");
-        assertThat(assembly.latestTopicMessageRange()).isEqualTo("1-2");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
     }
 
     @Test
@@ -126,6 +126,45 @@ class QaContextAssemblerTest {
         assertThat(former.topicStackJson()).contains("死锁", "饥饿");
         assertThat(latter.latestTopic()).isEqualTo("饥饿");
         assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldKeepComparisonFormerAsLatestTopicForLaterPronounFollowUp() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "银行家算法和资源分配图有什么区别？"),
+                message(4L, "assistant", 4, "银行家算法通过安全性检查避免进入不安全状态，资源分配图用于观察资源请求关系。"),
+                message(5L, "user", 5, "前者如何检测？"),
+                message(6L, "assistant", 6, "可以通过检查安全序列来检测银行家算法。")
+        );
+
+        QaContextAssembly assembly = assembler.assemble("local", "它还有什么局限？", history);
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.latestTopic()).isEqualTo("银行家算法");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
+        assertThat(assembly.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldKeepDeadlockAcrossMultiplePronounTurns() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "那个有哪些典型场景？"),
+                message(4L, "assistant", 4, "例如多个进程相互等待对方持有的资源。"),
+                message(5L, "user", 5, "上述情况怎么避免？"),
+                message(6L, "assistant", 6, "通过资源顺序分配和避免循环等待。")
+        );
+
+        QaContextAssembly assembly = assembler.assemble("local", "它如何检测？", history);
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.latestTopic()).isEqualTo("死锁");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
     }
 
     @Test

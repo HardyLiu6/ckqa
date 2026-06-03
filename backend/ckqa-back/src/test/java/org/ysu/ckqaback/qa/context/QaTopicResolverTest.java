@@ -38,6 +38,25 @@ class QaTopicResolverTest {
         assertThat(stack.activeTopicsJson()).contains("死锁", "饥饿");
     }
 
+    @Test
+    void shouldBindFormerAndLatterToMostRecentComparisonPair() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "银行家算法和资源分配图有什么区别？"),
+                message(4L, "assistant", 4, "银行家算法通过安全性检查避免进入不安全状态，资源分配图用于观察资源请求关系。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", history, null);
+        QaTopicStack latter = resolver.resolve("后者如何使用？", history, null);
+
+        assertThat(former.latestTopic()).isEqualTo("银行家算法");
+        assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.latestTopic()).isEqualTo("资源分配图");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
     private QaMessages message(Long id, String role, int sequenceNo, String content) {
         QaMessages message = new QaMessages();
         message.setId(id);

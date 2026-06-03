@@ -51,14 +51,21 @@ public class QaTopicResolver {
             if (!"user".equals(message.getRole())) {
                 continue;
             }
-            ResolvedQuestion resolved = extractExplicitTopic(message.getContent());
+            ResolvedQuestion resolved = extractTopic(message.getContent(), state);
             if (resolved == null) {
                 continue;
             }
             state.latestTopic = resolved.latestTopic();
             state.latestRange = rangeForUserMessage(message, history);
-            state.source = "history";
+            state.source = resolved.source();
             state.confidence = resolved.confidence();
+            if (resolved.resetsComparisonTopics()) {
+                state.comparisonTopics.clear();
+            }
+            if (!resolved.comparisonTopics().isEmpty()) {
+                state.comparisonTopics.clear();
+                state.comparisonTopics.addAll(resolved.comparisonTopics());
+            }
             if (resolved.activeTopics().isEmpty()) {
                 addTopic(state.activeTopics, resolved.latestTopic());
             } else {
@@ -69,7 +76,7 @@ public class QaTopicResolver {
     }
 
     private QaTopicStack resolveQuestion(String question, TopicState state) {
-        ResolvedQuestion current = extractExplicitTopic(question);
+        ResolvedQuestion current = extractTopic(question, state);
         if (current != null) {
             List<String> active = new ArrayList<>(state.activeTopics);
             if (current.activeTopics().isEmpty()) {
@@ -77,7 +84,8 @@ public class QaTopicResolver {
             } else {
                 current.activeTopics().forEach(topic -> addTopic(active, topic));
             }
-            return QaTopicStack.of(current.latestTopic(), "", current.source(), current.confidence(), active);
+            String range = current.useLatestRange() ? state.latestRange : "";
+            return QaTopicStack.of(current.latestTopic(), range, current.source(), current.confidence(), active);
         }
         if (containsFormer(question) && !state.activeTopics.isEmpty()) {
             return QaTopicStack.of(state.activeTopics.get(0), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics);
@@ -94,7 +102,7 @@ public class QaTopicResolver {
         return QaTopicStack.empty();
     }
 
-    private ResolvedQuestion extractExplicitTopic(String content) {
+    private ResolvedQuestion extractTopic(String content, TopicState state) {
         String text = normalizeQuestion(content);
         if (!StringUtils.hasText(text)) {
             return null;
@@ -104,8 +112,14 @@ public class QaTopicResolver {
             String first = shortenTopic(comparisonMatcher.group(1));
             String second = shortenTopic(comparisonMatcher.group(2));
             if (StringUtils.hasText(first) && StringUtils.hasText(second)) {
-                return new ResolvedQuestion(second, "comparison", 0.92D, List.of(first, second));
+                return new ResolvedQuestion(second, "comparison", 0.92D, List.of(first, second), List.of(first, second), false, false);
             }
+        }
+        if (containsFormer(text) && hasComparisonPair(state)) {
+            return comparisonPronoun(state.comparisonTopics.get(0));
+        }
+        if (containsLatter(text) && hasComparisonPair(state)) {
+            return comparisonPronoun(state.comparisonTopics.get(1));
         }
         Matcher prefixMatcher = WHAT_IS_PREFIX_PATTERN.matcher(text);
         if (prefixMatcher.matches()) {
@@ -116,15 +130,26 @@ public class QaTopicResolver {
             return singleTopic(suffixMatcher.group(1), "explicit", 0.95D);
         }
         Matcher thenMatcher = THEN_TOPIC_PATTERN.matcher(text);
-        if (thenMatcher.matches() && !QaContextPolicy.isPronounFollowUp(text)) {
+        if (thenMatcher.matches() && !isPronounFollowUp(text)) {
             return singleTopic(thenMatcher.group(1), "explicit_follow_up", 0.9D);
+        }
+        if (isPronounFollowUp(text) && StringUtils.hasText(state.latestTopic)) {
+            return new ResolvedQuestion(
+                    state.latestTopic,
+                    StringUtils.hasText(state.source) ? state.source : "history",
+                    state.confidence,
+                    new ArrayList<>(state.activeTopics),
+                    List.of(),
+                    false,
+                    true
+            );
         }
         return null;
     }
 
     private ResolvedQuestion singleTopic(String rawTopic, String source, double confidence) {
         String topic = shortenTopic(rawTopic);
-        return StringUtils.hasText(topic) ? new ResolvedQuestion(topic, source, confidence, List.of(topic)) : null;
+        return StringUtils.hasText(topic) ? new ResolvedQuestion(topic, source, confidence, List.of(topic), List.of(), true, false) : null;
     }
 
     private List<QaMessages> safeHistory(List<QaMessages> history) {
@@ -170,6 +195,21 @@ public class QaTopicResolver {
         return StringUtils.hasText(question) && question.contains("后者");
     }
 
+    private boolean isPronounFollowUp(String question) {
+        return QaContextPolicy.isPronounFollowUp(question) || (StringUtils.hasText(question) && question.contains("那个"));
+    }
+
+    private boolean hasComparisonPair(TopicState state) {
+        return state != null && state.comparisonTopics.size() >= 2;
+    }
+
+    private ResolvedQuestion comparisonPronoun(String topic) {
+        String resolvedTopic = shortenTopic(topic);
+        return StringUtils.hasText(resolvedTopic)
+                ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), List.of(), false, true)
+                : null;
+    }
+
     private void addTopic(List<String> topics, String rawTopic) {
         String topic = shortenTopic(rawTopic);
         if (StringUtils.hasText(topic) && !topics.contains(topic)) {
@@ -192,11 +232,20 @@ public class QaTopicResolver {
         return value == null ? "" : value.trim();
     }
 
-    private record ResolvedQuestion(String latestTopic, String source, double confidence, List<String> activeTopics) {
+    private record ResolvedQuestion(
+            String latestTopic,
+            String source,
+            Double confidence,
+            List<String> activeTopics,
+            List<String> comparisonTopics,
+            boolean resetsComparisonTopics,
+            boolean useLatestRange
+    ) {
     }
 
     private static final class TopicState {
         private final List<String> activeTopics = new ArrayList<>();
+        private final List<String> comparisonTopics = new ArrayList<>();
         private String latestTopic = "";
         private String latestRange = "";
         private String source = "";
