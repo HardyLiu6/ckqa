@@ -44,6 +44,8 @@ public class QaOperationLogResponse {
     private final Integer memoryRecentHistoryCount;
     private final String queryEngineStrategy;
     private final String historyFallbackReason;
+    private final Integer contextTokenCount;
+    private final Integer memoryTokenCount;
     private final LocalDateTime createdAt;
     private final LocalDateTime startedAt;
     private final LocalDateTime finishedAt;
@@ -86,6 +88,8 @@ public class QaOperationLogResponse {
         this.memoryRecentHistoryCount = row.getMemoryRecentHistoryCount();
         this.queryEngineStrategy = row.getQueryEngineStrategy();
         this.historyFallbackReason = row.getHistoryFallbackReason();
+        this.contextTokenCount = row.getContextTokenCount();
+        this.memoryTokenCount = row.getMemoryTokenCount();
         this.createdAt = row.getCreatedAt();
         this.startedAt = row.getStartedAt();
         this.finishedAt = row.getFinishedAt();

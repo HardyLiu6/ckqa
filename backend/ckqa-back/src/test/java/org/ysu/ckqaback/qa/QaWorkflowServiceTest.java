@@ -30,10 +30,12 @@ import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.context.BudgetSizeEstimate;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.qa.context.QaTopicEntityBindingCandidate;
 import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
 import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
+import org.ysu.ckqaback.qa.context.TokenBudgetEstimator;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
@@ -617,6 +619,85 @@ class QaWorkflowServiceTest {
     }
 
     @Test
+    void shouldWriteTokenBudgetEstimatesIntoPendingTaskContextAndResponse() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaMemoryContextService memoryContextService = mock(QaMemoryContextService.class);
+        TokenBudgetEstimator tokenBudgetEstimator = mock(TokenBudgetEstimator.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaMemoryContextService(memoryContextService);
+        workflowService.setTokenBudgetEstimator(tokenBudgetEstimator);
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是时间片轮转？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "时间片轮转是一种抢占式调度算法。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它为什么影响响应时间？");
+        QaRetrievalLogs task = pendingTask(9016L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(memoryContextService.buildContext(
+                "local",
+                "auto",
+                session,
+                List.of(previousUser, previousAssistant),
+                "它为什么影响响应时间？",
+                "时间片轮转"
+        )).willReturn(new QaMemoryContextResult(
+                true,
+                "local_history_preference_only",
+                "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
+                2,
+                66,
+                List.of(
+                        new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。"),
+                        new GraphRagConversationMessage("user", "什么是时间片轮转？")
+                ),
+                null
+        ));
+        given(tokenBudgetEstimator.estimate(any(), any()))
+                .willAnswer(invocation -> new BudgetSizeEstimate(
+                        invocation.getArgument(1, Integer.class),
+                        17,
+                        "test:o200k_base",
+                        null
+                ));
+        given(qaMessagesService.appendUserMessage(5L, "它为什么影响响应时间？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("local"),
+                eq("关于上一轮主题「时间片轮转」：它为什么影响响应时间？"),
+                argThat(context -> context.contextTokenCount() == 17
+                        && "test:o200k_base".equals(context.contextTokenizer())
+                        && context.contextBudgetFallbackReason() == null
+                        && context.memoryTokenCount() == 17
+                        && "test:o200k_base".equals(context.memoryTokenizer())
+                        && context.memoryBudgetFallbackReason() == null)
+        )).willReturn(task);
+
+        CreateQaMessageRequest request = new CreateQaMessageRequest("local", "它为什么影响响应时间？");
+        request.setMemoryPolicy("auto");
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
+
+        assertThat(response.getContextSizeEstimate().getTokens()).isEqualTo(17);
+        assertThat(response.getContextSizeEstimate().getTokenizer()).isEqualTo("test:o200k_base");
+        assertThat(response.getContextSizeEstimate().getFallbackReason()).isNull();
+    }
+
+    @Test
     void shouldResolveSmartModeToRecommendedDriftForPendingTaskAndResponse() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
@@ -714,7 +795,7 @@ class QaWorkflowServiceTest {
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
         given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
-        given(bindingService.bind("死锁", 3L, 23L))
+        given(bindingService.bind(any(), eq(3L), eq(23L)))
                 .willReturn(QaTopicEntityBindingResult.success(List.of(candidate), 12L));
         given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
         given(qaRetrievalLogsService.createPendingTask(
@@ -724,26 +805,35 @@ class QaWorkflowServiceTest {
                 eq(103L),
                 eq("basic"),
                 eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
-                argThat(context -> Boolean.TRUE.equals(context.topicEntityBindingApplied())
-                        && "success".equals(context.topicEntityBindingStatus())
-                        && "active_neo4j_topic_match".equals(context.topicEntityBindingStrategy())
-                        && context.topicEntityCandidateCount() == 1
-                        && Double.valueOf(1.0D).equals(context.topicEntityTopScore())
-                        && "entity-deadlock".equals(context.topicEntitySelectedId())
-                        && "死锁".equals(context.topicEntitySelectedName())
-                        && "concept".equals(context.topicEntitySelectedType())
-                        && context.topicEntityCandidatesJson().contains("\"id\":\"entity-deadlock\"")
-                        && context.topicEntityCandidatesJson().contains("\"source\":\"active_neo4j\"")
-                        && !context.topicEntityCandidatesJson().contains("description")
-                        && !context.topicEntityCandidatesJson().contains("snippet")
-                        && !context.topicEntityCandidatesJson().contains("memoryText")
-                        && !context.topicEntityCandidatesJson().contains("full_content")
-                        && context.topicEntityLookupDurationMs() == 12L)
+                any()
         )).willReturn(task);
 
         workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它和资源分配图有什么关系？"));
 
-        then(bindingService).should().bind("死锁", 3L, 23L);
+        ArgumentCaptor<QaRetrievalLogContext> contextCaptor = ArgumentCaptor.forClass(QaRetrievalLogContext.class);
+        then(qaRetrievalLogsService).should().createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                contextCaptor.capture()
+        );
+        QaRetrievalLogContext context = contextCaptor.getValue();
+        assertThat(context.topicEntityBindingApplied()).isTrue();
+        assertThat(context.topicEntityBindingStatus()).isEqualTo("success");
+        assertThat(context.topicEntityBindingStrategy()).isEqualTo("active_neo4j_topic_match");
+        assertThat(context.topicEntityCandidateCount()).isEqualTo(1);
+        assertThat(context.topicEntityTopScore()).isEqualTo(1.0D);
+        assertThat(context.topicEntitySelectedId()).isEqualTo("entity-deadlock");
+        assertThat(context.topicEntitySelectedName()).isEqualTo("死锁");
+        assertThat(context.topicEntitySelectedType()).isEqualTo("concept");
+        assertThat(context.topicEntityCandidatesJson()).contains("\"id\":\"entity-deadlock\"");
+        assertThat(context.topicEntityCandidatesJson()).contains("\"source\":\"active_neo4j\"");
+        assertThat(context.topicEntityCandidatesJson()).doesNotContain("description", "snippet", "memoryText", "full_content");
+        assertThat(context.topicEntityLookupDurationMs()).isEqualTo(12L);
+        then(bindingService).should().bind(any(), eq(3L), eq(23L));
     }
 
     @Test
@@ -1559,6 +1649,9 @@ class QaWorkflowServiceTest {
         task.setMemoryScope("userId=7;courseId=os;knowledgeBaseId=3;indexRunId=17");
         task.setMemorySourceCount(2);
         task.setMemorySizeChars(88);
+        task.setContextCharCount(120);
+        task.setContextTokenCount(31);
+        task.setContextTokenizer("jtokkit:o200k_base");
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(qaRetrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
@@ -1576,6 +1669,9 @@ class QaWorkflowServiceTest {
         assertThat(response.getMemoryScope()).contains("knowledgeBaseId=3");
         assertThat(response.getMemorySourceCount()).isEqualTo(2);
         assertThat(response.getMemorySizeEstimate()).isEqualTo(88);
+        assertThat(response.getContextSizeEstimate().getChars()).isEqualTo(120);
+        assertThat(response.getContextSizeEstimate().getTokens()).isEqualTo(31);
+        assertThat(response.getContextSizeEstimate().getTokenizer()).isEqualTo("jtokkit:o200k_base");
         assertThat(response.getPartialResponseText()).isEqualTo("drift 已生成的部分回答");
         assertThat(response.getStreamEventSeq()).isEqualTo(18L);
         assertThat(response.getLatestLogs()).containsExactly("正在综合 DRIFT 检索到的课程上下文。");

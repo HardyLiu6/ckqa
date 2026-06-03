@@ -19,6 +19,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
     private final String contextSnapshotText;
     private final String contextMessageRange;
     private final Integer contextCharCount;
+    private final Integer contextTokenCount;
+    private final String contextTokenizer;
+    private final String contextBudgetFallbackReason;
     private final String rewriteReason;
     private final String rewriteModel;
     private final String routingSnapshotJson;
@@ -36,6 +39,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
     private final String topicEntityFallbackReason;
     private final Long topicEntityLookupDurationMs;
     private final String memoryScope;
+    private final Integer memoryTokenCount;
+    private final String memoryTokenizer;
+    private final String memoryBudgetFallbackReason;
     private final String memoryGovernanceVersion;
     private final String memoryInjectionReason;
     private final String memorySourcesJson;
@@ -58,6 +64,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
         this.contextSnapshotText = row.getContextSnapshotText();
         this.contextMessageRange = row.getContextMessageRange();
         this.contextCharCount = row.getContextCharCount();
+        this.contextTokenCount = row.getContextTokenCount();
+        this.contextTokenizer = row.getContextTokenizer();
+        this.contextBudgetFallbackReason = row.getContextBudgetFallbackReason();
         this.rewriteReason = row.getRewriteReason();
         this.rewriteModel = row.getRewriteModel();
         this.routingSnapshotJson = row.getRoutingSnapshotJson();
@@ -75,6 +84,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
         this.topicEntityFallbackReason = row.getTopicEntityFallbackReason();
         this.topicEntityLookupDurationMs = row.getTopicEntityLookupDurationMs();
         this.memoryScope = row.getMemoryScope();
+        this.memoryTokenCount = row.getMemoryTokenCount();
+        this.memoryTokenizer = row.getMemoryTokenizer();
+        this.memoryBudgetFallbackReason = row.getMemoryBudgetFallbackReason();
         this.memoryGovernanceVersion = row.getMemoryGovernanceVersion();
         this.memoryInjectionReason = row.getMemoryInjectionReason();
         this.memorySourcesJson = row.getMemorySourcesJson();

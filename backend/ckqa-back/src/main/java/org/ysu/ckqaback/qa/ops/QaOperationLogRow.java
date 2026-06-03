@@ -39,6 +39,9 @@ public class QaOperationLogRow {
     private String contextStrategy;
     private String contextMessageRange;
     private Integer contextCharCount;
+    private Integer contextTokenCount;
+    private String contextTokenizer;
+    private String contextBudgetFallbackReason;
     private Boolean rewriteApplied;
     private String rewriteReason;
     private String rewriteMethod;
@@ -66,6 +69,9 @@ public class QaOperationLogRow {
     private String memoryScope;
     private Integer memorySourceCount;
     private Integer memorySizeChars;
+    private Integer memoryTokenCount;
+    private String memoryTokenizer;
+    private String memoryBudgetFallbackReason;
     private String memoryGovernanceVersion;
     private Integer memoryLongTermCount;
     private Integer memoryRecentHistoryCount;

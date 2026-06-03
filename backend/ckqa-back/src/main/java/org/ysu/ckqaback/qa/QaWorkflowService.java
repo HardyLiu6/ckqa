@@ -25,8 +25,11 @@ import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
+import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
+import org.ysu.ckqaback.qa.context.BudgetSizeEstimate;
+import org.ysu.ckqaback.qa.context.CharFallbackTokenBudgetEstimator;
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
 import org.ysu.ckqaback.qa.context.QaContextPolicy;
@@ -37,6 +40,7 @@ import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
 import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
+import org.ysu.ckqaback.qa.context.TokenBudgetEstimator;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
@@ -105,6 +109,7 @@ public class QaWorkflowService {
     private StudentCacheKeyFactory studentCacheKeyFactory;
     private QaMemoryContextService qaMemoryContextService;
     private QaTopicEntityBindingService qaTopicEntityBindingService;
+    private TokenBudgetEstimator tokenBudgetEstimator = new CharFallbackTokenBudgetEstimator();
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -159,6 +164,13 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setQaTopicEntityBindingService(QaTopicEntityBindingService qaTopicEntityBindingService) {
         this.qaTopicEntityBindingService = qaTopicEntityBindingService;
+    }
+
+    @Autowired(required = false)
+    public void setTokenBudgetEstimator(TokenBudgetEstimator tokenBudgetEstimator) {
+        if (tokenBudgetEstimator != null) {
+            this.tokenBudgetEstimator = tokenBudgetEstimator;
+        }
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -380,6 +392,11 @@ public class QaWorkflowService {
                 null,
                 memoryContext.memoryApplied() && !memoryContext.conversationHistory().isEmpty()
         );
+        BudgetSizeEstimate contextBudgetEstimate = tokenBudgetEstimator.estimate(context.snapshotText(), context.charCount());
+        BudgetSizeEstimate memoryBudgetEstimate = tokenBudgetEstimator.estimate(
+                memoryEstimateText(memoryContext),
+                memoryContext.sizeEstimate()
+        );
         QaTopicEntityBindingResult topicEntityBinding = bindTopicEntity(context.latestTopic(), session.getKnowledgeBaseId(), indexRunId);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
@@ -421,7 +438,8 @@ public class QaWorkflowService {
                 context.topicStackJson(),
                 context.semanticStateVersion(),
                 context.semanticStateJson()
-        ).withTopicEntityBinding(topicEntityBinding);
+        ).withBudgetEstimates(contextBudgetEstimate, memoryBudgetEstimate)
+                .withTopicEntityBinding(topicEntityBinding);
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
         qaSessionsService.touchLastMessageAt(sessionId);
@@ -452,7 +470,7 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 context.contextApplied(),
                 context.strategy(),
-                ContextSizeEstimateResponse.of(context.charCount()),
+                ContextSizeEstimateResponse.of(contextBudgetEstimate),
                 memoryContext.memoryApplied(),
                 memoryContext.strategy(),
                 memoryContext.scope(),
@@ -492,6 +510,16 @@ public class QaWorkflowService {
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "长期记忆上下文格式不合法");
         }
+    }
+
+    private String memoryEstimateText(QaMemoryContextResult memoryContext) {
+        if (memoryContext == null || memoryContext.conversationHistory() == null || memoryContext.conversationHistory().isEmpty()) {
+            return "";
+        }
+        return memoryContext.conversationHistory().stream()
+                .map(GraphRagConversationMessage::content)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private String serializeRoutingSnapshot(CreateQaMessageRequest request) {
@@ -750,7 +778,7 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 !"none".equals(contextStrategy),
                 contextStrategy,
-                ContextSizeEstimateResponse.of(task.getContextCharCount()),
+                ContextSizeEstimateResponse.of(toContextBudgetEstimate(task)),
                 Boolean.TRUE.equals(task.getMemoryApplied()),
                 StringUtils.hasText(task.getMemoryStrategy()) ? task.getMemoryStrategy() : "none",
                 task.getMemoryScope(),
@@ -758,6 +786,18 @@ public class QaWorkflowService {
                 task.getMemorySizeChars() == null ? 0 : task.getMemorySizeChars(),
                 task.getPartialResponseText(),
                 task.getStreamEventSeq()
+        );
+    }
+
+    private BudgetSizeEstimate toContextBudgetEstimate(QaRetrievalLogs task) {
+        if (task == null) {
+            return new BudgetSizeEstimate(0, null, null, null);
+        }
+        return new BudgetSizeEstimate(
+                task.getContextCharCount() == null ? 0 : task.getContextCharCount(),
+                task.getContextTokenCount(),
+                task.getContextTokenizer(),
+                task.getContextBudgetFallbackReason()
         );
     }
 

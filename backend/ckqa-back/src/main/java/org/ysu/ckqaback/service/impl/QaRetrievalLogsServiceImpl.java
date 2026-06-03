@@ -78,6 +78,9 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setContextStrategy(context.contextStrategy());
             task.setContextMessageRange(context.contextMessageRange());
             task.setContextCharCount(context.contextCharCount());
+            task.setContextTokenCount(context.contextTokenCount());
+            task.setContextTokenizer(context.contextTokenizer());
+            task.setContextBudgetFallbackReason(context.contextBudgetFallbackReason());
             task.setRewriteApplied(context.rewriteApplied());
             task.setRewriteReason(context.rewriteReason());
             task.setRewriteSourceMessageRange(context.rewriteSourceMessageRange());
@@ -113,6 +116,9 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setMemoryScope(context.memoryScope());
             task.setMemorySourceCount(context.memorySourceCount());
             task.setMemorySizeChars(context.memorySizeChars());
+            task.setMemoryTokenCount(context.memoryTokenCount());
+            task.setMemoryTokenizer(context.memoryTokenizer());
+            task.setMemoryBudgetFallbackReason(context.memoryBudgetFallbackReason());
             task.setMemoryGovernanceVersion(context.memoryGovernanceVersion());
             task.setMemoryLongTermCount(context.memoryLongTermCount());
             task.setMemoryRecentHistoryCount(context.memoryRecentHistoryCount());

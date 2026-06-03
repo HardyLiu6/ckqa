@@ -172,6 +172,24 @@ public class QaRetrievalLogs implements Serializable {
     private Integer contextCharCount;
 
     /**
+     * 上下文 token 数诊断。
+     */
+    @TableField("context_token_count")
+    private Integer contextTokenCount;
+
+    /**
+     * 上下文 token 统计器。
+     */
+    @TableField("context_tokenizer")
+    private String contextTokenizer;
+
+    /**
+     * 上下文预算降级原因。
+     */
+    @TableField("context_budget_fallback_reason")
+    private String contextBudgetFallbackReason;
+
+    /**
      * 是否应用追问改写
      */
     @TableField("rewrite_applied")
@@ -368,6 +386,24 @@ public class QaRetrievalLogs implements Serializable {
      */
     @TableField("memory_size_chars")
     private Integer memorySizeChars;
+
+    /**
+     * 长期记忆 token 数诊断。
+     */
+    @TableField("memory_token_count")
+    private Integer memoryTokenCount;
+
+    /**
+     * 长期记忆 token 统计器。
+     */
+    @TableField("memory_tokenizer")
+    private String memoryTokenizer;
+
+    /**
+     * 长期记忆预算降级原因。
+     */
+    @TableField("memory_budget_fallback_reason")
+    private String memoryBudgetFallbackReason;
 
     /**
      * 长期记忆治理版本，仅用于脱敏诊断。

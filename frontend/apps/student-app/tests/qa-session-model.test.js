@@ -473,7 +473,15 @@ test('消息模型保留每条消息自身的问答模式', () => {
   assert.equal(updated.mode, 'basic')
 })
 
-test('上下文状态文案只展示策略和字符数', () => {
+test('上下文状态文案优先展示 token 并保留字符兜底', () => {
+  assert.equal(
+    resolveContextStatusText({
+      contextApplied: true,
+      contextStrategy: 'recent',
+      contextSizeEstimate: { chars: 128, tokens: 32, tokenizer: 'jtokkit:o200k_base' },
+    }),
+    '已使用 recent 上下文，约 32 tokens',
+  )
   assert.equal(
     resolveContextStatusText({ contextApplied: true, contextStrategy: 'recent', contextSizeEstimate: { chars: 128 } }),
     '已使用 recent 上下文，约 128 字',

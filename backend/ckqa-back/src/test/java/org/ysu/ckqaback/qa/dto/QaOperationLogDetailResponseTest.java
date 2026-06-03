@@ -54,6 +54,12 @@ class QaOperationLogDetailResponseTest {
         row.setMemoryStrategy("local_history_preference_only");
         row.setMemorySourceCount(3);
         row.setMemorySizeChars(128);
+        row.setContextTokenCount(27);
+        row.setContextTokenizer("jtokkit:o200k_base");
+        row.setContextBudgetFallbackReason(null);
+        row.setMemoryTokenCount(19);
+        row.setMemoryTokenizer("jtokkit:o200k_base");
+        row.setMemoryBudgetFallbackReason(null);
         row.setMemoryGovernanceVersion("memory-governance-v1");
         row.setMemoryLongTermCount(1);
         row.setMemoryRecentHistoryCount(2);
@@ -69,6 +75,10 @@ class QaOperationLogDetailResponseTest {
 
         assertThat(root.get("memoryLongTermCount").asInt()).isEqualTo(1);
         assertThat(root.get("memoryRecentHistoryCount").asInt()).isEqualTo(2);
+        assertThat(root.get("contextTokenCount").asInt()).isEqualTo(27);
+        assertThat(root.get("contextTokenizer").asText()).isEqualTo("jtokkit:o200k_base");
+        assertThat(root.get("memoryTokenCount").asInt()).isEqualTo(19);
+        assertThat(root.get("memoryTokenizer").asText()).isEqualTo("jtokkit:o200k_base");
         assertThat(root.get("memoryGovernanceVersion").asText()).isEqualTo("memory-governance-v1");
         assertThat(root.get("memorySourcesJson").asText()).contains("\"textHash\":\"abc12345\"");
         assertThat(json).doesNotContain("memoryHistoryJson", "conversationHistory", "memoryText", "学生偏好");

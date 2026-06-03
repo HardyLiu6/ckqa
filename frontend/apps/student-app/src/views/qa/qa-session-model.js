@@ -494,6 +494,10 @@ export function resolveContextStatusText(task) {
     return '未使用历史上下文'
   }
   const strategy = task.contextStrategy || 'recent'
+  const tokens = Number(task.contextSizeEstimate?.tokens ?? 0)
+  if (Number.isFinite(tokens) && tokens > 0) {
+    return `已使用 ${strategy} 上下文，约 ${tokens} tokens`
+  }
   const chars = Number(task.contextSizeEstimate?.chars ?? 0)
   return `已使用 ${strategy} 上下文，约 ${Number.isFinite(chars) ? chars : 0} 字`
 }
