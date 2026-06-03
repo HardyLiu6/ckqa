@@ -94,6 +94,24 @@ class QaTopicResolverTest {
     }
 
     @Test
+    void shouldPreserveRealTopicSuffixWhenResolvingComparisonPronouns() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "时间与空间有什么区别？"),
+                message(2L, "assistant", 2, "时间描述变化的顺序，空间描述对象的位置与范围。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何理解？", history, null);
+        QaTopicStack latter = resolver.resolve("后者如何理解？", history, null);
+
+        assertThat(former.latestTopic()).isEqualTo("时间");
+        assertThat(latter.latestTopic()).isEqualTo("空间");
+        assertThat(latter.activeTopicsJson())
+                .contains("{\"topic\":\"时间\",\"role\":\"former\"}", "{\"topic\":\"空间\",\"role\":\"latter\"}")
+                .doesNotContain("\"topic\":\"时\"", "\"topic\":\"空\"");
+    }
+
+    @Test
     void shouldNotGuessFormerOrLatterWithoutValidComparisonPair() {
         QaTopicResolver resolver = new QaTopicResolver();
         List<QaMessages> history = List.of(

@@ -17,7 +17,7 @@ public class QaTopicResolver {
     private static final Pattern WHAT_IS_PREFIX_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下)(.+?)[？?。.!！]*$");
     private static final Pattern WHAT_IS_SUFFIX_PATTERN = Pattern.compile("^(.+?)(是什么|是啥|是什么概念)[？?。.!！]*$");
     private static final Pattern THEN_TOPIC_PATTERN = Pattern.compile("^(?:那|那么)?\\s*(.+?)\\s*呢[？?。.!！]*$");
-    private static final Pattern COMPARISON_PATTERN = Pattern.compile("^(.+?)(?:和|与)(.+?)(?:有什么区别|有何区别|区别是什么)[？?。.!！]*$");
+    private static final Pattern COMPARISON_PATTERN = Pattern.compile("^(.+?)(?:和|与)(?:(.+?)之间(?:有什么区别|有何区别)|(.+?)的区别是什么|(.+?)(?:有什么区别|有何区别|区别是什么))[？?。.!！]*$");
     private static final Pattern SUMMARY_OBJECT_PATTERN = Pattern.compile("\\{[^}]*}");
     private static final Pattern SUMMARY_TOPIC_PATTERN = Pattern.compile("\"topic\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern SUMMARY_ROLE_PATTERN = Pattern.compile("\"role\"\\s*:\\s*\"([^\"]+)\"");
@@ -128,8 +128,8 @@ public class QaTopicResolver {
         }
         Matcher comparisonMatcher = COMPARISON_PATTERN.matcher(text);
         if (comparisonMatcher.matches()) {
-            String first = normalizeComparisonTopic(comparisonMatcher.group(1));
-            String second = normalizeComparisonTopic(comparisonMatcher.group(2));
+            String first = shortenTopic(comparisonMatcher.group(1));
+            String second = shortenTopic(firstText(comparisonMatcher.group(2), comparisonMatcher.group(3), comparisonMatcher.group(4)));
             if (StringUtils.hasText(first) && StringUtils.hasText(second)) {
                 return new ResolvedQuestion(second, "comparison", 0.92D, List.of(first, second), List.of(first, second), false, false);
             }
@@ -235,7 +235,7 @@ public class QaTopicResolver {
     }
 
     private ResolvedQuestion comparisonPronoun(String topic, List<String> comparisonTopics) {
-        String resolvedTopic = normalizeComparisonTopic(topic);
+        String resolvedTopic = shortenTopic(topic);
         return StringUtils.hasText(resolvedTopic)
                 ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), comparisonTopics, false, true)
                 : null;
@@ -251,6 +251,19 @@ public class QaTopicResolver {
     private String matchFirst(Pattern pattern, String value) {
         Matcher matcher = pattern.matcher(trimToEmpty(value));
         return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            String text = trimToEmpty(value);
+            if (StringUtils.hasText(text)) {
+                return text;
+            }
+        }
+        return "";
     }
 
     private void ensureComparisonSlot(List<String> topics, int index, String topic) {
@@ -276,13 +289,6 @@ public class QaTopicResolver {
                 .replaceAll("[？?。.!！]+$", "")
                 .replaceAll("\\s+", " ");
         return topic.length() > 30 ? topic.substring(0, 30) : topic;
-    }
-
-    private String normalizeComparisonTopic(String rawTopic) {
-        String topic = shortenTopic(rawTopic)
-                .replaceAll("(?:之间|间|的)+$", "")
-                .trim();
-        return shortenTopic(topic);
     }
 
     private String trimToEmpty(String value) {
