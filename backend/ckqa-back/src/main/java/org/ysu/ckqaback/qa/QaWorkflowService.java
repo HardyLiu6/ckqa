@@ -780,7 +780,7 @@ public class QaWorkflowService {
                             HttpStatus.BAD_REQUEST,
                             "分支边界消息不存在"
                     ));
-            return new ForkBoundary(message.getId(), message.getSequenceNo());
+            return resolveCompleteTurnBoundary(messages, message);
         }
         if (request.getForkedFromSequenceNo() != null) {
             QaMessages message = messages.stream()
@@ -791,13 +791,47 @@ public class QaWorkflowService {
                             HttpStatus.BAD_REQUEST,
                             "分支边界消息不存在"
                     ));
-            return new ForkBoundary(message.getId(), message.getSequenceNo());
+            return resolveCompleteTurnBoundary(messages, message);
+        }
+
+        if (messages.isEmpty()) {
+            return new ForkBoundary(null, null);
         }
         return messages.stream()
+                .filter(message -> "assistant".equals(message.getRole()))
                 .filter(message -> message.getSequenceNo() != null)
                 .max(java.util.Comparator.comparing(QaMessages::getSequenceNo))
                 .map(message -> new ForkBoundary(message.getId(), message.getSequenceNo()))
-                .orElseGet(() -> new ForkBoundary(null, null));
+                .orElseThrow(this::incompleteForkBoundaryException);
+    }
+
+    private ForkBoundary resolveCompleteTurnBoundary(List<QaMessages> messages, QaMessages message) {
+        if ("assistant".equals(message.getRole())) {
+            return new ForkBoundary(message.getId(), message.getSequenceNo());
+        }
+        if (!"user".equals(message.getRole())) {
+            throw incompleteForkBoundaryException();
+        }
+        for (int index = 0; index < messages.size() - 1; index++) {
+            QaMessages current = messages.get(index);
+            if (!Objects.equals(current.getId(), message.getId())) {
+                continue;
+            }
+            QaMessages next = messages.get(index + 1);
+            if ("assistant".equals(next.getRole())) {
+                return new ForkBoundary(next.getId(), next.getSequenceNo());
+            }
+            break;
+        }
+        throw incompleteForkBoundaryException();
+    }
+
+    private BusinessException incompleteForkBoundaryException() {
+        return new BusinessException(
+                ApiResultCode.BAD_REQUEST,
+                HttpStatus.BAD_REQUEST,
+                "分支边界必须落在已完成问答轮次"
+        );
     }
 
     private record ForkBoundary(Long messageId, Integer sequenceNo) {

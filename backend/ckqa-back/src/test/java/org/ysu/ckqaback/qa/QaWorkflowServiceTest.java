@@ -1654,7 +1654,7 @@ class QaWorkflowServiceTest {
     }
 
     @Test
-    void shouldForkFormalSessionByMessageBoundaryAndCopyOnlyTranscriptMessages() {
+    void shouldForkFormalSessionFromUserBoundaryAtNextAssistantMessage() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
         QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
@@ -1694,7 +1694,7 @@ class QaWorkflowServiceTest {
         child.setTranscriptVersion("v1");
 
         ForkQaSessionRequest request = new ForkQaSessionRequest();
-        request.setForkedFromMessageId(102L);
+        request.setForkedFromMessageId(101L);
         request.setTitle("死锁分支");
         request.setForkReason("追问另一路");
 
@@ -1712,9 +1712,113 @@ class QaWorkflowServiceTest {
         assertThat(response.getForkedFromSequenceNo()).isEqualTo(2);
         assertThat(response.getCopiedMessageCount()).isEqualTo(2);
         assertThat(response.getChildSession().getLastMessageAt()).isNotNull();
+        then(qaSessionsService).should().createForkSession(parent, 102L, 2, "死锁分支", "追问另一路");
         then(qaMessagesService).should().copyMessagesToSession(5L, 9L, 2);
         then(qaSessionsService).should().touchLastMessageAt(9L);
         then(qaRetrievalLogsService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void shouldForkOmittedBoundaryAtLatestCompleteAssistantBeforePendingUser() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions parent = formalSession();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages third = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaSessions child = formalSession();
+        child.setId(9L);
+        child.setParentSessionId(5L);
+        child.setForkedFromMessageId(102L);
+        child.setForkedFromSequenceNo(2);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first, second, third));
+        given(qaSessionsService.createForkSession(eq(parent), eq(102L), eq(2), eq(null), eq(null)))
+                .willReturn(child);
+        given(qaMessagesService.copyMessagesToSession(5L, 9L, 2)).willReturn(2);
+
+        QaSessionForkResponse response = workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent());
+
+        assertThat(response.getForkedFromMessageId()).isEqualTo(102L);
+        assertThat(response.getForkedFromSequenceNo()).isEqualTo(2);
+        assertThat(response.getCopiedMessageCount()).isEqualTo(2);
+        then(qaMessagesService).should().copyMessagesToSession(5L, 9L, 2);
+    }
+
+    @Test
+    void shouldRejectOmittedForkBoundaryWhenParentOnlyHasPendingUserMessages() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first));
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                })
+                .hasMessageContaining("分支边界必须落在已完成问答轮次");
+
+        then(qaSessionsService).should(never()).createForkSession(any(), any(), any(), any(), any());
+        then(qaMessagesService).should(never()).copyMessagesToSession(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void shouldRejectExplicitForkBoundaryAtDanglingUserMessage() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        ForkQaSessionRequest request = new ForkQaSessionRequest();
+        request.setForkedFromMessageId(103L);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(
+                message(101L, 5L, "user", 1, "什么是死锁？"),
+                message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(103L, 5L, "user", 3, "那银行家算法呢？")
+        ));
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                })
+                .hasMessageContaining("分支边界必须落在已完成问答轮次");
+
+        then(qaSessionsService).should(never()).createForkSession(any(), any(), any(), any(), any());
+        then(qaMessagesService).should(never()).copyMessagesToSession(anyLong(), anyLong(), any());
     }
 
     @Test
@@ -1744,18 +1848,19 @@ class QaWorkflowServiceTest {
         );
         QaSessions parent = formalSession();
         QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
         QaSessions child = formalSession();
         child.setId(9L);
         child.setParentSessionId(5L);
-        child.setForkedFromMessageId(101L);
-        child.setForkedFromSequenceNo(1);
+        child.setForkedFromMessageId(102L);
+        child.setForkedFromSequenceNo(2);
         RuntimeException copyFailure = new RuntimeException("copy failed");
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
-        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first));
-        given(qaSessionsService.createForkSession(eq(parent), eq(101L), eq(1), eq(null), eq(null)))
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first, second));
+        given(qaSessionsService.createForkSession(eq(parent), eq(102L), eq(2), eq(null), eq(null)))
                 .willReturn(child);
-        given(qaMessagesService.copyMessagesToSession(5L, 9L, 1)).willThrow(copyFailure);
+        given(qaMessagesService.copyMessagesToSession(5L, 9L, 2)).willThrow(copyFailure);
 
         assertThatThrownBy(() -> workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent()))
                 .isSameAs(copyFailure);
