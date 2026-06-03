@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.course.dto.CourseRoutingRecommendRequest;
+import org.ysu.ckqaback.course.routing.CourseScopeRelevanceProvider.ScopeRelevance;
 import org.ysu.ckqaback.entity.CourseRouteProfiles;
 import org.ysu.ckqaback.entity.Courses;
 import org.ysu.ckqaback.integration.graphrag.GraphRagCourseRoutingClient;
@@ -166,6 +167,58 @@ class CourseRoutingServiceTest {
         assertThat(response.getStatus()).isEqualTo("matched");
         assertThat(response.getSelectedCourseId()).isEqualTo("demo");
         then(profileTextBuilder).should().build(smokeNamedCourse);
+    }
+
+    @Test
+    void shouldEvaluateScopeRelevanceForSingleCourse() {
+        Courses os = course("os", "操作系统");
+        given(coursesService.getOne(any())).willReturn(os);
+        given(profileTextBuilder.build(os)).willReturn(new CourseProfileSnapshot("操作系统画像", "hash-os"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        given(graphRagClient.recommend(any()))
+                .willReturn(new GraphRagCourseRoutingRecommendResponse(List.of(
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("os", "操作系统", 0.42D, "课程画像相似度 0.420", "hash-os")
+                )));
+
+        ScopeRelevance relevance = service().evaluateScopeRelevance("os", "什么是进程");
+
+        assertThat(relevance.evaluated()).isTrue();
+        assertThat(relevance.confidence()).isEqualTo(0.42D);
+    }
+
+    @Test
+    void shouldReturnNotEvaluatedWhenRecommendThrows() {
+        Courses os = course("os", "操作系统");
+        given(coursesService.getOne(any())).willReturn(os);
+        given(profileTextBuilder.build(os)).willReturn(new CourseProfileSnapshot("操作系统画像", "hash-os"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        doThrow(new IllegalStateException("embedding down")).when(graphRagClient).recommend(any());
+
+        ScopeRelevance relevance = service().evaluateScopeRelevance("os", "什么是进程");
+
+        assertThat(relevance.evaluated()).isFalse();
+    }
+
+    @Test
+    void shouldReturnNotEvaluatedWhenCourseMissing() {
+        given(coursesService.getOne(any())).willReturn(null);
+
+        ScopeRelevance relevance = service().evaluateScopeRelevance("ghost", "什么是进程");
+
+        assertThat(relevance.evaluated()).isFalse();
+        then(graphRagClient).should(never()).recommend(any());
+    }
+
+    @Test
+    void shouldReturnNotEvaluatedWhenDisabled() {
+        properties.setEnabled(false);
+
+        ScopeRelevance relevance = service().evaluateScopeRelevance("os", "什么是进程");
+
+        assertThat(relevance.evaluated()).isFalse();
+        then(graphRagClient).should(never()).recommend(any());
     }
 
     private CourseRoutingService service() {
