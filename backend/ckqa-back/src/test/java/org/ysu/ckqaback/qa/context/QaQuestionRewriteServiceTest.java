@@ -30,6 +30,19 @@ class QaQuestionRewriteServiceTest {
     }
 
     @Test
+    void shouldRewriteThatOnePronounFollowUpWithRecentTopic() {
+        QaContextAssembly context = new QaContextAssembly("recent", "最近对话", "1-2", 20, "死锁", "1-2");
+
+        assertThat(QaContextPolicy.isPronounFollowUp("那个有哪些典型场景？")).isTrue();
+        assertThat(QaContextPolicy.isPronounFollowUp("那一个有哪些典型场景？")).isTrue();
+        QaQuestionRewriteResult result = rewriteService.rewrite("basic", "那个有哪些典型场景？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：那个有哪些典型场景？");
+        assertThat(result.rewriteApplied()).isTrue();
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+    }
+
+    @Test
     void shouldUseHighConfidenceLlmStandaloneQuery() {
         QaQuestionRewriteService service = new QaQuestionRewriteService();
         service.setLlmClient((question, context) -> QaLlmQuestionRewriteResult.success(

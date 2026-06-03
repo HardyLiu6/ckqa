@@ -22,7 +22,19 @@ public record QaTopicStack(
     }
 
     public static QaTopicStack of(String latestTopic, String range, String source, Double confidence, List<String> topics) {
+        return of(latestTopic, range, source, confidence, topics, List.of());
+    }
+
+    public static QaTopicStack of(
+            String latestTopic,
+            String range,
+            String source,
+            Double confidence,
+            List<String> topics,
+            List<String> comparisonTopics
+    ) {
         List<String> normalizedTopics = normalizeTopics(topics);
+        List<String> normalizedComparisonTopics = normalizeTopics(comparisonTopics);
         if (StringUtils.hasText(latestTopic) && !normalizedTopics.contains(latestTopic)) {
             normalizedTopics = new ArrayList<>(normalizedTopics);
             normalizedTopics.add(latestTopic);
@@ -33,7 +45,7 @@ public record QaTopicStack(
                 trimToEmpty(source),
                 confidence,
                 List.copyOf(normalizedTopics),
-                toJson(normalizedTopics)
+                toJson(normalizedTopics, normalizedComparisonTopics)
         );
     }
 
@@ -55,7 +67,7 @@ public record QaTopicStack(
         return normalized;
     }
 
-    private static String toJson(List<String> topics) {
+    private static String toJson(List<String> topics, List<String> comparisonTopics) {
         if (topics == null || topics.isEmpty()) {
             return "";
         }
@@ -64,9 +76,28 @@ public record QaTopicStack(
             if (index > 0) {
                 builder.append(',');
             }
-            builder.append("{\"topic\":\"").append(escapeJson(topics.get(index))).append("\"}");
+            String topic = topics.get(index);
+            builder.append("{\"topic\":\"").append(escapeJson(topic)).append("\"");
+            String role = comparisonRole(topic, comparisonTopics);
+            if (StringUtils.hasText(role)) {
+                builder.append(",\"role\":\"").append(role).append("\"");
+            }
+            builder.append('}');
         }
         return builder.append(']').toString();
+    }
+
+    private static String comparisonRole(String topic, List<String> comparisonTopics) {
+        if (comparisonTopics == null || comparisonTopics.size() < 2) {
+            return "";
+        }
+        if (comparisonTopics.get(0).equals(topic)) {
+            return "former";
+        }
+        if (comparisonTopics.get(1).equals(topic)) {
+            return "latter";
+        }
+        return "";
     }
 
     private static String escapeJson(String value) {

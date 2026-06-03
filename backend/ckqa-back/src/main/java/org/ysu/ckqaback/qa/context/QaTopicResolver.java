@@ -18,7 +18,9 @@ public class QaTopicResolver {
     private static final Pattern WHAT_IS_SUFFIX_PATTERN = Pattern.compile("^(.+?)(是什么|是啥|是什么概念)[？?。.!！]*$");
     private static final Pattern THEN_TOPIC_PATTERN = Pattern.compile("^(?:那|那么)?\\s*(.+?)\\s*呢[？?。.!！]*$");
     private static final Pattern COMPARISON_PATTERN = Pattern.compile("^(.+?)(?:和|与)(.+?)(?:有什么区别|有何区别|区别是什么)[？?。.!！]*$");
+    private static final Pattern SUMMARY_OBJECT_PATTERN = Pattern.compile("\\{[^}]*}");
     private static final Pattern SUMMARY_TOPIC_PATTERN = Pattern.compile("\"topic\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern SUMMARY_ROLE_PATTERN = Pattern.compile("\"role\"\\s*:\\s*\"([^\"]+)\"");
 
     public QaTopicStack resolve(String question, List<QaMessages> history, QaContextSummary summary) {
         TopicState state = fromSummary(summary);
@@ -35,7 +37,9 @@ public class QaTopicResolver {
         if (summary == null) {
             return state;
         }
-        state.activeTopics.addAll(parseSummaryTopics(summary.activeTopicsJson()));
+        SummaryTopics summaryTopics = parseSummaryTopics(summary.activeTopicsJson());
+        state.activeTopics.addAll(summaryTopics.activeTopics());
+        state.comparisonTopics.addAll(summaryTopics.comparisonTopics());
         if (StringUtils.hasText(summary.latestTopic())) {
             state.latestTopic = summary.latestTopic().trim();
             state.latestRange = trimToEmpty(summary.latestTopicMessageRange());
@@ -57,7 +61,7 @@ public class QaTopicResolver {
             }
             state.latestTopic = resolved.latestTopic();
             state.latestRange = rangeForUserMessage(message, history);
-            state.source = resolved.source();
+            state.source = historySource(resolved.source());
             state.confidence = resolved.confidence();
             if (resolved.resetsComparisonTopics()) {
                 state.comparisonTopics.clear();
@@ -85,19 +89,28 @@ public class QaTopicResolver {
                 current.activeTopics().forEach(topic -> addTopic(active, topic));
             }
             String range = current.useLatestRange() ? state.latestRange : "";
-            return QaTopicStack.of(current.latestTopic(), range, current.source(), current.confidence(), active);
+            List<String> comparisonTopics = current.comparisonTopics().isEmpty()
+                    ? state.comparisonTopics
+                    : current.comparisonTopics();
+            return QaTopicStack.of(current.latestTopic(), range, current.source(), current.confidence(), active, comparisonTopics);
         }
         if (containsFormer(question) && !state.activeTopics.isEmpty()) {
-            return QaTopicStack.of(state.activeTopics.get(0), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics);
+            if (state.activeTopics.size() == 2) {
+                return QaTopicStack.of(state.activeTopics.get(0), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.activeTopics);
+            }
+            return QaTopicStack.empty();
         }
         if (containsLatter(question) && state.activeTopics.size() >= 2) {
-            return QaTopicStack.of(state.activeTopics.get(1), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics);
+            if (state.activeTopics.size() == 2) {
+                return QaTopicStack.of(state.activeTopics.get(1), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.activeTopics);
+            }
+            return QaTopicStack.empty();
         }
         if (QaContextPolicy.isPronounFollowUp(question) && StringUtils.hasText(state.latestTopic)) {
-            return QaTopicStack.of(state.latestTopic, state.latestRange, state.source, state.confidence, state.activeTopics);
+            return QaTopicStack.of(state.latestTopic, state.latestRange, state.source, state.confidence, state.activeTopics, state.comparisonTopics);
         }
         if (StringUtils.hasText(state.latestTopic)) {
-            return QaTopicStack.of(state.latestTopic, state.latestRange, state.source, state.confidence, state.activeTopics);
+            return QaTopicStack.of(state.latestTopic, state.latestRange, state.source, state.confidence, state.activeTopics, state.comparisonTopics);
         }
         return QaTopicStack.empty();
     }
@@ -116,10 +129,10 @@ public class QaTopicResolver {
             }
         }
         if (containsFormer(text) && hasComparisonPair(state)) {
-            return comparisonPronoun(state.comparisonTopics.get(0));
+            return comparisonPronoun(state.comparisonTopics.get(0), state.comparisonTopics);
         }
         if (containsLatter(text) && hasComparisonPair(state)) {
-            return comparisonPronoun(state.comparisonTopics.get(1));
+            return comparisonPronoun(state.comparisonTopics.get(1), state.comparisonTopics);
         }
         Matcher prefixMatcher = WHAT_IS_PREFIX_PATTERN.matcher(text);
         if (prefixMatcher.matches()) {
@@ -175,16 +188,28 @@ public class QaTopicResolver {
         return userMessage.getSequenceNo().equals(last) ? String.valueOf(userMessage.getSequenceNo()) : userMessage.getSequenceNo() + "-" + last;
     }
 
-    private List<String> parseSummaryTopics(String activeTopicsJson) {
+    private SummaryTopics parseSummaryTopics(String activeTopicsJson) {
         if (!StringUtils.hasText(activeTopicsJson)) {
-            return List.of();
+            return new SummaryTopics(List.of(), List.of());
         }
-        Matcher matcher = SUMMARY_TOPIC_PATTERN.matcher(activeTopicsJson);
         List<String> topics = new ArrayList<>();
-        while (matcher.find()) {
-            addTopic(topics, matcher.group(1));
+        List<String> comparisonTopics = new ArrayList<>();
+        Matcher objectMatcher = SUMMARY_OBJECT_PATTERN.matcher(activeTopicsJson);
+        while (objectMatcher.find()) {
+            String object = objectMatcher.group();
+            String topic = matchFirst(SUMMARY_TOPIC_PATTERN, object);
+            addTopic(topics, topic);
+            String role = matchFirst(SUMMARY_ROLE_PATTERN, object);
+            if ("former".equals(role)) {
+                ensureComparisonSlot(comparisonTopics, 0, topic);
+            } else if ("latter".equals(role)) {
+                ensureComparisonSlot(comparisonTopics, 1, topic);
+            }
         }
-        return topics;
+        if (comparisonTopics.size() < 2 || !StringUtils.hasText(comparisonTopics.get(0)) || !StringUtils.hasText(comparisonTopics.get(1))) {
+            comparisonTopics = List.of();
+        }
+        return new SummaryTopics(topics, comparisonTopics);
     }
 
     private boolean containsFormer(String question) {
@@ -203,11 +228,30 @@ public class QaTopicResolver {
         return state != null && state.comparisonTopics.size() >= 2;
     }
 
-    private ResolvedQuestion comparisonPronoun(String topic) {
+    private ResolvedQuestion comparisonPronoun(String topic, List<String> comparisonTopics) {
         String resolvedTopic = shortenTopic(topic);
         return StringUtils.hasText(resolvedTopic)
-                ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), List.of(), false, true)
+                ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), comparisonTopics, false, true)
                 : null;
+    }
+
+    private String historySource(String source) {
+        if ("explicit".equals(source) || "comparison".equals(source) || "explicit_follow_up".equals(source)) {
+            return "history";
+        }
+        return StringUtils.hasText(source) ? source : "history";
+    }
+
+    private String matchFirst(Pattern pattern, String value) {
+        Matcher matcher = pattern.matcher(trimToEmpty(value));
+        return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private void ensureComparisonSlot(List<String> topics, int index, String topic) {
+        while (topics.size() <= index) {
+            topics.add("");
+        }
+        topics.set(index, shortenTopic(topic));
     }
 
     private void addTopic(List<String> topics, String rawTopic) {
@@ -241,6 +285,9 @@ public class QaTopicResolver {
             boolean resetsComparisonTopics,
             boolean useLatestRange
     ) {
+    }
+
+    private record SummaryTopics(List<String> activeTopics, List<String> comparisonTopics) {
     }
 
     private static final class TopicState {

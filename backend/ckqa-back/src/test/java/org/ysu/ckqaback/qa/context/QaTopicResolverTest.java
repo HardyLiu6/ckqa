@@ -57,6 +57,26 @@ class QaTopicResolverTest {
         assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
     }
 
+    @Test
+    void shouldRestoreMostRecentComparisonPairFromSummary() {
+        QaContextSummary summary = new QaContextSummary(
+                "本会话先讨论死锁，随后比较银行家算法和资源分配图。",
+                12,
+                "资源分配图",
+                "9-10",
+                "[{\"topic\":\"死锁\"},{\"topic\":\"银行家算法\",\"role\":\"former\"},{\"topic\":\"资源分配图\",\"role\":\"latter\"}]"
+        );
+        QaTopicResolver resolver = new QaTopicResolver();
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", List.of(), summary);
+        QaTopicStack latter = resolver.resolve("后者如何使用？", List.of(), summary);
+
+        assertThat(former.latestTopic()).isEqualTo("银行家算法");
+        assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.latestTopic()).isEqualTo("资源分配图");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
     private QaMessages message(Long id, String role, int sequenceNo, String content) {
         QaMessages message = new QaMessages();
         message.setId(id);
