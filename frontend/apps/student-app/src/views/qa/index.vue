@@ -43,6 +43,7 @@ import { useUserStore } from '@/stores/user'
 import {
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
+  buildQaClientRoutingSnapshot,
   getModeOption,
   loadHybridBetaPreference,
   resolveQaMode,
@@ -526,7 +527,7 @@ async function send() {
       mode: submitMode,
       content: text,
       memoryPolicy: resolveMemoryPolicyForMode(expectedExecutionMode, memoryEnabled.value),
-      clientRoutingSnapshot: buildClientRoutingSnapshot(modeResolution),
+      clientRoutingSnapshot: buildQaClientRoutingSnapshot(selectedMode.value, modeResolution),
     })
     const resolvedMode = resolveResolvedMode(submission, modeResolution)
     const resolvedSubmission = {
@@ -569,23 +570,6 @@ function qaModeResolveOptions() {
   return {
     allowHybridBeta: allowHybridSmartBeta.value,
     hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
-  }
-}
-
-function buildClientRoutingSnapshot(modeResolution = {}) {
-  if (!modeResolution.fromSmart && !modeResolution.fromServer && !modeResolution.reviewPriority) {
-    return undefined
-  }
-  return {
-    selectedMode: selectedMode.value,
-    recommendedMode: modeResolution.originalRecommendedMode || modeResolution.mode,
-    fallbackMode: modeResolution.fallbackMode,
-    confidence: modeResolution.confidence,
-    confidenceBand: modeResolution.confidenceBand,
-    reviewPriority: modeResolution.reviewPriority || 'normal',
-    manualSwitchSuggested: Boolean(modeResolution.manualSwitchSuggested),
-    reasons: modeResolution.routeReasons,
-    routeScores: modeResolution.routeScores,
   }
 }
 

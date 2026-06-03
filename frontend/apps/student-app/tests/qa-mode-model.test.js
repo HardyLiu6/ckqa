@@ -5,6 +5,7 @@ import {
   BACKEND_QA_MODES,
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
+  buildQaClientRoutingSnapshot,
   loadHybridBetaPreference,
   resolveQaMode,
   resolveQaModeRecommendation,
@@ -232,4 +233,28 @@ test('后端 resolvedMode 优先覆盖本地推荐展示模式', () => {
   }
 
   assert.equal(resolveResolvedMode({ mode: 'local', resolvedMode: 'global' }, modeResolution), 'global')
+})
+
+test('智能 hybrid warmup 降级后 snapshot recommendedMode 使用预期实际执行模式', () => {
+  const modeResolution = {
+    mode: 'local',
+    originalRecommendedMode: 'hybrid_v0',
+    fromSmart: true,
+    fromServer: true,
+    fallbackMode: 'local',
+    confidence: 0.71,
+    confidenceBand: 'medium_confidence',
+    manualSwitchSuggested: true,
+    reviewPriority: 'hybrid_not_ready',
+    routeReasons: ['evidence_relation_intent'],
+    routeScores: { hybrid_v0: 0.9, local: 0.6 },
+  }
+
+  const snapshot = buildQaClientRoutingSnapshot(SMART_QA_MODE, modeResolution)
+
+  assert.equal(snapshot.selectedMode, SMART_QA_MODE)
+  assert.equal(snapshot.recommendedMode, 'local')
+  assert.equal(snapshot.originalRecommendedMode, 'hybrid_v0')
+  assert.equal(snapshot.fallbackMode, 'local')
+  assert.deepEqual(snapshot.reasons, ['evidence_relation_intent'])
 })

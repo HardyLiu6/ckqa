@@ -208,6 +208,30 @@ export function resolveResolvedMode(submission = {}, modeResolution = {}) {
   return isBackendQaMode(modeResolution?.mode) ? modeResolution.mode : 'basic'
 }
 
+export function buildQaClientRoutingSnapshot(selectedMode = SMART_QA_MODE, modeResolution = {}) {
+  if (!modeResolution.fromSmart && !modeResolution.fromServer && !modeResolution.reviewPriority) {
+    return undefined
+  }
+  const snapshot = {
+    selectedMode,
+    recommendedMode: modeResolution.mode,
+    fallbackMode: modeResolution.fallbackMode,
+    confidence: modeResolution.confidence,
+    confidenceBand: modeResolution.confidenceBand,
+    reviewPriority: modeResolution.reviewPriority || 'normal',
+    manualSwitchSuggested: Boolean(modeResolution.manualSwitchSuggested),
+    reasons: modeResolution.routeReasons,
+    routeScores: modeResolution.routeScores,
+  }
+  if (
+    modeResolution.originalRecommendedMode
+    && modeResolution.originalRecommendedMode !== modeResolution.mode
+  ) {
+    snapshot.originalRecommendedMode = modeResolution.originalRecommendedMode
+  }
+  return snapshot
+}
+
 export function shouldUseHybridBeta(question, options = {}) {
   if (!options.allowHybridBeta) {
     return false
