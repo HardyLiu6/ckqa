@@ -1,6 +1,8 @@
 -- QA 语义主题栈 v1：摘要主题锚点与检索日志诊断字段。
 -- 所有新增列均可空，便于兼容历史会话和旧任务记录。
 
+DROP PROCEDURE IF EXISTS `ckqa_add_qa_semantic_topic_stack_v1_columns_if_missing`;
+
 DELIMITER //
 CREATE PROCEDURE `ckqa_add_qa_semantic_topic_stack_v1_columns_if_missing`()
 BEGIN

@@ -40,12 +40,18 @@ public class QaTopicResolver {
         SummaryTopics summaryTopics = parseSummaryTopics(summary.activeTopicsJson());
         state.activeTopics.addAll(summaryTopics.activeTopics());
         state.comparisonTopics.addAll(summaryTopics.comparisonTopics());
-        if (StringUtils.hasText(summary.latestTopic())) {
-            state.latestTopic = summary.latestTopic().trim();
+        String summaryLatestTopic = trimToEmpty(summary.latestTopic());
+        if (StringUtils.hasText(summaryLatestTopic)) {
+            state.latestTopic = summaryLatestTopic;
             state.latestRange = trimToEmpty(summary.latestTopicMessageRange());
             state.source = "summary";
             state.confidence = 0.75D;
             addTopic(state.activeTopics, state.latestTopic);
+        } else if (summaryTopics.activeTopics().size() == 1 && StringUtils.hasText(summaryTopics.activeTopics().get(0))) {
+            state.latestTopic = summaryTopics.activeTopics().get(0);
+            state.latestRange = trimToEmpty(summary.latestTopicMessageRange());
+            state.source = "summary";
+            state.confidence = 0.75D;
         }
         return state;
     }
@@ -80,6 +86,18 @@ public class QaTopicResolver {
     }
 
     private QaTopicStack resolveQuestion(String question, TopicState state) {
+        if (containsFormer(question)) {
+            if (hasComparisonPair(state)) {
+                return QaTopicStack.of(state.comparisonTopics.get(0), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.comparisonTopics);
+            }
+            return QaTopicStack.empty();
+        }
+        if (containsLatter(question)) {
+            if (hasComparisonPair(state)) {
+                return QaTopicStack.of(state.comparisonTopics.get(1), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.comparisonTopics);
+            }
+            return QaTopicStack.empty();
+        }
         ResolvedQuestion current = extractTopic(question, state);
         if (current != null) {
             List<String> active = new ArrayList<>(state.activeTopics);
@@ -93,18 +111,6 @@ public class QaTopicResolver {
                     ? state.comparisonTopics
                     : current.comparisonTopics();
             return QaTopicStack.of(current.latestTopic(), range, current.source(), current.confidence(), active, comparisonTopics);
-        }
-        if (containsFormer(question) && !state.activeTopics.isEmpty()) {
-            if (state.activeTopics.size() == 2) {
-                return QaTopicStack.of(state.activeTopics.get(0), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.activeTopics);
-            }
-            return QaTopicStack.empty();
-        }
-        if (containsLatter(question) && state.activeTopics.size() >= 2) {
-            if (state.activeTopics.size() == 2) {
-                return QaTopicStack.of(state.activeTopics.get(1), state.latestRange, "comparison_pronoun", 0.86D, state.activeTopics, state.activeTopics);
-            }
-            return QaTopicStack.empty();
         }
         if (QaContextPolicy.isPronounFollowUp(question) && StringUtils.hasText(state.latestTopic)) {
             return QaTopicStack.of(state.latestTopic, state.latestRange, state.source, state.confidence, state.activeTopics, state.comparisonTopics);

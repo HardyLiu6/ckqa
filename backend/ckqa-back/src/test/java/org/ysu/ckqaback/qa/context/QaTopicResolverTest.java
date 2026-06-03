@@ -58,6 +58,25 @@ class QaTopicResolverTest {
     }
 
     @Test
+    void shouldNotGuessFormerOrLatterWithoutValidComparisonPair() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "那资源分配图呢？"),
+                message(4L, "assistant", 4, "资源分配图用于表示资源请求关系。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", history, null);
+        QaTopicStack latter = resolver.resolve("后者如何使用？", history, null);
+
+        assertThat(former.latestTopic()).isEmpty();
+        assertThat(former.topicSource()).isEmpty();
+        assertThat(latter.latestTopic()).isEmpty();
+        assertThat(latter.topicSource()).isEmpty();
+    }
+
+    @Test
     void shouldRestoreMostRecentComparisonPairFromSummary() {
         QaContextSummary summary = new QaContextSummary(
                 "本会话先讨论死锁，随后比较银行家算法和资源分配图。",
@@ -75,6 +94,22 @@ class QaTopicResolverTest {
         assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
         assertThat(latter.latestTopic()).isEqualTo("资源分配图");
         assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldRestoreLatestTopicFromLegacySummaryTopicsJson() {
+        QaContextSummary summary = new QaContextSummary(
+                "旧摘要只保存主题列表。",
+                8,
+                "",
+                "",
+                "[{\"topic\":\"死锁\"}]"
+        );
+
+        QaTopicStack stack = new QaTopicResolver().resolve("", List.of(), summary);
+
+        assertThat(stack.latestTopic()).isEqualTo("死锁");
+        assertThat(stack.topicSource()).isEqualTo("summary");
     }
 
     private QaMessages message(Long id, String role, int sequenceNo, String content) {
