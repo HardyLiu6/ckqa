@@ -23,7 +23,6 @@ public class QaClientRoutingSnapshot {
     @Pattern(regexp = "local|global|drift|basic|hybrid_v0|smart", message = "selectedMode取值不合法")
     private String selectedMode;
 
-    @Pattern(regexp = "local|global|drift|basic|hybrid_v0", message = "recommendedMode取值不合法")
     private String recommendedMode;
 
     @Pattern(regexp = "local|global|drift|basic|hybrid_v0", message = "fallbackMode取值不合法")

@@ -330,11 +330,65 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.taskId").value(9001))
                 .andExpect(jsonPath("$.data.mode").value("drift"))
+                .andExpect(jsonPath("$.data.requestedMode").value("drift"))
+                .andExpect(jsonPath("$.data.resolvedMode").value("drift"))
                 .andExpect(jsonPath("$.data.taskStatus").value("pending"))
                 .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(15))
                 .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(1800))
                 .andExpect(jsonPath("$.data.timeoutMessage").value("drift 模式正在沿相关线索展开追问检索，等待时间较长时会尽量保留已生成内容。"))
                 .andExpect(jsonPath("$.data.assistantMessage").doesNotExist());
+    }
+
+    @Test
+    void shouldAllowSmartMessageWithInvalidRecommendedModeAndReturnBasicFallback() throws Exception {
+        QaTaskSubmissionResponse response = QaTaskSubmissionResponse.of(
+                QaMessageResponse.of(101L, 5L, "user", 1, "请概括这套图谱的主题", LocalDateTime.of(2026, 4, 22, 15, 20), "basic", null, (String) null),
+                9002L,
+                "pending",
+                "queued",
+                null,
+                LocalDateTime.of(2026, 4, 22, 15, 20, 31),
+                "basic",
+                "smart",
+                "basic",
+                10L,
+                300L,
+                "basic 模式正在检索课程片段并生成回答，等待时间较长时会尽量保留已生成内容。",
+                false,
+                "none",
+                ContextSizeEstimateResponse.of(0),
+                false,
+                "none",
+                null,
+                0,
+                0
+        );
+        given(qaWorkflowService.sendMessage(eq(5L), any(), eq(authenticatedStudent()))).willReturn(response);
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/messages")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "mode": "smart",
+                                  "content": "请概括这套图谱的主题",
+                                  "clientRoutingSnapshot": {
+                                    "selectedMode": "smart",
+                                    "recommendedMode": "unsupported"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.taskId").value(9002))
+                .andExpect(jsonPath("$.data.mode").value("basic"))
+                .andExpect(jsonPath("$.data.requestedMode").value("smart"))
+                .andExpect(jsonPath("$.data.resolvedMode").value("basic"));
+
+        then(qaWorkflowService).should().sendMessage(eq(5L), argThat(request ->
+                "smart".equals(request.getMode())
+                        && request.getClientRoutingSnapshot() != null
+                        && "unsupported".equals(request.getClientRoutingSnapshot().getRecommendedMode())
+        ), eq(authenticatedStudent()));
     }
 
     @Test
