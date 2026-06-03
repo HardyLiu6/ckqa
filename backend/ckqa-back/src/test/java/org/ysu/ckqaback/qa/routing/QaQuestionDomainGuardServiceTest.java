@@ -2,7 +2,10 @@ package org.ysu.ckqaback.qa.routing;
 
 import org.junit.jupiter.api.Test;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.config.QaDomainGuardProperties;
 import org.ysu.ckqaback.course.CourseAccessService;
+import org.ysu.ckqaback.course.routing.CourseScopeRelevanceProvider;
+import org.ysu.ckqaback.course.routing.CourseScopeRelevanceProvider.ScopeRelevance;
 import org.ysu.ckqaback.entity.KnowledgeBases;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
@@ -14,36 +17,80 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 class QaQuestionDomainGuardServiceTest {
 
     @Test
-    void shouldBlockObviousOutOfScopeQuestionsWithReasonCodes() {
-        QaQuestionDomainGuardService service = buildService();
+    void shouldBlockWhenCourseRelevanceBelowThreshold() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        given(provider.evaluateScopeRelevance(eq("os"), any())).willReturn(ScopeRelevance.evaluated(0.08D));
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, 0.20D);
 
-        assertOutOfScope(service, "今天晚上吃什么", "campus_life");
-        assertOutOfScope(service, "今天晚上食堂有什么菜？", "campus_life");
-        assertOutOfScope(service, "帮我写一首关于春天的短诗", "creative_writing");
-        assertOutOfScope(service, "我的头像应该怎么换？", "profile_help");
-        assertOutOfScope(service, "这门课什么时候期末考试？", "course_administrivia");
+        QaQuestionDomainCheckRequest request = request("今天晚上吃什么");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("out_of_scope");
+        assertThat(response.getReasonCode()).isEqualTo("low_course_relevance");
+        assertThat(response.getStrategy()).isEqualTo("semantic_relevance_v1");
     }
 
     @Test
-    void shouldAllowCourseLikeAndWeakButReasonableQuestions() {
-        QaQuestionDomainGuardService service = buildService();
+    void shouldAllowWhenCourseRelevanceAtOrAboveThreshold() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        given(provider.evaluateScopeRelevance(eq("os"), any())).willReturn(ScopeRelevance.evaluated(0.42D));
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, 0.20D);
 
-        assertAllowed(service, request("什么是进程？"));
-        assertAllowed(service, request("帮我复习一下"));
-        assertAllowed(service, request("请根据第 3 章解释银行家算法的安全性检查过程"));
-        assertAllowed(service, request("校园卡系统的数据库表如何设计？"));
-        assertAllowed(service, request("宿舍网络拓扑如何规划？"));
+        QaQuestionDomainCheckRequest request = request("请解释银行家算法的安全性检查");
+        request.setCourseId("os");
+        var response = service.check(request, student());
 
-        QaQuestionDomainCheckRequest contextualFollowUp = request("它和资源分配图有什么关系？请给出材料依据");
-        contextualFollowUp.setHasConversationContext(true);
-        assertAllowed(service, contextualFollowUp);
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        assertThat(response.getStrategy()).isEqualTo("semantic_relevance_v1");
+    }
+
+    @Test
+    void shouldAllowFollowUpWithoutEvaluating() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, 0.20D);
+
+        QaQuestionDomainCheckRequest request = request("它和资源分配图有什么关系？");
+        request.setCourseId("os");
+        request.setHasConversationContext(true);
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        then(provider).should(never()).evaluateScopeRelevance(any(), any());
+    }
+
+    @Test
+    void shouldAllowWhenRelevanceNotEvaluated() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        given(provider.evaluateScopeRelevance(any(), any())).willReturn(ScopeRelevance.notEvaluated());
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, 0.20D);
+
+        QaQuestionDomainCheckRequest request = request("今天晚上吃什么");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+    }
+
+    @Test
+    void shouldAllowWhenRelevanceProviderNotWired() {
+        QaQuestionDomainGuardService service = serviceWithoutProvider();
+
+        QaQuestionDomainCheckRequest request = request("今天晚上吃什么");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
     }
 
     @Test
@@ -140,29 +187,22 @@ class QaQuestionDomainGuardServiceTest {
 
     @Test
     void shouldRequireAuthenticatedUser() {
-        QaQuestionDomainGuardService service = buildService();
-
-        assertThatThrownBy(() -> service.check(request("什么是进程？"), null))
+        assertThatThrownBy(() -> serviceWithoutProvider().check(request("什么是进程？"), null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("请先登录");
     }
 
-    private void assertOutOfScope(QaQuestionDomainGuardService service, String question, String reasonCode) {
-        var response = service.check(request(question), student());
-
-        assertThat(response.getStatus()).isEqualTo("out_of_scope");
-        assertThat(response.getReasonCode()).isEqualTo(reasonCode);
-        assertThat(response.getStrategy()).isEqualTo("rule_domain_guard_v1");
+    private QaQuestionDomainGuardService serviceWithProvider(CourseScopeRelevanceProvider provider, double threshold) {
+        QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(
+                mock(QaSessionsService.class), mock(KnowledgeBasesService.class));
+        service.setRelevanceProvider(provider);
+        QaDomainGuardProperties properties = new QaDomainGuardProperties();
+        properties.setOutOfScopeThreshold(threshold);
+        service.setProperties(properties);
+        return service;
     }
 
-    private void assertAllowed(QaQuestionDomainGuardService service, QaQuestionDomainCheckRequest request) {
-        var response = service.check(request, student());
-
-        assertThat(response.getStatus()).isEqualTo("allowed");
-        assertThat(response.getStrategy()).isEqualTo("rule_domain_guard_v1");
-    }
-
-    private QaQuestionDomainGuardService buildService() {
+    private QaQuestionDomainGuardService serviceWithoutProvider() {
         return new QaQuestionDomainGuardService(mock(QaSessionsService.class), mock(KnowledgeBasesService.class));
     }
 

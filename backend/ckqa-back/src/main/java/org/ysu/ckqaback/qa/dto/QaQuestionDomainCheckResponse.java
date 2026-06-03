@@ -10,7 +10,7 @@ import lombok.Getter;
 @Getter
 public class QaQuestionDomainCheckResponse {
 
-    public static final String STRATEGY = "rule_domain_guard_v1";
+    public static final String STRATEGY = "semantic_relevance_v1";
 
     private final String status;
     private final String reasonCode;
