@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * 学生端智能推荐诊断快照。
  * <p>
- * 该对象只用于运维观测，不参与权限判断和最终 QA mode 决策。
+ * 该对象主要用于运维观测；当请求 mode=smart 时，后端会读取 recommendedMode 做无额外 LLM 成本的执行模式解析。
  * </p>
  */
 @Getter

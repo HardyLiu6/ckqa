@@ -20,7 +20,7 @@ public final class QaContextPolicy {
     public static final int MAX_RETRIEVAL_QUERY_CHARS = 800;
     public static final String QUERY_ENGINE_LOCAL_HISTORY = "local_history";
 
-    private static final Set<String> RECENT_CONTEXT_MODES = Set.of("basic", "local", "hybrid_v0");
+    private static final Set<String> RECENT_CONTEXT_MODES = Set.of("basic", "local", "global", "drift", "hybrid_v0");
     private static final Set<String> MEMORY_CONTEXT_MODES = Set.of("local");
     private static final Pattern PRONOUN_FOLLOW_UP_PATTERN = Pattern.compile(
             ".*(它|这个|这一个|该概念|本概念|上面那个|前者|后者|这种|上述).*"

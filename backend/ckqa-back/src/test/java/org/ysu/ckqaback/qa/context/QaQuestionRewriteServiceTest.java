@@ -97,11 +97,18 @@ class QaQuestionRewriteServiceTest {
     }
 
     @Test
-    void shouldNotRewriteGlobalOrDrift() {
+    void shouldRewriteGlobalAndDriftFollowUpWithRecentTopic() {
         QaContextAssembly context = new QaContextAssembly("recent", "", "1-2", 0, "死锁", "1-2");
 
-        assertThat(rewriteService.rewrite("global", "它是什么意思？", context).rewriteApplied()).isFalse();
-        assertThat(rewriteService.rewrite("drift", "它是什么意思？", context).rewriteApplied()).isFalse();
+        QaQuestionRewriteResult global = rewriteService.rewrite("global", "它是什么意思？", context);
+        QaQuestionRewriteResult drift = rewriteService.rewrite("drift", "它是什么意思？", context);
+
+        assertThat(global.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它是什么意思？");
+        assertThat(global.rewriteApplied()).isTrue();
+        assertThat(global.rewriteMethod()).isEqualTo("rule");
+        assertThat(drift.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它是什么意思？");
+        assertThat(drift.rewriteApplied()).isTrue();
+        assertThat(drift.rewriteMethod()).isEqualTo("rule");
     }
 
     @Test

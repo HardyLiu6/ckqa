@@ -65,8 +65,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * 问答业务工作流服务。
@@ -80,6 +82,7 @@ public class QaWorkflowService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
     private static final int ROUTING_SNAPSHOT_MAX_CHARS = 4000;
+    private static final Set<String> EXECUTABLE_QUERY_MODES = Set.of("basic", "local", "global", "drift", "hybrid_v0");
 
     private final QaSessionsService qaSessionsService;
     private final QaMessagesService qaMessagesService;
@@ -331,6 +334,8 @@ public class QaWorkflowService {
     }
 
     private QaTaskSubmissionResponse sendMessage(Long sessionId, CreateQaMessageRequest request, Long indexRunIdOverride, String actorUserCode) {
+        String requestedMode = normalizeRequestedMode(request == null ? null : request.getMode());
+        String resolvedMode = resolveExecutionMode(request, requestedMode);
         QaSessions session = qaSessionsService.getRequiredById(sessionId);
         if (!"active".equals(session.getStatus())) {
             throw new BusinessException(ApiResultCode.QA_SESSION_NOT_ACTIVE, HttpStatus.CONFLICT);
@@ -345,17 +350,17 @@ public class QaWorkflowService {
 
         List<QaMessages> history = qaMessagesService.listBySessionId(sessionId);
         QaContextAssembly context = qaContextAssembler.assemble(
-                request.getMode(),
+                resolvedMode,
                 request.getContent(),
                 history,
                 loadLatestContextSummary(sessionId)
         );
         qaQuestionRewriteService.setRewriteProperties(properties.getRewrite());
-        QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(request.getMode(), request.getContent(), context);
+        QaQuestionRewriteResult rewrite = qaQuestionRewriteService.rewrite(resolvedMode, request.getContent(), context);
         QaMemoryContextResult memoryContext = qaMemoryContextService == null
                 ? QaMemoryContextResult.notApplied("service_unavailable")
                 : qaMemoryContextService.buildContext(
-                        request.getMode(),
+                        resolvedMode,
                         request.getMemoryPolicy(),
                         session,
                         history,
@@ -363,7 +368,7 @@ public class QaWorkflowService {
                         context.latestTopic()
                 );
         String queryEngineStrategy = QaContextPolicy.resolveQueryEngineStrategy(
-                request.getMode(),
+                resolvedMode,
                 null,
                 memoryContext.memoryApplied() && !memoryContext.conversationHistory().isEmpty()
         );
@@ -403,12 +408,12 @@ public class QaWorkflowService {
                 session.getCourseId(),
                 indexRunId,
                 userMessage.getId(),
-                request.getMode(),
+                resolvedMode,
                 rewrite.retrievalQueryText(),
                 logContext
         );
         dispatchAfterCommit(sessionId, task.getId());
-        QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(request.getMode());
+        QueryTaskModePolicy taskPolicy = properties.resolveQueryTaskModePolicy(resolvedMode);
 
         return QaTaskSubmissionResponse.of(
                 QaMessageResponse.fromEntity(userMessage, taskPolicy.mode()),
@@ -417,6 +422,8 @@ public class QaWorkflowService {
                 task.getProgressStage(),
                 null,
                 task.getCreatedAt(),
+                taskPolicy.mode(),
+                requestedMode,
                 taskPolicy.mode(),
                 taskPolicy.recommendedPollingIntervalSeconds(),
                 taskPolicy.staleTimeoutSeconds(),
@@ -430,6 +437,21 @@ public class QaWorkflowService {
                 memoryContext.sourceCount(),
                 memoryContext.sizeEstimate()
         );
+    }
+
+    private String normalizeRequestedMode(String rawMode) {
+        return StringUtils.hasText(rawMode) ? rawMode.trim().toLowerCase(Locale.ROOT) : "basic";
+    }
+
+    private String resolveExecutionMode(CreateQaMessageRequest request, String requestedMode) {
+        if ("smart".equals(requestedMode)) {
+            String recommendedMode = request == null || request.getClientRoutingSnapshot() == null
+                    ? null
+                    : request.getClientRoutingSnapshot().getRecommendedMode();
+            String normalizedRecommendedMode = normalizeRequestedMode(recommendedMode);
+            return EXECUTABLE_QUERY_MODES.contains(normalizedRecommendedMode) ? normalizedRecommendedMode : "basic";
+        }
+        return EXECUTABLE_QUERY_MODES.contains(requestedMode) ? requestedMode : "basic";
     }
 
     private String serializeMemoryHistory(QaMemoryContextResult memoryContext) {

@@ -58,15 +58,23 @@ class QaContextAssemblerTest {
     }
 
     @Test
-    void shouldNotApplyHistoryForGlobalAndDrift() {
+    void shouldUseRecentForGlobalAndDriftFollowUp() {
         QaContextAssembler assembler = new QaContextAssembler();
         List<QaMessages> history = List.of(
                 message(1L, "user", 1, "什么是死锁？"),
                 message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。")
         );
 
-        assertThat(assembler.assemble("global", "总结课程", history).strategy()).isEqualTo("none");
-        assertThat(assembler.assemble("drift", "关联一下", history).strategy()).isEqualTo("none");
+        QaContextAssembly global = assembler.assemble("global", "它和资源分配图有什么关系？", history);
+        QaContextAssembly drift = assembler.assemble("drift", "它和资源分配图有什么关系？", history);
+
+        assertThat(global.strategy()).isEqualTo("recent");
+        assertThat(global.contextApplied()).isTrue();
+        assertThat(global.snapshotText()).contains("学生：什么是死锁？", "助手：死锁是多个进程互相等待资源的状态。");
+        assertThat(global.latestTopic()).isEqualTo("死锁");
+        assertThat(drift.strategy()).isEqualTo("recent");
+        assertThat(drift.contextApplied()).isTrue();
+        assertThat(drift.latestTopic()).isEqualTo("死锁");
     }
 
     @Test
@@ -126,7 +134,7 @@ class QaContextAssemblerTest {
     }
 
     @Test
-    void shouldUseOnlyShortSummaryForGlobalAndDriftWhenSummaryExists() {
+    void shouldUseSummaryRecentForGlobalAndDriftWhenSummaryExists() {
         QaContextAssembler assembler = new QaContextAssembler();
         List<QaMessages> history = List.of(
                 message(1L, "user", 1, "什么是死锁？"),
@@ -135,16 +143,17 @@ class QaContextAssemblerTest {
                 message(4L, "assistant", 4, "资源分配图可以帮助观察环路。")
         );
 
-        QaContextSummary summary = new QaContextSummary("本会话已讨论死锁和资源分配图。", 4);
+        QaContextSummary summary = new QaContextSummary("本会话已讨论死锁定义。", 2);
 
         QaContextAssembly global = assembler.assemble("global", "总结一下", history, summary);
         QaContextAssembly drift = assembler.assemble("drift", "扩展关联", history, summary);
 
-        assertThat(global.strategy()).isEqualTo("summary");
-        assertThat(global.snapshotText()).contains("会话摘要：", "本会话已讨论死锁和资源分配图。");
+        assertThat(global.strategy()).isEqualTo("summary_recent");
+        assertThat(global.snapshotText()).contains("会话摘要：", "本会话已讨论死锁定义。", "最近对话：");
         assertThat(global.snapshotText()).doesNotContain("学生：什么是死锁？");
-        assertThat(drift.strategy()).isEqualTo("summary");
-        assertThat(drift.snapshotText()).doesNotContain("助手：资源分配图可以帮助观察环路。");
+        assertThat(global.snapshotText()).contains("学生：它和资源分配图有什么关系？");
+        assertThat(drift.strategy()).isEqualTo("summary_recent");
+        assertThat(drift.snapshotText()).contains("助手：资源分配图可以帮助观察环路。");
     }
 
     private QaMessages message(Long id, String role, int sequenceNo, String content) {

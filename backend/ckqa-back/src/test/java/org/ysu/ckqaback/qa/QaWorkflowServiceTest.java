@@ -599,6 +599,181 @@ class QaWorkflowServiceTest {
     }
 
     @Test
+    void shouldResolveSmartModeToRecommendedDriftForPendingTaskAndResponse() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaTaskWorker qaTaskWorker = mock(QaTaskWorker.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                qaTaskWorker,
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它和资源分配图有什么关系？");
+        QaRetrievalLogs task = pendingTask(9012L);
+        QaClientRoutingSnapshot snapshot = new QaClientRoutingSnapshot();
+        snapshot.setSelectedMode("smart");
+        snapshot.setRecommendedMode("drift");
+        CreateQaMessageRequest request = new CreateQaMessageRequest("smart", "它和资源分配图有什么关系？");
+        request.setClientRoutingSnapshot(snapshot);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("drift"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                argThat(context -> "recent".equals(context.contextStrategy())
+                        && context.rewriteApplied()
+                        && context.queryEngineStrategy() == null
+                        && context.routingSnapshotJson().contains("\"recommendedMode\":\"drift\""))
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
+
+        assertThat(response.getMode()).isEqualTo("drift");
+        assertThat(response.getRequestedMode()).isEqualTo("smart");
+        assertThat(response.getResolvedMode()).isEqualTo("drift");
+        assertThat(response.getUserMessage().getMode()).isEqualTo("drift");
+        assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(15);
+        assertThat(response.getContextStrategy()).isEqualTo("recent");
+        then(qaTaskWorker).should().dispatch(5L, 9012L);
+    }
+
+    @Test
+    void shouldResolveSmartModeToRecommendedLocalForMemoryAndPendingTask() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaMemoryContextService memoryContextService = mock(QaMemoryContextService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaMemoryContextService(memoryContextService);
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是时间片轮转？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "时间片轮转是一种抢占式调度算法。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它为什么影响响应时间？");
+        QaRetrievalLogs task = pendingTask(9013L);
+        QaClientRoutingSnapshot snapshot = new QaClientRoutingSnapshot();
+        snapshot.setSelectedMode("smart");
+        snapshot.setRecommendedMode("local");
+        CreateQaMessageRequest request = new CreateQaMessageRequest("smart", "它为什么影响响应时间？");
+        request.setClientRoutingSnapshot(snapshot);
+        request.setMemoryPolicy("auto");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(memoryContextService.buildContext(
+                "local",
+                "auto",
+                session,
+                List.of(previousUser, previousAssistant),
+                "它为什么影响响应时间？",
+                "时间片轮转"
+        )).willReturn(new QaMemoryContextResult(
+                true,
+                "local_history_preference_only",
+                "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
+                1,
+                44,
+                List.of(new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。")),
+                null
+        ));
+        given(qaMessagesService.appendUserMessage(5L, "它为什么影响响应时间？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("local"),
+                eq("关于上一轮主题「时间片轮转」：它为什么影响响应时间？"),
+                argThat(context -> context.memoryApplied()
+                        && "local_history_preference_only".equals(context.memoryStrategy())
+                        && "local_history".equals(context.queryEngineStrategy()))
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
+
+        assertThat(response.getMode()).isEqualTo("local");
+        assertThat(response.getRequestedMode()).isEqualTo("smart");
+        assertThat(response.getResolvedMode()).isEqualTo("local");
+        assertThat(response.getMemoryApplied()).isTrue();
+        assertThat(response.getMemoryStrategy()).isEqualTo("local_history_preference_only");
+    }
+
+    @Test
+    void shouldFallbackSmartModeToBasicWhenRecommendedModeIsInvalid() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = formalSession();
+        QaMessages userMessage = message(103L, 5L, "user", 1, "请概括这套图谱的主题");
+        QaRetrievalLogs task = pendingTask(9014L);
+        QaClientRoutingSnapshot snapshot = new QaClientRoutingSnapshot();
+        snapshot.setSelectedMode("smart");
+        snapshot.setRecommendedMode("unsupported");
+        CreateQaMessageRequest request = new CreateQaMessageRequest("smart", "请概括这套图谱的主题");
+        request.setClientRoutingSnapshot(snapshot);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
+        given(qaMessagesService.appendUserMessage(5L, "请概括这套图谱的主题")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("请概括这套图谱的主题"),
+                argThat(context -> "none".equals(context.contextStrategy())
+                        && context.queryEngineStrategy() == null)
+        )).willReturn(task);
+
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
+
+        assertThat(response.getMode()).isEqualTo("basic");
+        assertThat(response.getRequestedMode()).isEqualTo("smart");
+        assertThat(response.getResolvedMode()).isEqualTo("basic");
+        assertThat(response.getUserMessage().getMode()).isEqualTo("basic");
+    }
+
+    @Test
     void shouldNotApplyMemoryWhenPolicyIsOff() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
