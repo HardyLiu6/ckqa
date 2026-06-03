@@ -4118,35 +4118,52 @@ test('生产链路节点按失败优先规则归一化', () => {
   assert.equal(deriveTrackNodeState({}).tone, 'blocked')
 })
 
-test('健康响应同时保留 reachable 和 ready', () => {
+test('健康响应解析后端 items 契约并保留 reachable / ready', () => {
   const result = normalizeHealthResponse({
-    status: 'degraded',
-    services: {
-      javaApi: { reachable: true, ready: true, message: 'ok' },
-      graphRagBuildRunsRoot: { reachable: true, ready: true, path: '/tmp/build-runs' },
-      graphRagReady: { reachable: true, ready: false, message: 'active build run missing' },
-    },
+    up: false,
+    items: [
+      { name: 'mysql', reachable: true, ready: true, message: 'SELECT 1' },
+      { name: 'graphrag-ready', reachable: true, ready: false, message: 'active build run missing' },
+      { name: 'neo4j', reachable: false, ready: false, message: 'connection refused' },
+    ],
   })
 
-  assert.equal(result.overallStatus, 'degraded')
   assert.equal(result.services.length, 3)
-  assert.deepEqual(result.services[1], {
-    key: 'graphRagBuildRunsRoot',
-    label: 'GraphRAG build-runs root',
-    reachable: true,
-    ready: true,
-    message: '',
-    path: '/tmp/build-runs',
-    tone: 'success',
+  // 整体健康度由各检查项聚合：存在不可达项即判定为故障
+  assert.equal(result.overallTone, 'danger')
+  assert.deepEqual(result.counts, { total: 3, ok: 1, warning: 1, danger: 1 })
+
+  // mysql：连通且就绪 → 正常，并翻译成面向用户的中文名称
+  assert.equal(result.services[0].key, 'mysql')
+  assert.equal(result.services[0].label, '业务数据库')
+  assert.equal(result.services[0].tone, 'success')
+  assert.equal(result.services[0].reachable, true)
+  assert.equal(result.services[0].ready, true)
+
+  // graphrag-ready：连通但未就绪 → 同时保留 reachable / ready，标记降级
+  assert.equal(result.services[1].label, '问答模型')
+  assert.equal(result.services[1].reachable, true)
+  assert.equal(result.services[1].ready, false)
+  assert.equal(result.services[1].tone, 'warning')
+  assert.equal(result.services[1].statusLabel, '未就绪')
+
+  // neo4j：不可达 → 故障，原始 message 保留供技术排查
+  assert.equal(result.services[2].tone, 'danger')
+  assert.equal(result.services[2].message, 'connection refused')
+})
+
+test('健康响应对空载荷与早期 services 契约保持兜底', () => {
+  const empty = normalizeHealthResponse({})
+  assert.equal(empty.services.length, 0)
+  assert.equal(empty.overallTone, 'blocked')
+  assert.deepEqual(empty.counts, { total: 0, ok: 0, warning: 0, danger: 0 })
+
+  const legacy = normalizeHealthResponse({
+    services: { mysql: { reachable: true, ready: true } },
   })
-  assert.deepEqual(result.services[2], {
-    key: 'graphRagReady',
-    label: 'GraphRAG ready',
-    reachable: true,
-    ready: false,
-    message: 'active build run missing',
-    tone: 'warning',
-  })
+  assert.equal(legacy.services.length, 1)
+  assert.equal(legacy.services[0].label, '业务数据库')
+  assert.equal(legacy.services[0].tone, 'success')
 })
 
 
