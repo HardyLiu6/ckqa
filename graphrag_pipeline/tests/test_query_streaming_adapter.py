@@ -545,7 +545,7 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context_selected["summary"], "已选取 8 条概念关系作为上下文。")
         self.assertNotIn("0 个课程概念", context_selected["summary"])
 
-    async def test_hybrid_streaming_emits_retrieval_started_before_context_selected(self):
+    async def test_hybrid_streaming_emits_distinct_low_layer_and_fusion_progress(self):
         async def fake_basic(**kwargs):
             callbacks = kwargs.get("callbacks")
             self.assertIsNotNone(callbacks)
@@ -558,9 +558,12 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
             def search(self, question, top_k):  # noqa: ANN001 - 测试桩
                 return [
                     EvidenceCandidate(
-                        source="操作系统教材",
+                        source="bm25",
                         ref="tu-1",
-                        text="进程管理负责资源分配和调度。",
+                        text=(
+                            "source_file: 操作系统教材. heading_path_text: 第三章 > 处理机调度. "
+                            "page_start: 88. page_end: 89. 进程管理负责资源分配和调度。"
+                        ),
                         score=2.0,
                         layer=HybridLayer.LOW,
                         metadata={"ref": "tu-1"},
@@ -585,8 +588,14 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         progress = [chunk.progress for chunk in chunks if chunk.event == "progress"]
         self.assertEqual(progress[0]["type"], "retrieval_started")
         self.assertIn("混合证据", progress[0]["summary"])
-        self.assertEqual(progress[1]["type"], "context_selected")
-        self.assertIn("混合检索依据", progress[1]["summary"])
+        self.assertEqual(progress[1]["type"], "hybrid_low_evidence_selected")
+        self.assertIn("BM25", progress[1]["summary"])
+        self.assertIn("GraphRAG Basic", progress[1]["summary"])
+        self.assertEqual(progress[1]["metrics"]["bm25EvidenceCount"], 1)
+        self.assertEqual(progress[1]["evidence"][0]["kind"], "bm25")
+        self.assertEqual(progress[2]["type"], "context_selected")
+        self.assertIn("融合", progress[2]["summary"])
+        self.assertIn("GraphRAG Basic", progress[2]["summary"])
         self.assertTrue(any(item["type"] == "answer_running" for item in progress))
 
     async def test_global_streaming_emits_rate_limit_progress_from_graphrag_logger(self):

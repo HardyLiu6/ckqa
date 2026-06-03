@@ -5,11 +5,13 @@ import {
   BACKEND_QA_MODES,
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
+  loadHybridBetaPreference,
   resolveQaMode,
   resolveQaModeRecommendation,
   resolveHybridWarmupText,
   resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
+  saveHybridBetaPreference,
 } from '../src/views/qa/qa-mode-model.js'
 
 test('问答模式只暴露智能推荐和后端真实支持的模式', () => {
@@ -74,6 +76,24 @@ test('Beta 开启后智能推荐可受控路由到 hybrid_v0', () => {
   assert.equal(result.mode, 'hybrid_v0')
   assert.equal(result.fromSmart, true)
   assert.match(result.reason, /Beta|混合检索/)
+})
+
+test('智能推荐混合检索 Beta 偏好可持久化到本地存储', () => {
+  const storage = new Map()
+  const fakeStorage = {
+    getItem(key) {
+      return storage.has(key) ? storage.get(key) : null
+    },
+    setItem(key, value) {
+      storage.set(key, String(value))
+    },
+  }
+
+  assert.equal(loadHybridBetaPreference(fakeStorage), false)
+  assert.equal(saveHybridBetaPreference(true, fakeStorage), true)
+  assert.equal(loadHybridBetaPreference(fakeStorage), true)
+  assert.equal(saveHybridBetaPreference(false, fakeStorage), true)
+  assert.equal(loadHybridBetaPreference(fakeStorage), false)
 })
 
 test('服务端智能推荐结果优先于本地智能推荐兜底', () => {

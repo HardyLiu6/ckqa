@@ -9,13 +9,17 @@ import pandas as pd
 
 
 _DATA_BLOCK_RE = re.compile(r"\[Data:\s*([^\]]+)\]", re.IGNORECASE)
-_DATA_SEGMENT_RE = re.compile(r"(Sources|Entities|Relationships|Reports)\s*\(([^)]*)\)", re.IGNORECASE)
+_DATA_SEGMENT_RE = re.compile(
+    r"(Sources|Text\s+Units?|Entities|Relationships|Reports|Hybrid)\s*\(([^)]*)\)",
+    re.IGNORECASE,
+)
 _DATA_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _METADATA_KEY_RE = re.compile(
     r"\b(document_type|chapter|section|subsection|heading_level|heading_path_text|"
     r"page_start|page_end|section_level|source_file|course_id):"
 )
 _SNIPPET_MAX_CHARS = 280
+_TEXT_UNIT_PREFIX_MIN_CHARS = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +60,8 @@ def resolve_answer_citations(
     refs_by_kind = _extract_refs_by_kind(raw_answer)
     source_refs = refs_by_kind.get("sources", [])
     rows_by_ref = _load_text_unit_rows(output_dir, source_refs)
+    hybrid_refs = refs_by_kind.get("hybrid", [])
+    hybrid_rows_by_ref = _load_text_unit_rows(output_dir, hybrid_refs)
 
     sources: list[QueryCitationSource] = []
     seen: set[tuple[str, str]] = set()
@@ -68,6 +74,16 @@ def resolve_answer_citations(
         if row is None:
             continue
         sources.append(_source_from_text_unit(row, ref, len(sources) + 1, kind="graphrag_citation"))
+
+    for ref in hybrid_refs:
+        source_key = ("hybrid", ref)
+        if source_key in seen:
+            continue
+        seen.add(source_key)
+        row = hybrid_rows_by_ref.get(ref)
+        if row is None:
+            continue
+        sources.append(_source_from_text_unit(row, ref, len(sources) + 1, kind="hybrid_text_unit"))
 
     for ref in refs_by_kind.get("reports", []):
         source_key = ("reports", ref)
@@ -155,7 +171,7 @@ def _extract_refs_by_kind(answer: str) -> dict[str, list[str]]:
     }
     for block in _DATA_BLOCK_RE.findall(answer):
         for raw_kind, raw_ids in _DATA_SEGMENT_RE.findall(block):
-            kind = raw_kind.lower()
+            kind = _normalize_data_segment_kind(raw_kind)
             kind_refs = refs_by_kind.setdefault(kind, [])
             for token in _DATA_TOKEN_RE.findall(raw_ids):
                 if token not in kind_refs:
@@ -179,6 +195,12 @@ def _load_text_unit_rows(output_dir: Path | str | None, refs: list[str]) -> dict
         human_id = _normalize_ref_value(record.get("human_readable_id"))
         if human_id in wanted and human_id not in rows:
             rows[human_id] = record
+        full_id = _clean_string(record.get("id"))
+        for ref in wanted:
+            if ref in rows:
+                continue
+            if full_id == ref or (len(ref) >= _TEXT_UNIT_PREFIX_MIN_CHARS and full_id.startswith(ref)):
+                rows[ref] = record
     return rows
 
 
@@ -399,16 +421,18 @@ def _split_text_unit_metadata(text: str) -> tuple[dict[str, str], str]:
         return {}, text.strip()
 
     metadata: dict[str, str] = {}
+    body = ""
     for index, match in enumerate(matches):
         key = match.group(1)
         value_start = match.end()
         value_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        metadata[key] = text[value_start:value_end].strip(" .\n\t")
-
-    last_match = matches[-1]
-    tail = text[last_match.end():]
-    _, separator, body_tail = tail.partition(". ")
-    body = body_tail if separator else ""
+        raw_value = text[value_start:value_end].strip(" \n\t")
+        if index == len(matches) - 1:
+            value_part, separator, body_tail = raw_value.partition(". ")
+            metadata[key] = value_part.strip(" .\n\t")
+            body = body_tail.strip() if separator else ""
+        else:
+            metadata[key] = raw_value.strip(" .\n\t")
     return metadata, body or text.strip()
 
 
@@ -451,7 +475,7 @@ def _replace_data_blocks(
         block = match.group(1)
         ranks: list[int] = []
         for raw_kind, raw_ids in _DATA_SEGMENT_RE.findall(block):
-            kind = raw_kind.lower()
+            kind = _normalize_data_segment_kind(raw_kind)
             for token in _DATA_TOKEN_RE.findall(raw_ids):
                 rank = ref_to_rank.get(_rank_key(kind, token))
                 if rank is not None and rank not in ranks:
@@ -478,7 +502,17 @@ def _source_segment_kind(kind: str) -> str:
         "graphrag_report": "reports",
         "graphrag_entity": "entities",
         "graphrag_relationship": "relationships",
+        "hybrid_text_unit": "hybrid",
     }.get(kind, "")
+
+
+def _normalize_data_segment_kind(raw_kind: str) -> str:
+    normalized = re.sub(r"\s+", " ", raw_kind or "").strip().lower()
+    if normalized in {"source", "sources", "text unit", "text units"}:
+        return "sources"
+    if normalized == "hybrid":
+        return "hybrid"
+    return normalized
 
 
 def _append_source_notes(answer: str, sources: list[QueryCitationSource]) -> str:

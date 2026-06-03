@@ -29,6 +29,10 @@ except Exception:  # pragma: no cover - 仅用于缺少 GraphRAG 运行依赖的
 
 
 _DATA_BLOCK_RE = re.compile(r"\[Data:\s*[^\]]*\]", re.IGNORECASE)
+_TEXT_METADATA_KEY_RE = re.compile(
+    r"\b(document_type|chapter|section|subsection|heading_level|heading_path_text|"
+    r"page_start|page_end|section_level|source_file|course_id):"
+)
 _RATE_LIMIT_SIGNAL_RE = re.compile(
     r"("
     r"(?<!\d)429(?!\d)|"
@@ -140,10 +144,15 @@ class NativeGraphRagStreamingAdapter:
             yield NativeStreamingChunk(
                 event="progress",
                 progress=_progress_event(
-                    "context_selected",
+                    "hybrid_low_evidence_selected",
                     request.mode,
-                    f"已选取 {len(hybrid_sources)} 个课程片段作为混合检索依据。",
-                    {"textUnitCount": len(hybrid_sources), "strategy": "hybrid_v0"},
+                    f"低层 BM25 已召回 {len(hybrid_sources)} 个候选课程片段，准备注入 GraphRAG Basic 做上下文融合。",
+                    {
+                        "textUnitCount": len(hybrid_sources),
+                        "bm25EvidenceCount": len(hybrid_sources),
+                        "strategy": "hybrid_v0",
+                        "fusionStage": "bm25_low_layer",
+                    },
                     [_source_to_evidence(source) for source in hybrid_sources[:5]],
                 ),
             )
@@ -307,7 +316,10 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
 
     def on_context(self, context: Any) -> None:
         metrics, evidence = _context_metrics_and_evidence(context)
-        if metrics.get("reportCount", 0) > 0:
+        if self._mode == "hybrid_v0":
+            metrics = {**metrics, "strategy": "hybrid_v0", "fusionStage": "basic_context"}
+            summary = _hybrid_context_selected_summary(metrics)
+        elif metrics.get("reportCount", 0) > 0:
             summary = f"已选取 {metrics['reportCount']} 份课程报告作为回答依据。"
         elif metrics.get("textUnitCount", 0) > 0:
             summary = f"已选取 {metrics['textUnitCount']} 个课程片段作为回答依据。"
@@ -605,7 +617,7 @@ def _retrieval_started_event(mode: str) -> dict[str, Any]:
         "local": "正在检索课程概念、关系和片段，准备构建局部上下文。",
         "global": "正在从整门课程中寻找和问题相关的章节主题。",
         "drift": "正在沿课程报告和概念线索展开追问式检索。",
-        "hybrid_v0": "正在检索混合证据，结合片段匹配和课程上下文。",
+        "hybrid_v0": "正在检索混合证据：先召回本地 BM25 课程片段，再融合 GraphRAG Basic 课程上下文。",
     }
     return _progress_event(
         "retrieval_started",
@@ -617,6 +629,8 @@ def _retrieval_started_event(mode: str) -> dict[str, Any]:
 
 
 def _answer_running_summary(metrics: dict[str, Any], elapsed: int) -> str:
+    if str(metrics.get("fusionStage") or "") == "basic_context":
+        return f"仍在融合 BM25 片段与 GraphRAG Basic 上下文组织回答，已处理约 {elapsed} 秒。"
     text_units = int(metrics.get("textUnitCount") or 0)
     entities = int(metrics.get("entityCount") or 0)
     relationships = int(metrics.get("relationshipCount") or 0)
@@ -647,6 +661,16 @@ def _entity_relationship_context_summary(metrics: dict[str, Any]) -> str:
     if relationships:
         return f"已选取 {relationships} 条概念关系作为上下文。"
     return "已构建课程知识库上下文，准备生成回答。"
+
+
+def _hybrid_context_selected_summary(metrics: dict[str, Any]) -> str:
+    text_units = int(metrics.get("textUnitCount") or 0)
+    if text_units:
+        return f"GraphRAG Basic 已基于混合证据构建 {text_units} 个课程片段的融合上下文。"
+    context_count = int(metrics.get("contextCount") or 0)
+    if context_count:
+        return f"GraphRAG Basic 已基于混合证据构建 {context_count} 组融合上下文。"
+    return "GraphRAG Basic 已基于混合证据构建融合上下文。"
 
 
 def _reduce_running_summary(mode: str, elapsed: int) -> str:
@@ -1095,20 +1119,51 @@ def _read_optional_parquet(data_dir: Path, name: str) -> pd.DataFrame | None:
 
 
 def _evidence_candidate_to_source(rank: int, candidate: EvidenceCandidate) -> dict[str, Any]:
-    metadata = dict(candidate.metadata or {})
+    inline_metadata, body = _split_text_metadata(str(candidate.text or ""))
+    metadata = {**inline_metadata, **dict(candidate.metadata or {})}
+    source_file = metadata.get("source_file") or candidate.source
+    heading_path = metadata.get("heading_path") or metadata.get("heading_path_text") or ""
     return {
         "rank": rank,
         "kind": metadata.get("kind") or candidate.source,
         "source_type": metadata.get("source_type") or candidate.source,
         "ref": candidate.ref,
         "chunk_id": metadata.get("chunk_id") or candidate.ref,
-        "document_key": metadata.get("document_key") or metadata.get("source_file") or candidate.source,
-        "source_file": metadata.get("source_file") or candidate.source,
-        "heading_path": metadata.get("heading_path") or metadata.get("heading_path_text") or "",
-        "page_start": metadata.get("page_start"),
-        "page_end": metadata.get("page_end"),
-        "snippet": _shorten(candidate.text, 280),
+        "document_key": metadata.get("document_key") or source_file or candidate.source,
+        "source_file": source_file,
+        "heading_path": heading_path,
+        "page_start": _parse_metadata_int(metadata.get("page_start")),
+        "page_end": _parse_metadata_int(metadata.get("page_end")),
+        "snippet": _shorten(body or candidate.text, 280),
     }
+
+
+def _split_text_metadata(text: str) -> tuple[dict[str, str], str]:
+    matches = list(_TEXT_METADATA_KEY_RE.finditer(text or ""))
+    if not matches:
+        return {}, str(text or "").strip()
+
+    metadata: dict[str, str] = {}
+    body = ""
+    for index, match in enumerate(matches):
+        key = match.group(1)
+        value_start = match.end()
+        value_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        raw_value = text[value_start:value_end].strip(" \n\t")
+        if index == len(matches) - 1:
+            value_part, separator, body_tail = raw_value.partition(". ")
+            metadata[key] = value_part.strip(" .\n\t")
+            body = body_tail.strip() if separator else ""
+        else:
+            metadata[key] = raw_value.strip(" .\n\t")
+    return metadata, body or str(text or "").strip()
+
+
+def _parse_metadata_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    match = re.search(r"\d+", str(value))
+    return int(match.group(0)) if match else None
 
 
 def _shorten(text: str, max_chars: int) -> str:

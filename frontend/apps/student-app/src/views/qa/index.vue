@@ -44,11 +44,13 @@ import {
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
   getModeOption,
+  loadHybridBetaPreference,
   resolveQaMode,
   resolveQaModeRecommendation,
   resolveHybridWarmupText,
   resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
+  saveHybridBetaPreference,
 } from './qa-mode-model'
 import {
   buildQaRouteQuery,
@@ -115,7 +117,7 @@ const messages = ref([])
 const selectedCourseId = ref('')
 const selectedKnowledgeBaseId = ref('')
 const selectedMode = ref(initialQaRouteQuery.mode)
-const allowHybridSmartBeta = ref(false)
+const allowHybridSmartBeta = ref(loadHybridBetaPreference())
 const memoryPreference = ref(normalizeMemoryPreference(null))
 const learningMemoryItems = ref([])
 const input = ref(initialQaRouteQuery.topic)
@@ -633,6 +635,7 @@ async function handleModeSelect(mode) {
 }
 
 async function handleHybridBetaToggle() {
+  saveHybridBetaPreference(allowHybridSmartBeta.value)
   if (
     allowHybridSmartBeta.value
     && modePreview.value.mode === 'hybrid_v0'
@@ -1690,7 +1693,7 @@ function sourceTypeLabel(source) {
     return 'Basic'
   }
   if (type === 'fusion') {
-    return 'Fusion'
+    return '混合证据'
   }
   return '来源'
 }
@@ -1736,6 +1739,7 @@ function sourceTypeLabel(source) {
             </div>
             <QaRetrievalTrace
               :events="msg.progressEvents"
+              :mode="msg.mode"
               :mode-label="messageModeLabel(msg)"
               :task-status="msg.taskStatus"
               :started-at="msg.startedAt || msg.createdAt"
@@ -1794,6 +1798,7 @@ function sourceTypeLabel(source) {
             </div>
             <QaRetrievalTrace
               :events="pendingProcessEvents"
+              :mode="pendingTask.mode"
               :mode-label="messageModeLabel(pendingTask)"
               :task-status="pendingTask.taskStatus"
               :default-open="!pendingTask.streamText"
@@ -1931,9 +1936,36 @@ function sourceTypeLabel(source) {
           ></textarea>
 
           <!-- 模式 chip -->
-          <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
-            {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }} ▾
-          </button>
+          <div class="mode-control-wrap">
+            <button class="chip mode-chip" type="button" @click="modeMenuOpen = !modeMenuOpen">
+              {{ getModeOption(selectedMode).shortLabel === '智能' ? '智能' : getModeOption(selectedMode).shortLabel }} ▾
+            </button>
+            <Transition name="pop">
+              <div v-if="modeMenuOpen" class="mode-popover">
+                <div v-for="mode in QA_MODE_OPTIONS" :key="mode.value" class="mode-pop-item" :class="{ active: selectedMode === mode.value }" @click="handleModeSelect(mode.value); modeMenuOpen = false">
+                  <div class="mode-pop-title-row">
+                    <span class="mode-pop-label">{{ mode.label }}</span>
+                    <label
+                      v-if="mode.value === SMART_QA_MODE"
+                      class="smart-beta-title-toggle"
+                      :class="{ active: allowHybridSmartBeta }"
+                      title="允许智能推荐使用混合检索 Beta"
+                      @click.stop
+                    >
+                      <input
+                        v-model="allowHybridSmartBeta"
+                        type="checkbox"
+                        aria-label="允许智能推荐使用混合检索 Beta"
+                        @change="handleHybridBetaToggle"
+                      />
+                      <span>混合 Beta</span>
+                    </label>
+                  </div>
+                  <span class="mode-pop-desc">{{ mode.description }}</span>
+                </div>
+              </div>
+            </Transition>
+          </div>
 
           <!-- 学习记忆（开启后才显示） -->
           <button v-if="memoryEnabled && !isComposerExpanded" class="chip memory-chip" type="button">
@@ -1973,12 +2005,6 @@ function sourceTypeLabel(source) {
               <div v-else class="scope-pop-list">
                 <div v-for="kb in knowledgeBases" :key="kb.id" class="scope-pop-item" :class="{ active: String(selectedKnowledgeBaseId) === String(kb.id), disabled: kb.activeIndexRunId == null }" @click="kb.activeIndexRunId != null && (selectedKnowledgeBaseId = String(kb.id), handleKnowledgeBaseChange(), kbSelectOpen = false)"><span>{{ kb.name }}</span><span class="scope-pop-hint">{{ kb.activeIndexRunId == null ? '未激活索引' : '索引 #' + kb.activeIndexRunId }}</span></div>
               </div>
-            </div>
-          </Transition>
-          <Transition name="pop">
-            <div v-if="modeMenuOpen" class="mode-popover">
-              <div v-for="mode in QA_MODE_OPTIONS" :key="mode.value" class="mode-pop-item" :class="{ active: selectedMode === mode.value }" @click="handleModeSelect(mode.value); modeMenuOpen = false"><span class="mode-pop-label">{{ mode.label }}</span><span class="mode-pop-desc">{{ mode.description }}</span></div>
-              <div class="mode-pop-foot"><label><input v-model="allowHybridSmartBeta" type="checkbox" @change="handleHybridBetaToggle" /> 允许智能推荐使用混合检索 Beta</label></div>
             </div>
           </Transition>
         </div>
@@ -2343,7 +2369,7 @@ function sourceTypeLabel(source) {
 
 /* 展开态：＋ 在左，spacer 推模式和发送到右 */
 .expanded .plus-ring-wrap { order: 0; }
-.expanded .mode-chip { order: 1; margin-left: auto; }
+.expanded .mode-control-wrap { order: 1; margin-left: auto; }
 .expanded .memory-chip { order: 2; }
 .expanded .send-btn { order: 3; }
 
@@ -2473,6 +2499,12 @@ function sourceTypeLabel(source) {
 
 .chip-arrow { color: #94a3b8; font-size: 10px; }
 
+.mode-control-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .mode-chip {
   background: linear-gradient(135deg, #faf5ff, #fff);
   border-color: rgba(147, 51, 234, 0.32);
@@ -2488,8 +2520,8 @@ function sourceTypeLabel(source) {
 /* 模式 popover */
 .mode-popover {
   position: absolute;
-  bottom: calc(100% + 10px);
-  left: 48px;
+  right: calc(100% + 10px);
+  bottom: -4px;
   width: 320px;
   background: #fff;
   border: 1px solid rgba(226, 232, 240, 0.95);
@@ -2515,18 +2547,45 @@ function sourceTypeLabel(source) {
 .mode-pop-label { font-size: 13px; color: #0f172a; font-weight: 700; }
 .mode-pop-desc { font-size: 11.5px; color: #64748b; line-height: 1.5; }
 
-.mode-pop-foot {
-  border-top: 1px solid rgba(226, 232, 240, 0.8);
-  margin-top: 6px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: #64748b;
+.mode-pop-title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+}
 
-  input { accent-color: #9333ea; width: 13px; height: 13px; }
-  label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.smart-beta-title-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid rgba(147, 51, 234, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color $duration-fast $ease-out, background $duration-fast $ease-out, color $duration-fast $ease-out;
+
+  &:hover,
+  &.active {
+    border-color: rgba(147, 51, 234, 0.45);
+    background: rgba(255, 255, 255, 0.95);
+    color: #7e22ce;
+  }
+
+  input {
+    flex: 0 0 auto;
+    width: 11px;
+    height: 11px;
+    margin: 0;
+    accent-color: #9333ea;
+  }
 }
 
 /* 课程/知识库选择 popover */

@@ -36,6 +36,10 @@ _RETRY_AFTER_RE = re.compile(
     re.IGNORECASE,
 )
 _STATUS_429_RE = re.compile(r"(?<!\d)429(?!\d)")
+_TEXT_METADATA_KEY_RE = re.compile(
+    r"\b(document_type|chapter|section|subsection|heading_level|heading_path_text|"
+    r"page_start|page_end|section_level|source_file|course_id):"
+)
 _RATE_LIMIT_RETRY_SUMMARY = "模型服务当前繁忙，系统正在等待重试窗口后继续处理课程内容。"
 _RATE_LIMIT_FAILED_SUMMARY = "模型服务持续繁忙，本次课程问答未能完成。"
 
@@ -1261,11 +1265,21 @@ def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:
     serialized: list[dict[str, Any]] = []
     for index, source in enumerate(sources, start=1):
         raw_metadata = getattr(source, "metadata", {}) or {}
-        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        text = str(getattr(source, "text", "") or "").strip()
+        inline_metadata, body = _split_text_metadata(text)
+        metadata = {
+            **inline_metadata,
+            **(raw_metadata if isinstance(raw_metadata, dict) else {}),
+        }
         ref = str(getattr(source, "ref", "") or metadata.get("ref") or "").strip()
-        text = str(getattr(source, "text", "") or metadata.get("text") or "").strip()
-        source_name = str(getattr(source, "source", "") or metadata.get("source") or "hybrid_v0").strip()
-        source_type = _normalize_hybrid_source_type(source_name)
+        snippet = str(metadata.get("snippet") or metadata.get("text") or body or text).strip()
+        strategy_name = str(getattr(source, "source", "") or metadata.get("source") or "hybrid_v0").strip()
+        source_name = str(
+            metadata.get("source_file")
+            or strategy_name
+            or "hybrid_v0"
+        ).strip()
+        source_type = _normalize_hybrid_source_type(strategy_name)
         rank = metadata.get("rank")
         serialized.append(
             {
@@ -1274,15 +1288,43 @@ def _serialize_hybrid_sources(sources: list[Any]) -> list[dict[str, Any]]:
                 "source_type": source_type,
                 "ref": ref,
                 "chunk_id": ref,
-                "document_key": ref,
+                "document_key": metadata.get("document_key") or source_name or ref,
                 "source_file": source_name,
-                "heading_path": metadata.get("heading_path") if isinstance(metadata, dict) else None,
-                "page_start": metadata.get("page_start") if isinstance(metadata, dict) else None,
-                "page_end": metadata.get("page_end") if isinstance(metadata, dict) else None,
-                "snippet": text,
+                "heading_path": metadata.get("heading_path") or metadata.get("heading_path_text"),
+                "page_start": _parse_metadata_int(metadata.get("page_start")),
+                "page_end": _parse_metadata_int(metadata.get("page_end")),
+                "snippet": snippet,
             }
         )
     return serialized
+
+
+def _split_text_metadata(text: str) -> tuple[dict[str, str], str]:
+    matches = list(_TEXT_METADATA_KEY_RE.finditer(text or ""))
+    if not matches:
+        return {}, str(text or "").strip()
+
+    metadata: dict[str, str] = {}
+    body = ""
+    for index, match in enumerate(matches):
+        key = match.group(1)
+        value_start = match.end()
+        value_end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        raw_value = text[value_start:value_end].strip(" \n\t")
+        if index == len(matches) - 1:
+            value_part, separator, body_tail = raw_value.partition(". ")
+            metadata[key] = value_part.strip(" .\n\t")
+            body = body_tail.strip() if separator else ""
+        else:
+            metadata[key] = raw_value.strip(" .\n\t")
+    return metadata, body or str(text or "").strip()
+
+
+def _parse_metadata_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    match = re.search(r"\d+", str(value))
+    return int(match.group(0)) if match else None
 
 
 def resolve_build_run_data_dir_uri(data_dir_uri: str, build_runs_root: str | Path) -> Path:

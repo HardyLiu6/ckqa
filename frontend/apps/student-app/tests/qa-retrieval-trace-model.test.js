@@ -646,6 +646,102 @@ test('local 关系依据标签使用概念关系语义和真实总数', () => {
   assert.equal(retrievalTraceEvidenceLabel(event, 'Local'), '概念关系 3 / 共 8 条')
 })
 
+test('hybrid 时间线展示低层 BM25 证据和融合上下文阶段', () => {
+  const timeline = buildRetrievalTimeline([
+    {
+      type: 'retrieval_started',
+      mode: 'hybrid_v0',
+      summary: '正在启动混合检索。',
+      metrics: { strategy: 'hybrid_v0' },
+      evidence: [],
+    },
+    {
+      type: 'hybrid_low_evidence_selected',
+      mode: 'hybrid_v0',
+      summary: '低层 BM25 已召回 8 个候选课程片段，准备注入 GraphRAG Basic 做上下文融合。',
+      metrics: { bm25EvidenceCount: 8, textUnitCount: 8 },
+      evidence: Array.from({ length: 5 }, (_, index) => ({
+        kind: 'bm25',
+        title: `BM25 证据 ${index + 1}`,
+        snippet: 'SJF 和 SRTN 的教材片段。',
+      })),
+    },
+    {
+      type: 'context_selected',
+      mode: 'hybrid_v0',
+      summary: 'GraphRAG Basic 已基于混合证据构建融合上下文。',
+      metrics: { textUnitCount: 3, fusionStage: 'basic_context' },
+      evidence: [
+        {
+          kind: 'text_unit',
+          title: '操作系统教材',
+          snippet: 'SRTN 是抢占式短作业优先。',
+        },
+      ],
+    },
+    {
+      type: 'answer_running',
+      mode: 'hybrid_v0',
+      summary: '仍在基于混合证据组织回答。',
+      metrics: { elapsedSeconds: 8 },
+      evidence: [],
+    },
+  ])
+
+  assert.deepEqual(timeline.items.map((item) => item.title), [
+    '检索课程范围',
+    '召回混合证据',
+    '融合课程上下文',
+    '融合回答',
+  ])
+  assert.equal(timeline.totalCount, 4)
+  assert.equal(timeline.items[1].evidenceLabel, 'BM25 片段 3 / 共 8 条')
+  assert.equal(timeline.items[2].summary, 'GraphRAG Basic 已基于混合证据构建融合上下文。')
+})
+
+test('hybrid 时间线优先使用事件真实模式而不是展示标签', () => {
+  const timeline = buildRetrievalTimeline([
+    {
+      type: 'retrieval_started',
+      mode: 'hybrid_v0',
+      summary: '正在检索混合证据。',
+      metrics: { strategy: 'hybrid_v0' },
+    },
+    {
+      type: 'hybrid_low_evidence_selected',
+      mode: 'hybrid_v0',
+      summary: '低层 BM25 已召回 8 个候选课程片段，准备注入 GraphRAG Basic 做上下文融合。',
+      metrics: { bm25EvidenceCount: 8 },
+      evidence: [
+        {
+          kind: 'bm25',
+          title: 'SJF 教材片段',
+          snippet: '短作业优先调度算法。',
+        },
+      ],
+    },
+    {
+      type: 'context_selected',
+      mode: 'hybrid_v0',
+      summary: 'GraphRAG Basic 已基于混合证据构建融合上下文。',
+      metrics: { fusionStage: 'basic_context', textUnitCount: 3 },
+    },
+  ], {
+    mode: 'Hybrid',
+    taskStatus: 'success',
+    hasAnswer: true,
+  })
+
+  assert.deepEqual(timeline.items.map((item) => item.title), [
+    '检索课程范围',
+    '召回混合证据',
+    '融合课程上下文',
+    '融合回答',
+  ])
+  assert.equal(timeline.totalCount, 4)
+  assert.equal(timeline.reachedCount, 4)
+})
+
 test('模型限流事件展示为中文模型服务阶段并折叠重复记录', () => {
   const events = [
     {

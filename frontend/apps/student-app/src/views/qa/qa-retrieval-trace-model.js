@@ -3,6 +3,7 @@ const PROGRESS_TYPE_ORDER = {
   map_started: 20,
   map_running: 30,
   map_finished: 40,
+  hybrid_low_evidence_selected: 45,
   context_selected: 50,
   drift_followup_finished: 55,
   reduce_started: 60,
@@ -85,6 +86,36 @@ const DRIFT_STAGE_DEFINITIONS = {
     pendingSummary: '等待汇总追问结果。',
     completedSummary: '回答已生成。',
     types: new Set(['reduce_started', 'reduce_running', 'reduce_finished', 'answer_running']),
+  },
+}
+
+const HYBRID_STAGE_DEFINITIONS = {
+  retrieval: {
+    ...STAGE_DEFINITIONS.retrieval,
+  },
+  lowEvidence: {
+    key: 'hybrid_low_evidence',
+    title: '召回混合证据',
+    activeText: '正在召回混合证据',
+    pendingSummary: '等待召回本地 BM25 课程片段。',
+    completedSummary: '已召回本地 BM25 课程片段。',
+    types: new Set(['hybrid_low_evidence_selected']),
+  },
+  fusionContext: {
+    key: 'hybrid_fusion_context',
+    title: '融合课程上下文',
+    activeText: '正在融合课程上下文',
+    pendingSummary: '等待 GraphRAG Basic 构建融合上下文。',
+    completedSummary: '已完成课程上下文融合。',
+    types: new Set(['context_selected', 'map_started']),
+  },
+  answer: {
+    key: STAGE_DEFINITIONS.answer.key,
+    title: '融合回答',
+    activeText: '正在融合回答',
+    pendingSummary: '等待把混合证据组织成回答。',
+    completedSummary: '回答已生成。',
+    types: STAGE_DEFINITIONS.answer.types,
   },
 }
 
@@ -344,6 +375,12 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索', vis
       return `可用依据 ${answered} / 追问线索 ${total} 条`
     }
     return count > visibleCount ? `追问结果 ${visibleCount} / 共 ${count} 条` : `追问结果 ${count} 条`
+  }
+  if ([...kinds].some((kind) => kind.includes('bm25'))) {
+    const total = normalizePositiveInteger(event?.metrics?.bm25EvidenceCount)
+      || normalizePositiveInteger(event?.metrics?.textUnitCount)
+    const totalCount = total || count
+    return totalCount > visibleCount ? `BM25 片段 ${visibleCount} / 共 ${totalCount} 条` : `BM25 片段 ${totalCount} 条`
   }
   if (kinds.has('text_unit')) {
     return count > visibleCount ? `课程片段 ${visibleCount} / 共 ${count} 条` : `课程片段 ${count} 条`
@@ -630,7 +667,22 @@ function normalizeTimestamp(value) {
 }
 
 function inferTraceMode(events, fallbackMode = '') {
-  return String(fallbackMode || events.find((event) => event.mode)?.mode || '').toLowerCase()
+  return normalizeTraceMode(events.find((event) => event.mode)?.mode)
+    || normalizeTraceMode(fallbackMode)
+}
+
+function normalizeTraceMode(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!normalized) {
+    return ''
+  }
+  if (normalized === 'hybrid' || normalized === 'hybrid_v0' || normalized.includes('混合')) {
+    return 'hybrid_v0'
+  }
+  if (['basic', 'local', 'global', 'drift'].includes(normalized)) {
+    return normalized
+  }
+  return normalized
 }
 
 function resolveStageDefinitions(mode, events) {
@@ -639,6 +691,14 @@ function resolveStageDefinitions(mode, events) {
       DRIFT_STAGE_DEFINITIONS.primer,
       DRIFT_STAGE_DEFINITIONS.followup,
       DRIFT_STAGE_DEFINITIONS.answer,
+    ], events)
+  }
+  if (mode === 'hybrid_v0') {
+    return withOptionalModelStage([
+      HYBRID_STAGE_DEFINITIONS.retrieval,
+      HYBRID_STAGE_DEFINITIONS.lowEvidence,
+      HYBRID_STAGE_DEFINITIONS.fusionContext,
+      HYBRID_STAGE_DEFINITIONS.answer,
     ], events)
   }
   const hasMapStage = mode === 'global'

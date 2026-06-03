@@ -12,6 +12,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  mode: {
+    type: String,
+    default: '',
+  },
   modeLabel: {
     type: String,
     default: '',
@@ -70,7 +74,7 @@ const timelineOptions = computed(() => ({
   taskFinishedAt: props.finishedAt,
   hasAnswer: props.hasAnswer,
   sourceCount: props.sourceCount,
-  mode: props.modeLabel,
+  mode: props.mode || props.modeLabel,
   taskStatus: props.taskStatus,
 }))
 

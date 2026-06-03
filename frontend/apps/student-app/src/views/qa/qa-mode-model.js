@@ -1,5 +1,6 @@
 export const SMART_QA_MODE = 'smart'
 export const BACKEND_QA_MODES = ['basic', 'local', 'global', 'drift', 'hybrid_v0']
+export const HYBRID_BETA_PREFERENCE_KEY = 'ckqa.qa.allowHybridSmartBeta'
 
 export const QA_MODE_OPTIONS = [
   {
@@ -203,4 +204,27 @@ export function shouldUseHybridBeta(question, options = {}) {
 
 export function getModeOption(mode) {
   return QA_MODE_OPTIONS.find((option) => option.value === mode) ?? QA_MODE_OPTIONS[0]
+}
+
+export function loadHybridBetaPreference(storage = undefined) {
+  try {
+    const preferenceStorage = storage ?? defaultPreferenceStorage()
+    return preferenceStorage?.getItem(HYBRID_BETA_PREFERENCE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+export function saveHybridBetaPreference(value, storage = undefined) {
+  try {
+    const preferenceStorage = storage ?? defaultPreferenceStorage()
+    preferenceStorage?.setItem(HYBRID_BETA_PREFERENCE_KEY, value ? 'true' : 'false')
+    return Boolean(preferenceStorage)
+  } catch {
+    return false
+  }
+}
+
+function defaultPreferenceStorage() {
+  return globalThis?.localStorage
 }

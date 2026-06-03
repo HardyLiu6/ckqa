@@ -82,6 +82,20 @@ test('真实问答页会展示可折叠的检索过程日志', () => {
   assert.doesNotMatch(qaPageSource, /streamed chunk count=/)
 })
 
+test('模式选项卡片位于模式按钮左侧且 Beta 开关在智能推荐标题行', () => {
+  assert.match(qaPageSource, /loadHybridBetaPreference/)
+  assert.match(qaPageSource, /saveHybridBetaPreference/)
+  assert.match(qaPageSource, /class="mode-control-wrap"[\s\S]*class="chip mode-chip"[\s\S]*class="mode-popover"/)
+  assert.match(qaPageSource, /class="mode-pop-title-row"/)
+  assert.match(qaPageSource, /class="smart-beta-title-toggle"/)
+  assert.match(qaPageSource, /v-if="mode\.value === SMART_QA_MODE"/)
+  assert.match(qaPageSource, /@click\.stop/)
+  assert.match(qaPageSource, /:mode="msg\.mode"/)
+  assert.match(qaPageSource, /:mode="pendingTask\.mode"/)
+  assert.doesNotMatch(qaPageSource, /class="smart-beta-inline-toggle"/)
+  assert.doesNotMatch(qaPageSource, /mode-pop-foot/)
+})
+
 test('检索过程组件使用阶段归并模型而不是直接按数组最后一项展示', () => {
   const traceSource = readFileSync(resolve(__dirname, '../src/views/qa/QaRetrievalTrace.vue'), 'utf8')
   assert.match(traceSource, /buildRetrievalTimeline/)

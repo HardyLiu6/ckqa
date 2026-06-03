@@ -81,6 +81,53 @@ def test_keeps_answer_when_text_units_missing(tmp_path):
     assert resolved.sources == []
 
 
+def test_resolves_hybrid_refs_to_text_units_by_id_prefix(tmp_path):
+    output_dir = tmp_path / "index-output"
+    output_dir.mkdir()
+    pd.DataFrame(
+        [
+            {
+                "id": "d244f9016ac8abcdef",
+                "human_readable_id": 116,
+                "text": (
+                    "document_type: textbook. chapter: 第三章 处理机调度与死锁. "
+                    "section: 3.2 作业与作业调度. subsection: 3.2.3 先来先服务和短作业优先. "
+                    "heading_path_text: 第三章 处理机调度与死锁 > 3.2 作业与作业调度 > 3.2.3 先来先服务和短作业优先. "
+                    "page_start: 88. page_end: 89. source_file: 操作系统教材. "
+                    "SJF 调度选择估计运行时间最短的作业。"
+                ),
+                "document_id": "doc-os",
+            },
+            {
+                "id": "81d99ad61e36ffff",
+                "human_readable_id": 117,
+                "text": (
+                    "document_type: textbook. chapter: 第三章 处理机调度与死锁. "
+                    "section: 3.2 作业与作业调度. subsection: 3.2.4 抢占式短作业优先. "
+                    "heading_path_text: 第三章 处理机调度与死锁 > 3.2 作业与作业调度 > 3.2.4 抢占式短作业优先. "
+                    "page_start: 90. page_end: 91. source_file: 操作系统教材. "
+                    "SRTN 会在新短作业到达时抢占剩余时间更长的作业。"
+                ),
+                "document_id": "doc-os",
+            },
+        ]
+    ).to_parquet(output_dir / "text_units.parquet")
+
+    resolved = resolve_answer_citations(
+        "SJF 与 SRTN 的关键差异是是否抢占 [Data: Hybrid(d244f9016ac8, 81d99ad61e36)]。",
+        output_dir,
+        mode="hybrid_v0",
+    )
+
+    assert "SJF 与 SRTN 的关键差异是是否抢占 [来源 1、2]。" in resolved.display_text
+    assert "[已参考课程知识库]" not in resolved.display_text
+    assert [source.kind for source in resolved.sources] == ["hybrid_text_unit", "hybrid_text_unit"]
+    assert resolved.sources[0].source_file == "操作系统教材"
+    assert resolved.sources[0].heading_path.endswith("3.2.3 先来先服务和短作业优先")
+    assert resolved.sources[1].page_start == 90
+    assert resolved.sources[0].to_dict()["source_type"] == "hybrid_text_unit"
+
+
 def test_resolves_global_report_and_adds_fallback_text_units(tmp_path):
     output_dir = tmp_path / "index-output"
     output_dir.mkdir()
