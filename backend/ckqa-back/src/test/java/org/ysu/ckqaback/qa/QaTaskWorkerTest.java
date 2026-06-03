@@ -7,6 +7,7 @@ import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
+import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagSourceSnapshot;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
 import org.ysu.ckqaback.qa.memory.QaLearningMemoryCaptureService;
@@ -128,6 +129,89 @@ class QaTaskWorkerTest {
         then(taskClient).should().createTask("basic", "问题", 18L, "user_2/kb_5/build_27/index/output", null);
         then(taskClient).should(never()).createTask("basic", "问题", null, null, null);
         then(retrievalLogsService).should().markSuccess(9001L, 102L, "done", "success");
+    }
+
+    @Test
+    void shouldNormalizeBusinessMemoryStrategyBeforeSubmittingLocalHistoryTask() {
+        GraphRagTaskClient taskClient = mock(GraphRagTaskClient.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaSessionsService sessionsService = mock(QaSessionsService.class);
+        TaskExecutor taskExecutor = Runnable::run;
+
+        QaTaskWorker worker = new QaTaskWorker(
+                taskExecutor,
+                taskClient,
+                retrievalLogsService,
+                messagesService,
+                sessionsService,
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(30),
+                Clock.fixed(Instant.parse("2026-05-20T12:00:40Z"), SHANGHAI_ZONE)
+        );
+
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9002L);
+        task.setSessionId(5L);
+        task.setQueryMode("local");
+        task.setQueryText("关于上一轮主题「时间片轮转」：它为什么影响响应时间？");
+        task.setQueryEngineStrategy("local_history_preference_only");
+        task.setMemoryHistoryJson("""
+                [
+                  {"role": "user", "content": "什么是时间片轮转？"},
+                  {"role": "assistant", "content": "时间片轮转是一种抢占式调度算法。"}
+                ]
+                """);
+
+        given(retrievalLogsService.getRequiredTask(5L, 9002L)).willReturn(task);
+        given(taskClient.createTask(
+                "local",
+                "关于上一轮主题「时间片轮转」：它为什么影响响应时间？",
+                null,
+                null,
+                null,
+                "local_history",
+                List.of(
+                        new GraphRagConversationMessage("user", "什么是时间片轮转？"),
+                        new GraphRagConversationMessage("assistant", "时间片轮转是一种抢占式调度算法。")
+                ),
+                false
+        )).willReturn(new GraphRagTaskCreateResult("qt_20260520_002", "pending", "queued", LocalDateTime.now()));
+        given(taskClient.getTask("qt_20260520_002"))
+                .willReturn(Optional.of(new GraphRagTaskSnapshot(
+                        "qt_20260520_002",
+                        "success",
+                        "done",
+                        false,
+                        LocalDateTime.now(),
+                        List.of("done"),
+                        "时间片越短，响应越快但切换开销更高。",
+                        null,
+                        0,
+                        LocalDateTime.now(),
+                        LocalDateTime.now()
+                )));
+
+        QaMessages assistant = new QaMessages();
+        assistant.setId(202L);
+        given(messagesService.appendAssistantMessage(5L, "时间片越短，响应越快但切换开销更高。")).willReturn(assistant);
+
+        worker.processTask(5L, 9002L);
+
+        then(taskClient).should().createTask(
+                "local",
+                "关于上一轮主题「时间片轮转」：它为什么影响响应时间？",
+                null,
+                null,
+                null,
+                "local_history",
+                List.of(
+                        new GraphRagConversationMessage("user", "什么是时间片轮转？"),
+                        new GraphRagConversationMessage("assistant", "时间片轮转是一种抢占式调度算法。")
+                ),
+                false
+        );
+        then(retrievalLogsService).should().markSuccess(9002L, 202L, "done", "success");
     }
 
     @Test

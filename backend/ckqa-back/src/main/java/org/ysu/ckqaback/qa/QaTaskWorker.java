@@ -19,6 +19,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskCreateResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskSnapshot;
+import org.ysu.ckqaback.qa.context.QaContextPolicy;
 import org.ysu.ckqaback.qa.memory.QaLearningMemoryCaptureService;
 import org.ysu.ckqaback.qa.summary.QaSessionSummaryService;
 import org.ysu.ckqaback.service.IndexArtifactsService;
@@ -336,7 +337,12 @@ public class QaTaskWorker {
     private GraphRagTaskCreateResult createGraphRagTask(QaRetrievalLogs task) {
         String dataDirUri = resolveReadyOutputDirUri(task);
         List<GraphRagConversationMessage> conversationHistory = parseMemoryHistory(task.getMemoryHistoryJson());
-        boolean useHistoryStrategy = StringUtils.hasText(task.getQueryEngineStrategy()) || !conversationHistory.isEmpty();
+        String queryEngineStrategy = QaContextPolicy.resolveQueryEngineStrategy(
+                task.getQueryMode(),
+                task.getQueryEngineStrategy(),
+                !conversationHistory.isEmpty()
+        );
+        boolean useHistoryStrategy = StringUtils.hasText(queryEngineStrategy);
         boolean streamResponse = Boolean.TRUE.equals(pythonStreamModeResolver.apply(task.getQueryMode()));
         if (!StringUtils.hasText(dataDirUri)) {
             if (!useHistoryStrategy && !streamResponse) {
@@ -354,7 +360,7 @@ public class QaTaskWorker {
                     null,
                     null,
                     task.getContextSnapshotText(),
-                    useHistoryStrategy ? task.getQueryEngineStrategy() : null,
+                    useHistoryStrategy ? queryEngineStrategy : null,
                     useHistoryStrategy ? conversationHistory : null,
                     streamResponse
             );
@@ -386,7 +392,7 @@ public class QaTaskWorker {
                 task.getIndexRunId(),
                 dataDirUri,
                 task.getContextSnapshotText(),
-                task.getQueryEngineStrategy(),
+                queryEngineStrategy,
                 conversationHistory,
                 streamResponse
         );

@@ -14,10 +14,6 @@ import java.util.regex.Pattern;
  */
 public class QaContextAssembler {
 
-    private static final int MAX_RECENT_MESSAGES = 6;
-    private static final int MAX_RECENT_CHARS = 1800;
-    private static final int MAX_SUMMARY_CHARS = 800;
-    private static final int MAX_SNAPSHOT_CHARS = 3500;
     private static final Pattern WHAT_IS_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下)(.+?)[？?。.!！]*$");
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history) {
@@ -26,7 +22,7 @@ public class QaContextAssembler {
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history, QaContextSummary summary) {
         QaContextSummary safeSummary = summary == null ? null : summary;
-        if (!supportsRecentContext(mode)) {
+        if (!QaContextPolicy.supportsRecentContext(mode)) {
             return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary) : none();
         }
 
@@ -43,12 +39,12 @@ public class QaContextAssembler {
         if (!recentAssembly.contextApplied()) {
             return summaryOnly(safeSummary);
         }
-        String summaryText = truncate(trimToEmpty(safeSummary.text()), MAX_SUMMARY_CHARS);
+        String summaryText = truncate(trimToEmpty(safeSummary.text()), QaContextPolicy.MAX_SUMMARY_CHARS);
         String snapshot = "会话摘要：\n" + summaryText + "\n\n最近对话：\n" + recentAssembly.snapshotText();
-        if (snapshot.length() > MAX_SNAPSHOT_CHARS) {
-            snapshot = snapshot.substring(0, MAX_SNAPSHOT_CHARS);
+        if (snapshot.length() > QaContextPolicy.MAX_SNAPSHOT_CHARS) {
+            snapshot = snapshot.substring(0, QaContextPolicy.MAX_SNAPSHOT_CHARS);
         }
-        int charCount = Math.min(summaryText.length() + recentAssembly.charCount(), MAX_SNAPSHOT_CHARS);
+        int charCount = Math.min(summaryText.length() + recentAssembly.charCount(), QaContextPolicy.MAX_SNAPSHOT_CHARS);
         return new QaContextAssembly(
                 "summary_recent",
                 snapshot,
@@ -67,10 +63,6 @@ public class QaContextAssembler {
         return buildRecentAssembly(selectRecentMessages(usableHistory), usableHistory, "recent");
     }
 
-    private boolean supportsRecentContext(String mode) {
-        return "basic".equals(mode) || "local".equals(mode) || "hybrid_v0".equals(mode);
-    }
-
     private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, List<QaMessages> topicHistory, String strategy) {
         if (recent.isEmpty()) {
             return none();
@@ -84,16 +76,16 @@ public class QaContextAssembler {
                 continue;
             }
             int nextChars = contentChars + content.length();
-            if (nextChars > MAX_RECENT_CHARS && snapshot.length() > 0) {
+            if (nextChars > QaContextPolicy.MAX_RECENT_CHARS && snapshot.length() > 0) {
                 break;
             }
             if (snapshot.length() > 0) {
                 snapshot.append('\n');
             }
             snapshot.append(roleLabel(message.getRole())).append('：').append(content);
-            contentChars = Math.min(nextChars, MAX_RECENT_CHARS);
-            if (snapshot.length() > MAX_SNAPSHOT_CHARS) {
-                snapshot.setLength(MAX_SNAPSHOT_CHARS);
+            contentChars = Math.min(nextChars, QaContextPolicy.MAX_RECENT_CHARS);
+            if (snapshot.length() > QaContextPolicy.MAX_SNAPSHOT_CHARS) {
+                snapshot.setLength(QaContextPolicy.MAX_SNAPSHOT_CHARS);
                 break;
             }
         }
@@ -107,14 +99,14 @@ public class QaContextAssembler {
                 strategy,
                 snapshot.toString(),
                 rangeOf(recent),
-                Math.min(contentChars, MAX_RECENT_CHARS),
+                Math.min(contentChars, QaContextPolicy.MAX_RECENT_CHARS),
                 topic.text(),
                 topic.range()
         );
     }
 
     private QaContextAssembly summaryOnly(QaContextSummary summary) {
-        String summaryText = truncate(trimToEmpty(summary.text()), MAX_SUMMARY_CHARS);
+        String summaryText = truncate(trimToEmpty(summary.text()), QaContextPolicy.MAX_SUMMARY_CHARS);
         if (summaryText.isEmpty()) {
             return none();
         }
@@ -144,7 +136,7 @@ public class QaContextAssembler {
     }
 
     private List<QaMessages> selectRecentMessages(List<QaMessages> history) {
-        int fromIndex = Math.max(0, history.size() - MAX_RECENT_MESSAGES);
+        int fromIndex = Math.max(0, history.size() - QaContextPolicy.MAX_RECENT_MESSAGES);
         return new ArrayList<>(history.subList(fromIndex, history.size()));
     }
 
@@ -166,6 +158,9 @@ public class QaContextAssembler {
     private String extractTopic(String content) {
         String text = trimToEmpty(content);
         if (text.isEmpty()) {
+            return "";
+        }
+        if (QaContextPolicy.isPronounFollowUp(text)) {
             return "";
         }
         Matcher matcher = WHAT_IS_PATTERN.matcher(text);

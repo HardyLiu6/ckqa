@@ -8,6 +8,7 @@ import org.ysu.ckqaback.entity.QaMemoryPreferences;
 import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
+import org.ysu.ckqaback.qa.context.QaContextPolicy;
 import org.ysu.ckqaback.service.QaLearningMemoriesService;
 import org.ysu.ckqaback.service.QaMemoryPreferencesService;
 
@@ -21,10 +22,6 @@ import java.util.List;
 @Service
 public class QaMemoryContextService {
 
-    private static final int MAX_RECENT_MESSAGES = 6;
-    private static final int MAX_MEMORY_ITEMS = 3;
-    private static final int MAX_MEMORY_CHARS = 1000;
-    private static final int MAX_HISTORY_CHARS = 3000;
     private static final String MEMORY_PREFIX = "学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：";
 
     private final QaMemoryPreferencesService preferencesService;
@@ -59,7 +56,7 @@ public class QaMemoryContextService {
             String latestTopic
     ) {
         String policy = normalizePolicy(memoryPolicy);
-        if (!"local".equals(mode)) {
+        if (!QaContextPolicy.supportsMemoryContext(mode)) {
             return QaMemoryContextResult.notApplied("mode_not_local");
         }
         if ("off".equals(policy)) {
@@ -88,7 +85,7 @@ public class QaMemoryContextService {
                 session.getCourseId(),
                 session.getKnowledgeBaseId(),
                 session.getIndexRunId(),
-                MAX_MEMORY_ITEMS
+                QaContextPolicy.MAX_MEMORY_ITEMS
         )) {
             if (!"active".equals(memory.getStatus()) || !StringUtils.hasText(memory.getMemoryText())) {
                 continue;
@@ -98,7 +95,7 @@ public class QaMemoryContextService {
             }
             String content = MEMORY_PREFIX + memory.getMemoryText().trim();
             int contentChars = content.length();
-            if (memoryChars + contentChars > MAX_MEMORY_CHARS) {
+            if (memoryChars + contentChars > QaContextPolicy.MAX_MEMORY_CHARS) {
                 continue;
             }
             longMemory.add(new GraphRagConversationMessage("assistant", content));
@@ -157,13 +154,13 @@ public class QaMemoryContextService {
                         Comparator.nullsLast(Integer::compareTo)
                 ))
                 .toList();
-        int fromIndex = Math.max(0, ordered.size() - MAX_RECENT_MESSAGES);
+        int fromIndex = Math.max(0, ordered.size() - QaContextPolicy.MAX_RECENT_MESSAGES);
         return ordered.subList(fromIndex, ordered.size());
     }
 
     private List<GraphRagConversationMessage> trimToBudget(List<GraphRagConversationMessage> history) {
         List<GraphRagConversationMessage> trimmed = new ArrayList<>(history);
-        while (charCount(trimmed) > MAX_HISTORY_CHARS && !trimmed.isEmpty()) {
+        while (charCount(trimmed) > QaContextPolicy.MAX_MEMORY_HISTORY_CHARS && !trimmed.isEmpty()) {
             trimmed.remove(0);
         }
         return trimmed;

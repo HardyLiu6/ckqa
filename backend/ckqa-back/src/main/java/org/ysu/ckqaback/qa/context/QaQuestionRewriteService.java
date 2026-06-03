@@ -3,15 +3,11 @@ package org.ysu.ckqaback.qa.context;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 
-import java.util.regex.Pattern;
-
 /**
  * 追问改写服务：优先使用 LLM 生成独立检索问题，失败时回退规则式明显指代补全。
  */
 public class QaQuestionRewriteService {
 
-    private static final int MAX_RETRIEVAL_QUERY_CHARS = 800;
-    private static final Pattern PRONOUN_PATTERN = Pattern.compile(".*(它|这个|这一个|该概念|上面那个|前者|后者|这种|上述).*");
     private QaQuestionRewriteClientPort llmClient;
     private CkqaIntegrationProperties.RewriteProperties rewriteProperties = new CkqaIntegrationProperties.RewriteProperties();
 
@@ -46,12 +42,12 @@ public class QaQuestionRewriteService {
         if (question.contains(context.latestTopic())) {
             return noRewrite(question, "当前问题已经包含上一轮主题");
         }
-        if (!PRONOUN_PATTERN.matcher(question).matches()) {
+        if (!QaContextPolicy.isPronounFollowUp(question)) {
             return noRewrite(question, "未命中明显指代词");
         }
 
         String rewritten = "关于上一轮主题「" + context.latestTopic() + "」：" + question;
-        if (rewritten.length() > MAX_RETRIEVAL_QUERY_CHARS) {
+        if (rewritten.length() > QaContextPolicy.MAX_RETRIEVAL_QUERY_CHARS) {
             return noRewrite(question, "改写后超过检索问题长度限制");
         }
         return new QaQuestionRewriteResult(
@@ -83,7 +79,7 @@ public class QaQuestionRewriteService {
         if (question.contains(context.latestTopic())) {
             return false;
         }
-        return PRONOUN_PATTERN.matcher(question).matches() || question.length() <= 40;
+        return QaContextPolicy.isPronounFollowUp(question) || question.length() <= 40;
     }
 
     private QaQuestionRewriteResult tryLlmRewrite(String question, QaContextAssembly context) {
@@ -111,11 +107,11 @@ public class QaQuestionRewriteService {
 
     private int maxChars() {
         int configured = rewriteProperties == null ? 0 : rewriteProperties.getMaxChars();
-        return configured > 0 ? configured : MAX_RETRIEVAL_QUERY_CHARS;
+        return configured > 0 ? configured : QaContextPolicy.MAX_RETRIEVAL_QUERY_CHARS;
     }
 
     private boolean supportsRewrite(String mode) {
-        return "basic".equals(mode) || "local".equals(mode) || "hybrid_v0".equals(mode);
+        return QaContextPolicy.supportsRewrite(mode);
     }
 
     private double minConfidence() {

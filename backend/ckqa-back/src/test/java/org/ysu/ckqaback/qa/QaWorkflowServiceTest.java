@@ -581,7 +581,8 @@ class QaWorkflowServiceTest {
                 eq("local"),
                 eq("关于上一轮主题「时间片轮转」：它为什么影响响应时间？"),
                 argThat(context -> context.memoryApplied()
-                        && "local_history_preference_only".equals(context.queryEngineStrategy())
+                        && "local_history_preference_only".equals(context.memoryStrategy())
+                        && "local_history".equals(context.queryEngineStrategy())
                         && context.memoryHistoryJson().contains("学习记忆")
                         && context.memorySourceCount() == 2)
         )).willReturn(task);

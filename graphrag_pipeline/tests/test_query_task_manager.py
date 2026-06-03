@@ -457,6 +457,22 @@ class TestQueryTaskManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.history_fallback_reason, "missing artifacts")
         self.assertTrue(any("fallback local_history to cli: missing artifacts" in line for line in snapshot.latest_logs))
 
+    async def test_rejects_business_memory_strategy_as_query_engine_strategy(self):
+        manager = QueryTaskManager(
+            heartbeat_interval_seconds=0.05,
+            command_factory=lambda request: _python_cmd("print('should not run')"),
+            env_factory=lambda request: os.environ.copy(),
+            cwd=_PROJECT_ROOT,
+        )
+
+        with self.assertRaisesRegex(ValueError, "非法 query_engine_strategy"):
+            await manager.create_task(
+                "local",
+                "问题",
+                query_engine_strategy="local_history_preference_only",
+                conversation_history=[{"role": "user", "content": "上一轮"}],
+            )
+
     async def test_non_local_mode_with_local_history_strategy_still_uses_cli(self):
         command_calls: list[QueryTaskRequest] = []
         adapter_calls = 0

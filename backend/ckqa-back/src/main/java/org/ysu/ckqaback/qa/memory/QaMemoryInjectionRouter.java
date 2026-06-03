@@ -3,6 +3,7 @@ package org.ysu.ckqaback.qa.memory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.entity.QaLearningMemories;
+import org.ysu.ckqaback.qa.context.QaContextPolicy;
 
 import java.util.regex.Pattern;
 
@@ -12,12 +13,11 @@ import java.util.regex.Pattern;
 @Component
 public class QaMemoryInjectionRouter {
 
-    private static final Pattern PRONOUN_PATTERN = Pattern.compile(".*(它|这个|这一个|该概念|上面那个|前者|后者|这种|上述).*");
     private static final Pattern DEFINITION_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下).+");
 
     public QaMemoryInjectionDecision decide(String question, String latestTopic) {
         String safeQuestion = normalize(question);
-        if (hasText(latestTopic) && PRONOUN_PATTERN.matcher(safeQuestion).matches()) {
+        if (hasText(latestTopic) && QaContextPolicy.isPronounFollowUp(safeQuestion)) {
             return new QaMemoryInjectionDecision(
                     "preference_only",
                     "pronoun_followup_uses_current_session_topic",

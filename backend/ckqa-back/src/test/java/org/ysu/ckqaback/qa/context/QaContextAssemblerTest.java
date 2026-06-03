@@ -84,6 +84,24 @@ class QaContextAssemblerTest {
     }
 
     @Test
+    void shouldKeepLatestNonPronounTopicAcrossRepeatedPronounTurns() {
+        QaContextAssembler assembler = new QaContextAssembler();
+
+        QaContextAssembly assembly = assembler.assemble("local", "它如何预防？", List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "它有什么特点？"),
+                message(4L, "assistant", 4, "死锁通常具有互斥、请求保持、不可剥夺和循环等待。"),
+                message(5L, "user", 5, "它怎么检测？"),
+                message(6L, "assistant", 6, "可以通过资源分配图或等待图检测。")
+        ));
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.latestTopic()).isEqualTo("死锁");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("1-2");
+    }
+
+    @Test
     void shouldUseSummaryRecentWhenActiveSummaryExistsForBasicFollowUp() {
         QaContextAssembler assembler = new QaContextAssembler();
 

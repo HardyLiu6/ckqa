@@ -29,6 +29,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
+import org.ysu.ckqaback.qa.context.QaContextPolicy;
 import org.ysu.ckqaback.qa.context.QaContextSummary;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteClientPort;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
@@ -361,6 +362,11 @@ public class QaWorkflowService {
                         request.getContent(),
                         context.latestTopic()
                 );
+        String queryEngineStrategy = QaContextPolicy.resolveQueryEngineStrategy(
+                request.getMode(),
+                null,
+                memoryContext.memoryApplied() && !memoryContext.conversationHistory().isEmpty()
+        );
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),
@@ -385,7 +391,7 @@ public class QaWorkflowService {
                 memoryContext.scope(),
                 memoryContext.sourceCount(),
                 memoryContext.sizeEstimate(),
-                memoryContext.memoryApplied() ? memoryContext.strategy() : null,
+                queryEngineStrategy,
                 memoryContext.historyFallbackReason(),
                 serializeMemoryHistory(memoryContext)
         );
