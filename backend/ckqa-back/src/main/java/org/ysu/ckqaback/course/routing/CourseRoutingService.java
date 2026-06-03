@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.course.routing;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,7 +39,7 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
-public class CourseRoutingService {
+public class CourseRoutingService implements CourseScopeRelevanceProvider {
 
     private final CoursesService coursesService;
     private final CourseRouteProfilesService profilesService;
@@ -99,6 +100,34 @@ public class CourseRoutingService {
                 properties.getMarginThreshold()
         ).decide(candidates);
         return logAndReturn(request, currentUser, candidates, decision);
+    }
+
+    @Override
+    public ScopeRelevance evaluateScopeRelevance(String courseId, String question) {
+        if (!properties.isEnabled() || !StringUtils.hasText(courseId) || !StringUtils.hasText(question)) {
+            return ScopeRelevance.notEvaluated();
+        }
+        try {
+            Courses course = coursesService.getOne(
+                    new LambdaQueryWrapper<Courses>().eq(Courses::getCourseId, courseId));
+            if (course == null || !isRoutableCourse(course)) {
+                return ScopeRelevance.notEvaluated();
+            }
+            ensureProfiles(List.of(course));
+            var response = graphRagClient.recommend(
+                    new GraphRagCourseRoutingRecommendRequest(question, List.of(courseId), 1));
+            var candidates = response == null ? null : response.candidates();
+            if (candidates == null || candidates.isEmpty()) {
+                return ScopeRelevance.notEvaluated();
+            }
+            Double confidence = candidates.getFirst().confidence();
+            if (confidence == null) {
+                return ScopeRelevance.notEvaluated();
+            }
+            return ScopeRelevance.evaluated(confidence);
+        } catch (RuntimeException ex) {
+            return ScopeRelevance.notEvaluated();
+        }
     }
 
     private void ensureProfiles(List<Courses> courses) {

@@ -1,0 +1,20 @@
+{"id":"os_inscope_process_001","courseId":"crs-20260506-r4slkr","question":"什么是进程，和程序有什么区别？","label":"in_scope"}
+{"id":"os_inscope_thread_001","courseId":"crs-20260506-r4slkr","question":"进程和线程有什么区别和联系？","label":"in_scope"}
+{"id":"os_inscope_scheduling_001","courseId":"crs-20260506-r4slkr","question":"CPU 调度算法如何影响响应时间和吞吐量？","label":"in_scope"}
+{"id":"os_inscope_context_switch_001","courseId":"crs-20260506-r4slkr","question":"什么是上下文切换，为什么会有开销？","label":"in_scope"}
+{"id":"os_inscope_virtual_memory_001","courseId":"crs-20260506-r4slkr","question":"虚拟内存主要解决了什么问题？","label":"in_scope"}
+{"id":"os_inscope_paging_001","courseId":"crs-20260506-r4slkr","question":"分页机制和页面置换算法有什么关系？","label":"in_scope"}
+{"id":"os_inscope_deadlock_001","courseId":"crs-20260506-r4slkr","question":"死锁产生需要满足哪些必要条件？","label":"in_scope"}
+{"id":"os_inscope_sync_001","courseId":"crs-20260506-r4slkr","question":"信号量和互斥锁分别适合什么场景？","label":"in_scope"}
+{"id":"os_inscope_banker_001","courseId":"crs-20260506-r4slkr","question":"请解释银行家算法的安全性检查。","label":"in_scope"}
+{"id":"os_inscope_filesystem_001","courseId":"crs-20260506-r4slkr","question":"文件系统如何组织目录和文件元数据？","label":"in_scope"}
+{"id":"os_inscope_io_001","courseId":"crs-20260506-r4slkr","question":"I/O 中断和轮询有什么区别？","label":"in_scope"}
+{"id":"os_inscope_fork_001","courseId":"crs-20260506-r4slkr","question":"fork 创建子进程后父进程和子进程的地址空间有什么关系？","label":"in_scope"}
+{"id":"shared_offtopic_food_001","courseId":"*","question":"今天晚上吃什么？","label":"out_of_scope"}
+{"id":"shared_offtopic_canteen_001","courseId":"*","question":"今天晚上食堂有什么菜？","label":"out_of_scope"}
+{"id":"shared_offtopic_poem_001","courseId":"*","question":"帮我写一首关于春天的短诗。","label":"out_of_scope"}
+{"id":"shared_offtopic_avatar_001","courseId":"*","question":"我的头像应该怎么换？","label":"out_of_scope"}
+{"id":"shared_offtopic_exam_date_001","courseId":"*","question":"这门课什么时候期末考试？","label":"out_of_scope"}
+{"id":"shared_offtopic_dorm_001","courseId":"*","question":"宿舍报修电话是多少？","label":"out_of_scope"}
+{"id":"shared_offtopic_weather_001","courseId":"*","question":"明天天气怎么样？","label":"out_of_scope"}
+{"id":"shared_offtopic_movie_001","courseId":"*","question":"推荐几部最近好看的电影。","label":"out_of_scope"}

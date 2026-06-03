@@ -103,8 +103,8 @@ class QaRoutingControllerWebMvcTest {
     @Test
     void shouldCheckQuestionDomainForAuthenticatedStudent() throws Exception {
         given(qaQuestionDomainGuardService.check(any(), eq(student()))).willReturn(QaQuestionDomainCheckResponse.outOfScope(
-                "campus_life",
-                "这个问题看起来不属于课程知识问答范围。"
+                "low_course_relevance",
+                "这个问题好像不在当前课程的资料范围内，换成课程里的概念、章节或知识点再试试吧。"
         ));
 
         mockMvc.perform(post(ApiPaths.QA_ROUTING + "/domain-check")
@@ -121,8 +121,8 @@ class QaRoutingControllerWebMvcTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("out_of_scope"))
-                .andExpect(jsonPath("$.data.reasonCode").value("campus_life"))
-                .andExpect(jsonPath("$.data.strategy").value("rule_domain_guard_v1"));
+                .andExpect(jsonPath("$.data.reasonCode").value("low_course_relevance"))
+                .andExpect(jsonPath("$.data.strategy").value("semantic_relevance_v1"));
 
         then(qaQuestionDomainGuardService).should().check(any(), eq(student()));
     }
