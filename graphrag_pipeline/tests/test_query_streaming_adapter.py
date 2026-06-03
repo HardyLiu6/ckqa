@@ -263,7 +263,7 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reduce_started["metrics"]["answeredNodeCount"], 1)
         self.assertEqual(reduce_started["metrics"]["pendingNodeCount"], 2)
         self.assertIn("已生成 3 条追问线索", reduce_started["summary"])
-        self.assertIn("完成 1 条可用依据", reduce_started["summary"])
+        self.assertIn("1 条已有追问回答", reduce_started["summary"])
         self.assertEqual(len(reduce_started["evidence"]), 1)
         self.assertEqual(reduce_started["evidence"][0]["title"], "抢占式调度和非抢占式调度各有什么优缺点？")
 

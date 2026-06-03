@@ -372,7 +372,7 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索', vis
     const total = normalizePositiveInteger(event?.metrics?.driftNodeCount)
     const answered = normalizePositiveInteger(event?.metrics?.answeredNodeCount) || count
     if (total) {
-      return `可用依据 ${answered} / 追问线索 ${total} 条`
+      return `已回答追问 ${answered} / 追问线索 ${total} 条`
     }
     return count > visibleCount ? `追问结果 ${visibleCount} / 共 ${count} 条` : `追问结果 ${count} 条`
   }
@@ -815,7 +815,7 @@ function driftFollowupCompletedSummary(event, evidenceCount = 0) {
   const total = normalizePositiveInteger(event?.metrics?.driftNodeCount)
   const answered = normalizePositiveInteger(event?.metrics?.answeredNodeCount) || normalizePositiveInteger(evidenceCount)
   if (total && answered) {
-    return `已生成 ${total} 条追问线索，其中 ${answered} 条形成可用依据。`
+    return `已生成 ${total} 条追问线索，其中 ${answered} 条已有追问回答，可供汇总。`
   }
   if (total) {
     return `已生成 ${total} 条追问线索，正在汇总已有课程依据。`

@@ -845,7 +845,7 @@ def _drift_reduce_started_summary(metrics: dict[str, Any]) -> str:
     total = int(metrics.get("driftNodeCount") or 0)
     answered = int(metrics.get("answeredNodeCount") or 0)
     if total and answered:
-        return f"已生成 {total} 条追问线索，完成 {answered} 条可用依据，正在汇总回答。"
+        return f"已生成 {total} 条追问线索，其中 {answered} 条已有追问回答，正在汇总回答。"
     if total:
         return f"已生成 {total} 条追问线索，暂未形成可展示的追问答案，正在汇总已有课程依据。"
     return "已完成追问扩展，正在汇总课程依据。"
