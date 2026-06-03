@@ -143,15 +143,10 @@ public class QaSessionSummaryService {
             if (!"user".equals(message.getRole())) {
                 continue;
             }
-            QaRetrievalLogs task = taskMap.get(message.getId());
-            if (task == null || !"success".equals(task.getTaskStatus()) || task.getAssistantMessageId() == null) {
-                break;
-            }
-            QaMessages assistant = byId.get(task.getAssistantMessageId());
-            if (assistant == null
-                    || !"assistant".equals(assistant.getRole())
-                    || assistant.getSequenceNo() == null
-                    || assistant.getSequenceNo() <= message.getSequenceNo()) {
+            QaMessages assistant = isCopiedMessage(message)
+                    ? findFollowingCopiedAssistant(message, messages)
+                    : findTaskAssistant(message, taskMap, byId);
+            if (assistant == null) {
                 break;
             }
             included.add(message);
@@ -161,6 +156,46 @@ public class QaSessionSummaryService {
         }
 
         return new CompletedWindow(included, charCount, lastSequenceNo);
+    }
+
+    private QaMessages findTaskAssistant(
+            QaMessages userMessage,
+            Map<Long, QaRetrievalLogs> taskMap,
+            Map<Long, QaMessages> byId
+    ) {
+        QaRetrievalLogs task = taskMap.get(userMessage.getId());
+        if (task == null || !"success".equals(task.getTaskStatus()) || task.getAssistantMessageId() == null) {
+            return null;
+        }
+        QaMessages assistant = byId.get(task.getAssistantMessageId());
+        if (assistant == null
+                || !"assistant".equals(assistant.getRole())
+                || assistant.getSequenceNo() == null
+                || userMessage.getSequenceNo() == null
+                || assistant.getSequenceNo() <= userMessage.getSequenceNo()) {
+            return null;
+        }
+        return assistant;
+    }
+
+    private QaMessages findFollowingCopiedAssistant(QaMessages userMessage, List<QaMessages> messages) {
+        if (userMessage.getSequenceNo() == null) {
+            return null;
+        }
+        for (QaMessages candidate : messages) {
+            if (candidate.getSequenceNo() == null || candidate.getSequenceNo() <= userMessage.getSequenceNo()) {
+                continue;
+            }
+            if ("assistant".equals(candidate.getRole()) && isCopiedMessage(candidate)) {
+                return candidate;
+            }
+            return null;
+        }
+        return null;
+    }
+
+    private boolean isCopiedMessage(QaMessages message) {
+        return message != null && message.getCopiedFromMessageId() != null;
     }
 
     private boolean shouldTrigger(CompletedWindow window) {
