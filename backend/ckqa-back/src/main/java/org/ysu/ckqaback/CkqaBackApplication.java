@@ -9,6 +9,7 @@ import org.springframework.web.client.RestClient;
 import org.ysu.ckqaback.auth.config.CkqaEmailProperties;
 import org.ysu.ckqaback.auth.config.CkqaSecurityProperties;
 import org.ysu.ckqaback.cache.StudentRedisCacheProperties;
+import org.ysu.ckqaback.config.QaDomainGuardProperties;
 import org.ysu.ckqaback.course.CourseMaterialProperties;
 import org.ysu.ckqaback.course.CourseCoverProperties;
 import org.ysu.ckqaback.course.routing.CourseRoutingProperties;
@@ -26,7 +27,8 @@ import org.ysu.ckqaback.user.UserAvatarProperties;
         CkqaEmailProperties.class,
         StudentRedisCacheProperties.class,
         QaTaskStreamProperties.class,
-        CourseRoutingProperties.class
+        CourseRoutingProperties.class,
+        QaDomainGuardProperties.class
 })
 @SpringBootApplication
 public class CkqaBackApplication {
