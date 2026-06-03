@@ -58,15 +58,23 @@ class QaContextAssemblerTest {
     }
 
     @Test
-    void shouldNotApplyHistoryForGlobalAndDrift() {
+    void shouldUseRecentForGlobalAndDriftFollowUp() {
         QaContextAssembler assembler = new QaContextAssembler();
         List<QaMessages> history = List.of(
                 message(1L, "user", 1, "什么是死锁？"),
                 message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。")
         );
 
-        assertThat(assembler.assemble("global", "总结课程", history).strategy()).isEqualTo("none");
-        assertThat(assembler.assemble("drift", "关联一下", history).strategy()).isEqualTo("none");
+        QaContextAssembly global = assembler.assemble("global", "它和资源分配图有什么关系？", history);
+        QaContextAssembly drift = assembler.assemble("drift", "它和资源分配图有什么关系？", history);
+
+        assertThat(global.strategy()).isEqualTo("recent");
+        assertThat(global.contextApplied()).isTrue();
+        assertThat(global.snapshotText()).contains("学生：什么是死锁？", "助手：死锁是多个进程互相等待资源的状态。");
+        assertThat(global.latestTopic()).isEqualTo("死锁");
+        assertThat(drift.strategy()).isEqualTo("recent");
+        assertThat(drift.contextApplied()).isTrue();
+        assertThat(drift.latestTopic()).isEqualTo("死锁");
     }
 
     @Test
@@ -98,7 +106,83 @@ class QaContextAssemblerTest {
 
         assertThat(assembly.strategy()).isEqualTo("recent");
         assertThat(assembly.latestTopic()).isEqualTo("死锁");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
+    }
+
+    @Test
+    void shouldResolveFormerAndLatterFromComparisonTopicStack() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁和饥饿有什么区别？"),
+                message(2L, "assistant", 2, "死锁与饥饿都和资源等待有关，但触发条件不同。")
+        );
+
+        QaContextAssembly former = assembler.assemble("local", "前者如何检测？", history);
+        QaContextAssembly latter = assembler.assemble("local", "后者如何避免？", history);
+
+        assertThat(former.latestTopic()).isEqualTo("死锁");
+        assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(former.topicConfidence()).isGreaterThanOrEqualTo(0.8);
+        assertThat(former.topicStackJson()).contains("死锁", "饥饿");
+        assertThat(latter.latestTopic()).isEqualTo("饥饿");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldKeepComparisonFormerAsLatestTopicForLaterPronounFollowUp() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "银行家算法和资源分配图有什么区别？"),
+                message(4L, "assistant", 4, "银行家算法通过安全性检查避免进入不安全状态，资源分配图用于观察资源请求关系。"),
+                message(5L, "user", 5, "前者如何检测？"),
+                message(6L, "assistant", 6, "可以通过检查安全序列来检测银行家算法。")
+        );
+
+        QaContextAssembly assembly = assembler.assemble("local", "它还有什么局限？", history);
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.latestTopic()).isEqualTo("银行家算法");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
+        assertThat(assembly.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldKeepDeadlockAcrossMultiplePronounTurns() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "那个有哪些典型场景？"),
+                message(4L, "assistant", 4, "例如多个进程相互等待对方持有的资源。"),
+                message(5L, "user", 5, "上述情况怎么避免？"),
+                message(6L, "assistant", 6, "通过资源顺序分配和避免循环等待。")
+        );
+
+        QaContextAssembly assembly = assembler.assemble("local", "它如何检测？", history);
+
+        assertThat(assembly.strategy()).isEqualTo("recent");
+        assertThat(assembly.latestTopic()).isEqualTo("死锁");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("5-6");
+    }
+
+    @Test
+    void shouldRestoreTopicFromStructuredSummaryForSummaryOnlyPronounFollowUp() {
+        QaContextAssembler assembler = new QaContextAssembler();
+
+        QaContextAssembly assembly = assembler.assemble(
+                "basic",
+                "它怎么判断？",
+                List.of(),
+                new QaContextSummary("本会话已讨论死锁定义。", 12, "死锁", "1-2", "[{\"topic\":\"死锁\"}]")
+        );
+
+        assertThat(assembly.strategy()).isEqualTo("summary");
+        assertThat(assembly.latestTopic()).isEqualTo("死锁");
         assertThat(assembly.latestTopicMessageRange()).isEqualTo("1-2");
+        assertThat(assembly.topicSource()).isEqualTo("summary");
+        assertThat(assembly.topicStackJson()).contains("死锁");
     }
 
     @Test
@@ -126,7 +210,7 @@ class QaContextAssemblerTest {
     }
 
     @Test
-    void shouldUseOnlyShortSummaryForGlobalAndDriftWhenSummaryExists() {
+    void shouldUseSummaryRecentForGlobalAndDriftWhenSummaryExists() {
         QaContextAssembler assembler = new QaContextAssembler();
         List<QaMessages> history = List.of(
                 message(1L, "user", 1, "什么是死锁？"),
@@ -135,16 +219,19 @@ class QaContextAssemblerTest {
                 message(4L, "assistant", 4, "资源分配图可以帮助观察环路。")
         );
 
-        QaContextSummary summary = new QaContextSummary("本会话已讨论死锁和资源分配图。", 4);
+        QaContextSummary summary = new QaContextSummary("本会话已讨论死锁定义。", 2);
 
         QaContextAssembly global = assembler.assemble("global", "总结一下", history, summary);
         QaContextAssembly drift = assembler.assemble("drift", "扩展关联", history, summary);
 
-        assertThat(global.strategy()).isEqualTo("summary");
-        assertThat(global.snapshotText()).contains("会话摘要：", "本会话已讨论死锁和资源分配图。");
+        assertThat(global.strategy()).isEqualTo("summary_recent");
+        assertThat(global.snapshotText()).contains("会话摘要：", "本会话已讨论死锁定义。", "最近对话：");
         assertThat(global.snapshotText()).doesNotContain("学生：什么是死锁？");
-        assertThat(drift.strategy()).isEqualTo("summary");
-        assertThat(drift.snapshotText()).doesNotContain("助手：资源分配图可以帮助观察环路。");
+        assertThat(global.snapshotText()).contains("学生：它和资源分配图有什么关系？");
+        assertThat(drift.strategy()).isEqualTo("summary_recent");
+        assertThat(drift.snapshotText()).contains("助手：资源分配图可以帮助观察环路。");
+        assertThat(global.latestTopic()).isEqualTo("死锁");
+        assertThat(drift.latestTopic()).isEqualTo("死锁");
     }
 
     private QaMessages message(Long id, String role, int sequenceNo, String content) {

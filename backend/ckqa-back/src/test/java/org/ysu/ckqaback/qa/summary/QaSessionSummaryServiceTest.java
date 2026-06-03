@@ -63,6 +63,45 @@ class QaSessionSummaryServiceTest {
     }
 
     @Test
+    void shouldPersistStructuredTopicAnchorsWhenSummarySucceeds() {
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService summariesService = mock(QaSessionSummariesService.class);
+        StubSummaryClient summaryClient = new StubSummaryClient("本会话已比较死锁与饥饿。");
+        QaSessionSummaryService service = new QaSessionSummaryService(
+                messagesService,
+                retrievalLogsService,
+                summariesService,
+                summaryClient,
+                Runnable::run,
+                true,
+                4,
+                100,
+                800
+        );
+
+        List<QaMessages> messages = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "死锁和饥饿有什么区别？"),
+                message(4L, "assistant", 4, "死锁通常形成循环等待，饥饿则长期得不到资源。")
+        );
+        given(messagesService.listBySessionId(5L)).willReturn(messages);
+        given(summariesService.findLatestSuccessfulBySessionId(5L)).willReturn(null);
+        given(retrievalLogsService.findLatestByUserMessageIds(List.of(1L, 3L))).willReturn(successTaskMap(messages));
+
+        service.checkAndSummarizeAsync(5L);
+
+        then(summariesService).should().save(argThat(summary ->
+                "success".equals(summary.getStatus())
+                        && "饥饿".equals(summary.getLatestTopic())
+                        && "3-4".equals(summary.getLatestTopicMessageRange())
+                        && summary.getActiveTopicsJson().contains("死锁")
+                        && summary.getActiveTopicsJson().contains("饥饿")
+        ));
+    }
+
+    @Test
     void shouldNotTriggerWhenBelowThreshold() {
         QaMessagesService messagesService = mock(QaMessagesService.class);
         QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);

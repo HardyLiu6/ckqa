@@ -2,9 +2,11 @@ package org.ysu.ckqaback.integration.config;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -53,8 +55,20 @@ class CkqaIntegrationPropertiesTest {
                 .doesNotContain("\\u524d\\u7aef")
                 .doesNotContain("低频轮询")
                 .doesNotContain("\\u4f4e\\u9891\\u8f6e\\u8be2")
-                .doesNotContain("stale")
-                .contains("已生成内容");
+                .doesNotContain("stale");
+    }
+
+    @Test
+    void shouldLoadApplicationDefaultTimeoutMessagesAsReadableChinese() throws Exception {
+        Properties properties = new Properties();
+        try (InputStream inputStream = Files.newInputStream(Path.of("src/main/resources/application.properties"))) {
+            properties.load(inputStream);
+        }
+
+        assertThat(properties.getProperty("ckqa.integration.timeout.query-task-mode-timeout-messages.basic"))
+                .contains("basic 模式正在检索课程片段并生成回答")
+                .contains("尽量保留已生成内容")
+                .doesNotContain("æ");
     }
 
     @Test

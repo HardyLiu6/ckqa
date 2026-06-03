@@ -188,6 +188,50 @@ export function resolveMemoryPolicyForMode(mode, memoryEnabled = false) {
   return mode === 'local' && memoryEnabled ? 'auto' : 'off'
 }
 
+export function resolveSubmitMode(selectedMode = SMART_QA_MODE, modeResolution = {}) {
+  if (selectedMode === SMART_QA_MODE) {
+    return SMART_QA_MODE
+  }
+  if (isBackendQaMode(selectedMode)) {
+    return selectedMode
+  }
+  return isBackendQaMode(modeResolution?.mode) ? modeResolution.mode : 'basic'
+}
+
+export function resolveResolvedMode(submission = {}, modeResolution = {}) {
+  if (isBackendQaMode(submission?.resolvedMode)) {
+    return submission.resolvedMode
+  }
+  if (isBackendQaMode(submission?.mode)) {
+    return submission.mode
+  }
+  return isBackendQaMode(modeResolution?.mode) ? modeResolution.mode : 'basic'
+}
+
+export function buildQaClientRoutingSnapshot(selectedMode = SMART_QA_MODE, modeResolution = {}) {
+  if (!modeResolution.fromSmart && !modeResolution.fromServer && !modeResolution.reviewPriority) {
+    return undefined
+  }
+  const snapshot = {
+    selectedMode,
+    recommendedMode: modeResolution.mode,
+    fallbackMode: modeResolution.fallbackMode,
+    confidence: modeResolution.confidence,
+    confidenceBand: modeResolution.confidenceBand,
+    reviewPriority: modeResolution.reviewPriority || 'normal',
+    manualSwitchSuggested: Boolean(modeResolution.manualSwitchSuggested),
+    reasons: modeResolution.routeReasons,
+    routeScores: modeResolution.routeScores,
+  }
+  if (
+    modeResolution.originalRecommendedMode
+    && modeResolution.originalRecommendedMode !== modeResolution.mode
+  ) {
+    snapshot.originalRecommendedMode = modeResolution.originalRecommendedMode
+  }
+  return snapshot
+}
+
 export function shouldUseHybridBeta(question, options = {}) {
   if (!options.allowHybridBeta) {
     return false

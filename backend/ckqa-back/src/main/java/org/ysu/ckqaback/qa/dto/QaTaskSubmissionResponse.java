@@ -17,6 +17,8 @@ public class QaTaskSubmissionResponse {
     private final String retrievalStatus;
     private final LocalDateTime createdAt;
     private final String mode;
+    private final String requestedMode;
+    private final String resolvedMode;
     private final Long recommendedPollingIntervalSeconds;
     private final Long staleTimeoutSeconds;
     private final String timeoutMessage;
@@ -37,6 +39,8 @@ public class QaTaskSubmissionResponse {
             String retrievalStatus,
             LocalDateTime createdAt,
             String mode,
+            String requestedMode,
+            String resolvedMode,
             Long recommendedPollingIntervalSeconds,
             Long staleTimeoutSeconds,
             String timeoutMessage,
@@ -56,6 +60,8 @@ public class QaTaskSubmissionResponse {
         this.retrievalStatus = retrievalStatus;
         this.createdAt = createdAt;
         this.mode = mode;
+        this.requestedMode = requestedMode;
+        this.resolvedMode = resolvedMode;
         this.recommendedPollingIntervalSeconds = recommendedPollingIntervalSeconds;
         this.staleTimeoutSeconds = staleTimeoutSeconds;
         this.timeoutMessage = timeoutMessage;
@@ -126,6 +132,52 @@ public class QaTaskSubmissionResponse {
             Integer memorySourceCount,
             Integer memorySizeEstimate
     ) {
+        return of(
+                userMessage,
+                taskId,
+                taskStatus,
+                progressStage,
+                retrievalStatus,
+                createdAt,
+                mode,
+                mode,
+                mode,
+                recommendedPollingIntervalSeconds,
+                staleTimeoutSeconds,
+                timeoutMessage,
+                contextApplied,
+                contextStrategy,
+                contextSizeEstimate,
+                memoryApplied,
+                memoryStrategy,
+                memoryScope,
+                memorySourceCount,
+                memorySizeEstimate
+        );
+    }
+
+    public static QaTaskSubmissionResponse of(
+            QaMessageResponse userMessage,
+            Long taskId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            LocalDateTime createdAt,
+            String mode,
+            String requestedMode,
+            String resolvedMode,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate
+    ) {
         return new QaTaskSubmissionResponse(
                 userMessage,
                 taskId,
@@ -134,6 +186,8 @@ public class QaTaskSubmissionResponse {
                 retrievalStatus,
                 createdAt,
                 mode,
+                requestedMode,
+                resolvedMode,
                 recommendedPollingIntervalSeconds,
                 staleTimeoutSeconds,
                 timeoutMessage,

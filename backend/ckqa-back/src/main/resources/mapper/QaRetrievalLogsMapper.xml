@@ -16,6 +16,8 @@
         <result column="course_id" property="courseId" />
         <result column="index_run_id" property="indexRunId" />
         <result column="query_mode" property="queryMode" />
+        <result column="requested_mode" property="requestedMode" />
+        <result column="resolved_mode" property="resolvedMode" />
         <result column="query_text" property="queryText" />
         <result column="original_query_text" property="originalQueryText" />
         <result column="retrieval_query_text" property="retrievalQueryText" />
@@ -31,6 +33,10 @@
         <result column="rewrite_model" property="rewriteModel" />
         <result column="rewrite_confidence" property="rewriteConfidence" />
         <result column="context_snapshot_version" property="contextSnapshotVersion" />
+        <result column="resolved_topic" property="resolvedTopic" />
+        <result column="topic_source" property="topicSource" />
+        <result column="topic_confidence" property="topicConfidence" />
+        <result column="topic_stack_json" property="topicStackJson" />
         <result column="routing_confidence" property="routingConfidence" />
         <result column="routing_confidence_band" property="routingConfidenceBand" />
         <result column="routing_review_priority" property="routingReviewPriority" />
@@ -54,10 +60,12 @@
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
         id, session_id, user_message_id, assistant_message_id, task_seq, task_status, progress_stage,
-        python_task_id, latest_logs, course_id, index_run_id, query_mode, query_text, original_query_text,
+        python_task_id, latest_logs, course_id, index_run_id, query_mode, requested_mode, resolved_mode,
+        query_text, original_query_text,
         retrieval_query_text, standalone_query_text, context_snapshot_text, context_strategy, context_message_range,
         context_char_count, rewrite_applied, rewrite_reason, rewrite_source_message_range,
         rewrite_method, rewrite_model, rewrite_confidence, context_snapshot_version,
+        resolved_topic, topic_source, topic_confidence, topic_stack_json,
         routing_confidence, routing_confidence_band, routing_review_priority, routing_snapshot_json,
         memory_applied, memory_strategy, memory_scope, memory_source_count, memory_size_chars,
         query_engine_strategy, history_fallback_reason, memory_history_json,

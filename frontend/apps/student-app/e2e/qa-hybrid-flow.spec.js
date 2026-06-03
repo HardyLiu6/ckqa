@@ -100,9 +100,10 @@ test('智能推荐开启 Beta 后以后端推荐为准并在 warmup 未就绪时
   await page.getByRole('button', { name: '发送问题' }).click()
 
   await expect(page.locator('.hybrid-warmup-pill')).toContainText(/混合检索准备中|混合检索建议降级/)
-  await expect.poll(() => state.lastMessagePayload?.mode).toBe('local')
-  expect(state.lastMessagePayload.mode).toBe('local')
-  expect(state.lastMessagePayload.clientRoutingSnapshot.recommendedMode).toBe('hybrid_v0')
+  await expect.poll(() => state.lastMessagePayload?.mode).toBe('smart')
+  expect(state.lastMessagePayload.mode).toBe('smart')
+  expect(state.lastMessagePayload.clientRoutingSnapshot.recommendedMode).toBe('local')
+  expect(state.lastMessagePayload.clientRoutingSnapshot.originalRecommendedMode).toBe('hybrid_v0')
   expect(state.lastMessagePayload.clientRoutingSnapshot.reviewPriority).toBe('hybrid_not_ready')
 })
 

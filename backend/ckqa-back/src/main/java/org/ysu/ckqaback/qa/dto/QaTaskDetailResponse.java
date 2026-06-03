@@ -19,6 +19,8 @@ public class QaTaskDetailResponse {
     private final String progressStage;
     private final String retrievalStatus;
     private final String mode;
+    private final String requestedMode;
+    private final String resolvedMode;
     private final String queryText;
     private final List<String> latestLogs;
     private final List<QaProgressEventResponse> progressEvents;
@@ -49,6 +51,8 @@ public class QaTaskDetailResponse {
             String progressStage,
             String retrievalStatus,
             String mode,
+            String requestedMode,
+            String resolvedMode,
             String queryText,
             List<String> latestLogs,
             List<QaProgressEventResponse> progressEvents,
@@ -78,6 +82,8 @@ public class QaTaskDetailResponse {
         this.progressStage = progressStage;
         this.retrievalStatus = retrievalStatus;
         this.mode = mode;
+        this.requestedMode = hasText(requestedMode) ? requestedMode : mode;
+        this.resolvedMode = hasText(resolvedMode) ? resolvedMode : mode;
         this.queryText = queryText;
         this.latestLogs = latestLogs;
         this.progressEvents = progressEvents == null ? List.of() : List.copyOf(progressEvents);
@@ -99,6 +105,10 @@ public class QaTaskDetailResponse {
         this.memorySizeEstimate = memorySizeEstimate;
         this.partialResponseText = partialResponseText;
         this.streamEventSeq = streamEventSeq == null ? 0L : streamEventSeq;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @JsonIgnore
@@ -225,6 +235,45 @@ public class QaTaskDetailResponse {
             String partialResponseText,
             Long streamEventSeq
     ) {
+        return of(taskId, userMessageId, assistantMessageId, taskStatus, progressStage, retrievalStatus, mode, mode, mode,
+                queryText, latestLogs, progressEvents, startedAt, lastHeartbeatAt, finishedAt, assistantMessage,
+                errorMessage, recommendedPollingIntervalSeconds, staleTimeoutSeconds, timeoutMessage, contextApplied,
+                contextStrategy, contextSizeEstimate, memoryApplied, memoryStrategy, memoryScope, memorySourceCount,
+                memorySizeEstimate, partialResponseText, streamEventSeq);
+    }
+
+    public static QaTaskDetailResponse of(
+            Long taskId,
+            Long userMessageId,
+            Long assistantMessageId,
+            String taskStatus,
+            String progressStage,
+            String retrievalStatus,
+            String mode,
+            String requestedMode,
+            String resolvedMode,
+            String queryText,
+            List<String> latestLogs,
+            List<QaProgressEventResponse> progressEvents,
+            LocalDateTime startedAt,
+            LocalDateTime lastHeartbeatAt,
+            LocalDateTime finishedAt,
+            QaMessageResponse assistantMessage,
+            String errorMessage,
+            Long recommendedPollingIntervalSeconds,
+            Long staleTimeoutSeconds,
+            String timeoutMessage,
+            Boolean contextApplied,
+            String contextStrategy,
+            ContextSizeEstimateResponse contextSizeEstimate,
+            Boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeEstimate,
+            String partialResponseText,
+            Long streamEventSeq
+    ) {
         return new QaTaskDetailResponse(
                 taskId,
                 userMessageId,
@@ -233,6 +282,8 @@ public class QaTaskDetailResponse {
                 progressStage,
                 retrievalStatus,
                 mode,
+                requestedMode,
+                resolvedMode,
                 queryText,
                 latestLogs,
                 progressEvents,

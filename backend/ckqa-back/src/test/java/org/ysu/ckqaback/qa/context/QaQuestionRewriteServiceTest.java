@@ -30,6 +30,30 @@ class QaQuestionRewriteServiceTest {
     }
 
     @Test
+    void shouldRewriteThatOnePronounFollowUpWithRecentTopic() {
+        QaContextAssembly context = new QaContextAssembly("recent", "最近对话", "1-2", 20, "死锁", "1-2");
+
+        assertThat(QaContextPolicy.isPronounFollowUp("那个有哪些典型场景？")).isTrue();
+        assertThat(QaContextPolicy.isPronounFollowUp("那一个有哪些典型场景？")).isTrue();
+        QaQuestionRewriteResult result = rewriteService.rewrite("basic", "那个有哪些典型场景？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：那个有哪些典型场景？");
+        assertThat(result.rewriteApplied()).isTrue();
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+    }
+
+    @Test
+    void shouldRewritePronounDefinitionQuestionWithRecentTopic() {
+        QaContextAssembly context = new QaContextAssembly("recent", "最近对话", "1-2", 20, "死锁", "1-2");
+
+        QaQuestionRewriteResult result = rewriteService.rewrite("basic", "它的定义是什么？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它的定义是什么？");
+        assertThat(result.rewriteApplied()).isTrue();
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+    }
+
+    @Test
     void shouldUseHighConfidenceLlmStandaloneQuery() {
         QaQuestionRewriteService service = new QaQuestionRewriteService();
         service.setLlmClient((question, context) -> QaLlmQuestionRewriteResult.success(
@@ -97,11 +121,18 @@ class QaQuestionRewriteServiceTest {
     }
 
     @Test
-    void shouldNotRewriteGlobalOrDrift() {
+    void shouldRewriteGlobalAndDriftFollowUpWithRecentTopic() {
         QaContextAssembly context = new QaContextAssembly("recent", "", "1-2", 0, "死锁", "1-2");
 
-        assertThat(rewriteService.rewrite("global", "它是什么意思？", context).rewriteApplied()).isFalse();
-        assertThat(rewriteService.rewrite("drift", "它是什么意思？", context).rewriteApplied()).isFalse();
+        QaQuestionRewriteResult global = rewriteService.rewrite("global", "它是什么意思？", context);
+        QaQuestionRewriteResult drift = rewriteService.rewrite("drift", "它是什么意思？", context);
+
+        assertThat(global.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它是什么意思？");
+        assertThat(global.rewriteApplied()).isTrue();
+        assertThat(global.rewriteMethod()).isEqualTo("rule");
+        assertThat(drift.retrievalQueryText()).isEqualTo("关于上一轮主题「死锁」：它是什么意思？");
+        assertThat(drift.rewriteApplied()).isTrue();
+        assertThat(drift.rewriteMethod()).isEqualTo("rule");
     }
 
     @Test

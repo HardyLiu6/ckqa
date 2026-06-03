@@ -1,20 +1,17 @@
 package org.ysu.ckqaback.qa.context;
 
-import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.entity.QaMessages;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 问答上下文组装器：只生成 Java 侧快照，不把完整上下文传给 Python。
  */
 public class QaContextAssembler {
 
-    private static final Pattern WHAT_IS_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下)(.+?)[？?。.!！]*$");
+    private final QaTopicResolver topicResolver = new QaTopicResolver();
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history) {
         return assemble(mode, question, history, null);
@@ -22,22 +19,23 @@ public class QaContextAssembler {
 
     public QaContextAssembly assemble(String mode, String question, List<QaMessages> history, QaContextSummary summary) {
         QaContextSummary safeSummary = summary == null ? null : summary;
+        List<QaMessages> usableHistory = safeHistory(history);
+        QaTopicStack topicStack = topicResolver.resolve(question, usableHistory, safeSummary);
         if (!QaContextPolicy.supportsRecentContext(mode)) {
-            return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary) : none();
+            return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary, topicStack) : none(topicStack);
         }
 
-        List<QaMessages> usableHistory = safeHistory(history);
         if (safeSummary == null || !safeSummary.hasText()) {
-            return recentOnly(usableHistory);
+            return recentOnly(usableHistory, topicStack);
         }
 
         List<QaMessages> unsummarizedHistory = usableHistory.stream()
                 .filter(message -> message.getSequenceNo() != null && message.getSequenceNo() > safeSummary.untilSequenceNo())
                 .toList();
         List<QaMessages> recent = selectRecentMessages(unsummarizedHistory);
-        QaContextAssembly recentAssembly = buildRecentAssembly(recent, usableHistory, "summary_recent");
+        QaContextAssembly recentAssembly = buildRecentAssembly(recent, "summary_recent", topicStack);
         if (!recentAssembly.contextApplied()) {
-            return summaryOnly(safeSummary);
+            return summaryOnly(safeSummary, topicStack);
         }
         String summaryText = truncate(trimToEmpty(safeSummary.text()), QaContextPolicy.MAX_SUMMARY_CHARS);
         String snapshot = "会话摘要：\n" + summaryText + "\n\n最近对话：\n" + recentAssembly.snapshotText();
@@ -51,21 +49,24 @@ public class QaContextAssembler {
                 recentAssembly.messageRange(),
                 charCount,
                 recentAssembly.latestTopic(),
-                recentAssembly.latestTopicMessageRange()
+                recentAssembly.latestTopicMessageRange(),
+                recentAssembly.topicSource(),
+                recentAssembly.topicConfidence(),
+                recentAssembly.topicStackJson()
         );
     }
 
-    private QaContextAssembly recentOnly(List<QaMessages> usableHistory) {
+    private QaContextAssembly recentOnly(List<QaMessages> usableHistory, QaTopicStack topicStack) {
         if (usableHistory.isEmpty()) {
-            return none();
+            return none(topicStack);
         }
 
-        return buildRecentAssembly(selectRecentMessages(usableHistory), usableHistory, "recent");
+        return buildRecentAssembly(selectRecentMessages(usableHistory), "recent", topicStack);
     }
 
-    private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, List<QaMessages> topicHistory, String strategy) {
+    private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, String strategy, QaTopicStack topicStack) {
         if (recent.isEmpty()) {
-            return none();
+            return none(topicStack);
         }
 
         StringBuilder snapshot = new StringBuilder();
@@ -91,24 +92,26 @@ public class QaContextAssembler {
         }
 
         if (snapshot.isEmpty()) {
-            return none();
+            return none(topicStack);
         }
 
-        Topic topic = latestCompletedTopic(topicHistory);
         return new QaContextAssembly(
                 strategy,
                 snapshot.toString(),
                 rangeOf(recent),
                 Math.min(contentChars, QaContextPolicy.MAX_RECENT_CHARS),
-                topic.text(),
-                topic.range()
+                topicStack.latestTopic(),
+                topicStack.latestTopicMessageRange(),
+                topicStack.topicSource(),
+                topicStack.topicConfidence(),
+                topicStack.activeTopicsJson()
         );
     }
 
-    private QaContextAssembly summaryOnly(QaContextSummary summary) {
+    private QaContextAssembly summaryOnly(QaContextSummary summary, QaTopicStack topicStack) {
         String summaryText = truncate(trimToEmpty(summary.text()), QaContextPolicy.MAX_SUMMARY_CHARS);
         if (summaryText.isEmpty()) {
-            return none();
+            return none(topicStack);
         }
         String snapshot = "会话摘要：\n" + summaryText;
         return new QaContextAssembly(
@@ -116,13 +119,27 @@ public class QaContextAssembler {
                 snapshot,
                 "",
                 summaryText.length(),
-                "",
-                ""
+                topicStack.latestTopic(),
+                topicStack.latestTopicMessageRange(),
+                topicStack.topicSource(),
+                topicStack.topicConfidence(),
+                topicStack.activeTopicsJson()
         );
     }
 
-    private QaContextAssembly none() {
-        return new QaContextAssembly("none", "", "", 0, "", "");
+    private QaContextAssembly none(QaTopicStack topicStack) {
+        QaTopicStack stack = topicStack == null ? QaTopicStack.empty() : topicStack;
+        return new QaContextAssembly(
+                "none",
+                "",
+                "",
+                0,
+                stack.latestTopic(),
+                stack.latestTopicMessageRange(),
+                stack.topicSource(),
+                stack.topicConfidence(),
+                stack.activeTopicsJson()
+        );
     }
 
     private List<QaMessages> safeHistory(List<QaMessages> history) {
@@ -138,43 +155,6 @@ public class QaContextAssembler {
     private List<QaMessages> selectRecentMessages(List<QaMessages> history) {
         int fromIndex = Math.max(0, history.size() - QaContextPolicy.MAX_RECENT_MESSAGES);
         return new ArrayList<>(history.subList(fromIndex, history.size()));
-    }
-
-    private Topic latestCompletedTopic(List<QaMessages> history) {
-        for (int index = history.size() - 1; index >= 1; index--) {
-            QaMessages assistant = history.get(index);
-            QaMessages user = history.get(index - 1);
-            if (!"assistant".equals(assistant.getRole()) || !"user".equals(user.getRole())) {
-                continue;
-            }
-            String topic = extractTopic(user.getContent());
-            if (StringUtils.hasText(topic)) {
-                return new Topic(topic, rangeOf(List.of(user, assistant)));
-            }
-        }
-        return new Topic("", "");
-    }
-
-    private String extractTopic(String content) {
-        String text = trimToEmpty(content);
-        if (text.isEmpty()) {
-            return "";
-        }
-        if (QaContextPolicy.isPronounFollowUp(text)) {
-            return "";
-        }
-        Matcher matcher = WHAT_IS_PATTERN.matcher(text);
-        if (matcher.matches()) {
-            return shortenTopic(matcher.group(2));
-        }
-        return shortenTopic(text);
-    }
-
-    private String shortenTopic(String rawTopic) {
-        String topic = trimToEmpty(rawTopic)
-                .replaceAll("[？?。.!！]+$", "")
-                .replaceAll("\\s+", " ");
-        return topic.length() > 30 ? topic.substring(0, 30) : topic;
     }
 
     private String rangeOf(List<QaMessages> messages) {
@@ -204,6 +184,4 @@ public class QaContextAssembler {
         return value.substring(0, maxLength);
     }
 
-    private record Topic(String text, String range) {
-    }
 }

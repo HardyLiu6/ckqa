@@ -29,6 +29,12 @@ public record QaRetrievalLogContext(
         Integer memorySizeChars,
         String queryEngineStrategy,
         String historyFallbackReason,
-        String memoryHistoryJson
+        String memoryHistoryJson,
+        String requestedMode,
+        String resolvedMode,
+        String resolvedTopic,
+        String topicSource,
+        Double topicConfidence,
+        String topicStackJson
 ) {
 }

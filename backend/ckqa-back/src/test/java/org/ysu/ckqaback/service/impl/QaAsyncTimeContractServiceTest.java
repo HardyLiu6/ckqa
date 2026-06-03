@@ -6,6 +6,7 @@ import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -100,6 +101,74 @@ class QaAsyncTimeContractServiceTest {
         assertThat(task.getTaskSeq()).isEqualTo(1);
         assertThat(task.getCreatedAt()).isNotNull();
         assertRecentShanghai(task.getCreatedAt());
+    }
+
+    @Test
+    void createPendingTaskShouldPersistModeAndTopicDiagnostics() {
+        AtomicReference<QaRetrievalLogs> saved = new AtomicReference<>();
+        QaRetrievalLogsServiceImpl service = new QaRetrievalLogsServiceImpl() {
+            @Override
+            public boolean save(QaRetrievalLogs entity) {
+                saved.set(entity);
+                return true;
+            }
+
+            @Override
+            public QaRetrievalLogs getOne(Wrapper<QaRetrievalLogs> queryWrapper, boolean throwEx) {
+                return null;
+            }
+        };
+
+        QaRetrievalLogs task = service.createPendingTask(
+                5L,
+                "os",
+                2L,
+                11L,
+                "drift",
+                "关于上一轮主题「死锁」：它怎么检测？",
+                new QaRetrievalLogContext(
+                        "它怎么检测？",
+                        "关于上一轮主题「死锁」：它怎么检测？",
+                        "关于上一轮主题「死锁」：它怎么检测？",
+                        "学生：什么是死锁？",
+                        "recent",
+                        "1-2",
+                        30,
+                        true,
+                        "pronoun_follow_up",
+                        "1-2",
+                        "rule",
+                        null,
+                        0.92,
+                        "phase3-v1",
+                        null,
+                        null,
+                        null,
+                        null,
+                        false,
+                        "none",
+                        null,
+                        0,
+                        0,
+                        null,
+                        null,
+                        null,
+                        "smart",
+                        "drift",
+                        "死锁",
+                        "history",
+                        0.86,
+                        "[{\"topic\":\"死锁\"}]"
+                )
+        );
+
+        assertThat(saved.get()).isSameAs(task);
+        assertThat(task.getRequestedMode()).isEqualTo("smart");
+        assertThat(task.getResolvedMode()).isEqualTo("drift");
+        assertThat(task.getResolvedTopic()).isEqualTo("死锁");
+        assertThat(task.getTopicSource()).isEqualTo("history");
+        assertThat(task.getTopicConfidence()).isEqualTo(0.86);
+        assertThat(task.getTopicStackJson()).contains("死锁");
     }
 
     private void assertRecentShanghai(LocalDateTime actual) {

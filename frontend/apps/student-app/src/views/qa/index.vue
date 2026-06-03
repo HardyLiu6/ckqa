@@ -43,13 +43,16 @@ import { useUserStore } from '@/stores/user'
 import {
   QA_MODE_OPTIONS,
   SMART_QA_MODE,
+  buildQaClientRoutingSnapshot,
   getModeOption,
   loadHybridBetaPreference,
   resolveQaMode,
   resolveQaModeRecommendation,
+  resolveResolvedMode,
   resolveHybridWarmupText,
   resolveMemoryPolicyForMode,
   resolveModeWithHybridReadiness,
+  resolveSubmitMode,
   saveHybridBetaPreference,
 } from './qa-mode-model'
 import {
@@ -518,18 +521,25 @@ async function send() {
       })
     }
     const session = await ensureSession(course, knowledgeBase, text)
+    const submitMode = resolveSubmitMode(selectedMode.value, modeResolution)
+    const expectedExecutionMode = resolveResolvedMode(null, modeResolution)
     const submission = await sendQaMessage(session.id, {
-      mode: modeResolution.mode,
+      mode: submitMode,
       content: text,
-      memoryPolicy: resolveMemoryPolicyForMode(modeResolution.mode, memoryEnabled.value),
-      clientRoutingSnapshot: buildClientRoutingSnapshot(modeResolution),
+      memoryPolicy: resolveMemoryPolicyForMode(expectedExecutionMode, memoryEnabled.value),
+      clientRoutingSnapshot: buildQaClientRoutingSnapshot(selectedMode.value, modeResolution),
     })
-
-    messages.value = upsertQaMessage(messages.value, withTaskMode(submission.userMessage, { mode: modeResolution.mode }))
-    pendingTask.value = {
+    const resolvedMode = resolveResolvedMode(submission, modeResolution)
+    const resolvedSubmission = {
       ...submission,
+      mode: resolvedMode,
+    }
+
+    messages.value = upsertQaMessage(messages.value, withTaskMode(submission.userMessage, { mode: resolvedMode }))
+    pendingTask.value = {
+      ...resolvedSubmission,
       sessionId: session.id,
-      mode: modeResolution.mode,
+      mode: resolvedMode,
       routeReason: modeResolution.reason,
       queryText: text,
     }
@@ -537,17 +547,17 @@ async function send() {
       ? '推荐不够确定，可手动切换模式。'
       : ''
     const memoryStatus = resolveMemoryStatusText({
-      ...submission,
-      mode: modeResolution.mode,
+      ...resolvedSubmission,
+      mode: resolvedMode,
     })
     const submitStatus = modeResolution.fromSmart
-      ? `智能推荐为 ${modeResolution.mode} 模式：${modeResolution.reason}。${resolveContextStatusText(submission)}。${memoryStatus}`
-      : `已使用 ${modeResolution.mode} 模式提交问题。${resolveContextStatusText(submission)}。${memoryStatus}`
+      ? `智能推荐为 ${resolvedMode} 模式：${modeResolution.reason}。${resolveContextStatusText(resolvedSubmission)}。${memoryStatus}`
+      : `已使用 ${resolvedMode} 模式提交问题。${resolveContextStatusText(resolvedSubmission)}。${memoryStatus}`
     const domainGuardHint = domainGuardResult.statusMessage ? `${domainGuardResult.statusMessage}。` : ''
     statusMessage.value = `${domainGuardHint}${submitStatus}${confidenceHint}`
     input.value = ''
     await scrollToBottom({ force: true })
-    startTaskStream(session.id, submission.taskId, submission)
+    startTaskStream(session.id, submission.taskId, resolvedSubmission)
   } catch (error) {
     errorMessage.value = error?.message || '问答请求失败，请稍后重试'
     ElMessage.error(errorMessage.value)
@@ -560,23 +570,6 @@ function qaModeResolveOptions() {
   return {
     allowHybridBeta: allowHybridSmartBeta.value,
     hasConversationContext: messages.value.length > 0 || Boolean(activeSession.value),
-  }
-}
-
-function buildClientRoutingSnapshot(modeResolution = {}) {
-  if (!modeResolution.fromSmart && !modeResolution.fromServer && !modeResolution.reviewPriority) {
-    return undefined
-  }
-  return {
-    selectedMode: selectedMode.value,
-    recommendedMode: modeResolution.originalRecommendedMode || modeResolution.mode,
-    fallbackMode: modeResolution.fallbackMode,
-    confidence: modeResolution.confidence,
-    confidenceBand: modeResolution.confidenceBand,
-    reviewPriority: modeResolution.reviewPriority || 'normal',
-    manualSwitchSuggested: Boolean(modeResolution.manualSwitchSuggested),
-    reasons: modeResolution.routeReasons,
-    routeScores: modeResolution.routeScores,
   }
 }
 
