@@ -349,9 +349,27 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索', vis
     return count > visibleCount ? `课程片段 ${visibleCount} / 共 ${count} 条` : `课程片段 ${count} 条`
   }
   if (kinds.has('entity') || kinds.has('relationship')) {
-    return count > visibleCount ? `课程概念 ${visibleCount} / 共 ${count} 条` : `课程概念 ${count} 条`
+    const entityTotal = normalizePositiveInteger(event?.metrics?.entityCount)
+    const relationshipTotal = normalizePositiveInteger(event?.metrics?.relationshipCount)
+    const totalCount = entityTotal + relationshipTotal || count
+    const shownCount = Math.min(visibleCount, totalCount)
+    const label = entityRelationshipEvidenceLabel({
+      hasEntity: kinds.has('entity') || entityTotal > 0,
+      hasRelationship: kinds.has('relationship') || relationshipTotal > 0,
+    })
+    return totalCount > shownCount ? `${label} ${shownCount} / 共 ${totalCount} 条` : `${label} ${totalCount} 条`
   }
   return `展示样例 ${visibleCount} 条`
+}
+
+function entityRelationshipEvidenceLabel({ hasEntity, hasRelationship }) {
+  if (hasEntity && !hasRelationship) {
+    return '课程概念'
+  }
+  if (hasRelationship && !hasEntity) {
+    return '概念关系'
+  }
+  return '概念与关系'
 }
 
 export function retrievalTraceEvidenceTitle(item) {

@@ -312,10 +312,7 @@ class _GraphRagProgressCallbacks(QueryCallbacks):
         elif metrics.get("textUnitCount", 0) > 0:
             summary = f"已选取 {metrics['textUnitCount']} 个课程片段作为回答依据。"
         elif metrics.get("entityCount", 0) > 0 or metrics.get("relationshipCount", 0) > 0:
-            summary = (
-                f"已选取 {metrics.get('entityCount', 0)} 个课程概念"
-                f"和 {metrics.get('relationshipCount', 0)} 条概念关系作为上下文。"
-            )
+            summary = _entity_relationship_context_summary(metrics)
         else:
             summary = "已构建课程知识库上下文，准备生成回答。"
         self._emit(_progress_event("context_selected", self._mode, summary, metrics, evidence))
@@ -627,13 +624,29 @@ def _answer_running_summary(metrics: dict[str, Any], elapsed: int) -> str:
     if text_units and not entities and not relationships:
         return f"仍在基于 {text_units} 个课程片段组织回答，已处理约 {elapsed} 秒。"
     if entities or relationships:
-        return (
-            f"仍在基于 {entities} 个课程概念、{relationships} 条关系"
-            f"和 {text_units} 个课程片段组织回答，已处理约 {elapsed} 秒。"
-        )
+        parts: list[str] = []
+        if entities:
+            parts.append(f"{entities} 个课程概念")
+        if relationships:
+            parts.append(f"{relationships} 条概念关系")
+        if text_units:
+            parts.append(f"{text_units} 个课程片段")
+        return f"仍在基于 {'、'.join(parts)} 组织回答，已处理约 {elapsed} 秒。"
     if reports:
         return f"仍在基于 {reports} 份课程报告组织回答，已处理约 {elapsed} 秒。"
     return f"仍在基于课程知识库上下文组织回答，已处理约 {elapsed} 秒。"
+
+
+def _entity_relationship_context_summary(metrics: dict[str, Any]) -> str:
+    entities = int(metrics.get("entityCount") or 0)
+    relationships = int(metrics.get("relationshipCount") or 0)
+    if entities and relationships:
+        return f"已选取 {entities} 个课程概念和 {relationships} 条概念关系作为上下文。"
+    if entities:
+        return f"已选取 {entities} 个课程概念作为上下文。"
+    if relationships:
+        return f"已选取 {relationships} 条概念关系作为上下文。"
+    return "已构建课程知识库上下文，准备生成回答。"
 
 
 def _reduce_running_summary(mode: str, elapsed: int) -> str:
@@ -956,7 +969,7 @@ def _metric_key_for_context(key: str) -> str:
         return "reportCount"
     if "text" in normalized or "source" in normalized or "unit" in normalized:
         return "textUnitCount"
-    if "entity" in normalized:
+    if "entity" in normalized or "entities" in normalized:
         return "entityCount"
     if "relationship" in normalized:
         return "relationshipCount"
@@ -967,7 +980,7 @@ def _evidence_kind_for_context(key: str) -> str:
     normalized = key.strip().casefold()
     if "report" in normalized or "communit" in normalized:
         return "report"
-    if "entity" in normalized:
+    if "entity" in normalized or "entities" in normalized:
         return "entity"
     if "relationship" in normalized:
         return "relationship"

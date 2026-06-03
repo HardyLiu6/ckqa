@@ -503,8 +503,47 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertIn("课程概念、关系和片段", progress[0]["summary"])
         self.assertTrue(any(item["type"] == "answer_running" for item in progress))
         answer_running = next(item for item in progress if item["type"] == "answer_running")
-        self.assertIn("课程概念", answer_running["summary"])
+        self.assertIn("2 个课程概念、1 条概念关系、1 个课程片段", answer_running["summary"])
         self.assertEqual(chunks[-1].text, "局部回答")
+
+    async def test_local_streaming_describes_relationship_only_context_without_zero_entities(self):
+        async def fake_local(**kwargs):
+            callbacks = kwargs.get("callbacks")
+            self.assertIsNotNone(callbacks)
+            callback = callbacks[0] if isinstance(callbacks, list) else callbacks
+            callback.on_context({
+                "relationships": [
+                    {"id": f"rel-{index}", "description": f"银行家算法关系依据 {index}"}
+                    for index in range(1, 9)
+                ],
+            })
+            yield "局部回答"
+
+        adapter = NativeGraphRagStreamingAdapter(
+            root_dir=_PROJECT_ROOT,
+            config=NativeStreamingConfig(),
+            search_functions={"local": fake_local},
+        )
+        frames = {
+            "entities": pd.DataFrame(),
+            "communities": pd.DataFrame(),
+            "community_reports": pd.DataFrame(),
+            "text_units": pd.DataFrame(),
+            "relationships": pd.DataFrame(),
+            "covariates": None,
+        }
+        with patch("query_streaming_adapter._load_graphrag_config", return_value=object()), \
+                patch("query_streaming_adapter._load_common_frames", return_value=frames):
+            chunks = [chunk async for chunk in adapter.stream(_request_for_mode("local"))]
+
+        context_selected = next(
+            chunk.progress for chunk in chunks
+            if chunk.event == "progress" and chunk.progress["type"] == "context_selected"
+        )
+        self.assertEqual(context_selected["metrics"]["relationshipCount"], 8)
+        self.assertEqual(len(context_selected["evidence"]), 5)
+        self.assertEqual(context_selected["summary"], "已选取 8 条概念关系作为上下文。")
+        self.assertNotIn("0 个课程概念", context_selected["summary"])
 
     async def test_hybrid_streaming_emits_retrieval_started_before_context_selected(self):
         async def fake_basic(**kwargs):

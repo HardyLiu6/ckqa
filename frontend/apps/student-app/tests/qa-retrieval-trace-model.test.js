@@ -628,6 +628,24 @@ test('未知类型过程依据只显示样例数量而不是依据总数', () =>
   assert.equal(retrievalTraceEvidenceLabel(event, 'Global'), '展示样例 3 条')
 })
 
+test('local 关系依据标签使用概念关系语义和真实总数', () => {
+  const event = {
+    type: 'context_selected',
+    mode: 'local',
+    summary: '已选取 8 条概念关系作为上下文。',
+    metrics: {
+      relationshipCount: 8,
+    },
+    evidence: Array.from({ length: 5 }, (_, index) => ({
+      kind: 'relationship',
+      title: `${2493 + index}`,
+      snippet: `银行家算法关系依据 ${index + 1}`,
+    })),
+  }
+
+  assert.equal(retrievalTraceEvidenceLabel(event, 'Local'), '概念关系 3 / 共 8 条')
+})
+
 test('模型限流事件展示为中文模型服务阶段并折叠重复记录', () => {
   const events = [
     {
