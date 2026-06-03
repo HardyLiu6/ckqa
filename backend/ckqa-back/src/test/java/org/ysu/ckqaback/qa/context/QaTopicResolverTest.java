@@ -58,6 +58,42 @@ class QaTopicResolverTest {
     }
 
     @Test
+    void shouldStripDeSuffixFromLatterComparisonTopic() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁和饥饿的区别是什么？"),
+                message(2L, "assistant", 2, "死锁和饥饿都和资源等待有关，但表现不同。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", history, null);
+        QaTopicStack latter = resolver.resolve("后者如何避免？", history, null);
+
+        assertThat(former.latestTopic()).isEqualTo("死锁");
+        assertThat(latter.latestTopic()).isEqualTo("饥饿");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.activeTopicsJson()).contains("死锁", "饥饿");
+        assertThat(latter.activeTopicsJson()).doesNotContain("饥饿的");
+    }
+
+    @Test
+    void shouldStripBetweenSuffixFromLatterComparisonTopic() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁与饥饿之间有什么区别？"),
+                message(2L, "assistant", 2, "死锁与饥饿都和资源等待有关，但触发条件不同。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", history, null);
+        QaTopicStack latter = resolver.resolve("后者如何避免？", history, null);
+
+        assertThat(former.latestTopic()).isEqualTo("死锁");
+        assertThat(latter.latestTopic()).isEqualTo("饥饿");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.activeTopicsJson()).contains("死锁", "饥饿");
+        assertThat(latter.activeTopicsJson()).doesNotContain("饥饿之间");
+    }
+
+    @Test
     void shouldNotGuessFormerOrLatterWithoutValidComparisonPair() {
         QaTopicResolver resolver = new QaTopicResolver();
         List<QaMessages> history = List.of(

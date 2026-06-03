@@ -128,8 +128,8 @@ public class QaTopicResolver {
         }
         Matcher comparisonMatcher = COMPARISON_PATTERN.matcher(text);
         if (comparisonMatcher.matches()) {
-            String first = shortenTopic(comparisonMatcher.group(1));
-            String second = shortenTopic(comparisonMatcher.group(2));
+            String first = normalizeComparisonTopic(comparisonMatcher.group(1));
+            String second = normalizeComparisonTopic(comparisonMatcher.group(2));
             if (StringUtils.hasText(first) && StringUtils.hasText(second)) {
                 return new ResolvedQuestion(second, "comparison", 0.92D, List.of(first, second), List.of(first, second), false, false);
             }
@@ -235,7 +235,7 @@ public class QaTopicResolver {
     }
 
     private ResolvedQuestion comparisonPronoun(String topic, List<String> comparisonTopics) {
-        String resolvedTopic = shortenTopic(topic);
+        String resolvedTopic = normalizeComparisonTopic(topic);
         return StringUtils.hasText(resolvedTopic)
                 ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), comparisonTopics, false, true)
                 : null;
@@ -276,6 +276,13 @@ public class QaTopicResolver {
                 .replaceAll("[？?。.!！]+$", "")
                 .replaceAll("\\s+", " ");
         return topic.length() > 30 ? topic.substring(0, 30) : topic;
+    }
+
+    private String normalizeComparisonTopic(String rawTopic) {
+        String topic = shortenTopic(rawTopic)
+                .replaceAll("(?:之间|间|的)+$", "")
+                .trim();
+        return shortenTopic(topic);
     }
 
     private String trimToEmpty(String value) {
