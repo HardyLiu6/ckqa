@@ -191,6 +191,17 @@ const pendingProcessEvents = computed(() => normalizeProgressEvents(
 const hasActivePendingTask = computed(() => Boolean(
   pendingTask.value && !isTerminalTaskStatus(pendingTask.value.taskStatus),
 ))
+const composerModeHintLabel = computed(() => {
+  if (hasActivePendingTask.value) {
+    return messageModeLabel(pendingTask.value)
+  }
+  if (selectedMode.value === SMART_QA_MODE) {
+    return input.value.trim()
+      ? getModeOption(modePreview.value.mode).shortLabel
+      : getModeOption(SMART_QA_MODE).shortLabel
+  }
+  return getModeOption(selectedMode.value).shortLabel
+})
 const isEmpty = computed(() => messages.value.length === 0 && !pendingTask.value)
 const activeSessionReadOnlyMessage = computed(() => (
   resolveSessionLifecycleStatusText(activeSession.value)
@@ -2019,7 +2030,7 @@ function sourceTypeLabel(source) {
 
       <div v-if="!isEmpty" class="composer-hint">
         <span><kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行</span>
-        <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ getModeOption(modePreview.mode).shortLabel }}</span>
+        <span v-if="selectedCourse">{{ selectedCourse.name }} · {{ composerModeHintLabel }}</span>
         <span v-else>可先提问，系统会尝试识别课程</span>
       </div>
     </div>
