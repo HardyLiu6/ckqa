@@ -2,6 +2,7 @@ package org.ysu.ckqaback.qa.stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -151,7 +152,7 @@ public class QaTaskEventStreamService {
             QaTaskDetailResponse detail = qaWorkflowService.getTaskDetail(sessionId, taskId, currentUserId);
             sendEvent(emitter, "status", QaTaskStreamStatusEvent.from(detail));
             sendHeartbeatIfDue(taskId, emitter, lastHeartbeatEpochMillis);
-            startPythonBridgeIfAvailable(sessionId, taskId, emitter, bridgedPythonTaskId, pythonDeltaForwarded, afterEventSeq);
+            startPythonBridgeIfAvailable(sessionId, taskId, emitter, bridgedPythonTaskId, pythonDeltaForwarded, detail, afterEventSeq);
 
             if (!isTerminal(detail.getTaskStatus())) {
                 return;
@@ -199,6 +200,7 @@ public class QaTaskEventStreamService {
             SseEmitter emitter,
             AtomicReference<String> bridgedPythonTaskId,
             AtomicBoolean pythonDeltaForwarded,
+            QaTaskDetailResponse detail,
             Long afterEventSeq
     ) {
         if (bridgedPythonTaskId.get() != null) {
@@ -226,7 +228,7 @@ public class QaTaskEventStreamService {
                 graphRagTaskClient.streamTaskEvents(
                         pythonTaskId,
                         afterEventSeq,
-                        event -> forwardPythonEvent(emitter, event, pythonDeltaForwarded)
+                        event -> forwardPythonEvent(emitter, event, pythonDeltaForwarded, detail.getRequestedMode(), detail.getResolvedMode())
                 );
             } catch (RuntimeException ex) {
                 log.debug("Python QA 事件流不可用，继续使用 Java 阶段 1 事件流, pythonTaskId={}", pythonTaskId, ex);
@@ -234,10 +236,16 @@ public class QaTaskEventStreamService {
         });
     }
 
-    private void forwardPythonEvent(SseEmitter emitter, GraphRagTaskEvent event, AtomicBoolean pythonDeltaForwarded) {
+    private void forwardPythonEvent(
+            SseEmitter emitter,
+            GraphRagTaskEvent event,
+            AtomicBoolean pythonDeltaForwarded,
+            String requestedMode,
+            String resolvedMode
+    ) {
         if ("status".equals(event.eventName()) && event.data() != null) {
             try {
-                sendEvent(emitter, "status", event.data(), resolveEventSeq(event));
+                sendEvent(emitter, "status", enrichPythonStatus(event.data(), requestedMode, resolvedMode), resolveEventSeq(event));
             } catch (IOException ex) {
                 log.debug("转发 Python QA status 失败: {}", ex.getMessage());
             }
@@ -270,6 +278,24 @@ public class QaTaskEventStreamService {
         } catch (IOException ex) {
             log.debug("转发 Python QA delta 失败: {}", ex.getMessage());
         }
+    }
+
+    private JsonNode enrichPythonStatus(JsonNode data, String requestedMode, String resolvedMode) {
+        if (!(data instanceof ObjectNode objectNode)) {
+            return data;
+        }
+        ObjectNode enriched = objectNode.deepCopy();
+        if (!enriched.hasNonNull("requestedMode") && hasText(requestedMode)) {
+            enriched.put("requestedMode", requestedMode);
+        }
+        if (!enriched.hasNonNull("resolvedMode") && hasText(resolvedMode)) {
+            enriched.put("resolvedMode", resolvedMode);
+        }
+        return enriched;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private Long resolveEventSeq(GraphRagTaskEvent event) {

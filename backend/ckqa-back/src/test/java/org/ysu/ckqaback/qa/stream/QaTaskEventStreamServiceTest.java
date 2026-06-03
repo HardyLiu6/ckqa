@@ -111,7 +111,7 @@ class QaTaskEventStreamServiceTest {
                     scheduledTask.set(invocation.getArgument(0));
                     return scheduledFuture;
                 });
-        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningDetail());
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningSmartGlobalDetail());
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setPythonTaskId("qt_stream_1");
         given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
@@ -189,7 +189,7 @@ class QaTaskEventStreamServiceTest {
                     scheduledTask.set(invocation.getArgument(0));
                     return scheduledFuture;
                 });
-        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningDetail());
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningSmartGlobalDetail());
         QaRetrievalLogs task = new QaRetrievalLogs();
         task.setPythonTaskId("qt_stream_1");
         given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
@@ -238,12 +238,15 @@ class QaTaskEventStreamServiceTest {
             assertThat(event).contains("event:status");
             assertThat(event).contains("map_running");
             assertThat(event).contains("已处理约 64 秒");
+            assertThat(event).contains("requestedMode", "smart", "resolvedMode", "global");
         });
         assertThat(service.emitter.payloads).anySatisfy(payload -> {
             assertThat(payload).isInstanceOf(Map.class);
             @SuppressWarnings("unchecked")
             Map<String, Object> status = (Map<String, Object>) payload;
             assertThat(status).containsEntry("taskStatus", "running");
+            assertThat(status).containsEntry("requestedMode", "smart");
+            assertThat(status).containsEntry("resolvedMode", "global");
             assertThat(status).containsKey("progressEvents");
         });
     }
@@ -379,6 +382,41 @@ class QaTaskEventStreamServiceTest {
                 30L,
                 1800L,
                 "任务心跳超时"
+        );
+    }
+
+    private static QaTaskDetailResponse runningSmartGlobalDetail() {
+        return QaTaskDetailResponse.of(
+                9001L,
+                101L,
+                null,
+                "running",
+                "streaming",
+                "running",
+                "global",
+                "smart",
+                "global",
+                "它有什么特点？",
+                List.of(),
+                List.of(),
+                LocalDateTime.of(2026, 5, 20, 10, 0),
+                LocalDateTime.of(2026, 5, 20, 10, 0, 5),
+                null,
+                null,
+                null,
+                30L,
+                1800L,
+                "任务心跳超时",
+                true,
+                "recent",
+                null,
+                false,
+                "none",
+                null,
+                0,
+                0,
+                null,
+                38L
         );
     }
 

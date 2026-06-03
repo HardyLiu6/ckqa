@@ -880,6 +880,8 @@ public class KnowledgeBaseBuildRunService {
         metadata.put("taskId", detail.getTaskId());
         metadata.put("taskStatus", detail.getTaskStatus());
         metadata.put("progressStage", detail.getProgressStage());
+        metadata.put("requestedMode", detail.getRequestedMode());
+        metadata.put("resolvedMode", detail.getResolvedMode());
         metadata.put("errorMessage", detail.getErrorMessage());
         return metadata;
     }
@@ -893,6 +895,8 @@ public class KnowledgeBaseBuildRunService {
             payload.put("taskId", detail.getTaskId());
             payload.put("taskStatus", detail.getTaskStatus());
             payload.put("progressStage", detail.getProgressStage());
+            payload.put("requestedMode", detail.getRequestedMode());
+            payload.put("resolvedMode", detail.getResolvedMode());
             payload.put("errorMessage", detail.getErrorMessage());
             payload.put("assistantMessage", assistantMessagePayload(detail.getAssistantMessage()));
             payload.put("latestLogs", detail.getLatestLogs());

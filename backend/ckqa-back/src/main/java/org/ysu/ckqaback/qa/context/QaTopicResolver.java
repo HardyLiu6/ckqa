@@ -140,6 +140,17 @@ public class QaTopicResolver {
         if (containsLatter(text) && hasComparisonPair(state)) {
             return comparisonPronoun(state.comparisonTopics.get(1), state.comparisonTopics);
         }
+        if (isPronounFollowUp(text) && StringUtils.hasText(state.latestTopic)) {
+            return new ResolvedQuestion(
+                    state.latestTopic,
+                    StringUtils.hasText(state.source) ? state.source : "history",
+                    state.confidence,
+                    new ArrayList<>(state.activeTopics),
+                    List.of(),
+                    false,
+                    true
+            );
+        }
         Matcher prefixMatcher = WHAT_IS_PREFIX_PATTERN.matcher(text);
         if (prefixMatcher.matches()) {
             return singleTopic(prefixMatcher.group(2), "explicit", 0.95D);
@@ -151,17 +162,6 @@ public class QaTopicResolver {
         Matcher thenMatcher = THEN_TOPIC_PATTERN.matcher(text);
         if (thenMatcher.matches() && !isPronounFollowUp(text)) {
             return singleTopic(thenMatcher.group(1), "explicit_follow_up", 0.9D);
-        }
-        if (isPronounFollowUp(text) && StringUtils.hasText(state.latestTopic)) {
-            return new ResolvedQuestion(
-                    state.latestTopic,
-                    StringUtils.hasText(state.source) ? state.source : "history",
-                    state.confidence,
-                    new ArrayList<>(state.activeTopics),
-                    List.of(),
-                    false,
-                    true
-            );
         }
         return null;
     }

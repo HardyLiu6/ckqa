@@ -17,6 +17,7 @@ import org.ysu.ckqaback.index.dto.BuildRunMaterialSelectionRequest;
 import org.ysu.ckqaback.index.dto.BuildRunQaSmokeRequest;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.QaWorkflowService;
+import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
@@ -331,8 +332,11 @@ class KnowledgeBaseBuildRunServiceTest {
                 "done",
                 "success",
                 "basic",
+                "smart",
+                "basic",
                 "问题",
                 List.of("done"),
+                List.of(),
                 LocalDateTime.now(),
                 LocalDateTime.now(),
                 LocalDateTime.now(),
@@ -340,7 +344,17 @@ class KnowledgeBaseBuildRunServiceTest {
                 null,
                 10L,
                 300L,
-                "timeout"
+                "timeout",
+                false,
+                "none",
+                ContextSizeEstimateResponse.of(0),
+                false,
+                "none",
+                null,
+                0,
+                0,
+                null,
+                0L
         ));
 
         service.runQaSmoke(27L, new BuildRunQaSmokeRequest());
@@ -348,7 +362,11 @@ class KnowledgeBaseBuildRunServiceTest {
         assertThat(buildRun.getCurrentStage()).isEqualTo("done");
         assertThat(buildRun.getQaStatus()).isEqualTo("success");
         assertThat(Files.readString(tempDir.resolve("user_7/kb_5/build_27/qa-smoke/response.json")))
-                .contains("\"taskStatus\":\"success\"", "回答");
+                .contains("\"taskStatus\":\"success\"", "\"requestedMode\":\"smart\"", "\"resolvedMode\":\"basic\"", "回答");
+        com.fasterxml.jackson.databind.JsonNode metadata =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(buildRun.getBuildMetadata());
+        assertThat(metadata.get("requestedMode").asText()).isEqualTo("smart");
+        assertThat(metadata.get("resolvedMode").asText()).isEqualTo("basic");
     }
 
     private KnowledgeBases knowledgeBase() {

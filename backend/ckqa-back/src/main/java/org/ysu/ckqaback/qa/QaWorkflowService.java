@@ -710,6 +710,8 @@ public class QaWorkflowService {
                 task.getProgressStage(),
                 task.getRetrievalStatus(),
                 task.getQueryMode(),
+                task.getRequestedMode(),
+                task.getResolvedMode(),
                 task.getQueryText(),
                 latestLogs,
                 progressEvents,

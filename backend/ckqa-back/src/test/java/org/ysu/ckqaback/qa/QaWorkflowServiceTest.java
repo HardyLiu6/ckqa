@@ -1439,6 +1439,8 @@ class QaWorkflowServiceTest {
         task.setTaskStatus("running");
         task.setProgressStage("running");
         task.setQueryMode("drift");
+        task.setRequestedMode("smart");
+        task.setResolvedMode("drift");
         task.setQueryText("请用 drift 模式回答");
         task.setLatestLogs("""
                 [
@@ -1466,6 +1468,8 @@ class QaWorkflowServiceTest {
         QaTaskDetailResponse response = workflowService.getTaskDetail(5L, 9001L);
 
         assertThat(response.getMode()).isEqualTo("drift");
+        assertThat(response.getRequestedMode()).isEqualTo("smart");
+        assertThat(response.getResolvedMode()).isEqualTo("drift");
         assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(15);
         assertThat(response.getStaleTimeoutSeconds()).isEqualTo(1800);
         assertThat(response.getTimeoutMessage()).contains("drift");
@@ -1480,6 +1484,13 @@ class QaWorkflowServiceTest {
         assertThat(response.getProgressEvents()).hasSize(1);
         assertThat(response.getProgressEvents().get(0).getType()).isEqualTo("reduce_started");
         assertThat(response.getProgressEvents().get(0).getEventSeq()).isEqualTo(18L);
+
+        task.setRequestedMode(null);
+        task.setResolvedMode(null);
+        QaTaskDetailResponse legacyResponse = workflowService.getTaskDetail(5L, 9001L);
+
+        assertThat(legacyResponse.getRequestedMode()).isEqualTo("drift");
+        assertThat(legacyResponse.getResolvedMode()).isEqualTo("drift");
     }
 
     private KnowledgeBases buildKnowledgeBase() {

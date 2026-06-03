@@ -476,6 +476,8 @@ class QaSessionsControllerWebMvcTest {
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.taskStatus").value("success"))
+                .andExpect(jsonPath("$.data.requestedMode").value("global"))
+                .andExpect(jsonPath("$.data.resolvedMode").value("global"))
                 .andExpect(jsonPath("$.data.recommendedPollingIntervalSeconds").value(5))
                 .andExpect(jsonPath("$.data.staleTimeoutSeconds").value(30))
                 .andExpect(jsonPath("$.data.contextApplied").value(true))

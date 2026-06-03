@@ -39,6 +39,22 @@ class QaTopicResolverTest {
     }
 
     @Test
+    void shouldResolvePronounDefinitionQuestionToPreviousStableTopic() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁是什么？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。")
+        );
+
+        QaTopicStack stack = resolver.resolve("它的定义是什么？", history, null);
+
+        assertThat(stack.latestTopic()).isEqualTo("死锁");
+        assertThat(stack.topicSource()).isEqualTo("history");
+        assertThat(stack.latestTopicMessageRange()).isEqualTo("1-2");
+        assertThat(stack.activeTopicsJson()).contains("死锁").doesNotContain("它的定义");
+    }
+
+    @Test
     void shouldBindFormerAndLatterToMostRecentComparisonPair() {
         QaTopicResolver resolver = new QaTopicResolver();
         List<QaMessages> history = List.of(
