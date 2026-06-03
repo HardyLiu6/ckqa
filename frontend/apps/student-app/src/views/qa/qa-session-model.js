@@ -407,6 +407,17 @@ export function normalizeQaSessionList(payload) {
     .filter((session) => session.id != null)
 }
 
+export function localDateString(date = new Date()) {
+  const value = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(value.getTime())) {
+    return ''
+  }
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function toQaSideNavSession(session, activeSessionId = '', now = new Date()) {
   const normalized = normalizeQaSession(session)
   const referenceTime = normalized.lastMessageAt || normalized.createdAt || normalized.indexLockedAt || ''
@@ -415,7 +426,7 @@ export function toQaSideNavSession(session, activeSessionId = '', now = new Date
     active: String(activeSessionId || '') === String(normalized.id ?? ''),
     meta: sideNavSessionMeta(normalized, referenceTime, now),
     relativeTime: formatRelativeSessionTime(referenceTime, now),
-    dateStr: String(referenceTime || '').slice(0, 10) || now.toISOString().slice(0, 10),
+    dateStr: String(referenceTime || '').slice(0, 10) || localDateString(now),
   }
 }
 

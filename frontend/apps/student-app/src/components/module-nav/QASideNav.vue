@@ -3,7 +3,7 @@
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listQaSessions } from '@/api/qa'
-import { normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
+import { localDateString, normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
 import { buildQaRouteQuery, withoutQaSessionQuery } from '@/views/qa/qa-route-query-model'
 
 const router = useRouter()
@@ -54,9 +54,9 @@ const groupedSessions = computed(() => {
     ? sessions.value.filter((s) => s.title.toLowerCase().includes(searchKeyword.value.toLowerCase()))
     : sessions.value
 
-  const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)
-  const yesterday = new Date(today.getTime() - 86400000).toISOString().slice(0, 10)
+  const now = new Date()
+  const todayStr = localDateString(now)
+  const yesterday = localDateString(new Date(now.getTime() - 86400000))
 
   const groups = { today: [], yesterday: [], earlier: [] }
   for (const session of filtered) {

@@ -76,9 +76,11 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 .eq(QaSessions::getSessionType, "formal")
                 .eq(StringUtils.hasText(request.getCourseId()), QaSessions::getCourseId, request.getCourseId())
                 .eq(request.getKnowledgeBaseId() != null, QaSessions::getKnowledgeBaseId, request.getKnowledgeBaseId())
-                .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus())
-                .orderByDesc(QaSessions::getLastMessageAt)
-                .orderByDesc(QaSessions::getCreatedAt);
+                .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus());
+        // 无消息会话 last_message_at 为 NULL，MySQL 在 DESC 下会把它们排到最后，
+        // 导致刚创建的会话被列表 size 截断而看不见。用 COALESCE 兜底到 created_at，
+        // 让会话按真实活跃时间排序，刚提问的会话也能出现在最近列表顶部。
+        wrapper.last(" ORDER BY COALESCE(last_message_at, created_at) DESC, created_at DESC");
 
         IPage<QaSessions> page = page(new Page<>(current, size), wrapper);
         return new ApiPageData<>(

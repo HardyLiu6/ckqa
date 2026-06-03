@@ -409,6 +409,14 @@ test('问答侧栏相对时间兼容空值和旧日期', () => {
   assert.equal(formatRelativeSessionTime('not-a-date', now), 'not-a-date')
 })
 
+test('localDateString 按本地时区取日期,避免 UTC 把刚过午夜的会话算成昨天', () => {
+  // 本地 6/4 00:30(东八区 UTC 仍停在 6/3 16:30):分组用的"今天"必须取本地日期 6/4,
+  // 否则 toISOString 会把刚提问的会话错判成昨天/更早。
+  assert.equal(qaSessionModel.localDateString(new Date(2026, 5, 4, 0, 30)), '2026-06-04')
+  // 月、日补零
+  assert.equal(qaSessionModel.localDateString(new Date(2026, 0, 9, 23, 59)), '2026-01-09')
+})
+
 test('旧会话与 active index 差异状态可被前端识别', () => {
   const legacy = normalizeQaSession({ id: 21, courseId: 'os', knowledgeBaseId: 3, indexRunId: null })
   const oldIndexSession = normalizeQaSession({ id: 22, courseId: 'os', knowledgeBaseId: 3, indexRunId: 17 })
