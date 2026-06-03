@@ -40,6 +40,8 @@ public class QaOperationLogResponse {
     private final String memoryStrategy;
     private final Integer memorySourceCount;
     private final Integer memorySizeChars;
+    private final Integer memoryLongTermCount;
+    private final Integer memoryRecentHistoryCount;
     private final String queryEngineStrategy;
     private final String historyFallbackReason;
     private final LocalDateTime createdAt;
@@ -80,6 +82,8 @@ public class QaOperationLogResponse {
         this.memoryStrategy = row.getMemoryStrategy();
         this.memorySourceCount = row.getMemorySourceCount();
         this.memorySizeChars = row.getMemorySizeChars();
+        this.memoryLongTermCount = row.getMemoryLongTermCount();
+        this.memoryRecentHistoryCount = row.getMemoryRecentHistoryCount();
         this.queryEngineStrategy = row.getQueryEngineStrategy();
         this.historyFallbackReason = row.getHistoryFallbackReason();
         this.createdAt = row.getCreatedAt();

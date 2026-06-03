@@ -113,6 +113,11 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setMemoryScope(context.memoryScope());
             task.setMemorySourceCount(context.memorySourceCount());
             task.setMemorySizeChars(context.memorySizeChars());
+            task.setMemoryGovernanceVersion(context.memoryGovernanceVersion());
+            task.setMemoryLongTermCount(context.memoryLongTermCount());
+            task.setMemoryRecentHistoryCount(context.memoryRecentHistoryCount());
+            task.setMemoryInjectionReason(context.memoryInjectionReason());
+            task.setMemorySourcesJson(context.memorySourcesJson());
             task.setQueryEngineStrategy(context.queryEngineStrategy());
             task.setHistoryFallbackReason(context.historyFallbackReason());
             task.setMemoryHistoryJson(context.memoryHistoryJson());

@@ -370,6 +370,36 @@ public class QaRetrievalLogs implements Serializable {
     private Integer memorySizeChars;
 
     /**
+     * 长期记忆治理版本，仅用于脱敏诊断。
+     */
+    @TableField("memory_governance_version")
+    private String memoryGovernanceVersion;
+
+    /**
+     * 本轮实际注入的长期记忆条数。
+     */
+    @TableField("memory_long_term_count")
+    private Integer memoryLongTermCount;
+
+    /**
+     * 本轮实际注入的最近会话历史条数。
+     */
+    @TableField("memory_recent_history_count")
+    private Integer memoryRecentHistoryCount;
+
+    /**
+     * 长期记忆注入原因，不包含原文。
+     */
+    @TableField("memory_injection_reason")
+    private String memoryInjectionReason;
+
+    /**
+     * 脱敏来源 JSON，不包含 memory_text 或最近会话正文。
+     */
+    @TableField("memory_sources_json")
+    private String memorySourcesJson;
+
+    /**
      * Python 查询引擎策略
      */
     @TableField("query_engine_strategy")

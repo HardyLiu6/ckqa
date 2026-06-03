@@ -611,7 +611,12 @@ ALTER TABLE `qa_retrieval_logs`
   ADD COLUMN `memory_scope` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '长期记忆隔离范围' AFTER `memory_strategy`,
   ADD COLUMN `memory_source_count` int NULL COMMENT '长期记忆来源数量' AFTER `memory_scope`,
   ADD COLUMN `memory_size_chars` int NULL COMMENT '长期记忆上下文字符数' AFTER `memory_source_count`,
-  ADD COLUMN `query_engine_strategy` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT 'Python查询引擎策略' AFTER `memory_size_chars`,
+  ADD COLUMN `memory_governance_version` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '长期记忆治理版本，仅用于脱敏诊断' AFTER `memory_size_chars`,
+  ADD COLUMN `memory_long_term_count` int NULL COMMENT '本轮实际注入的长期记忆条数，脱敏诊断字段，不含原文' AFTER `memory_governance_version`,
+  ADD COLUMN `memory_recent_history_count` int NULL COMMENT '本轮实际注入的最近会话历史条数，脱敏诊断字段，不含原文' AFTER `memory_long_term_count`,
+  ADD COLUMN `memory_injection_reason` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '长期记忆注入原因，脱敏诊断字段，不含原文' AFTER `memory_recent_history_count`,
+  ADD COLUMN `memory_sources_json` json NULL COMMENT '长期记忆脱敏来源JSON，仅含ID/hash/字符数等诊断字段，不含memory_text或会话正文' AFTER `memory_injection_reason`,
+  ADD COLUMN `query_engine_strategy` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT 'Python查询引擎策略' AFTER `memory_sources_json`,
   ADD COLUMN `history_fallback_reason` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '历史上下文降级原因' AFTER `query_engine_strategy`,
   ADD COLUMN `memory_history_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '内部传递给Python的历史上下文JSON' AFTER `history_fallback_reason`,
   ADD INDEX `idx_retrieval_logs_memory_strategy` (`memory_applied`, `query_engine_strategy`);

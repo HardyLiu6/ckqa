@@ -66,6 +66,11 @@ public class QaOperationLogRow {
     private String memoryScope;
     private Integer memorySourceCount;
     private Integer memorySizeChars;
+    private String memoryGovernanceVersion;
+    private Integer memoryLongTermCount;
+    private Integer memoryRecentHistoryCount;
+    private String memoryInjectionReason;
+    private String memorySourcesJson;
     private String queryEngineStrategy;
     private String historyFallbackReason;
     private LocalDateTime createdAt;

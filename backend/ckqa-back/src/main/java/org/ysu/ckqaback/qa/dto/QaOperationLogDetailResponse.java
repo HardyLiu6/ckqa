@@ -36,6 +36,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
     private final String topicEntityFallbackReason;
     private final Long topicEntityLookupDurationMs;
     private final String memoryScope;
+    private final String memoryGovernanceVersion;
+    private final String memoryInjectionReason;
+    private final String memorySourcesJson;
     private final LocalDateTime lastHeartbeatAt;
     private final String assistantContent;
     private final List<QaOperationFeedbackResponse> feedback;
@@ -72,6 +75,9 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
         this.topicEntityFallbackReason = row.getTopicEntityFallbackReason();
         this.topicEntityLookupDurationMs = row.getTopicEntityLookupDurationMs();
         this.memoryScope = row.getMemoryScope();
+        this.memoryGovernanceVersion = row.getMemoryGovernanceVersion();
+        this.memoryInjectionReason = row.getMemoryInjectionReason();
+        this.memorySourcesJson = row.getMemorySourcesJson();
         this.lastHeartbeatAt = row.getLastHeartbeatAt();
         this.assistantContent = row.getAssistantContent();
         this.feedback = feedback == null ? List.of() : List.copyOf(feedback);

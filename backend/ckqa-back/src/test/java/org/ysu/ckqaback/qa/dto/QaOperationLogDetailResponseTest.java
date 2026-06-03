@@ -46,4 +46,31 @@ class QaOperationLogDetailResponseTest {
         assertThat(root.get("topicEntityCandidatesJson").asText()).contains("\"source\":\"active_neo4j\"");
         assertThat(json).doesNotContain("description", "snippet", "memoryText", "full_content");
     }
+
+    @Test
+    void shouldSerializeMemoryGovernanceDiagnosticsWithoutRawMemoryHistory() throws Exception {
+        QaOperationLogRow row = new QaOperationLogRow();
+        row.setMemoryApplied(true);
+        row.setMemoryStrategy("local_history_preference_only");
+        row.setMemorySourceCount(3);
+        row.setMemorySizeChars(128);
+        row.setMemoryGovernanceVersion("memory-governance-v1");
+        row.setMemoryLongTermCount(1);
+        row.setMemoryRecentHistoryCount(2);
+        row.setMemoryInjectionReason("preference_enabled:auto");
+        row.setMemorySourcesJson("""
+                [{"memoryId":101,"memoryType":"explanation_preference","sourceSessionId":5,"sourceMessageId":88,"includeReason":"preference_enabled:auto","textHash":"abc12345","textChars":14}]
+                """);
+
+        QaOperationLogDetailResponse response = QaOperationLogDetailResponse.of(row, List.of(), List.of());
+
+        String json = objectMapper.writeValueAsString(response);
+        JsonNode root = objectMapper.readTree(json);
+
+        assertThat(root.get("memoryLongTermCount").asInt()).isEqualTo(1);
+        assertThat(root.get("memoryRecentHistoryCount").asInt()).isEqualTo(2);
+        assertThat(root.get("memoryGovernanceVersion").asText()).isEqualTo("memory-governance-v1");
+        assertThat(root.get("memorySourcesJson").asText()).contains("\"textHash\":\"abc12345\"");
+        assertThat(json).doesNotContain("memoryHistoryJson", "conversationHistory", "memoryText", "学生偏好");
+    }
 }

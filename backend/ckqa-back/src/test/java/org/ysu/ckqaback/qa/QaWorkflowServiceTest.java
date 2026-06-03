@@ -573,8 +573,16 @@ class QaWorkflowServiceTest {
                         "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
                         2,
                         66,
-                        List.of(new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。")),
-                        null
+                        List.of(
+                                new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。"),
+                                new GraphRagConversationMessage("user", "什么是时间片轮转？")
+                        ),
+                        null,
+                        "memory-governance-v1",
+                        1,
+                        1,
+                        "preference_enabled:auto",
+                        "[{\"memoryId\":101,\"memoryType\":\"explanation_preference\",\"textHash\":\"abc12345\",\"textChars\":10}]"
                 ));
         given(qaMessagesService.appendUserMessage(5L, "它为什么影响响应时间？")).willReturn(userMessage);
         given(qaRetrievalLogsService.createPendingTask(
@@ -588,7 +596,13 @@ class QaWorkflowServiceTest {
                         && "local_history_preference_only".equals(context.memoryStrategy())
                         && "local_history".equals(context.queryEngineStrategy())
                         && context.memoryHistoryJson().contains("学习记忆")
-                        && context.memorySourceCount() == 2)
+                        && context.memorySourceCount() == 2
+                        && "memory-governance-v1".equals(context.memoryGovernanceVersion())
+                        && context.memoryLongTermCount() == 1
+                        && context.memoryRecentHistoryCount() == 1
+                        && "preference_enabled:auto".equals(context.memoryInjectionReason())
+                        && context.memorySourcesJson().contains("\"textHash\":\"abc12345\"")
+                        && !context.memorySourcesJson().contains("偏好步骤化解释"))
         )).willReturn(task);
 
         CreateQaMessageRequest request = new CreateQaMessageRequest("local", "它为什么影响响应时间？");

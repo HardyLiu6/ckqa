@@ -17,6 +17,7 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagTaskEvent;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
+import org.ysu.ckqaback.qa.safety.QaSensitiveFieldFilter;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 
 import java.io.IOException;
@@ -394,9 +395,9 @@ public class QaTaskEventStreamService {
 
     private Object normalizeSseData(Object data) {
         if (data instanceof JsonNode node) {
-            return objectMapper.convertValue(node, Object.class);
+            return QaSensitiveFieldFilter.sanitize(objectMapper.convertValue(node, Object.class));
         }
-        return data;
+        return QaSensitiveFieldFilter.sanitize(data);
     }
 
     private void sendErrorEventAndComplete(SseEmitter emitter, Long taskId, String message) {

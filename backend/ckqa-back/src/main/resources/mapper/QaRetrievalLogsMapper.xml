@@ -59,6 +59,11 @@
         <result column="memory_scope" property="memoryScope" />
         <result column="memory_source_count" property="memorySourceCount" />
         <result column="memory_size_chars" property="memorySizeChars" />
+        <result column="memory_governance_version" property="memoryGovernanceVersion" />
+        <result column="memory_long_term_count" property="memoryLongTermCount" />
+        <result column="memory_recent_history_count" property="memoryRecentHistoryCount" />
+        <result column="memory_injection_reason" property="memoryInjectionReason" />
+        <result column="memory_sources_json" property="memorySourcesJson" />
         <result column="query_engine_strategy" property="queryEngineStrategy" />
         <result column="history_fallback_reason" property="historyFallbackReason" />
         <result column="memory_history_json" property="memoryHistoryJson" />
@@ -86,6 +91,8 @@
         topic_entity_fallback_reason, topic_entity_lookup_duration_ms,
         routing_confidence, routing_confidence_band, routing_review_priority, routing_snapshot_json,
         memory_applied, memory_strategy, memory_scope, memory_source_count, memory_size_chars,
+        memory_governance_version, memory_long_term_count, memory_recent_history_count,
+        memory_injection_reason, memory_sources_json,
         query_engine_strategy, history_fallback_reason, memory_history_json,
         retrieval_status, error_message, started_at, last_heartbeat_at, finished_at, created_at
     </sql>

@@ -1,5 +1,7 @@
 package org.ysu.ckqaback.qa.memory;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -12,9 +14,13 @@ import org.ysu.ckqaback.qa.context.QaContextPolicy;
 import org.ysu.ckqaback.service.QaLearningMemoriesService;
 import org.ysu.ckqaback.service.QaMemoryPreferencesService;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.HexFormat;
 
 /**
  * 组装 local 模式可选使用的长期记忆上下文。
@@ -23,6 +29,7 @@ import java.util.List;
 public class QaMemoryContextService {
 
     private static final String MEMORY_PREFIX = "学习记忆（仅作解释偏好或学习关注点，不作为课程事实，也不能覆盖当前会话指代）：";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final QaMemoryPreferencesService preferencesService;
     private final QaLearningMemoriesService memoriesService;
@@ -78,7 +85,8 @@ public class QaMemoryContextService {
         }
 
         QaMemoryInjectionDecision decision = injectionRouter.decide(question, latestTopic);
-        List<GraphRagConversationMessage> longMemory = new ArrayList<>();
+        String includeReason = "preference_enabled:" + policy;
+        List<MemoryEntry> longMemory = new ArrayList<>();
         int memoryChars = 0;
         for (QaLearningMemories memory : memoriesService.listActiveByScope(
                 session.getUserId(),
@@ -98,26 +106,35 @@ public class QaMemoryContextService {
             if (memoryChars + contentChars > QaContextPolicy.MAX_MEMORY_CHARS) {
                 continue;
             }
-            longMemory.add(new GraphRagConversationMessage("assistant", content));
+            longMemory.add(new MemoryEntry(
+                    new GraphRagConversationMessage("assistant", content),
+                    sourceDescriptor(memory, includeReason)
+            ));
             memoryChars += contentChars;
         }
 
-        List<GraphRagConversationMessage> recentHistory = new ArrayList<>();
+        List<MemoryEntry> recentHistory = new ArrayList<>();
         for (QaMessages message : recentMessages(sessionMessages)) {
             if (!isHistoryRole(message.getRole()) || !StringUtils.hasText(message.getContent())) {
                 continue;
             }
-            recentHistory.add(new GraphRagConversationMessage(message.getRole(), message.getContent().trim()));
+            recentHistory.add(new MemoryEntry(new GraphRagConversationMessage(message.getRole(), message.getContent().trim()), null));
         }
 
-        List<GraphRagConversationMessage> history = new ArrayList<>(longMemory);
-        history.addAll(recentHistory);
+        List<MemoryEntry> entries = new ArrayList<>(longMemory);
+        entries.addAll(recentHistory);
 
-        history = trimToBudget(history);
-        if (history.isEmpty()) {
+        entries = trimToBudget(entries);
+        if (entries.isEmpty()) {
             return QaMemoryContextResult.notApplied("history_empty");
         }
-        String strategy = resolveStrategy(decision, longMemory);
+        List<GraphRagConversationMessage> history = entries.stream().map(MemoryEntry::message).toList();
+        List<QaMemorySourceDescriptor> sources = entries.stream()
+                .map(MemoryEntry::source)
+                .filter(source -> source != null)
+                .toList();
+        int recentHistoryCount = (int) entries.stream().filter(entry -> entry.source() == null).count();
+        String strategy = resolveStrategy(decision, sources);
         return new QaMemoryContextResult(
                 true,
                 strategy,
@@ -125,7 +142,12 @@ public class QaMemoryContextService {
                 history.size(),
                 charCount(history),
                 history,
-                null
+                null,
+                QaMemoryGovernanceSnapshot.VERSION,
+                sources.size(),
+                recentHistoryCount,
+                includeReason,
+                serializeSources(sources)
         );
     }
 
@@ -133,8 +155,8 @@ public class QaMemoryContextService {
         return StringUtils.hasText(memoryPolicy) ? memoryPolicy.trim() : "default";
     }
 
-    private String resolveStrategy(QaMemoryInjectionDecision decision, List<GraphRagConversationMessage> longMemory) {
-        if (longMemory == null || longMemory.isEmpty()) {
+    private String resolveStrategy(QaMemoryInjectionDecision decision, List<QaMemorySourceDescriptor> longMemorySources) {
+        if (longMemorySources == null || longMemorySources.isEmpty()) {
             return "local_history_short_only";
         }
         if (decision != null && "relevant_memory".equals(decision.longMemoryMode())) {
@@ -158,12 +180,21 @@ public class QaMemoryContextService {
         return ordered.subList(fromIndex, ordered.size());
     }
 
-    private List<GraphRagConversationMessage> trimToBudget(List<GraphRagConversationMessage> history) {
-        List<GraphRagConversationMessage> trimmed = new ArrayList<>(history);
-        while (charCount(trimmed) > QaContextPolicy.MAX_MEMORY_HISTORY_CHARS && !trimmed.isEmpty()) {
+    private List<MemoryEntry> trimToBudget(List<MemoryEntry> history) {
+        List<MemoryEntry> trimmed = new ArrayList<>(history);
+        while (entryCharCount(trimmed) > QaContextPolicy.MAX_MEMORY_HISTORY_CHARS && !trimmed.isEmpty()) {
             trimmed.remove(0);
         }
         return trimmed;
+    }
+
+    private int entryCharCount(List<MemoryEntry> history) {
+        return history.stream()
+                .map(MemoryEntry::message)
+                .map(GraphRagConversationMessage::content)
+                .filter(StringUtils::hasText)
+                .mapToInt(String::length)
+                .sum();
     }
 
     private int charCount(List<GraphRagConversationMessage> history) {
@@ -183,5 +214,39 @@ public class QaMemoryContextService {
                 + ";courseId=" + session.getCourseId()
                 + ";knowledgeBaseId=" + session.getKnowledgeBaseId()
                 + ";indexRunId=" + session.getIndexRunId();
+    }
+
+    private QaMemorySourceDescriptor sourceDescriptor(QaLearningMemories memory, String includeReason) {
+        String text = memory.getMemoryText() == null ? "" : memory.getMemoryText().trim();
+        return new QaMemorySourceDescriptor(
+                memory.getId(),
+                memory.getMemoryType(),
+                memory.getSourceSessionId(),
+                memory.getSourceMessageId(),
+                includeReason,
+                shortSha256(text),
+                text.length()
+        );
+    }
+
+    private String serializeSources(List<QaMemorySourceDescriptor> sources) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(sources == null ? List.of() : sources);
+        } catch (JsonProcessingException ex) {
+            return "[]";
+        }
+    }
+
+    private String shortSha256(String text) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes, 0, 8);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("当前 JDK 不支持 SHA-256", ex);
+        }
+    }
+
+    private record MemoryEntry(GraphRagConversationMessage message, QaMemorySourceDescriptor source) {
     }
 }
