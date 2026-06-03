@@ -13,6 +13,11 @@
         <result column="index_run_id" property="indexRunId" />
         <result column="index_locked_at" property="indexLockedAt" />
         <result column="session_type" property="sessionType" />
+        <result column="parent_session_id" property="parentSessionId" />
+        <result column="forked_from_message_id" property="forkedFromMessageId" />
+        <result column="forked_from_sequence_no" property="forkedFromSequenceNo" />
+        <result column="fork_reason" property="forkReason" />
+        <result column="transcript_version" property="transcriptVersion" />
         <result column="title" property="title" />
         <result column="status" property="status" />
         <result column="last_message_at" property="lastMessageAt" />
@@ -23,7 +28,8 @@
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
         id, session_code, user_id, course_id, course_membership_id, knowledge_base_id, index_run_id,
-        index_locked_at, session_type, title, status, last_message_at, created_at, updated_at
+        index_locked_at, session_type, parent_session_id, forked_from_message_id, forked_from_sequence_no,
+        fork_reason, transcript_version, title, status, last_message_at, created_at, updated_at
     </sql>
 
 </mapper>

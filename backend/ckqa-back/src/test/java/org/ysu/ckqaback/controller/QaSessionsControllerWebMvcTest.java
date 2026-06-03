@@ -17,11 +17,15 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.exception.GlobalExceptionHandler;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
 import org.ysu.ckqaback.qa.QaWorkflowService;
+import org.ysu.ckqaback.qa.dto.QaSessionForkResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptSummaryResponse;
 import org.ysu.ckqaback.qa.stream.QaTaskEventStreamService;
 
 import java.time.LocalDateTime;
@@ -30,6 +34,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -554,6 +559,156 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data[0].taskStatus").value("running"))
                 .andExpect(jsonPath("$.data[0].progressStage").value("running"))
                 .andExpect(jsonPath("$.data[1].taskStatus").isEmpty());
+    }
+
+    @Test
+    void shouldReturnSessionTranscriptForOwner() throws Exception {
+        QaSessionResponse session = QaSessionResponse.of(
+                5L,
+                "qa-0001",
+                7L,
+                "os",
+                3L,
+                "formal",
+                "操作系统问答",
+                "active",
+                null,
+                LocalDateTime.of(2026, 5, 17, 10, 0)
+        );
+        QaMessageResponse message = QaMessageResponse.of(
+                101L,
+                5L,
+                "user",
+                1,
+                "什么是死锁？",
+                LocalDateTime.of(2026, 5, 17, 10, 1),
+                "basic",
+                null,
+                (String) null
+        );
+        QaTranscriptSummaryResponse summary = QaTranscriptSummaryResponse.of(
+                "本会话已讨论死锁定义。",
+                1,
+                1,
+                "死锁",
+                "1",
+                "[{\"topic\":\"死锁\"}]",
+                "semantic_state_v1",
+                LocalDateTime.of(2026, 5, 17, 10, 2),
+                LocalDateTime.of(2026, 5, 17, 10, 3)
+        );
+        given(qaWorkflowService.getTranscript(5L, 7L)).willReturn(QaTranscriptResponse.of(
+                session,
+                List.of(QaTranscriptMessageResponse.fromMessage(message, 77L)),
+                summary,
+                "v1"
+        ));
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/transcript")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.session.id").value(5))
+                .andExpect(jsonPath("$.data.messages[0].id").value(101))
+                .andExpect(jsonPath("$.data.messages[0].copiedFromMessageId").value(77))
+                .andExpect(jsonPath("$.data.latestSummary.summaryText").value("本会话已讨论死锁定义。"))
+                .andExpect(jsonPath("$.data.messageCount").value(1))
+                .andExpect(jsonPath("$.data.maxSequenceNo").value(1));
+
+        then(qaWorkflowService).should().getTranscript(5L, 7L);
+    }
+
+    @Test
+    void shouldForkSessionForOwner() throws Exception {
+        QaSessionResponse child = QaSessionResponse.of(
+                9L,
+                "qa-child",
+                7L,
+                "os",
+                3L,
+                "formal",
+                "死锁分支",
+                "active",
+                null,
+                LocalDateTime.of(2026, 5, 17, 11, 0)
+        );
+        given(qaWorkflowService.forkSession(eq(5L), any(), eq(authenticatedStudent()))).willReturn(QaSessionForkResponse.of(
+                5L,
+                child,
+                102L,
+                2,
+                2
+        ));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/fork")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "forkedFromMessageId": 102,
+                                  "title": "死锁分支",
+                                  "forkReason": "追问另一路"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.parentSessionId").value(5))
+                .andExpect(jsonPath("$.data.childSession.id").value(9))
+                .andExpect(jsonPath("$.data.forkedFromMessageId").value(102))
+                .andExpect(jsonPath("$.data.forkedFromSequenceNo").value(2))
+                .andExpect(jsonPath("$.data.copiedMessageCount").value(2));
+
+        then(qaWorkflowService).should().forkSession(eq(5L), argThat(request ->
+                Long.valueOf(102L).equals(request.getForkedFromMessageId())
+                        && "死锁分支".equals(request.getTitle())
+                        && "追问另一路".equals(request.getForkReason())
+        ), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldForkSessionWithoutRequestBody() throws Exception {
+        QaSessionResponse child = QaSessionResponse.of(
+                9L,
+                "qa-child",
+                7L,
+                "os",
+                3L,
+                "formal",
+                "死锁复习 的分支",
+                "active",
+                null,
+                LocalDateTime.of(2026, 5, 17, 11, 0)
+        );
+        given(qaWorkflowService.forkSession(eq(5L), isNull(), eq(authenticatedStudent()))).willReturn(QaSessionForkResponse.of(
+                5L,
+                child,
+                null,
+                null,
+                0
+        ));
+
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/fork")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.parentSessionId").value(5))
+                .andExpect(jsonPath("$.data.childSession.id").value(9))
+                .andExpect(jsonPath("$.data.copiedMessageCount").value(0));
+
+        then(qaWorkflowService).should().forkSession(eq(5L), isNull(), eq(authenticatedStudent()));
+    }
+
+    @Test
+    void shouldRequireAuthWhenReadingTranscript() throws Exception {
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/5/transcript"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(4010));
+    }
+
+    @Test
+    void shouldRequireAuthWhenForkingSession() throws Exception {
+        mockMvc.perform(post(ApiPaths.QA_SESSIONS + "/5/fork")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(4010));
     }
 
     @Test

@@ -24,13 +24,16 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.ForkQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionForkResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.stream.QaTaskEventStreamService;
 import org.springframework.http.MediaType;
@@ -125,6 +128,23 @@ public class QaSessionsController {
     ) {
         qaWorkflowService.ensureSessionOwner(id, currentUserId(servletRequest));
         return ApiResponseUtils.success(qaWorkflowService.listMessages(id, currentUserId(servletRequest)));
+    }
+
+    @GetMapping("/{id}/transcript")
+    public ApiResponse<QaTranscriptResponse> getTranscript(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaWorkflowService.getTranscript(id, currentUserId(servletRequest)));
+    }
+
+    @PostMapping("/{id}/fork")
+    public ApiResponse<QaSessionForkResponse> forkSession(
+            @PathVariable @Positive(message = "id必须大于0") Long id,
+            @Valid @RequestBody(required = false) ForkQaSessionRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponseUtils.success(qaWorkflowService.forkSession(id, request, currentUser(servletRequest)));
     }
 
     @GetMapping("/{sessionId}/tasks/{taskId}")

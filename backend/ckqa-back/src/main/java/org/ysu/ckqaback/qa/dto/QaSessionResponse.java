@@ -19,6 +19,11 @@ public class QaSessionResponse {
     private final Long indexRunId;
     private final LocalDateTime indexLockedAt;
     private final String sessionType;
+    private final Long parentSessionId;
+    private final Long forkedFromMessageId;
+    private final Integer forkedFromSequenceNo;
+    private final String forkReason;
+    private final String transcriptVersion;
     private final String title;
     private final String status;
     private final LocalDateTime lastMessageAt;
@@ -33,6 +38,11 @@ public class QaSessionResponse {
             Long indexRunId,
             LocalDateTime indexLockedAt,
             String sessionType,
+            Long parentSessionId,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String forkReason,
+            String transcriptVersion,
             String title,
             String status,
             LocalDateTime lastMessageAt,
@@ -46,6 +56,11 @@ public class QaSessionResponse {
         this.indexRunId = indexRunId;
         this.indexLockedAt = indexLockedAt;
         this.sessionType = sessionType;
+        this.parentSessionId = parentSessionId;
+        this.forkedFromMessageId = forkedFromMessageId;
+        this.forkedFromSequenceNo = forkedFromSequenceNo;
+        this.forkReason = forkReason;
+        this.transcriptVersion = transcriptVersion;
         this.title = title;
         this.status = status;
         this.lastMessageAt = lastMessageAt;
@@ -66,7 +81,65 @@ public class QaSessionResponse {
             LocalDateTime lastMessageAt,
             LocalDateTime createdAt
     ) {
-        return new QaSessionResponse(id, sessionCode, userId, courseId, knowledgeBaseId, indexRunId, indexLockedAt, sessionType, title, status, lastMessageAt, createdAt);
+        return of(
+                id,
+                sessionCode,
+                userId,
+                courseId,
+                knowledgeBaseId,
+                indexRunId,
+                indexLockedAt,
+                sessionType,
+                null,
+                null,
+                null,
+                null,
+                "v1",
+                title,
+                status,
+                lastMessageAt,
+                createdAt
+        );
+    }
+
+    public static QaSessionResponse of(
+            Long id,
+            String sessionCode,
+            Long userId,
+            String courseId,
+            Long knowledgeBaseId,
+            Long indexRunId,
+            LocalDateTime indexLockedAt,
+            String sessionType,
+            Long parentSessionId,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String forkReason,
+            String transcriptVersion,
+            String title,
+            String status,
+            LocalDateTime lastMessageAt,
+            LocalDateTime createdAt
+    ) {
+        return new QaSessionResponse(
+                id,
+                sessionCode,
+                userId,
+                courseId,
+                knowledgeBaseId,
+                indexRunId,
+                indexLockedAt,
+                sessionType,
+                parentSessionId,
+                forkedFromMessageId,
+                forkedFromSequenceNo,
+                forkReason,
+                transcriptVersion == null ? "v1" : transcriptVersion,
+                title,
+                status,
+                lastMessageAt,
+                createdAt
+        );
     }
 
     public static QaSessionResponse of(
@@ -94,6 +167,11 @@ public class QaSessionResponse {
                 session.getIndexRunId(),
                 session.getIndexLockedAt(),
                 session.getSessionType(),
+                session.getParentSessionId(),
+                session.getForkedFromMessageId(),
+                session.getForkedFromSequenceNo(),
+                session.getForkReason(),
+                session.getTranscriptVersion(),
                 session.getTitle(),
                 session.getStatus(),
                 session.getLastMessageAt(),

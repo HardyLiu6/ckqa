@@ -82,6 +82,36 @@ public class QaSessions implements Serializable {
     private String sessionType;
 
     /**
+     * 父会话ID
+     */
+    @TableField("parent_session_id")
+    private Long parentSessionId;
+
+    /**
+     * 分支来源消息ID
+     */
+    @TableField("forked_from_message_id")
+    private Long forkedFromMessageId;
+
+    /**
+     * 分支来源消息序号
+     */
+    @TableField("forked_from_sequence_no")
+    private Integer forkedFromSequenceNo;
+
+    /**
+     * 分支原因
+     */
+    @TableField("fork_reason")
+    private String forkReason;
+
+    /**
+     * transcript 契约版本
+     */
+    @TableField("transcript_version")
+    private String transcriptVersion;
+
+    /**
      * 会话标题
      */
     @TableField("title")

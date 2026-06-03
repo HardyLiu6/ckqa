@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
@@ -46,15 +47,20 @@ import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
+import org.ysu.ckqaback.qa.dto.ForkQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaProgressEventResponse;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionForkResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptSummaryResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
@@ -73,6 +79,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.Set;
 
@@ -637,6 +644,75 @@ public class QaWorkflowService {
         return QaSessionResponse.fromEntity(qaSessionsService.getRequiredById(id));
     }
 
+    public QaTranscriptResponse getTranscript(Long sessionId, Long currentUserId) {
+        ensureSessionOwner(sessionId, currentUserId);
+        QaSessions session = qaSessionsService.getRequiredById(sessionId);
+        List<QaMessageResponse> messageResponses = listMessages(sessionId, currentUserId);
+        Map<Long, Long> copiedFromByMessageId = new HashMap<>();
+        for (QaMessages message : qaMessagesService.listBySessionId(sessionId)) {
+            copiedFromByMessageId.put(message.getId(), message.getCopiedFromMessageId());
+        }
+        List<QaTranscriptMessageResponse> transcriptMessages = messageResponses.stream()
+                .map(message -> QaTranscriptMessageResponse.fromMessage(
+                        message,
+                        copiedFromByMessageId.get(message.getId())
+                ))
+                .toList();
+        QaSessionSummaries latestSummary = qaSessionSummariesService == null
+                ? null
+                : qaSessionSummariesService.findLatestSuccessfulBySessionId(sessionId);
+        String transcriptVersion = StringUtils.hasText(session.getTranscriptVersion())
+                ? session.getTranscriptVersion()
+                : "v1";
+        return QaTranscriptResponse.of(
+                QaSessionResponse.fromEntity(session),
+                transcriptMessages,
+                QaTranscriptSummaryResponse.fromEntity(latestSummary),
+                transcriptVersion
+        );
+    }
+
+    @Transactional
+    public QaSessionForkResponse forkSession(
+            Long parentSessionId,
+            ForkQaSessionRequest request,
+            AuthenticatedUser currentUser
+    ) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        ForkQaSessionRequest safeRequest = request == null ? new ForkQaSessionRequest() : request;
+        ensureSessionOwner(parentSessionId, currentUser.id());
+        QaSessions parent = qaSessionsService.getRequiredById(parentSessionId);
+        if (!"formal".equals(parent.getSessionType())) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "只能 fork 正式问答会话");
+        }
+        List<QaMessages> parentMessages = qaMessagesService.listBySessionId(parentSessionId);
+        ForkBoundary boundary = resolveForkBoundary(parentMessages, safeRequest);
+        QaSessions child = qaSessionsService.createForkSession(
+                parent,
+                boundary.messageId(),
+                boundary.sequenceNo(),
+                safeRequest.getTitle(),
+                safeRequest.getForkReason()
+        );
+        int copiedMessageCount = boundary.sequenceNo() == null
+                ? 0
+                : qaMessagesService.copyMessagesToSession(parentSessionId, child.getId(), boundary.sequenceNo());
+        if (copiedMessageCount > 0) {
+            LocalDateTime lastMessageAt = LocalDateTime.now(SHANGHAI_ZONE);
+            qaSessionsService.touchLastMessageAt(child.getId());
+            child.setLastMessageAt(lastMessageAt);
+        }
+        return QaSessionForkResponse.of(
+                parentSessionId,
+                QaSessionResponse.fromEntity(child),
+                boundary.messageId(),
+                boundary.sequenceNo(),
+                copiedMessageCount
+        );
+    }
+
     public List<QaMessageResponse> listMessages(Long sessionId) {
         return listMessages(sessionId, null);
     }
@@ -691,6 +767,40 @@ public class QaWorkflowService {
                     );
                 })
                 .toList();
+    }
+
+    private ForkBoundary resolveForkBoundary(List<QaMessages> parentMessages, ForkQaSessionRequest request) {
+        List<QaMessages> messages = parentMessages == null ? List.of() : parentMessages;
+        if (request.getForkedFromMessageId() != null) {
+            QaMessages message = messages.stream()
+                    .filter(candidate -> request.getForkedFromMessageId().equals(candidate.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ApiResultCode.BAD_REQUEST,
+                            HttpStatus.BAD_REQUEST,
+                            "分支边界消息不存在"
+                    ));
+            return new ForkBoundary(message.getId(), message.getSequenceNo());
+        }
+        if (request.getForkedFromSequenceNo() != null) {
+            QaMessages message = messages.stream()
+                    .filter(candidate -> request.getForkedFromSequenceNo().equals(candidate.getSequenceNo()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ApiResultCode.BAD_REQUEST,
+                            HttpStatus.BAD_REQUEST,
+                            "分支边界消息不存在"
+                    ));
+            return new ForkBoundary(message.getId(), message.getSequenceNo());
+        }
+        return messages.stream()
+                .filter(message -> message.getSequenceNo() != null)
+                .max(java.util.Comparator.comparing(QaMessages::getSequenceNo))
+                .map(message -> new ForkBoundary(message.getId(), message.getSequenceNo()))
+                .orElseGet(() -> new ForkBoundary(null, null));
+    }
+
+    private record ForkBoundary(Long messageId, Integer sequenceNo) {
     }
 
     private Map<Long, org.ysu.ckqaback.qa.dto.QaFeedbackResponse> loadFeedbackByMessage(

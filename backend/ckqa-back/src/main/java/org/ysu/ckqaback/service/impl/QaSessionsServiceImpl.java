@@ -68,6 +68,36 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
     }
 
     @Override
+    public QaSessions createForkSession(
+            QaSessions parent,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String title,
+            String forkReason
+    ) {
+        LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
+        QaSessions session = new QaSessions();
+        session.setSessionCode(generateSessionCode());
+        session.setUserId(parent.getUserId());
+        session.setCourseId(parent.getCourseId());
+        session.setCourseMembershipId(parent.getCourseMembershipId());
+        session.setKnowledgeBaseId(parent.getKnowledgeBaseId());
+        session.setIndexRunId(parent.getIndexRunId());
+        session.setIndexLockedAt(parent.getIndexLockedAt());
+        session.setSessionType("formal");
+        session.setTitle(resolveForkTitle(parent.getTitle(), title));
+        session.setStatus("active");
+        session.setParentSessionId(parent.getId());
+        session.setForkedFromMessageId(forkedFromMessageId);
+        session.setForkedFromSequenceNo(forkedFromSequenceNo);
+        session.setForkReason(StringUtils.hasText(forkReason) ? forkReason.trim() : null);
+        session.setTranscriptVersion("v1");
+        session.setCreatedAt(now);
+        save(session);
+        return session;
+    }
+
+    @Override
     public ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request) {
         long current = request.getPage() == null ? 1L : request.getPage();
         long size = request.getSize() == null ? 20L : request.getSize();
@@ -131,5 +161,14 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
             code = "qa-" + UUID.randomUUID().toString().replace("-", "");
         } while (exists(new LambdaQueryWrapper<QaSessions>().eq(QaSessions::getSessionCode, code)));
         return code;
+    }
+
+    private String resolveForkTitle(String parentTitle, String requestedTitle) {
+        if (StringUtils.hasText(requestedTitle)) {
+            return requestedTitle.trim();
+        }
+        String baseTitle = StringUtils.hasText(parentTitle) ? parentTitle.trim() : "问答会话";
+        String title = baseTitle + " 的分支";
+        return title.length() > 255 ? title.substring(0, 255) : title;
     }
 }

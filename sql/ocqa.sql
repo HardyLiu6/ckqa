@@ -462,6 +462,11 @@ CREATE TABLE `qa_sessions` (
   `index_run_id` bigint NULL DEFAULT NULL COMMENT '本会话固化的索引运行ID',
   `index_locked_at` timestamp NULL DEFAULT NULL COMMENT '索引版本固化时间',
   `session_type` enum('formal','smoke') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'formal' COMMENT '会话类型：formal正式问答，smoke构建冒烟验证',
+  `parent_session_id` bigint NULL DEFAULT NULL COMMENT '父会话ID，仅用于会话分支追踪',
+  `forked_from_message_id` bigint NULL DEFAULT NULL COMMENT '分支来源消息ID',
+  `forked_from_sequence_no` int NULL DEFAULT NULL COMMENT '分支来源消息序号',
+  `fork_reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '分支原因',
+  `transcript_version` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'v1' COMMENT 'transcript契约版本',
   `title` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '会话标题',
   `status` enum('active','archived','deleted') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active' COMMENT '会话状态',
   `last_message_at` timestamp NULL DEFAULT NULL COMMENT '最后消息时间',
@@ -471,6 +476,8 @@ CREATE TABLE `qa_sessions` (
   UNIQUE INDEX `uk_session_code`(`session_code` ASC) USING BTREE,
   INDEX `idx_sessions_user_created`(`user_id` ASC, `created_at` ASC) USING BTREE,
   INDEX `idx_sessions_index_run`(`index_run_id` ASC) USING BTREE,
+  INDEX `idx_qa_sessions_parent`(`parent_session_id` ASC) USING BTREE,
+  INDEX `idx_qa_sessions_forked_from_message`(`forked_from_message_id` ASC) USING BTREE,
   CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_sessions_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`course_id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_sessions_membership` FOREIGN KEY (`course_membership_id`) REFERENCES `course_memberships` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
@@ -490,9 +497,11 @@ CREATE TABLE `qa_messages` (
   `content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '消息原始内容',
   `content_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '可检索文本',
   `token_count` int NULL DEFAULT NULL COMMENT 'Token数',
+  `copied_from_message_id` bigint NULL DEFAULT NULL COMMENT 'fork复制来源消息ID',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_session_sequence`(`session_id` ASC, `sequence_no` ASC) USING BTREE,
+  INDEX `idx_qa_messages_copied_from`(`copied_from_message_id` ASC) USING BTREE,
   CONSTRAINT `fk_messages_session` FOREIGN KEY (`session_id`) REFERENCES `qa_sessions` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '问答消息表' ROW_FORMAT = Dynamic;
 

@@ -25,6 +25,14 @@ public interface QaSessionsService extends IService<QaSessions> {
 
     QaSessions createSession(CreateQaSessionRequest request, Long indexRunId, LocalDateTime indexLockedAt);
 
+    QaSessions createForkSession(
+            QaSessions parent,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String title,
+            String forkReason
+    );
+
     ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request);
 
     void lockIndexRun(Long id, Long indexRunId, LocalDateTime indexLockedAt);
