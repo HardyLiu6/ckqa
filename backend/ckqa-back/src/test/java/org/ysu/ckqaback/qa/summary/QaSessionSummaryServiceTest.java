@@ -98,6 +98,10 @@ class QaSessionSummaryServiceTest {
                         && "3-4".equals(summary.getLatestTopicMessageRange())
                         && summary.getActiveTopicsJson().contains("死锁")
                         && summary.getActiveTopicsJson().contains("饥饿")
+                        && "session_semantic_state_v1".equals(summary.getSemanticStateVersion())
+                        && summary.getSemanticStateJson().contains("\"latestTopic\":\"饥饿\"")
+                        && summary.getSemanticStateJson().contains("\"role\":\"former\"")
+                        && summary.getSemanticStateJson().contains("\"role\":\"latter\"")
         ));
     }
 

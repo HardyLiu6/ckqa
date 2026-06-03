@@ -22,18 +22,18 @@ public class QaContextAssembler {
         List<QaMessages> usableHistory = safeHistory(history);
         QaTopicStack topicStack = topicResolver.resolve(question, usableHistory, safeSummary);
         if (!QaContextPolicy.supportsRecentContext(mode)) {
-            return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary, topicStack) : none(topicStack);
+            return safeSummary != null && safeSummary.hasText() ? summaryOnly(safeSummary, topicStack) : none(topicStack, safeSummary);
         }
 
         if (safeSummary == null || !safeSummary.hasText()) {
-            return recentOnly(usableHistory, topicStack);
+            return recentOnly(usableHistory, topicStack, null);
         }
 
         List<QaMessages> unsummarizedHistory = usableHistory.stream()
                 .filter(message -> message.getSequenceNo() != null && message.getSequenceNo() > safeSummary.untilSequenceNo())
                 .toList();
         List<QaMessages> recent = selectRecentMessages(unsummarizedHistory);
-        QaContextAssembly recentAssembly = buildRecentAssembly(recent, "summary_recent", topicStack);
+        QaContextAssembly recentAssembly = buildRecentAssembly(recent, "summary_recent", topicStack, safeSummary);
         if (!recentAssembly.contextApplied()) {
             return summaryOnly(safeSummary, topicStack);
         }
@@ -52,21 +52,28 @@ public class QaContextAssembler {
                 recentAssembly.latestTopicMessageRange(),
                 recentAssembly.topicSource(),
                 recentAssembly.topicConfidence(),
-                recentAssembly.topicStackJson()
+                recentAssembly.topicStackJson(),
+                recentAssembly.semanticStateVersion(),
+                recentAssembly.semanticStateJson()
         );
     }
 
-    private QaContextAssembly recentOnly(List<QaMessages> usableHistory, QaTopicStack topicStack) {
+    private QaContextAssembly recentOnly(List<QaMessages> usableHistory, QaTopicStack topicStack, QaContextSummary summary) {
         if (usableHistory.isEmpty()) {
-            return none(topicStack);
+            return none(topicStack, summary);
         }
 
-        return buildRecentAssembly(selectRecentMessages(usableHistory), "recent", topicStack);
+        return buildRecentAssembly(selectRecentMessages(usableHistory), "recent", topicStack, summary);
     }
 
-    private QaContextAssembly buildRecentAssembly(List<QaMessages> recent, String strategy, QaTopicStack topicStack) {
+    private QaContextAssembly buildRecentAssembly(
+            List<QaMessages> recent,
+            String strategy,
+            QaTopicStack topicStack,
+            QaContextSummary summary
+    ) {
         if (recent.isEmpty()) {
-            return none(topicStack);
+            return none(topicStack, summary);
         }
 
         StringBuilder snapshot = new StringBuilder();
@@ -92,9 +99,10 @@ public class QaContextAssembler {
         }
 
         if (snapshot.isEmpty()) {
-            return none(topicStack);
+            return none(topicStack, summary);
         }
 
+        SessionSemanticState semanticState = SessionSemanticState.from(topicStack, summary);
         return new QaContextAssembly(
                 strategy,
                 snapshot.toString(),
@@ -104,16 +112,19 @@ public class QaContextAssembler {
                 topicStack.latestTopicMessageRange(),
                 topicStack.topicSource(),
                 topicStack.topicConfidence(),
-                topicStack.activeTopicsJson()
+                topicStack.activeTopicsJson(),
+                semanticState.version(),
+                semanticState.json()
         );
     }
 
     private QaContextAssembly summaryOnly(QaContextSummary summary, QaTopicStack topicStack) {
         String summaryText = truncate(trimToEmpty(summary.text()), QaContextPolicy.MAX_SUMMARY_CHARS);
         if (summaryText.isEmpty()) {
-            return none(topicStack);
+            return none(topicStack, summary);
         }
         String snapshot = "会话摘要：\n" + summaryText;
+        SessionSemanticState semanticState = SessionSemanticState.from(topicStack, summary);
         return new QaContextAssembly(
                 "summary",
                 snapshot,
@@ -123,12 +134,15 @@ public class QaContextAssembler {
                 topicStack.latestTopicMessageRange(),
                 topicStack.topicSource(),
                 topicStack.topicConfidence(),
-                topicStack.activeTopicsJson()
+                topicStack.activeTopicsJson(),
+                semanticState.version(),
+                semanticState.json()
         );
     }
 
-    private QaContextAssembly none(QaTopicStack topicStack) {
+    private QaContextAssembly none(QaTopicStack topicStack, QaContextSummary summary) {
         QaTopicStack stack = topicStack == null ? QaTopicStack.empty() : topicStack;
+        SessionSemanticState semanticState = SessionSemanticState.from(stack, summary);
         return new QaContextAssembly(
                 "none",
                 "",
@@ -138,7 +152,9 @@ public class QaContextAssembler {
                 stack.latestTopicMessageRange(),
                 stack.topicSource(),
                 stack.topicConfidence(),
-                stack.activeTopicsJson()
+                stack.activeTopicsJson(),
+                semanticState.version(),
+                semanticState.json()
         );
     }
 

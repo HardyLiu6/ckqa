@@ -22,6 +22,8 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
     private final String rewriteReason;
     private final String rewriteModel;
     private final String routingSnapshotJson;
+    private final String semanticStateVersion;
+    private final String semanticStateJson;
     private final String memoryScope;
     private final LocalDateTime lastHeartbeatAt;
     private final String assistantContent;
@@ -45,6 +47,8 @@ public class QaOperationLogDetailResponse extends QaOperationLogResponse {
         this.rewriteReason = row.getRewriteReason();
         this.rewriteModel = row.getRewriteModel();
         this.routingSnapshotJson = row.getRoutingSnapshotJson();
+        this.semanticStateVersion = row.getSemanticStateVersion();
+        this.semanticStateJson = row.getSemanticStateJson();
         this.memoryScope = row.getMemoryScope();
         this.lastHeartbeatAt = row.getLastHeartbeatAt();
         this.assistantContent = row.getAssistantContent();

@@ -39,6 +39,8 @@ class QaContextAssemblerTest {
         assertThat(assembly.latestTopic()).isEqualTo("死锁");
         assertThat(assembly.latestTopicMessageRange()).isEqualTo("1-2");
         assertThat(assembly.charCount()).isGreaterThan(0);
+        assertThat(assembly.semanticStateVersion()).isEqualTo(SessionSemanticState.VERSION);
+        assertThat(assembly.semanticStateJson()).contains("\"latestTopic\":\"死锁\"");
     }
 
     @Test
@@ -124,8 +126,13 @@ class QaContextAssemblerTest {
         assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
         assertThat(former.topicConfidence()).isGreaterThanOrEqualTo(0.8);
         assertThat(former.topicStackJson()).contains("死锁", "饥饿");
+        assertThat(former.semanticStateJson())
+                .contains("\"latestTopic\":\"死锁\"")
+                .contains("\"role\":\"former\"")
+                .contains("\"role\":\"latter\"");
         assertThat(latter.latestTopic()).isEqualTo("饥饿");
         assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.semanticStateJson()).contains("\"latestTopic\":\"饥饿\"");
     }
 
     @Test
@@ -183,6 +190,10 @@ class QaContextAssemblerTest {
         assertThat(assembly.latestTopicMessageRange()).isEqualTo("1-2");
         assertThat(assembly.topicSource()).isEqualTo("summary");
         assertThat(assembly.topicStackJson()).contains("死锁");
+        assertThat(assembly.semanticStateJson())
+                .contains("\"latestTopic\":\"死锁\"")
+                .contains("\"restoredFromSummary\":true")
+                .contains("\"summaryUntilSequenceNo\":12");
     }
 
     @Test

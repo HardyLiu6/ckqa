@@ -10,6 +10,7 @@ import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.context.QaContextSummary;
+import org.ysu.ckqaback.qa.context.SessionSemanticState;
 import org.ysu.ckqaback.qa.context.QaTopicResolver;
 import org.ysu.ckqaback.qa.context.QaTopicStack;
 import org.ysu.ckqaback.service.QaMessagesService;
@@ -201,6 +202,16 @@ public class QaSessionSummaryService {
             summary.setLatestTopic(topicStack.latestTopic());
             summary.setLatestTopicMessageRange(topicStack.latestTopicMessageRange());
             summary.setActiveTopicsJson(topicStack.activeTopicsJson());
+            QaContextSummary currentSummary = new QaContextSummary(
+                    summary.getSummaryText(),
+                    window.lastSequenceNo(),
+                    topicStack.latestTopic(),
+                    topicStack.latestTopicMessageRange(),
+                    topicStack.activeTopicsJson()
+            );
+            SessionSemanticState semanticState = SessionSemanticState.from(topicStack, currentSummary, previousSummary != null);
+            summary.setSemanticStateVersion(semanticState.version());
+            summary.setSemanticStateJson(semanticState.json());
         } else {
             summary.setStatus("failed");
             summary.setErrorMessage(truncate(result.errorMessage(), 500));
@@ -217,7 +228,9 @@ public class QaSessionSummaryService {
                 summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
                 summary.getLatestTopic(),
                 summary.getLatestTopicMessageRange(),
-                summary.getActiveTopicsJson()
+                summary.getActiveTopicsJson(),
+                summary.getSemanticStateVersion(),
+                summary.getSemanticStateJson()
         );
     }
 

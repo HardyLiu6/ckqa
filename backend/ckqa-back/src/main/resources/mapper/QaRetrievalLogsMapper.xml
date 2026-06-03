@@ -37,6 +37,8 @@
         <result column="topic_source" property="topicSource" />
         <result column="topic_confidence" property="topicConfidence" />
         <result column="topic_stack_json" property="topicStackJson" />
+        <result column="semantic_state_version" property="semanticStateVersion" />
+        <result column="semantic_state_json" property="semanticStateJson" />
         <result column="routing_confidence" property="routingConfidence" />
         <result column="routing_confidence_band" property="routingConfidenceBand" />
         <result column="routing_review_priority" property="routingReviewPriority" />
@@ -66,6 +68,7 @@
         context_char_count, rewrite_applied, rewrite_reason, rewrite_source_message_range,
         rewrite_method, rewrite_model, rewrite_confidence, context_snapshot_version,
         resolved_topic, topic_source, topic_confidence, topic_stack_json,
+        semantic_state_version, semantic_state_json,
         routing_confidence, routing_confidence_band, routing_review_priority, routing_snapshot_json,
         memory_applied, memory_strategy, memory_scope, memory_source_count, memory_size_chars,
         query_engine_strategy, history_fallback_reason, memory_history_json,

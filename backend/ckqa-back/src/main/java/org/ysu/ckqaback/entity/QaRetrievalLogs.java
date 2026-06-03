@@ -238,6 +238,18 @@ public class QaRetrievalLogs implements Serializable {
     private String topicStackJson;
 
     /**
+     * 会话语义状态版本。
+     */
+    @TableField("semantic_state_version")
+    private String semanticStateVersion;
+
+    /**
+     * 会话语义状态 JSON。
+     */
+    @TableField("semantic_state_json")
+    private String semanticStateJson;
+
+    /**
      * 智能推荐置信度
      */
     @TableField("routing_confidence")

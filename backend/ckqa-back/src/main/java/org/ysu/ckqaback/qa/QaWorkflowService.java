@@ -404,7 +404,9 @@ public class QaWorkflowService {
                 context.latestTopic(),
                 context.topicSource(),
                 context.topicConfidence(),
-                context.topicStackJson()
+                context.topicStackJson(),
+                context.semanticStateVersion(),
+                context.semanticStateJson()
         );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
@@ -563,7 +565,9 @@ public class QaWorkflowService {
                 summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
                 summary.getLatestTopic(),
                 summary.getLatestTopicMessageRange(),
-                summary.getActiveTopicsJson()
+                summary.getActiveTopicsJson(),
+                summary.getSemanticStateVersion(),
+                summary.getSemanticStateJson()
         );
     }
 

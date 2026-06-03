@@ -1,6 +1,7 @@
 package org.ysu.ckqaback.qa;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ysu.ckqaback.api.ApiResultCode;
@@ -1162,6 +1163,18 @@ class QaWorkflowServiceTest {
         workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "继续提问"));
 
         then(qaSessionsService).should().lockIndexRun(eq(5L), eq(18L), any());
+        ArgumentCaptor<QaRetrievalLogContext> contextCaptor = ArgumentCaptor.forClass(QaRetrievalLogContext.class);
+        then(qaRetrievalLogsService).should().createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(18L),
+                eq(11L),
+                eq("basic"),
+                eq("继续提问"),
+                contextCaptor.capture()
+        );
+        assertThat(contextCaptor.getValue().semanticStateVersion()).isEqualTo("session_semantic_state_v1");
+        assertThat(contextCaptor.getValue().semanticStateJson()).contains("\"version\":\"session_semantic_state_v1\"");
     }
 
     @Test

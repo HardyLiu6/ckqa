@@ -63,6 +63,12 @@
         am.content AS assistantContent
     </sql>
 
+    <sql id="QaOperationLogDetailColumns">
+        <include refid="QaOperationLogColumns" />,
+        l.semantic_state_version AS semanticStateVersion,
+        l.semantic_state_json AS semanticStateJson
+    </sql>
+
     <sql id="QaOperationFrom">
         FROM qa_retrieval_logs l
         JOIN qa_sessions s ON s.id = l.session_id
@@ -165,7 +171,7 @@
 
     <select id="selectLogDetail" resultType="org.ysu.ckqaback.qa.ops.QaOperationLogRow">
         SELECT
-        <include refid="QaOperationLogColumns" />
+        <include refid="QaOperationLogDetailColumns" />
         <include refid="QaOperationFrom" />
         WHERE l.id = #{retrievalLogId}
         <if test="!adminScope">

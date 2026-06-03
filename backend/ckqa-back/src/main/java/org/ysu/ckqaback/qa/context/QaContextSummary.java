@@ -10,11 +10,23 @@ public record QaContextSummary(
         int untilSequenceNo,
         String latestTopic,
         String latestTopicMessageRange,
-        String activeTopicsJson
+        String activeTopicsJson,
+        String semanticStateVersion,
+        String semanticStateJson
 ) {
 
     public QaContextSummary(String text, int untilSequenceNo) {
         this(text, untilSequenceNo, "", "", "");
+    }
+
+    public QaContextSummary(
+            String text,
+            int untilSequenceNo,
+            String latestTopic,
+            String latestTopicMessageRange,
+            String activeTopicsJson
+    ) {
+        this(text, untilSequenceNo, latestTopic, latestTopicMessageRange, activeTopicsJson, "", "");
     }
 
     public boolean hasText() {
