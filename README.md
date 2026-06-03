@@ -50,7 +50,7 @@ CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码
 ```bash
 cd infra
 cp .env.example .env
-# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码；Redis 密码可按本地需要留空或设置
+# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码；Redis 本地调试固定匿名访问
 ```
 
 统一启动：
@@ -108,7 +108,6 @@ export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
 export CKQA_REDIS_HOST=127.0.0.1
 export CKQA_REDIS_PORT=16379
-export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 export CKQA_STUDENT_CACHE_ENABLED=true
 
 export MINIO_ENDPOINT=localhost:9000
@@ -191,7 +190,6 @@ export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
 export CKQA_REDIS_HOST=127.0.0.1
 export CKQA_REDIS_PORT=16379
-export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 export CKQA_STUDENT_CACHE_ENABLED=true
 
 export MINIO_ENDPOINT=localhost:9000

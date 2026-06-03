@@ -278,7 +278,7 @@ export INDEX_STALE_SECONDS=2400
 ```bash
 cd ../../infra
 cp .env.example .env
-# 编辑 .env，填入当前 MySQL root 密码、MinIO 账号密码和可选 REDIS_PASSWORD
+# 编辑 .env，填入当前 MySQL root 密码、MinIO 账号密码；Redis 本地调试固定匿名访问
 docker compose up -d
 docker compose ps
 ```
@@ -297,7 +297,6 @@ export MYSQL_USER=root
 export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
 export CKQA_REDIS_HOST=127.0.0.1
 export CKQA_REDIS_PORT=16379
-export REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 export CKQA_STUDENT_CACHE_ENABLED=true
 
 export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest

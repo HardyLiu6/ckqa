@@ -106,18 +106,13 @@ services:
       - "${CKQA_REDIS_PORT:-16379}:6379"
     environment:
       TZ: ${TZ:-Asia/Shanghai}
-      # 通过环境变量把密码透传给 entrypoint 命令；REDIS_PASSWORD 为空时容器匿名访问。
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    # 启用 AOF 持久化 + 可选密码（密码留空则匿名访问，仅本地开发使用）。
+    # 本地调试固定匿名访问；Redis 仅绑定到本机转发端口，不作为业务事实源。
     command:
-      - sh
-      - -c
-      - >-
-        if [ -n "$$REDIS_PASSWORD" ]; then
-          exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD";
-        else
-          exec redis-server --appendonly yes --appendfsync everysec;
-        fi
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
     volumes:
       - type: bind
         source: ./redis/data
