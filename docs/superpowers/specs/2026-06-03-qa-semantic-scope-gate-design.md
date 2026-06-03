@@ -139,11 +139,11 @@ private QaQuestionDomainCheckResponse classify(String courseId, String question,
 | 配置项 | 默认 | 含义 |
 |---|---|---|
 | `enabled` | `true` | 总开关；关掉=全放行 |
-| `out-of-scope-threshold` | `0.20`（起步值，待校准） | 余弦相似度低于它才判无关 |
+| `out-of-scope-threshold` | `0.25`（2026-06-03 实测校准） | 余弦相似度低于它才判无关 |
 
-阈值说明：中文 embedding 对无关文本的余弦相似度基线偏高，`0.20` 是**保守起步值，不是定论**，应用 §8.1 校准工具在真实环境实测后回填。
+阈值说明：`0.25` 由 §8.1 校准工具在真实环境实测后回填——取 in_scope 下沿（≈0.31）与 out_of_scope 上沿（≈0.19）经验间隙的中点。中文 embedding 对无关文本的余弦相似度基线偏高，但对**明显**无关文本仍显著低于切题文本，间隙清晰。
 
-- 默认偏低，宁可漏过也不误拦（保守优先）。
+- 默认值取经验间隙中点、偏向保守，宁可漏过也不误拦。
 - 闸门在 `QaQuestionDomainGuardService.classify` 中每次判定打一条结构化日志：question 的 hash、courseId、confidence、阈值、decision。
 - 暂不为闸门新建数据库表；以后要做系统化校准评估再加。
 
@@ -189,7 +189,7 @@ private QaQuestionDomainCheckResponse classify(String courseId, String question,
 
 ### 8.1 阈值校准工具
 
-`0.20` 是保守起步值、未经实测；下列工具用于在真实环境算出可回填的阈值，并随新课程画像复用。
+闸门用单一全局余弦阈值；下列工具用于在真实环境实测两类问题的相似度分布、算出可回填的阈值，并随新课程画像复用。
 
 - **纯逻辑核心** `qa/routing/QaScopeGateCalibrationReport`（test-scope，无外部依赖、可单测）：输入每条样本的 `(courseId, label, evaluated, confidence)`，输出按课程的 in_scope / out_of_scope 相似度分布（min/中位/max），并在「in_scope 零误拦」为硬约束下扫描 `[0.15, 0.45]`（步长 `0.01`）找能拦下最多无关问题的**单一全局阈值**；`evaluated=false`（fail-open）不计入、单独计数。已有 `QaScopeGateCalibrationReportTest` 覆盖。
 - **可复用验证集** `src/test/resources/qa-scope/qa-scope-validation-v1.jsonl`，每行 `{"id","courseId","question","label"}`（`label` ∈ `in_scope` / `out_of_scope`）：
@@ -198,9 +198,11 @@ private QaQuestionDomainCheckResponse classify(String courseId, String question,
 - **在线校准壳** `qa/routing/QaScopeGateOnlineCalibrationTest`（`@SpringBootTest`，默认禁用，需 `-Dckqa.qaScopeGate.onlineCalibration=true` 才跑，复用课程路由校准同一套 MySQL/GraphRAG/embedding 接线）：逐条调 `evaluateScopeRelevance` 取真实相似度喂给纯逻辑核心，打印两类分布 + 推荐阈值，再把推荐值回填到 `ckqa.qa-domain-guard.out-of-scope-threshold`。
 - **关键取舍**：闸门维持**单一全局阈值**（不改 gate 配置模型）；工具按课打分布只为暴露离群课程。若将来确需按课设阈值，那是改 gate 本身、另开一轮。
 
+**首次校准结果（2026-06-03，课程 `crs-20260506-r4slkr` / text-embedding-v4）**：12 条切题相似度落在 `[0.306, 0.505]`（中位 0.424），8 条无关里 7 条明显无关落在 `[0.060, 0.188]`，经验间隙 `(0.188, 0.306)`。取中点回填 **`0.25`**（零误拦、拦下 7/8 无关，双向余量均衡）。唯一漏网为"这门课什么时候期末考试？"（0.480）——它语义贴近课程本身、高于多数切题，纯语义阈值无法在不误伤真问题的前提下拦它，属意图分类范畴，本设计不处理。
+
 ## 9. 风险与权衡
 
 1. **延迟**：会话已绑定课程时选课路由不跑，本闸门会**新增一次到 Python 的 embedding 往返**（量级与选课路由的一次 embedding 相当）。可接受；后续可在选课路由已跑时复用其 embedding，本轮不做。
-2. **阈值不确定**：绝对余弦阈值依赖 embedding 模型分布，`0.20` 需上线后校准。保守默认 + fail-open 把误拦风险降到最低。
+2. **阈值依赖模型分布**：绝对余弦阈值依赖 embedding 模型，已于 2026-06-03 用 text-embedding-v4 对 OS 课实测校准为 `0.25`（见 §8.1）；接入新课程画像后建议用同一工具复校。保守取间隙中点 + fail-open 把误拦风险降到最低。
 3. **依赖方向**：`qa.routing` 新增对 `course.routing` 的依赖（经窄接口），与现有 `CourseAccessService` 依赖同向，可接受。
 4. **画像未就绪的课程**：`ensureProfiles` 会按需 embedding；若 Python 不可用则走 fail-open，不阻断提问。
