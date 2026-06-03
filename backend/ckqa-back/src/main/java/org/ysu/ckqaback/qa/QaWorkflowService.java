@@ -35,6 +35,8 @@ import org.ysu.ckqaback.qa.context.QaQuestionRewriteClientPort;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
@@ -102,6 +104,7 @@ public class QaWorkflowService {
     private StudentRedisCacheService studentRedisCacheService;
     private StudentCacheKeyFactory studentCacheKeyFactory;
     private QaMemoryContextService qaMemoryContextService;
+    private QaTopicEntityBindingService qaTopicEntityBindingService;
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -151,6 +154,11 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setQaMemoryContextService(QaMemoryContextService qaMemoryContextService) {
         this.qaMemoryContextService = qaMemoryContextService;
+    }
+
+    @Autowired(required = false)
+    public void setQaTopicEntityBindingService(QaTopicEntityBindingService qaTopicEntityBindingService) {
+        this.qaTopicEntityBindingService = qaTopicEntityBindingService;
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -372,6 +380,7 @@ public class QaWorkflowService {
                 null,
                 memoryContext.memoryApplied() && !memoryContext.conversationHistory().isEmpty()
         );
+        QaTopicEntityBindingResult topicEntityBinding = bindTopicEntity(context.latestTopic(), session.getKnowledgeBaseId(), indexRunId);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),
@@ -407,7 +416,7 @@ public class QaWorkflowService {
                 context.topicStackJson(),
                 context.semanticStateVersion(),
                 context.semanticStateJson()
-        );
+        ).withTopicEntityBinding(topicEntityBinding);
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
         qaSessionsService.touchLastMessageAt(sessionId);
@@ -449,6 +458,13 @@ public class QaWorkflowService {
 
     private String normalizeRequestedMode(String rawMode) {
         return StringUtils.hasText(rawMode) ? rawMode.trim().toLowerCase(Locale.ROOT) : "basic";
+    }
+
+    private QaTopicEntityBindingResult bindTopicEntity(String topic, Long knowledgeBaseId, Long indexRunId) {
+        if (qaTopicEntityBindingService == null) {
+            return QaTopicEntityBindingResult.skipped("service_unavailable");
+        }
+        return qaTopicEntityBindingService.bind(topic, knowledgeBaseId, indexRunId);
     }
 
     private String resolveExecutionMode(CreateQaMessageRequest request, String requestedMode) {

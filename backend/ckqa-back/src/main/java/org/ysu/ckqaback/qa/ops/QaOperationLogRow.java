@@ -50,6 +50,17 @@ public class QaOperationLogRow {
     private String routingSnapshotJson;
     private String semanticStateVersion;
     private String semanticStateJson;
+    private Boolean topicEntityBindingApplied;
+    private String topicEntityBindingStatus;
+    private String topicEntityBindingStrategy;
+    private Integer topicEntityCandidateCount;
+    private Double topicEntityTopScore;
+    private String topicEntitySelectedId;
+    private String topicEntitySelectedName;
+    private String topicEntitySelectedType;
+    private String topicEntityCandidatesJson;
+    private String topicEntityFallbackReason;
+    private Long topicEntityLookupDurationMs;
     private Boolean memoryApplied;
     private String memoryStrategy;
     private String memoryScope;

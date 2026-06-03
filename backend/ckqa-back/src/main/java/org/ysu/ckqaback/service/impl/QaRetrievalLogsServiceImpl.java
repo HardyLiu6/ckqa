@@ -93,6 +93,17 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setTopicStackJson(context.topicStackJson());
             task.setSemanticStateVersion(context.semanticStateVersion());
             task.setSemanticStateJson(context.semanticStateJson());
+            task.setTopicEntityBindingApplied(context.topicEntityBindingApplied());
+            task.setTopicEntityBindingStatus(context.topicEntityBindingStatus());
+            task.setTopicEntityBindingStrategy(context.topicEntityBindingStrategy());
+            task.setTopicEntityCandidateCount(context.topicEntityCandidateCount());
+            task.setTopicEntityTopScore(context.topicEntityTopScore());
+            task.setTopicEntitySelectedId(context.topicEntitySelectedId());
+            task.setTopicEntitySelectedName(context.topicEntitySelectedName());
+            task.setTopicEntitySelectedType(context.topicEntitySelectedType());
+            task.setTopicEntityCandidatesJson(context.topicEntityCandidatesJson());
+            task.setTopicEntityFallbackReason(context.topicEntityFallbackReason());
+            task.setTopicEntityLookupDurationMs(context.topicEntityLookupDurationMs());
             task.setRoutingConfidence(context.routingConfidence());
             task.setRoutingConfidenceBand(context.routingConfidenceBand());
             task.setRoutingReviewPriority(context.routingReviewPriority());

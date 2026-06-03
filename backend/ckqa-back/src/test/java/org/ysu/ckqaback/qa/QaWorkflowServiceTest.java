@@ -31,6 +31,9 @@ import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingCandidate;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
@@ -659,6 +662,74 @@ class QaWorkflowServiceTest {
         assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(15);
         assertThat(response.getContextStrategy()).isEqualTo("recent");
         then(qaTaskWorker).should().dispatch(5L, 9012L);
+    }
+
+    @Test
+    void shouldWriteTopicEntityBindingDiagnosticsIntoLogContext() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaTopicEntityBindingService bindingService = mock(QaTopicEntityBindingService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaTopicEntityBindingService(bindingService);
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它和资源分配图有什么关系？");
+        QaRetrievalLogs task = pendingTask(9015L);
+        QaTopicEntityBindingCandidate candidate = new QaTopicEntityBindingCandidate(
+                "entity-deadlock",
+                "死锁",
+                "concept",
+                "E-42",
+                1.0D,
+                "exact_name",
+                "active_neo4j"
+        );
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(bindingService.bind("死锁", 3L, 23L))
+                .willReturn(QaTopicEntityBindingResult.success(List.of(candidate), 12L));
+        given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                argThat(context -> Boolean.TRUE.equals(context.topicEntityBindingApplied())
+                        && "success".equals(context.topicEntityBindingStatus())
+                        && "active_neo4j_topic_match".equals(context.topicEntityBindingStrategy())
+                        && context.topicEntityCandidateCount() == 1
+                        && Double.valueOf(1.0D).equals(context.topicEntityTopScore())
+                        && "entity-deadlock".equals(context.topicEntitySelectedId())
+                        && "死锁".equals(context.topicEntitySelectedName())
+                        && "concept".equals(context.topicEntitySelectedType())
+                        && context.topicEntityCandidatesJson().contains("\"id\":\"entity-deadlock\"")
+                        && context.topicEntityCandidatesJson().contains("\"source\":\"active_neo4j\"")
+                        && !context.topicEntityCandidatesJson().contains("description")
+                        && !context.topicEntityCandidatesJson().contains("snippet")
+                        && !context.topicEntityCandidatesJson().contains("memoryText")
+                        && !context.topicEntityCandidatesJson().contains("full_content")
+                        && context.topicEntityLookupDurationMs() == 12L)
+        )).willReturn(task);
+
+        workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它和资源分配图有什么关系？"));
+
+        then(bindingService).should().bind("死锁", 3L, 23L);
     }
 
     @Test

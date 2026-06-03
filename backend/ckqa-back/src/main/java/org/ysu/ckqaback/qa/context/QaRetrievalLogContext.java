@@ -37,7 +37,18 @@ public record QaRetrievalLogContext(
         Double topicConfidence,
         String topicStackJson,
         String semanticStateVersion,
-        String semanticStateJson
+        String semanticStateJson,
+        Boolean topicEntityBindingApplied,
+        String topicEntityBindingStatus,
+        String topicEntityBindingStrategy,
+        Integer topicEntityCandidateCount,
+        Double topicEntityTopScore,
+        String topicEntitySelectedId,
+        String topicEntitySelectedName,
+        String topicEntitySelectedType,
+        String topicEntityCandidatesJson,
+        String topicEntityFallbackReason,
+        Long topicEntityLookupDurationMs
 ) {
 
     public QaRetrievalLogContext {
@@ -51,6 +62,12 @@ public record QaRetrievalLogContext(
                         topicConfidence,
                         topicStackJson
                 ).json();
+        topicEntityBindingApplied = Boolean.TRUE.equals(topicEntityBindingApplied);
+        topicEntityBindingStatus = hasText(topicEntityBindingStatus) ? topicEntityBindingStatus : "skipped";
+        topicEntityBindingStrategy = hasText(topicEntityBindingStrategy) ? topicEntityBindingStrategy : "none";
+        topicEntityCandidateCount = topicEntityCandidateCount == null ? 0 : Math.max(0, topicEntityCandidateCount);
+        topicEntityCandidatesJson = hasText(topicEntityCandidatesJson) ? topicEntityCandidatesJson : "[]";
+        topicEntityLookupDurationMs = topicEntityLookupDurationMs == null ? 0L : Math.max(0L, topicEntityLookupDurationMs);
     }
 
     public QaRetrievalLogContext(
@@ -121,7 +138,156 @@ public record QaRetrievalLogContext(
                 topicConfidence,
                 topicStackJson,
                 null,
-                null
+                null,
+                false,
+                "skipped",
+                "none",
+                0,
+                null,
+                null,
+                null,
+                null,
+                "[]",
+                "not_requested",
+                0L
+        );
+    }
+
+    public QaRetrievalLogContext(
+            String originalQueryText,
+            String retrievalQueryText,
+            String standaloneQueryText,
+            String contextSnapshotText,
+            String contextStrategy,
+            String contextMessageRange,
+            int contextCharCount,
+            boolean rewriteApplied,
+            String rewriteReason,
+            String rewriteSourceMessageRange,
+            String rewriteMethod,
+            String rewriteModel,
+            Double rewriteConfidence,
+            String contextSnapshotVersion,
+            Double routingConfidence,
+            String routingConfidenceBand,
+            String routingReviewPriority,
+            String routingSnapshotJson,
+            boolean memoryApplied,
+            String memoryStrategy,
+            String memoryScope,
+            Integer memorySourceCount,
+            Integer memorySizeChars,
+            String queryEngineStrategy,
+            String historyFallbackReason,
+            String memoryHistoryJson,
+            String requestedMode,
+            String resolvedMode,
+            String resolvedTopic,
+            String topicSource,
+            Double topicConfidence,
+            String topicStackJson,
+            String semanticStateVersion,
+            String semanticStateJson
+    ) {
+        this(
+                originalQueryText,
+                retrievalQueryText,
+                standaloneQueryText,
+                contextSnapshotText,
+                contextStrategy,
+                contextMessageRange,
+                contextCharCount,
+                rewriteApplied,
+                rewriteReason,
+                rewriteSourceMessageRange,
+                rewriteMethod,
+                rewriteModel,
+                rewriteConfidence,
+                contextSnapshotVersion,
+                routingConfidence,
+                routingConfidenceBand,
+                routingReviewPriority,
+                routingSnapshotJson,
+                memoryApplied,
+                memoryStrategy,
+                memoryScope,
+                memorySourceCount,
+                memorySizeChars,
+                queryEngineStrategy,
+                historyFallbackReason,
+                memoryHistoryJson,
+                requestedMode,
+                resolvedMode,
+                resolvedTopic,
+                topicSource,
+                topicConfidence,
+                topicStackJson,
+                semanticStateVersion,
+                semanticStateJson,
+                false,
+                "skipped",
+                "none",
+                0,
+                null,
+                null,
+                null,
+                null,
+                "[]",
+                "not_requested",
+                0L
+        );
+    }
+
+    public QaRetrievalLogContext withTopicEntityBinding(QaTopicEntityBindingResult bindingResult) {
+        QaTopicEntityBindingResult safeResult = bindingResult == null
+                ? QaTopicEntityBindingResult.skipped("service_unavailable")
+                : bindingResult;
+        return new QaRetrievalLogContext(
+                originalQueryText,
+                retrievalQueryText,
+                standaloneQueryText,
+                contextSnapshotText,
+                contextStrategy,
+                contextMessageRange,
+                contextCharCount,
+                rewriteApplied,
+                rewriteReason,
+                rewriteSourceMessageRange,
+                rewriteMethod,
+                rewriteModel,
+                rewriteConfidence,
+                contextSnapshotVersion,
+                routingConfidence,
+                routingConfidenceBand,
+                routingReviewPriority,
+                routingSnapshotJson,
+                memoryApplied,
+                memoryStrategy,
+                memoryScope,
+                memorySourceCount,
+                memorySizeChars,
+                queryEngineStrategy,
+                historyFallbackReason,
+                memoryHistoryJson,
+                requestedMode,
+                resolvedMode,
+                resolvedTopic,
+                topicSource,
+                topicConfidence,
+                topicStackJson,
+                semanticStateVersion,
+                semanticStateJson,
+                safeResult.applied(),
+                safeResult.status(),
+                safeResult.strategy(),
+                safeResult.candidateCount(),
+                safeResult.topScore(),
+                safeResult.selectedId(),
+                safeResult.selectedName(),
+                safeResult.selectedType(),
+                safeResult.candidatesJson(),
+                safeResult.fallbackReason(),
+                safeResult.lookupDurationMs()
         );
     }
 

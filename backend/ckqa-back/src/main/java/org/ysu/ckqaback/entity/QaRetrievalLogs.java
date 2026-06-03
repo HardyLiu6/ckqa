@@ -250,6 +250,72 @@ public class QaRetrievalLogs implements Serializable {
     private String semanticStateJson;
 
     /**
+     * 本轮是否应用 KG 主题实体弱绑定。
+     */
+    @TableField("topic_entity_binding_applied")
+    private Boolean topicEntityBindingApplied;
+
+    /**
+     * 主题实体弱绑定状态：skipped/success/fallback/failed/ambiguous。
+     */
+    @TableField("topic_entity_binding_status")
+    private String topicEntityBindingStatus;
+
+    /**
+     * 主题实体弱绑定策略。
+     */
+    @TableField("topic_entity_binding_strategy")
+    private String topicEntityBindingStrategy;
+
+    /**
+     * 记录的 TopN 候选数量。
+     */
+    @TableField("topic_entity_candidate_count")
+    private Integer topicEntityCandidateCount;
+
+    /**
+     * Top 候选得分。
+     */
+    @TableField("topic_entity_top_score")
+    private Double topicEntityTopScore;
+
+    /**
+     * 选中的实体 ID。
+     */
+    @TableField("topic_entity_selected_id")
+    private String topicEntitySelectedId;
+
+    /**
+     * 选中的实体名称。
+     */
+    @TableField("topic_entity_selected_name")
+    private String topicEntitySelectedName;
+
+    /**
+     * 选中的实体类型。
+     */
+    @TableField("topic_entity_selected_type")
+    private String topicEntitySelectedType;
+
+    /**
+     * 脱敏候选 JSON，仅包含 id/name/type/humanReadableId/score/matchReason/source。
+     */
+    @TableField("topic_entity_candidates_json")
+    private String topicEntityCandidatesJson;
+
+    /**
+     * 弱绑定未应用或失败的兜底原因。
+     */
+    @TableField("topic_entity_fallback_reason")
+    private String topicEntityFallbackReason;
+
+    /**
+     * 主题实体查询耗时（毫秒）。
+     */
+    @TableField("topic_entity_lookup_duration_ms")
+    private Long topicEntityLookupDurationMs;
+
+    /**
      * 智能推荐置信度
      */
     @TableField("routing_confidence")

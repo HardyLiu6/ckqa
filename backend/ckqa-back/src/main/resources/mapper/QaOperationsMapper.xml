@@ -66,7 +66,18 @@
     <sql id="QaOperationLogDetailColumns">
         <include refid="QaOperationLogColumns" />,
         l.semantic_state_version AS semanticStateVersion,
-        l.semantic_state_json AS semanticStateJson
+        l.semantic_state_json AS semanticStateJson,
+        l.topic_entity_binding_applied AS topicEntityBindingApplied,
+        l.topic_entity_binding_status AS topicEntityBindingStatus,
+        l.topic_entity_binding_strategy AS topicEntityBindingStrategy,
+        l.topic_entity_candidate_count AS topicEntityCandidateCount,
+        l.topic_entity_top_score AS topicEntityTopScore,
+        l.topic_entity_selected_id AS topicEntitySelectedId,
+        l.topic_entity_selected_name AS topicEntitySelectedName,
+        l.topic_entity_selected_type AS topicEntitySelectedType,
+        l.topic_entity_candidates_json AS topicEntityCandidatesJson,
+        l.topic_entity_fallback_reason AS topicEntityFallbackReason,
+        l.topic_entity_lookup_duration_ms AS topicEntityLookupDurationMs
     </sql>
 
     <sql id="QaOperationFrom">
