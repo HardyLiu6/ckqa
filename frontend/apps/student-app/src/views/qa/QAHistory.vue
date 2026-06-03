@@ -177,7 +177,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
 import { listCourses } from '@/api/courses'
 import { listQaSessions, updateQaSession } from '@/api/qa'
-import { normalizeCourseList, normalizeQaSession } from './qa-session-model'
+import { normalizeCourseList, normalizeQaSession, localDateString } from './qa-session-model'
 
 const router = useRouter()
 
@@ -217,7 +217,7 @@ const filteredSessions = computed(() => {
   }
 
   if (filterType.value === 'today') {
-    const today = new Date().toISOString().split('T')[0]
+    const today = localDateString()
     result = result.filter(s => s.date === today)
   } else if (filterType.value === 'week') {
     const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
@@ -236,8 +236,8 @@ const filteredSessions = computed(() => {
 // 按日期分组
 const groupedSessions = computed(() => {
   const groups = {}
-  const today = new Date().toISOString().split('T')[0]
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
+  const today = localDateString()
+  const yesterday = localDateString(new Date(Date.now() - 86400000))
 
   filteredSessions.value.forEach(s => {
     if (!groups[s.date]) {
