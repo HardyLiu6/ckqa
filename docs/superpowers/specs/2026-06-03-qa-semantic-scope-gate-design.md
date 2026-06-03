@@ -141,7 +141,7 @@ private QaQuestionDomainCheckResponse classify(String courseId, String question,
 | `enabled` | `true` | 总开关；关掉=全放行 |
 | `out-of-scope-threshold` | `0.20`（起步值，待校准） | 余弦相似度低于它才判无关 |
 
-阈值说明：中文 embedding 对无关文本的余弦相似度基线偏高，`0.20` 是**保守起步值，不是定论**。
+阈值说明：中文 embedding 对无关文本的余弦相似度基线偏高，`0.20` 是**保守起步值，不是定论**，应用 §8.1 校准工具在真实环境实测后回填。
 
 - 默认偏低，宁可漏过也不误拦（保守优先）。
 - 闸门在 `QaQuestionDomainGuardService.classify` 中每次判定打一条结构化日志：question 的 hash、courseId、confidence、阈值、decision。
@@ -185,7 +185,18 @@ private QaQuestionDomainCheckResponse classify(String courseId, String question,
 
 - 先写失败测试再实现：`evaluateScopeRelevance` 的故障→fail-open、`classify` 的四条放行 + 低分拦截。
 - 旧的关键词断言（`今天晚上吃什么 → campus_life` 等 reasonCode）整体移除，替换为语义 mock 断言。
-- 阈值校准（不在本次编码内，但日志先埋好）：上线后从日志收集 (confidence, 人工标注是否真无关)，画出真问题 vs 无关问题分布，再定阈值。
+- 阈值校准：上线后既可从 §5 的结构化日志收集 (confidence, 人工标注是否真无关)，也可用 §8.1 的离线校准工具在真实 embedding 环境批量实测两类问题分布后回填阈值。
+
+### 8.1 阈值校准工具
+
+`0.20` 是保守起步值、未经实测；下列工具用于在真实环境算出可回填的阈值，并随新课程画像复用。
+
+- **纯逻辑核心** `qa/routing/QaScopeGateCalibrationReport`（test-scope，无外部依赖、可单测）：输入每条样本的 `(courseId, label, evaluated, confidence)`，输出按课程的 in_scope / out_of_scope 相似度分布（min/中位/max），并在「in_scope 零误拦」为硬约束下扫描 `[0.15, 0.45]`（步长 `0.01`）找能拦下最多无关问题的**单一全局阈值**；`evaluated=false`（fail-open）不计入、单独计数。已有 `QaScopeGateCalibrationReportTest` 覆盖。
+- **可复用验证集** `src/test/resources/qa-scope/qa-scope-validation-v1.jsonl`，每行 `{"id","courseId","question","label"}`（`label` ∈ `in_scope` / `out_of_scope`）：
+  - `courseId="*"` 是**共享无关问题池**，对验证集里出现的每一门 in_scope 课程各评测一遍；
+  - **扩展新课程**：只需为新课追加若干 `in_scope` 行（`courseId` 写新课 id），共享无关池自动套用到新课——不改任何代码、跑同一条命令即可。
+- **在线校准壳** `qa/routing/QaScopeGateOnlineCalibrationTest`（`@SpringBootTest`，默认禁用，需 `-Dckqa.qaScopeGate.onlineCalibration=true` 才跑，复用课程路由校准同一套 MySQL/GraphRAG/embedding 接线）：逐条调 `evaluateScopeRelevance` 取真实相似度喂给纯逻辑核心，打印两类分布 + 推荐阈值，再把推荐值回填到 `ckqa.qa-domain-guard.out-of-scope-threshold`。
+- **关键取舍**：闸门维持**单一全局阈值**（不改 gate 配置模型）；工具按课打分布只为暴露离群课程。若将来确需按课设阈值，那是改 gate 本身、另开一轮。
 
 ## 9. 风险与权衡
 
