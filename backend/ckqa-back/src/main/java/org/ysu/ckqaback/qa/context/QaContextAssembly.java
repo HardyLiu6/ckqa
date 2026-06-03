@@ -9,8 +9,22 @@ public record QaContextAssembly(
         String messageRange,
         int charCount,
         String latestTopic,
-        String latestTopicMessageRange
+        String latestTopicMessageRange,
+        String topicSource,
+        Double topicConfidence,
+        String topicStackJson
 ) {
+
+    public QaContextAssembly(
+            String strategy,
+            String snapshotText,
+            String messageRange,
+            int charCount,
+            String latestTopic,
+            String latestTopicMessageRange
+    ) {
+        this(strategy, snapshotText, messageRange, charCount, latestTopic, latestTopicMessageRange, "", null, "");
+    }
 
     public boolean contextApplied() {
         return !"none".equals(strategy);

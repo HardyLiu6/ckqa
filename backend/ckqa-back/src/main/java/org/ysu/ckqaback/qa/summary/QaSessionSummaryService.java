@@ -9,6 +9,9 @@ import org.ysu.ckqaback.entity.QaMessages;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
+import org.ysu.ckqaback.qa.context.QaContextSummary;
+import org.ysu.ckqaback.qa.context.QaTopicResolver;
+import org.ysu.ckqaback.qa.context.QaTopicStack;
 import org.ysu.ckqaback.service.QaMessagesService;
 import org.ysu.ckqaback.service.QaRetrievalLogsService;
 import org.ysu.ckqaback.service.QaSessionSummariesService;
@@ -34,6 +37,7 @@ public class QaSessionSummaryService {
     private final QaSessionSummariesService summariesService;
     private final QaSummaryClientPort summaryClient;
     private final TaskExecutor executor;
+    private final QaTopicResolver topicResolver = new QaTopicResolver();
     private final boolean enabled;
     private final int triggerMessageCount;
     private final int triggerCharCount;
@@ -123,7 +127,7 @@ public class QaSessionSummaryService {
 
         String previousSummary = latestSummary == null ? "" : latestSummary.getSummaryText();
         QaSummaryResult result = summaryClient.summarize(previousSummary, buildConversationText(window.messages()));
-        saveSummary(sessionId, window, result);
+        saveSummary(sessionId, window, result, latestSummary);
     }
 
     private CompletedWindow continuousCompletedWindow(List<QaMessages> messages, Map<Long, QaRetrievalLogs> taskMap) {
@@ -178,7 +182,7 @@ public class QaSessionSummaryService {
         return builder.toString();
     }
 
-    private void saveSummary(Long sessionId, CompletedWindow window, QaSummaryResult result) {
+    private void saveSummary(Long sessionId, CompletedWindow window, QaSummaryResult result, QaSessionSummaries previousSummary) {
         LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
         QaSessionSummaries summary = new QaSessionSummaries();
         summary.setSessionId(sessionId);
@@ -193,11 +197,28 @@ public class QaSessionSummaryService {
         if (result.success()) {
             summary.setStatus("success");
             summary.setSummaryText(truncate(result.summaryText(), maxChars));
+            QaTopicStack topicStack = topicResolver.resolveFromHistory(window.messages(), toContextSummary(previousSummary));
+            summary.setLatestTopic(topicStack.latestTopic());
+            summary.setLatestTopicMessageRange(topicStack.latestTopicMessageRange());
+            summary.setActiveTopicsJson(topicStack.activeTopicsJson());
         } else {
             summary.setStatus("failed");
             summary.setErrorMessage(truncate(result.errorMessage(), 500));
         }
         summariesService.save(summary);
+    }
+
+    private QaContextSummary toContextSummary(QaSessionSummaries summary) {
+        if (summary == null) {
+            return null;
+        }
+        return new QaContextSummary(
+                summary.getSummaryText(),
+                summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
+                summary.getLatestTopic(),
+                summary.getLatestTopicMessageRange(),
+                summary.getActiveTopicsJson()
+        );
     }
 
     private int lengthOf(String value) {

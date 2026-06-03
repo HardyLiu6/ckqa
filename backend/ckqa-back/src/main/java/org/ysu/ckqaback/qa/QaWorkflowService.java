@@ -398,7 +398,13 @@ public class QaWorkflowService {
                 memoryContext.sizeEstimate(),
                 queryEngineStrategy,
                 memoryContext.historyFallbackReason(),
-                serializeMemoryHistory(memoryContext)
+                serializeMemoryHistory(memoryContext),
+                requestedMode,
+                resolvedMode,
+                context.latestTopic(),
+                context.topicSource(),
+                context.topicConfidence(),
+                context.topicStackJson()
         );
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
@@ -554,7 +560,10 @@ public class QaWorkflowService {
         }
         return new QaContextSummary(
                 summary.getSummaryText(),
-                summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo()
+                summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
+                summary.getLatestTopic(),
+                summary.getLatestTopicMessageRange(),
+                summary.getActiveTopicsJson()
         );
     }
 

@@ -112,6 +112,18 @@ public class QaRetrievalLogs implements Serializable {
     private String queryMode;
 
     /**
+     * 学生端请求模式，可能是 smart。
+     */
+    @TableField("requested_mode")
+    private String requestedMode;
+
+    /**
+     * 后端实际执行模式。
+     */
+    @TableField("resolved_mode")
+    private String resolvedMode;
+
+    /**
      * 查询文本
      */
     @TableField("query_text")
@@ -200,6 +212,30 @@ public class QaRetrievalLogs implements Serializable {
      */
     @TableField("context_snapshot_version")
     private String contextSnapshotVersion;
+
+    /**
+     * 本轮解析出的主题。
+     */
+    @TableField("resolved_topic")
+    private String resolvedTopic;
+
+    /**
+     * 主题来源：explicit/history/summary/comparison_pronoun 等。
+     */
+    @TableField("topic_source")
+    private String topicSource;
+
+    /**
+     * 主题解析置信度。
+     */
+    @TableField("topic_confidence")
+    private Double topicConfidence;
+
+    /**
+     * 内部主题栈 JSON。
+     */
+    @TableField("topic_stack_json")
+    private String topicStackJson;
 
     /**
      * 智能推荐置信度

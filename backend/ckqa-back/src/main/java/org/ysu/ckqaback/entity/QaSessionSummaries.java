@@ -43,6 +43,15 @@ public class QaSessionSummaries implements Serializable {
     @TableField("error_message")
     private String errorMessage;
 
+    @TableField("latest_topic")
+    private String latestTopic;
+
+    @TableField("latest_topic_message_range")
+    private String latestTopicMessageRange;
+
+    @TableField("active_topics_json")
+    private String activeTopicsJson;
+
     @TableField("model")
     private String model;
 

@@ -638,6 +638,12 @@ class QaWorkflowServiceTest {
                 eq("drift"),
                 eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
                 argThat(context -> "recent".equals(context.contextStrategy())
+                        && "smart".equals(context.requestedMode())
+                        && "drift".equals(context.resolvedMode())
+                        && "死锁".equals(context.resolvedTopic())
+                        && "history".equals(context.topicSource())
+                        && context.topicConfidence() >= 0.8
+                        && context.topicStackJson().contains("死锁")
                         && context.rewriteApplied()
                         && context.queryEngineStrategy() == null
                         && context.routingSnapshotJson().contains("\"recommendedMode\":\"drift\""))
@@ -1093,10 +1099,11 @@ class QaWorkflowServiceTest {
                 eq(23L),
                 eq(105L),
                 eq("basic"),
-                eq("关于上一轮主题「那银行家算法呢」：它怎么判断安全？"),
+                eq("关于上一轮主题「银行家算法」：它怎么判断安全？"),
                 argThat(context -> "summary_recent".equals(context.contextStrategy())
                         && context.contextSnapshotText().contains("会话摘要")
                         && context.contextSnapshotText().contains("最近对话")
+                        && "银行家算法".equals(context.resolvedTopic())
                         && context.contextCharCount() > 0)
         )).willReturn(task);
 

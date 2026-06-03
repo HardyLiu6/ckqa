@@ -85,6 +85,12 @@ public class QaRetrievalLogsServiceImpl extends ServiceImpl<QaRetrievalLogsMappe
             task.setRewriteModel(context.rewriteModel());
             task.setRewriteConfidence(context.rewriteConfidence());
             task.setContextSnapshotVersion(context.contextSnapshotVersion());
+            task.setRequestedMode(context.requestedMode());
+            task.setResolvedMode(context.resolvedMode());
+            task.setResolvedTopic(context.resolvedTopic());
+            task.setTopicSource(context.topicSource());
+            task.setTopicConfidence(context.topicConfidence());
+            task.setTopicStackJson(context.topicStackJson());
             task.setRoutingConfidence(context.routingConfidence());
             task.setRoutingConfidenceBand(context.routingConfidenceBand());
             task.setRoutingReviewPriority(context.routingReviewPriority());
