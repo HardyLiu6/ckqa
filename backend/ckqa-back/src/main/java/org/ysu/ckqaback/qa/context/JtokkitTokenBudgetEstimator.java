@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.function.Supplier;
+
 /**
  * 使用 o200k_base 做精确 token 统计；失败时退回字符预算诊断。
  */
@@ -21,18 +23,24 @@ public class JtokkitTokenBudgetEstimator implements TokenBudgetEstimator {
     private final String initFallbackReason;
 
     public JtokkitTokenBudgetEstimator() {
+        this(() -> Encodings.newLazyEncodingRegistry());
+    }
+
+    JtokkitTokenBudgetEstimator(Supplier<EncodingRegistry> registrySupplier) {
         Encoding resolvedEncoding = null;
         String fallbackReason = null;
         try {
-            EncodingRegistry registry = Encodings.newLazyEncodingRegistry();
+            EncodingRegistry registry = registrySupplier.get();
             resolvedEncoding = registry.getEncoding(ENCODING_NAME).orElse(null);
             if (resolvedEncoding == null) {
                 fallbackReason = "encoding_unavailable";
                 LOGGER.warn("Jtokkit encoding {} is unavailable, token budget falls back to chars.", ENCODING_NAME);
             }
-        } catch (RuntimeException exception) {
+        } catch (RuntimeException | LinkageError exception) {
             fallbackReason = "tokenizer_init_failed";
-            LOGGER.warn("Jtokkit tokenizer init failed, token budget falls back to chars.", exception);
+            LOGGER.warn("Jtokkit tokenizer init failed, token budget falls back to chars. type={} reason={}",
+                    exception.getClass().getSimpleName(),
+                    exception.getMessage());
         }
         this.encoding = resolvedEncoding;
         this.initFallbackReason = fallbackReason;

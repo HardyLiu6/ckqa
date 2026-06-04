@@ -50,4 +50,18 @@ class TokenBudgetEstimatorTest {
         assertThat(estimate.tokens()).isNotNull().isPositive();
         assertThat(estimate.fallbackReason()).isNull();
     }
+
+    @Test
+    void shouldFallBackToCharsWhenTokenizerDependencyIsMissingAtRuntime() {
+        TokenBudgetEstimator estimator = new JtokkitTokenBudgetEstimator(() -> {
+            throw new NoClassDefFoundError("com/knuddels/jtokkit/Encodings");
+        });
+
+        BudgetSizeEstimate estimate = estimator.estimate("死锁检测", null);
+
+        assertThat(estimate.chars()).isEqualTo(4);
+        assertThat(estimate.tokens()).isNull();
+        assertThat(estimate.tokenizer()).isEqualTo("char_fallback");
+        assertThat(estimate.fallbackReason()).isEqualTo("tokenizer_init_failed");
+    }
 }
