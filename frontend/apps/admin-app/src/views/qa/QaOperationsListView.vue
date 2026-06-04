@@ -2,7 +2,18 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChevronDown, Copy, Download, Filter, RefreshCw, Search, Eye } from 'lucide-vue-next'
+import {
+  Braces,
+  ChevronDown,
+  Copy,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  RefreshCw,
+  Search,
+  Eye,
+} from 'lucide-vue-next'
 
 import StatusBadge from '../../components/common/StatusBadge.vue'
 import {
@@ -368,6 +379,7 @@ function queryStrategyText(row = {}) {
         <el-dropdown
           trigger="click"
           placement="bottom-end"
+          popper-class="qa-export-dropdown"
           :disabled="exporting"
           @command="handleExportCommand"
         >
@@ -384,16 +396,37 @@ function queryStrategyText(row = {}) {
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="xlsx">
-                <span class="export-menu-title">Excel (.xlsx)</span>
-                <span class="export-menu-hint">扁平表，便于人工查看与统计</span>
+                <span class="export-menu-option">
+                  <span class="export-menu-icon export-menu-icon--xlsx">
+                    <component :is="FileSpreadsheet" :size="17" aria-hidden="true" />
+                  </span>
+                  <span class="export-menu-copy">
+                    <span class="export-menu-title">Excel (.xlsx)</span>
+                    <span class="export-menu-hint">扁平表，便于人工查看与统计</span>
+                  </span>
+                </span>
               </el-dropdown-item>
               <el-dropdown-item command="csv">
-                <span class="export-menu-title">CSV (.csv)</span>
-                <span class="export-menu-hint">UTF-8 + BOM，跨工具兼容</span>
+                <span class="export-menu-option">
+                  <span class="export-menu-icon export-menu-icon--csv">
+                    <component :is="FileText" :size="17" aria-hidden="true" />
+                  </span>
+                  <span class="export-menu-copy">
+                    <span class="export-menu-title">CSV (.csv)</span>
+                    <span class="export-menu-hint">UTF-8 + BOM，跨工具兼容</span>
+                  </span>
+                </span>
               </el-dropdown-item>
               <el-dropdown-item command="json" divided>
-                <span class="export-menu-title">JSON (.json)</span>
-                <span class="export-menu-hint">完整快照，含来源与反馈</span>
+                <span class="export-menu-option">
+                  <span class="export-menu-icon export-menu-icon--json">
+                    <component :is="Braces" :size="17" aria-hidden="true" />
+                  </span>
+                  <span class="export-menu-copy">
+                    <span class="export-menu-title">JSON (.json)</span>
+                    <span class="export-menu-hint">完整快照，含来源与反馈</span>
+                  </span>
+                </span>
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -1103,23 +1136,94 @@ function queryStrategyText(row = {}) {
   没有副作用。
 -->
 <style>
-.el-dropdown-menu .el-dropdown-menu__item .export-menu-title {
-  display: block;
+.qa-export-dropdown.el-popper {
+  border: 1px solid color-mix(in srgb, var(--ckqa-accent) 18%, var(--ckqa-border));
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 44px rgba(37, 45, 92, 0.16), 0 6px 18px rgba(79, 70, 229, 0.12);
+}
+
+.qa-export-dropdown .el-dropdown-menu {
+  min-width: 286px;
+  padding: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ckqa-accent) 8%, transparent), transparent 42%),
+    var(--ckqa-surface);
+}
+
+.qa-export-dropdown .el-dropdown-menu__item {
+  min-height: 0;
+  padding: 0;
+  border-radius: 10px;
+  color: var(--ckqa-text);
+  line-height: 1;
+}
+
+.qa-export-dropdown .el-dropdown-menu__item:hover,
+.qa-export-dropdown .el-dropdown-menu__item:focus {
+  background: color-mix(in srgb, var(--ckqa-accent) 10%, transparent);
+}
+
+.qa-export-dropdown .el-dropdown-menu__item--divided {
+  margin-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ckqa-accent) 12%, var(--ckqa-border-subtle));
+}
+
+.qa-export-dropdown .el-dropdown-menu__item--divided::before {
+  height: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.qa-export-dropdown .export-menu-option {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  align-items: center;
+}
+
+.qa-export-dropdown .export-menu-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+}
+
+.qa-export-dropdown .export-menu-icon--xlsx {
+  color: #2563eb;
+  background: color-mix(in srgb, #2563eb 12%, transparent);
+}
+
+.qa-export-dropdown .export-menu-icon--csv {
+  color: #0f766e;
+  background: color-mix(in srgb, #0f766e 12%, transparent);
+}
+
+.qa-export-dropdown .export-menu-icon--json {
+  color: #7c3aed;
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+}
+
+.qa-export-dropdown .export-menu-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.qa-export-dropdown .export-menu-title {
   color: var(--ckqa-text);
   font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
-.el-dropdown-menu .el-dropdown-menu__item .export-menu-hint {
-  display: block;
+.qa-export-dropdown .export-menu-hint {
   color: var(--ckqa-text-muted);
   font-size: 11px;
-  line-height: 1.3;
-  margin-top: 2px;
-}
-
-.el-dropdown-menu .el-dropdown-menu__item {
-  padding: 8px 16px;
+  line-height: 1.35;
+  white-space: normal;
 }
 </style>

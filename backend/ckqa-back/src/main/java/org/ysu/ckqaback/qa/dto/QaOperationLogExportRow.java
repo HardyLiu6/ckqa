@@ -1,7 +1,5 @@
 package org.ysu.ckqaback.qa.dto;
 
-import com.alibaba.excel.annotation.ExcelProperty;
-import com.alibaba.excel.annotation.write.style.ColumnWidth;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,74 +19,41 @@ import java.util.Optional;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ColumnWidth(20)
 public class QaOperationLogExportRow {
 
     private static final DateTimeFormatter SHANGHAI_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    @ExcelProperty("日志ID")
-    @ColumnWidth(10)
     private Long retrievalLogId;
 
-    @ExcelProperty("课程")
-    @ColumnWidth(24)
     private String courseName;
 
-    @ExcelProperty("知识库")
-    @ColumnWidth(24)
     private String knowledgeBaseName;
 
-    @ExcelProperty("学生")
-    @ColumnWidth(16)
     private String userDisplay;
 
-    @ExcelProperty("模式")
-    @ColumnWidth(12)
     private String queryMode;
 
-    @ExcelProperty("查询策略")
-    @ColumnWidth(20)
     private String queryStrategy;
 
-    @ExcelProperty("任务状态")
-    @ColumnWidth(12)
     private String taskStatus;
 
-    @ExcelProperty("路由置信度")
-    @ColumnWidth(14)
     private String routingConfidenceBand;
 
-    @ExcelProperty("复核优先级")
-    @ColumnWidth(14)
     private String routingReviewPriority;
 
-    @ExcelProperty("耗时(ms)")
-    @ColumnWidth(12)
     private Long durationMs;
 
-    @ExcelProperty("来源数")
-    @ColumnWidth(10)
     private Long sourceCount;
 
-    @ExcelProperty("有用反馈")
-    @ColumnWidth(10)
     private Long helpfulCount;
 
-    @ExcelProperty("无用反馈")
-    @ColumnWidth(10)
     private Long unhelpfulCount;
 
-    @ExcelProperty("待改进反馈")
-    @ColumnWidth(12)
     private Long needsImprovementCount;
 
-    @ExcelProperty("来源问题反馈")
-    @ColumnWidth(14)
     private Long sourceIssueCount;
 
-    @ExcelProperty("创建时间")
-    @ColumnWidth(20)
     private String createdAt;
 
     /**

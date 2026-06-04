@@ -5,6 +5,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -17,8 +20,10 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthContext;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
+import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.qa.QaOperationsService;
 import org.ysu.ckqaback.qa.dto.QaOperationLogDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationLogExportRow;
@@ -36,8 +41,6 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +54,12 @@ import java.util.List;
 @RequiredArgsConstructor
 @RequestMapping(ApiPaths.QA_OPERATIONS)
 public class QaOperationsController {
+
+    private static final Logger log = LoggerFactory.getLogger(QaOperationsController.class);
+    private static final String XLSX_DEPENDENCY_ERROR =
+            "Excel导出依赖未正确加载，请重新构建并重启后端服务";
+    private static final String XLSX_GENERATION_ERROR =
+            "Excel导出生成失败，请查看后端日志定位具体原因";
 
     private final QaOperationsService qaOperationsService;
     private final QaSourceReviewsService sourceReviewsService;
@@ -96,27 +105,26 @@ public class QaOperationsController {
             HttpServletRequest servletRequest,
             HttpServletResponse response
     ) throws IOException {
-        Path tempDir = Files.createTempDirectory("qa-operation-samples-");
-        Path tempFile = tempDir.resolve("qa-operation-samples.xlsx");
+        byte[] body;
         try {
             List<QaOperationLogExportRow> rows = qaOperationsService.exportFlatRows(request, currentUser(servletRequest));
-            try {
-                xlsxExporter.write(tempFile, rows);
-            } catch (LinkageError error) {
-                throw new IllegalStateException("Excel导出依赖未正确加载，请重新构建并重启后端服务", error);
-            }
-            writeDownloadHeaders(response, "qa-operation-samples", "xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            try (OutputStream out = response.getOutputStream()) {
-                Files.copy(tempFile, out);
-            }
-        } finally {
-            try {
-                Files.deleteIfExists(tempFile);
-                Files.deleteIfExists(tempDir);
-            } catch (IOException error) {
-                // 临时文件删除失败不应影响已经完成的下载响应。
-            }
+            body = xlsxExporter.toByteArray(rows);
+        } catch (LinkageError error) {
+            log.error("问答运维 Excel 导出依赖加载失败", error);
+            throw new BusinessException(ApiResultCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR,
+                    XLSX_DEPENDENCY_ERROR);
+        } catch (BusinessException error) {
+            throw error;
+        } catch (IOException | RuntimeException error) {
+            log.error("问答运维 Excel 导出生成失败", error);
+            throw new BusinessException(ApiResultCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR,
+                    XLSX_GENERATION_ERROR);
+        }
+        writeDownloadHeaders(response, "qa-operation-samples", "xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setContentLength(body.length);
+        try (OutputStream out = response.getOutputStream()) {
+            out.write(body);
         }
     }
 

@@ -166,8 +166,8 @@ class QaOperationsControllerWebMvcTest {
         QaOperationLogXlsxExporter failingExporter = Mockito.mock(QaOperationLogXlsxExporter.class);
         given(qaOperationsService.exportFlatRows(any(), eq(authenticatedAdmin())))
                 .willReturn(List.of(buildExportRow()));
-        willThrow(new NoClassDefFoundError("com/alibaba/excel/EasyExcel"))
-                .given(failingExporter).write(any(), any());
+        willThrow(new NoClassDefFoundError("missing/runtime/ExcelClass"))
+                .given(failingExporter).toByteArray(any());
         MockMvc failingMvc = MockMvcBuilders.standaloneSetup(new QaOperationsController(
                         qaOperationsService,
                         sourceReviewsService,
@@ -180,7 +180,8 @@ class QaOperationsControllerWebMvcTest {
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedAdmin()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(header().string("Content-Type", org.hamcrest.Matchers.startsWith("application/json")))
-                .andExpect(jsonPath("$.code").value(5000));
+                .andExpect(jsonPath("$.code").value(5000))
+                .andExpect(jsonPath("$.message").value("Excel导出依赖未正确加载，请重新构建并重启后端服务"));
     }
 
     @Test

@@ -304,6 +304,32 @@ test('请求层默认使用同源 /api/v1 并保留认证头注入入口', async
   assert.equal(requestConfig.headers['X-CKQA-User-Code'], 'TCH2026001')
 })
 
+test('请求层能解析 blob 下载接口返回的 ApiResponse 错误', async () => {
+  const client = createHttpClient()
+  const rejected = client.interceptors.response.handlers[0].rejected
+  const errorBlob = new Blob([
+    JSON.stringify({
+      code: 5000,
+      message: 'Excel导出依赖未正确加载，请重新构建并重启后端服务',
+      data: { component: 'easyexcel' },
+    }),
+  ], { type: 'application/json' })
+
+  await assert.rejects(
+    () => rejected({
+      response: { status: 500, data: errorBlob },
+      message: 'Request failed with status code 500',
+    }),
+    (error) => {
+      assert.equal(error.status, 500)
+      assert.equal(error.code, 5000)
+      assert.equal(error.message, 'Excel导出依赖未正确加载，请重新构建并重启后端服务')
+      assert.deepEqual(error.data, { component: 'easyexcel' })
+      return true
+    },
+  )
+})
+
 test('开发服务器把同源 /api/v1 代理到 Java 后端', () => {
   assert.equal(resolveApiProxyTarget({}), 'http://127.0.0.1:8080')
   assert.equal(resolveApiProxyTarget({ VITE_API_PROXY_TARGET: 'http://backend.local:18080/' }), 'http://backend.local:18080')

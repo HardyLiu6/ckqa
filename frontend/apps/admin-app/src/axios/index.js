@@ -36,7 +36,7 @@ export function createHttpClient({ authStore: activeAuthStore = null, getAuthSes
 
   client.interceptors.response.use(
     (response) => response,
-    (error) => {
+    async (error) => {
       const status = error.response?.status
       // axios 超时（ECONNABORTED + 'timeout of Xms exceeded'）的英文报错对终端用户不友好，
       // 在拦截器里统一转成中文。区分超时和其它网络错误。
@@ -47,7 +47,7 @@ export function createHttpClient({ authStore: activeAuthStore = null, getAuthSes
       // 把 envelope 的 code / message / data 提到错误对象顶层，让上层能用
       // err.code / err.data 直接判别业务码（如 4105 / 4104）。
       // 这与 client.js unwrapApiResponse 的 200 + 业务非 200 抛错形态保持一致。
-      const responseBody = error.response?.data
+      const responseBody = await normalizeErrorResponseBody(error.response?.data)
       const isApiEnvelope = responseBody
         && typeof responseBody === 'object'
         && Object.prototype.hasOwnProperty.call(responseBody, 'code')
@@ -78,3 +78,25 @@ export function createHttpClient({ authStore: activeAuthStore = null, getAuthSes
 }
 
 export const http = createHttpClient()
+
+async function normalizeErrorResponseBody(responseBody) {
+  if (!isBlobLike(responseBody)) {
+    return responseBody
+  }
+  const text = await responseBody.text()
+  if (!text) {
+    return responseBody
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function isBlobLike(value) {
+  return value
+    && typeof value === 'object'
+    && typeof value.text === 'function'
+    && typeof value.size === 'number'
+}
