@@ -22,7 +22,13 @@ _MODULE_DIR = _PROJECT_ROOT / "utils"
 if str(_MODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_MODULE_DIR))
 
-from query_streaming_adapter import EvidenceCandidate, HybridLayer, NativeGraphRagStreamingAdapter, NativeStreamingConfig
+from query_streaming_adapter import (
+    EvidenceCandidate,
+    HybridLayer,
+    NativeGraphRagStreamingAdapter,
+    NativeStreamingConfig,
+    _context_metrics_and_evidence,
+)
 from query_task_manager import QueryTaskRequest
 
 
@@ -753,6 +759,42 @@ class TestQueryStreamingAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rate_limit["metrics"]["source"], "graphrag_log")
         self.assertEqual(rate_limit["metrics"]["retryAfterSeconds"], 4)
         self.assertEqual(chunks[-1].text, "基础回答")
+
+
+class TestContextMetricsCounting(unittest.TestCase):
+    """计数应反映真实选中条目数：线上 on_context 传的是 DataFrame，而非测试常用的 list。"""
+
+    def test_dataframe_source_count_is_true_total_not_capped_at_eight(self):
+        frame = pd.DataFrame(
+            [{"id": f"tu-{index}", "text": f"课程片段 {index}"} for index in range(1, 11)]
+        )
+
+        metrics, evidence = _context_metrics_and_evidence({"sources": frame})
+
+        self.assertEqual(metrics.get("textUnitCount"), 10)
+        self.assertEqual(len(evidence), 5)
+
+    def test_multi_section_counts_not_dropped_after_evidence_fills(self):
+        reports = pd.DataFrame(
+            [{"id": f"r-{index}", "title": f"课程报告 {index}"} for index in range(1, 7)]
+        )
+        relationships = pd.DataFrame(
+            [{"id": f"rel-{index}", "description": f"概念关系 {index}"} for index in range(1, 5)]
+        )
+        sources = pd.DataFrame(
+            [{"id": f"tu-{index}", "text": f"课程片段 {index}"} for index in range(1, 4)]
+        )
+
+        metrics, evidence = _context_metrics_and_evidence({
+            "reports": reports,
+            "relationships": relationships,
+            "sources": sources,
+        })
+
+        self.assertEqual(metrics.get("reportCount"), 6)
+        self.assertEqual(metrics.get("relationshipCount"), 4)
+        self.assertEqual(metrics.get("textUnitCount"), 3)
+        self.assertEqual(len(evidence), 5)
 
 
 if __name__ == "__main__":

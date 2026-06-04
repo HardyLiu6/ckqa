@@ -382,8 +382,15 @@ export function retrievalTraceEvidenceLabel(event, fallbackLabel = '检索', vis
     const totalCount = total || count
     return totalCount > visibleCount ? `BM25 片段 ${visibleCount} / 共 ${totalCount} 条` : `BM25 片段 ${totalCount} 条`
   }
+  if (kinds.has('report')) {
+    const total = normalizePositiveInteger(event?.metrics?.reportCount)
+    const totalCount = total || count
+    return totalCount > visibleCount ? `课程报告 ${visibleCount} / 共 ${totalCount} 份` : `课程报告 ${totalCount} 份`
+  }
   if (kinds.has('text_unit')) {
-    return count > visibleCount ? `课程片段 ${visibleCount} / 共 ${count} 条` : `课程片段 ${count} 条`
+    const total = normalizePositiveInteger(event?.metrics?.textUnitCount)
+    const totalCount = total || count
+    return totalCount > visibleCount ? `课程片段 ${visibleCount} / 共 ${totalCount} 条` : `课程片段 ${totalCount} 条`
   }
   if (kinds.has('entity') || kinds.has('relationship')) {
     const entityTotal = normalizePositiveInteger(event?.metrics?.entityCount)

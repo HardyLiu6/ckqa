@@ -728,17 +728,18 @@ def _context_metrics_and_evidence(context: Any) -> tuple[dict[str, Any], list[di
     metrics: dict[str, Any] = {}
     evidence: list[dict[str, Any]] = []
     for key, value in sections.items():
-        records = _records_from_context_value(value)
-        count = len(records) if records else _safe_len(value)
-        metric_key = _metric_key_for_context(key)
+        count = _context_value_count(value)
         if count:
+            metric_key = _metric_key_for_context(key)
             metrics[metric_key] = metrics.get(metric_key, 0) + count
-        for record in records[:5]:
-            evidence_item = _context_item_to_evidence(record, _evidence_kind_for_context(key))
-            if evidence_item:
-                evidence.append(evidence_item)
-        if len(evidence) >= 5:
-            break
+        if len(evidence) < 5:
+            kind = _evidence_kind_for_context(key)
+            for record in _records_from_context_value(value):
+                evidence_item = _context_item_to_evidence(record, kind)
+                if evidence_item:
+                    evidence.append(evidence_item)
+                if len(evidence) >= 5:
+                    break
     if not metrics and context is not None:
         metrics["contextCount"] = _safe_len(context)
     return metrics, evidence[:5]
@@ -880,6 +881,22 @@ def _records_from_context_value(value: Any) -> list[Any]:
     if isinstance(value, str):
         return [value]
     return [value]
+
+
+def _context_value_count(value: Any) -> int:
+    """上下文某一段的真实条目数（计数用，不受证据预览截断影响）。"""
+    if value is None:
+        return 0
+    if isinstance(value, pd.DataFrame):
+        return len(value)
+    if isinstance(value, dict):
+        nested = value.get("records") or value.get("data") or value.get("items")
+        if isinstance(nested, list):
+            return len(nested)
+        return 1
+    if isinstance(value, (list, tuple)):
+        return len(value)
+    return 1
 
 
 def _context_item_to_evidence(item: Any, kind: str) -> dict[str, Any]:
