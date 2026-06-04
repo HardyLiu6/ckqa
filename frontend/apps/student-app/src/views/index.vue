@@ -1,18 +1,32 @@
 <!-- frontend/apps/student-app/src/views/index.vue -->
 <!-- 登录后首页 · Indigo · Product Layout -->
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useCourseStore } from '@/stores'
+import { useCourseStore, useUserStore } from '@/stores'
+import { listQaSessions, getQaSessionStats } from '@/api/qa'
 import GlassCard from '@/components/common/GlassCard.vue'
 import GlowButton from '@/components/common/GlowButton.vue'
 import ModuleTag from '@/components/common/ModuleTag.vue'
 import { ArrowRight, Reading, ChatDotRound, Share, DataAnalysis, Search, Collection } from '@element-plus/icons-vue'
+import { normalizeQaSessionStats } from './qa/qa-session-model'
+import {
+  DEFAULT_HOME_COURSE_COVER,
+  buildHomeCourseItems,
+  buildHomeRecentQaItems,
+  resolveHomeGreetingName,
+} from './home/home-page-model'
 
 const router = useRouter()
 const courseStore = useCourseStore()
+const userStore = useUserStore()
 
-const greetingName = '俊达'
+const qaStats = ref({ totalSessions: 0, totalMessages: 0, courseCount: 0, favoriteCount: 0 })
+const recentSessionPayload = ref({ items: [], total: 0 })
+const homeLoading = ref(false)
+const qaErrorMessage = ref('')
+
+const greetingName = computed(() => resolveHomeGreetingName(userStore.userInfo))
 const timeOfDay = computed(() => {
   const h = new Date().getHours()
   if (h < 6) return '凌晨好'
@@ -22,9 +36,24 @@ const timeOfDay = computed(() => {
   return '晚上好'
 })
 
+const defaultCourse = {
+  id: '',
+  title: '选择一门课程',
+  cover: DEFAULT_HOME_COURSE_COVER,
+  progress: 0,
+  lastLearnAt: '从课程中心开始学习',
+  meta: '课程资料待完善',
+}
+
+const courseNameById = computed(() => Object.fromEntries(
+  courseStore.allCourses.flatMap((course) => [
+    [String(course.id ?? ''), course.title],
+    [String(course.courseId ?? ''), course.title],
+  ]).filter(([id]) => id),
+))
+
 const recentCourse = computed(() => {
-  const my = courseStore.myCoursesWithDetail?.[0]
-  return my || { id: 1, title: '操作系统', progress: 70, lastLearnAt: '上次学到：页面置换算法' }
+  return myCourses.value[0] || defaultCourse
 })
 
 const hotQuestions = [
@@ -34,30 +63,77 @@ const hotQuestions = [
   '动态规划怎么入手？',
 ]
 
-const modules = [
-  { key: 'course', label: '课程中心', desc: '120+ 门精品课程', route: '/course/list', icon: Reading },
-  { key: 'qa', label: '智能问答', desc: 'AI 专业解答', route: '/qa/ask', icon: ChatDotRound },
-  { key: 'knowledge', label: '知识图谱', desc: '可视化学科脉络', route: '/knowledge/graph', icon: Share },
+const modules = computed(() => [
+  {
+    key: 'course',
+    label: '课程中心',
+    desc: courseStore.allCourses.length ? `${courseStore.allCourses.length} 门可见课程` : '课程中心',
+    route: '/course/list',
+    icon: Reading,
+  },
+  {
+    key: 'qa',
+    label: '智能问答',
+    desc: qaStats.value.totalSessions ? `${qaStats.value.totalSessions} 个对话 / ${qaStats.value.totalMessages} 条消息` : 'AI 专业解答',
+    route: '/qa/ask',
+    icon: ChatDotRound,
+  },
+  {
+    key: 'knowledge',
+    label: '知识图谱',
+    desc: courseStore.allCourses.length ? `${courseStore.allCourses.reduce((sum, course) => sum + Number(course.activeKnowledgeBaseCount ?? 0), 0)} 个活跃知识库` : '可视化学科脉络',
+    route: '/knowledge/graph',
+    icon: Share,
+  },
   { key: 'analysis', label: '学习分析', desc: '错题 / 报告 / 推荐', route: '/analysis/wrong', icon: DataAnalysis },
-]
+])
 
-const myCourses = computed(() => (courseStore.myCoursesWithDetail || []).slice(0, 3))
+const myCourses = computed(() => buildHomeCourseItems(courseStore.myCoursesWithDetail || []).slice(0, 3))
 
-const recentQAs = [
-  { id: 1, title: '进程间通信的管道方式？', time: '10 分钟前', subject: '操作系统', active: true },
-  { id: 2, title: '红黑树为何要保证黑高一致？', time: '昨天', subject: '数据结构', active: false },
-  { id: 3, title: 'ResNet 的残差连接作用？', time: '3 天前', subject: '深度学习', active: false },
-]
+const recentQAs = computed(() => buildHomeRecentQaItems(recentSessionPayload.value, courseNameById.value))
 
 function goQA(prefill) {
   router.push({ path: '/qa/ask', query: prefill ? { topic: prefill } : {} })
 }
 function goCourse(id) {
-  router.push(`/course/detail/${id}`)
+  if (!id) {
+    router.push('/course/list')
+    return
+  }
+  router.push(`/course/detail/${encodeURIComponent(id)}`)
 }
-function goQADetail(id) {
-  router.push(`/qa/detail/${id}`)
+function goQADetail(q) {
+  router.push(q.route)
 }
+
+async function loadHomeData() {
+  homeLoading.value = true
+  qaErrorMessage.value = ''
+  await Promise.allSettled([
+    courseStore.loadCourses({ force: true }),
+    loadQaOverview(),
+  ])
+  homeLoading.value = false
+}
+
+async function loadQaOverview() {
+  try {
+    const [statsPayload, sessionPayload] = await Promise.all([
+      getQaSessionStats({ status: 'active' }),
+      listQaSessions({ status: 'active', sort: 'newest', page: 1, size: 3 }),
+    ])
+    qaStats.value = normalizeQaSessionStats(statsPayload)
+    recentSessionPayload.value = sessionPayload
+  } catch (error) {
+    qaErrorMessage.value = error?.message || '最近问答加载失败'
+    recentSessionPayload.value = { items: [], total: 0 }
+    qaStats.value = { totalSessions: 0, totalMessages: 0, courseCount: 0, favoriteCount: 0 }
+  }
+}
+
+onMounted(() => {
+  loadHomeData()
+})
 </script>
 
 <template>
@@ -66,7 +142,7 @@ function goQADetail(id) {
 
     <div class="home-inner">
       <!-- 欢迎 / 继续学习 -->
-      <GlassCard tier="base" padding="lg" class="welcome-card">
+      <GlassCard tier="base" padding="lg" class="welcome-card" :class="{ 'is-loading': homeLoading }">
         <div class="welcome-row">
           <div class="welcome-left">
             <ModuleTag module="home" size="sm">{{ timeOfDay }}，{{ greetingName }}</ModuleTag>
@@ -77,7 +153,7 @@ function goQADetail(id) {
           </div>
           <div class="welcome-right">
             <GlowButton size="md" @click="goCourse(recentCourse.id)">
-              继续学习
+              {{ recentCourse.id ? '继续学习' : '浏览课程' }}
               <template #suffix>
                 <el-icon><ArrowRight /></el-icon>
               </template>
@@ -135,9 +211,10 @@ function goQADetail(id) {
               class="course-row"
               @click="goCourse(c.id)"
             >
-              <img :src="c.cover" :alt="c.title" class="course-cover" />
+              <img :src="c.cover || DEFAULT_HOME_COURSE_COVER" :alt="c.title" class="course-cover" />
               <div class="course-info">
                 <div class="course-name">{{ c.title }}</div>
+                <div class="course-meta-line">{{ c.meta }}</div>
                 <div class="progress-bar">
                   <div class="progress-fill" :style="{ width: c.progress + '%' }"></div>
                 </div>
@@ -162,11 +239,13 @@ function goQADetail(id) {
               :key="q.id"
               class="qa-row"
               :class="{ active: q.active }"
-              @click="goQADetail(q.id)"
+              @click="goQADetail(q)"
             >
               <div class="qa-title">{{ q.title }}</div>
               <div class="qa-meta">{{ q.time }} · {{ q.subject }}</div>
             </div>
+            <div v-if="qaErrorMessage" class="empty-hint">{{ qaErrorMessage }}</div>
+            <div v-else-if="!recentQAs.length" class="empty-hint">暂无近期问答，先去 <button class="link-btn qa-link" @click="goQA()">智能问答</button> 试试</div>
           </div>
         </GlassCard>
       </div>
@@ -180,8 +259,11 @@ function goQADetail(id) {
 
 .home-page {
   position: relative;
-  min-height: 100vh;
-  padding: 32px;
+  min-height: calc(100vh - 64px);
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: hidden;
+  padding: clamp(16px, 2.2vw, 32px);
   background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
   @media (max-width: $bp-tablet) { padding: 16px; }
 }
@@ -191,18 +273,21 @@ function goQADetail(id) {
   width: 480px; height: 480px;
   background: radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 60%);
   border-radius: 50%;
-  top: -120px; right: -80px;
+  top: -120px; right: 0;
+  transform: translateX(28%);
   filter: blur(40px);
   pointer-events: none;
 }
 
 .home-inner {
   position: relative;
-  max-width: 1280px;
+  width: 100%;
+  max-width: min(1280px, 100%);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: clamp(14px, 1.45vw, 20px);
+  min-width: 0;
 }
 
 // ========== Welcome Card ==========
@@ -219,6 +304,7 @@ function goQADetail(id) {
 }
 
 .welcome-left { flex: 1; }
+.welcome-right { flex-shrink: 0; }
 
 .welcome-title {
   font-family: 'Space Grotesk', 'Noto Sans SC', sans-serif;
@@ -226,6 +312,7 @@ function goQADetail(id) {
   font-weight: 700;
   color: #0f172a;
   margin: 8px 0 4px;
+  overflow-wrap: anywhere;
 
   .module-accent {
     background: linear-gradient(135deg, #6366f1, #818cf8);
@@ -285,15 +372,17 @@ function goQADetail(id) {
 // ========== Modules Grid ==========
 .modules-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  @media (max-width: $bp-laptop) { grid-template-columns: repeat(2, 1fr); }
+  min-width: 0;
+  @media (max-width: $bp-laptop) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   @media (max-width: $bp-tablet) { grid-template-columns: 1fr; }
 }
 .module-card {
   position: relative;
   overflow: hidden;
   cursor: pointer;
+  min-width: 0;
 
   .module-halo {
     position: absolute;
@@ -314,8 +403,8 @@ function goQADetail(id) {
     color: #fff;
     margin-bottom: 12px;
   }
-  .module-label { font-size: 15px; font-weight: 700; color: #0f172a; }
-  .module-desc { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .module-label { font-size: 15px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+  .module-desc { font-size: 12px; color: #64748b; margin-top: 4px; overflow-wrap: anywhere; }
 }
 .module-course .module-halo { background: radial-gradient(circle, rgba(37, 99, 235, 0.3), transparent 60%); }
 .module-course .module-icon-wrap { background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 16px rgba(37, 99, 235, 0.3); }
@@ -329,10 +418,16 @@ function goQADetail(id) {
 // ========== Dual Col ==========
 .dual-col {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  min-width: 0;
   @media (max-width: $bp-laptop) { grid-template-columns: 1fr; }
 }
+
+.col-card {
+  min-width: 0;
+}
+
 .col-header {
   display: flex;
   justify-content: space-between;
@@ -373,6 +468,7 @@ function goQADetail(id) {
   border-radius: $radius-md;
   cursor: pointer;
   transition: background $duration-fast $ease-out;
+  min-width: 0;
   &:hover { background: rgba(37, 99, 235, 0.04); }
 
   .course-cover {
@@ -380,8 +476,23 @@ function goQADetail(id) {
     border-radius: $radius-md;
     object-fit: cover;
   }
-  .course-info { flex: 1; }
-  .course-name { font-size: 13px; font-weight: 600; color: #0f172a; }
+  .course-info { flex: 1; min-width: 0; }
+  .course-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .course-meta-line {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .progress-bar {
     height: 4px;
     background: #e5e7eb;
@@ -406,6 +517,7 @@ function goQADetail(id) {
   border-radius: 0 $radius-md $radius-md 0;
   cursor: pointer;
   transition: background $duration-fast $ease-out;
+  min-width: 0;
   &:hover { background: rgba(147, 51, 234, 0.04); }
 
   &.active {
@@ -414,8 +526,22 @@ function goQADetail(id) {
     .qa-title { color: #7e22ce; }
   }
 
-  .qa-title { font-size: 13px; font-weight: 500; color: #0f172a; }
-  .qa-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .qa-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .qa-meta {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .empty-hint {

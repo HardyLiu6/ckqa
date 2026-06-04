@@ -27,6 +27,8 @@ import NavHeader from '@/components/NavHeader.vue'
 .product-main {
   padding-top: 64px; // NavHeader 高度
   min-height: 100vh;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 // 路由切换过渡
