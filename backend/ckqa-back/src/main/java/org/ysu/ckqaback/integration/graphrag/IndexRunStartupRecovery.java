@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.service.IndexRunsService;
@@ -16,6 +17,7 @@ import java.time.Duration;
  */
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "ckqa.startup-recovery.index-runs", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class IndexRunStartupRecovery implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(IndexRunStartupRecovery.class);

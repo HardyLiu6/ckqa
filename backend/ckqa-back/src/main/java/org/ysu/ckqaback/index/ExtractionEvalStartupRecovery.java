@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.ysu.ckqaback.entity.PromptTuneExtractionEvalRuns;
 import org.ysu.ckqaback.service.PromptTuneExtractionEvalRunsService;
@@ -28,6 +29,7 @@ import java.util.List;
  */
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "ckqa.startup-recovery.extraction-eval", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class ExtractionEvalStartupRecovery implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractionEvalStartupRecovery.class);

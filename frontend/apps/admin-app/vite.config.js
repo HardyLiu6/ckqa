@@ -7,9 +7,118 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 const VENDOR_CHUNK_RULES = [
   { name: 'vendor-vue', packages: ['vue', 'vue-router', 'pinia'] },
   { name: 'vendor-icons', packages: ['@element-plus/icons-vue', 'lucide-vue-next'] },
-  { name: 'vendor-element-plus', packages: ['element-plus', '@element-plus'] },
   { name: 'vendor-http', packages: ['axios'] },
 ]
+
+const ELEMENT_PLUS_COMPONENT_CHUNKS = [
+  {
+    name: 'vendor-element-forms',
+    components: [
+      'autocomplete',
+      'cascader',
+      'checkbox',
+      'checkbox-group',
+      'color-picker',
+      'date-picker',
+      'form',
+      'input',
+      'input-number',
+      'option',
+      'option-group',
+      'radio',
+      'radio-group',
+      'rate',
+      'select',
+      'slider',
+      'switch',
+      'time-picker',
+      'time-select',
+      'transfer',
+      'upload',
+    ],
+  },
+  {
+    name: 'vendor-element-data',
+    components: [
+      'calendar',
+      'carousel',
+      'descriptions',
+      'empty',
+      'image',
+      'pagination',
+      'result',
+      'skeleton',
+      'statistic',
+      'table',
+      'table-v2',
+      'timeline',
+      'tree',
+      'tree-select',
+      'virtual-list',
+    ],
+  },
+  {
+    name: 'vendor-element-feedback',
+    components: [
+      'alert',
+      'dialog',
+      'drawer',
+      'loading',
+      'message',
+      'message-box',
+      'notification',
+      'popconfirm',
+      'popover',
+      'progress',
+      'tooltip',
+    ],
+  },
+  {
+    name: 'vendor-element-navigation',
+    components: [
+      'affix',
+      'anchor',
+      'backtop',
+      'breadcrumb',
+      'dropdown',
+      'menu',
+      'page-header',
+      'steps',
+      'tabs',
+    ],
+  },
+]
+
+function resolveElementPlusComponentChunk(packagePath) {
+  const componentName = packagePath.match(/\/(?:es|lib)\/components\/([^/]+)/)?.[1]
+  if (!componentName) {
+    return 'vendor-element-components'
+  }
+  const matchedGroup = ELEMENT_PLUS_COMPONENT_CHUNKS.find((group) => (
+    group.components.includes(componentName)
+  ))
+  return matchedGroup?.name ?? 'vendor-element-basic'
+}
+
+function resolveElementPlusChunk(packageName, packagePath) {
+  if (packageName === '@element-plus/icons-vue') {
+    return 'vendor-icons'
+  }
+  if (packageName.startsWith('@element-plus/')) {
+    return 'vendor-element-core'
+  }
+  if (packageName !== 'element-plus') {
+    return null
+  }
+
+  if (packagePath.includes('/es/components/') || packagePath.includes('/lib/components/')) {
+    return resolveElementPlusComponentChunk(packagePath)
+  }
+  if (packagePath.includes('/es/locale') || packagePath.includes('/lib/locale')) {
+    return 'vendor-element-locale'
+  }
+  return 'vendor-element-core'
+}
 
 export function resolveApiProxyTarget(env = process.env) {
   const rawTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8080'
@@ -27,6 +136,10 @@ export function resolveAdminAppManualChunk(id) {
   const packageName = packagePath.startsWith('@')
     ? packagePath.split('/').slice(0, 2).join('/')
     : packagePath.split('/')[0]
+  const elementPlusChunk = resolveElementPlusChunk(packageName, packagePath)
+  if (elementPlusChunk) {
+    return elementPlusChunk
+  }
 
   const matchedRule = VENDOR_CHUNK_RULES.find((rule) => (
     rule.packages.some((packagePrefix) => (

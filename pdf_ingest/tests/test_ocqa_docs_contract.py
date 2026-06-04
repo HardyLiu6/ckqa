@@ -7,6 +7,7 @@ SPEC_PATH = (
     Path(__file__).resolve().parents[2]
     / "docs"
     / "superpowers"
+    / "archive"
     / "specs"
     / "2026-04-20-course-hybrid-qa-database-design.md"
 )

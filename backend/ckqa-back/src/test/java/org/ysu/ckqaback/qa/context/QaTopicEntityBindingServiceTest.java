@@ -121,6 +121,7 @@ class QaTopicEntityBindingServiceTest {
         Neo4jProperties properties = new Neo4jProperties();
         properties.setReadTimeoutMillis(5000L);
         properties.setTopicBindingTimeoutMillis(1200L);
+        AtomicLong nowNanos = new AtomicLong(0L);
 
         given(driver.session(any(SessionConfig.class))).willReturn(session);
         given(session.run(any(Query.class), any(TransactionConfig.class))).willReturn(queryResult);
@@ -133,7 +134,7 @@ class QaTopicEntityBindingServiceTest {
         given(record.get("matchReason")).willReturn(Values.value("exact_name"));
         given(record.get("source")).willReturn(Values.value("active_neo4j"));
 
-        QaTopicEntityBindingResult result = new QaTopicEntityBindingService(driver, properties)
+        QaTopicEntityBindingResult result = new QaTopicEntityBindingService(driver, properties, nowNanos::get)
                 .bind("死锁", 3L, 17L);
 
         ArgumentCaptor<TransactionConfig> transactionConfigCaptor = ArgumentCaptor.forClass(TransactionConfig.class);

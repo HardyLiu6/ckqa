@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- 测试会刻意模拟启动恢复、外部进程和流推送失败；保留断言结果，收敛预期故障堆栈噪声。 -->
+    <logger name="org.ysu.ckqaback.cache.StudentRedisCacheService" level="OFF"/>
+    <logger name="org.ysu.ckqaback.course.CourseMembershipAuditWriter" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.AuditSampleResponseMapper" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.AuditWithGoldExporter" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.BuildRunPromptMaterializer" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.CandidateManifestReader" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.CandidateService" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.ExtractionEvalReportAssembler" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.ExtractionEvalStartupRecovery" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.ExtractionEvalWorker" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.FinalizePromptService" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.PromptTuneStartupRecovery" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.SeedAvailabilityService" level="OFF"/>
+    <logger name="org.ysu.ckqaback.index.SeedInfoStore" level="OFF"/>
+    <logger name="org.ysu.ckqaback.integration.graphrag.IndexRunStartupRecovery" level="OFF"/>
+    <logger name="org.ysu.ckqaback.pdf.PdfParseTaskDispatcher" level="OFF"/>
+    <logger name="org.ysu.ckqaback.qa.QaTaskStartupRecovery" level="OFF"/>
+    <logger name="org.ysu.ckqaback.qa.context.JtokkitTokenBudgetEstimator" level="OFF"/>
+    <logger name="org.ysu.ckqaback.qa.context.QaTopicEntityBindingService" level="OFF"/>
+    <logger name="org.ysu.ckqaback.qa.routing.QaQuestionDomainGuardService" level="WARN"/>
+    <logger name="org.ysu.ckqaback.qa.stream.QaTaskEventStreamService" level="OFF"/>
+    <logger name="org.springframework.boot.availability.ApplicationAvailabilityBean" level="WARN"/>
+    <logger name="org.springframework.boot.devtools.restart.Restarter" level="WARN"/>
+    <logger name="org.springframework.mock.web.MockServletContext" level="WARN"/>
+    <logger name="org.springframework.test.web.servlet.TestDispatcherServlet" level="WARN"/>
+
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>
