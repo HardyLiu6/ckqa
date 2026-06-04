@@ -37,3 +37,23 @@ export function buildQaSideNavQueryParams({
   }
   return params
 }
+
+export function filterQaSideNavSessions(sessions = [], {
+  keyword = '',
+  now = new Date(),
+} = {}) {
+  const normalizedKeyword = normalizeQaSideNavSearchKeyword(keyword)
+  const list = Array.isArray(sessions) ? sessions : []
+  const activeSessions = list.filter((session) => String(session?.status ?? 'active').toLowerCase() !== 'archived')
+  if (normalizedKeyword) {
+    return activeSessions
+  }
+
+  const base = now instanceof Date ? now : new Date(now)
+  const oneMonthAgo = new Date(base.getTime() - 30 * 24 * 60 * 60 * 1000)
+  return activeSessions.filter((session) => {
+    const ref = session.lastMessageAt || session.createdAt || ''
+    if (!ref) return true
+    return new Date(ref) >= oneMonthAgo
+  })
+}

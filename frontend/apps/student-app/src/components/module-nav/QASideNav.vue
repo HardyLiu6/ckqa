@@ -6,7 +6,7 @@ import { listQaSessions } from '@/api/qa'
 import { localDateString, normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
 import { buildQaRouteQuery, withoutQaSessionQuery } from '@/views/qa/qa-route-query-model'
 import { onQaSessionsChanged } from '@/views/qa/qa-session-events'
-import { buildQaSideNavQueryParams, normalizeQaSideNavSearchKeyword } from '@/components/module-nav/qa-side-nav-model'
+import { buildQaSideNavQueryParams, filterQaSideNavSessions, normalizeQaSideNavSearchKeyword } from '@/components/module-nav/qa-side-nav-model'
 
 const router = useRouter()
 const route = useRoute()
@@ -103,16 +103,8 @@ async function loadRecentSessions(keyword = searchKeyword.value) {
   const normalizedKeyword = normalizeQaSideNavSearchKeyword(keyword)
   try {
     const payload = await listQaSessions(buildQaSideNavQueryParams({ keyword: normalizedKeyword, page: 1 }))
-    // 只保留近一个月的会话
-    const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     const normalizedSessions = normalizeQaSessionList(payload)
-    const nextSessions = normalizedKeyword
-      ? normalizedSessions
-      : normalizedSessions.filter((s) => {
-          const ref = s.lastMessageAt || s.createdAt || ''
-          if (!ref) return true
-          return new Date(ref) >= oneMonthAgo
-        })
+    const nextSessions = filterQaSideNavSessions(normalizedSessions, { keyword: normalizedKeyword })
     if (seq === recentLoadSeq) {
       rawSessions.value = nextSessions
     }
