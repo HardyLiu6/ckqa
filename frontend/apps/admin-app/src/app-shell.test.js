@@ -18,6 +18,8 @@ import {
   sendQaMessage,
 } from './api/qa.js'
 import {
+  downloadQaOperationLogsCsv,
+  downloadQaOperationLogsXlsx,
   exportQaOperationLogs,
   getQaOperationLog,
   getQaOperationsSummary,
@@ -1781,7 +1783,12 @@ test('QA 运维 API 使用管理端 qa-operations 契约', async () => {
   const calls = []
   const client = {
     get: async (url, config) => {
-      calls.push(['get', url, config?.params ?? null])
+      calls.push(['get', url, config?.params ?? null, config?.responseType ?? null])
+      const isBinary = url.endsWith('.csv') || url.endsWith('.xlsx')
+      if (isBinary) {
+        // CSV / Excel 走二进制下载，不经过 ApiResponse 信封
+        return { data: new Blob([url.endsWith('.csv') ? '\uFEFF日志ID\n42' : 'PK\u0003\u0004']) }
+      }
       const data = url.endsWith('/export')
         ? [{ retrievalLogId: 9 }]
         : url === '/qa-operations/logs/summary'
@@ -1801,17 +1808,23 @@ test('QA 运维 API 使用管理端 qa-operations 契约', async () => {
   await getQaOperationLog(9, client)
   await exportQaOperationLogs({ taskStatus: 'success' }, client)
   const summary = await getQaOperationsSummary({ mode: 'global', keyword: '操作系统' }, client)
+  const csvBlob = await downloadQaOperationLogsCsv({ mode: 'global' }, client)
+  const xlsxBlob = await downloadQaOperationLogsXlsx({ mode: 'global' }, client)
   await upsertQaSourceReview(7, { relevance: 'partially_relevant', citationQuality: 'weak_support' }, client)
 
   assert.equal(page.items[0].retrievalLogId, 9)
   assert.equal(summary.total, 42)
   assert.equal(summary.success, 30)
   assert.equal(summary.lowConfidence, 4)
+  assert.ok(csvBlob instanceof Blob)
+  assert.ok(xlsxBlob instanceof Blob)
   assert.deepEqual(calls, [
-    ['get', '/qa-operations/logs', { mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }],
-    ['get', '/qa-operations/logs/9', null],
-    ['get', '/qa-operations/logs/export', { taskStatus: 'success' }],
-    ['get', '/qa-operations/logs/summary', { mode: 'global', keyword: '操作系统' }],
+    ['get', '/qa-operations/logs', { mode: 'hybrid_v0', feedbackTag: 'source_irrelevant' }, null],
+    ['get', '/qa-operations/logs/9', null, null],
+    ['get', '/qa-operations/logs/export', { taskStatus: 'success' }, null],
+    ['get', '/qa-operations/logs/summary', { mode: 'global', keyword: '操作系统' }, null],
+    ['get', '/qa-operations/logs/export.csv', { mode: 'global' }, 'blob'],
+    ['get', '/qa-operations/logs/export.xlsx', { mode: 'global' }, 'blob'],
     ['put', '/qa-operations/source-reviews/7', { relevance: 'partially_relevant', citationQuality: 'weak_support' }],
   ])
 })

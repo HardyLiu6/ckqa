@@ -11,6 +11,7 @@ import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.mapper.QaOperationsMapper;
 import org.ysu.ckqaback.qa.dto.QaOperationFeedbackResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationLogDetailResponse;
+import org.ysu.ckqaback.qa.dto.QaOperationLogExportRow;
 import org.ysu.ckqaback.qa.dto.QaOperationLogResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaOperationsQueryRequest;
@@ -102,6 +103,20 @@ public class QaOperationsService {
         return operationsMapper.selectLogs(effective, currentUser.id(), scope.adminScope(), 0, EXPORT_LIMIT)
                 .stream()
                 .map(row -> getLogDetail(row.getRetrievalLogId(), currentUser))
+                .toList();
+    }
+
+    /**
+     * 扁平表导出：CSV / Excel 共用，复用同一筛选条件，但只查列表行，
+     * 不再逐条 fan-out 详情，避免大批量导出时 N+1 慢查询。
+     */
+    public List<QaOperationLogExportRow> exportFlatRows(QaOperationsQueryRequest request, AuthenticatedUser currentUser) {
+        Scope scope = requireOpsScope(currentUser);
+        QaOperationsQueryRequest effective = withDefaults(request, true);
+        return operationsMapper.selectLogs(effective, currentUser.id(), scope.adminScope(), 0, EXPORT_LIMIT)
+                .stream()
+                .map(QaOperationLogResponse::fromRow)
+                .map(QaOperationLogExportRow::fromLogResponse)
                 .toList();
     }
 
