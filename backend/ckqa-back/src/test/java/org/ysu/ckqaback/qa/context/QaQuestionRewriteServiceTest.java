@@ -145,4 +145,26 @@ class QaQuestionRewriteServiceTest {
         assertThat(result.rewriteApplied()).isTrue();
         assertThat(result.rewriteMethod()).isEqualTo("rule");
     }
+
+    @Test
+    void shouldRewriteComparisonPronounWithResolvedTopicAnchor() {
+        QaContextAssembly context = new QaContextAssembly(
+                "recent",
+                "学生：银行家算法和资源分配图有什么区别？",
+                "3-4",
+                24,
+                "银行家算法",
+                "3-4",
+                "comparison_pronoun",
+                0.86D,
+                "[{\"topic\":\"银行家算法\",\"role\":\"former\"},{\"topic\":\"资源分配图\",\"role\":\"latter\"}]"
+        );
+
+        QaQuestionRewriteResult result = rewriteService.rewrite("global", "前者如何检测？", context);
+
+        assertThat(result.retrievalQueryText()).isEqualTo("关于上一轮主题「银行家算法」：前者如何检测？");
+        assertThat(result.rewriteApplied()).isTrue();
+        assertThat(result.rewriteMethod()).isEqualTo("rule");
+        assertThat(result.rewriteSourceMessageRange()).isEqualTo("3-4");
+    }
 }

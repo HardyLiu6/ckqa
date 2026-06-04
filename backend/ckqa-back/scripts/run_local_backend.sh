@@ -64,11 +64,23 @@ load_env_file() {
         return 0
     fi
 
-    set -a
-    # 兼容 Windows 编辑器产生的 CRLF，避免 smtp\r 这类脏值进入 Spring 条件装配。
-    # shellcheck disable=SC1090
-    source <(sed 's/\r$//' "$file")
-    set +a
+    local line key value
+    # 兼容 CRLF 与包含空格/中文的未引用值；不执行 .env 内容，避免把值当 shell 命令。
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+        key="${line%%=*}"
+        value="${line#*=}"
+        key="${key//[[:space:]]/}"
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        value="${value%$'\r'}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        export "$key=$value"
+    done < "$file"
 }
 
 load_env_file "$ENV_FILE"

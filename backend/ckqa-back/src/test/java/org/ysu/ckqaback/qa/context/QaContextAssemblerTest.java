@@ -197,6 +197,38 @@ class QaContextAssemblerTest {
     }
 
     @Test
+    void shouldRestoreComparisonTopicFromSemanticStateJsonOnlyForSummaryOnlyFollowUp() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        String semanticStateJson = """
+                {"version":"session_semantic_state_v1","latestTopic":"资源分配图","latestTopicMessageRange":"9-10","topicSource":"history","topicConfidence":0.82,"activeTopics":[{"topic":"死锁"},{"topic":"银行家算法","role":"former"},{"topic":"资源分配图","role":"latter"}],"comparisonTopics":[{"topic":"银行家算法","role":"former"},{"topic":"资源分配图","role":"latter"}],"restoredFromSummary":true,"summaryUntilSequenceNo":12}
+                """;
+
+        QaContextAssembly assembly = assembler.assemble(
+                "global",
+                "后者如何使用？",
+                List.of(),
+                new QaContextSummary(
+                        "摘要字段迁移中只保留了结构化语义状态。",
+                        12,
+                        "",
+                        "",
+                        "",
+                        SessionSemanticState.VERSION,
+                        semanticStateJson
+                )
+        );
+
+        assertThat(assembly.strategy()).isEqualTo("summary");
+        assertThat(assembly.latestTopic()).isEqualTo("资源分配图");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("9-10");
+        assertThat(assembly.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(assembly.topicStackJson()).contains("银行家算法", "资源分配图", "former", "latter");
+        assertThat(assembly.semanticStateJson())
+                .contains("\"latestTopic\":\"资源分配图\"")
+                .contains("\"comparisonTopics\"");
+    }
+
+    @Test
     void shouldUseSummaryRecentWhenActiveSummaryExistsForBasicFollowUp() {
         QaContextAssembler assembler = new QaContextAssembler();
 
@@ -218,6 +250,37 @@ class QaContextAssemblerTest {
         assertThat(assembly.snapshotText()).contains("学生：那银行家算法呢？");
         assertThat(assembly.messageRange()).isEqualTo("3-4");
         assertThat(assembly.charCount()).isGreaterThan(0);
+    }
+
+    @Test
+    void shouldLetUnsummarizedExplicitTopicOverrideSummarySemanticState() {
+        QaContextAssembler assembler = new QaContextAssembler();
+        QaContextSummary summary = new QaContextSummary(
+                "摘要窗口已讨论死锁。",
+                12,
+                "死锁",
+                "1-2",
+                "[{\"topic\":\"死锁\"}]"
+        );
+
+        QaContextAssembly assembly = assembler.assemble(
+                "drift",
+                "它有什么局限？",
+                List.of(
+                        message(13L, "user", 13, "那银行家算法呢？"),
+                        message(14L, "assistant", 14, "银行家算法通过安全性检查避免进入不安全状态。")
+                ),
+                summary
+        );
+
+        assertThat(assembly.strategy()).isEqualTo("summary_recent");
+        assertThat(assembly.latestTopic()).isEqualTo("银行家算法");
+        assertThat(assembly.latestTopicMessageRange()).isEqualTo("13-14");
+        assertThat(assembly.topicSource()).isEqualTo("history");
+        assertThat(assembly.snapshotText()).contains("会话摘要：", "最近对话：", "学生：那银行家算法呢？");
+        assertThat(assembly.semanticStateJson())
+                .contains("\"latestTopic\":\"银行家算法\"")
+                .contains("\"死锁\"");
     }
 
     @Test

@@ -1,5 +1,8 @@
 package org.ysu.ckqaback.qa.context;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.entity.QaMessages;
 
@@ -13,6 +16,8 @@ import java.util.regex.Pattern;
  * 可用语义主题栈 v1：只做低风险规则解析，不绑定 KG，也不调用在线 LLM。
  */
 public class QaTopicResolver {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final Pattern WHAT_IS_PREFIX_PATTERN = Pattern.compile("^(什么是|请解释|解释一下|介绍一下)(.+?)[？?。.!！]*$");
     private static final Pattern WHAT_IS_SUFFIX_PATTERN = Pattern.compile("^(.+?)(是什么|是啥|是什么概念)[？?。.!！]*$");
@@ -38,14 +43,26 @@ public class QaTopicResolver {
             return state;
         }
         SummaryTopics summaryTopics = parseSummaryTopics(summary.activeTopicsJson());
-        state.activeTopics.addAll(summaryTopics.activeTopics());
-        state.comparisonTopics.addAll(summaryTopics.comparisonTopics());
+        SemanticSummaryState semanticState = parseSemanticState(summary.semanticStateJson());
+        summaryTopics.activeTopics().forEach(topic -> addTopic(state.activeTopics, topic));
+        semanticState.activeTopics().forEach(topic -> addTopic(state.activeTopics, topic));
+        if (!summaryTopics.comparisonTopics().isEmpty()) {
+            state.comparisonTopics.addAll(summaryTopics.comparisonTopics());
+        } else {
+            state.comparisonTopics.addAll(semanticState.comparisonTopics());
+        }
         String summaryLatestTopic = trimToEmpty(summary.latestTopic());
         if (StringUtils.hasText(summaryLatestTopic)) {
             state.latestTopic = summaryLatestTopic;
             state.latestRange = trimToEmpty(summary.latestTopicMessageRange());
             state.source = "summary";
             state.confidence = 0.75D;
+            addTopic(state.activeTopics, state.latestTopic);
+        } else if (StringUtils.hasText(semanticState.latestTopic())) {
+            state.latestTopic = semanticState.latestTopic();
+            state.latestRange = semanticState.latestTopicMessageRange();
+            state.source = "summary";
+            state.confidence = semanticState.topicConfidence() == null ? 0.75D : semanticState.topicConfidence();
             addTopic(state.activeTopics, state.latestTopic);
         } else if (summaryTopics.activeTopics().size() == 1 && StringUtils.hasText(summaryTopics.activeTopics().get(0))) {
             state.latestTopic = summaryTopics.activeTopics().get(0);
@@ -218,6 +235,60 @@ public class QaTopicResolver {
         return new SummaryTopics(topics, comparisonTopics);
     }
 
+    private SemanticSummaryState parseSemanticState(String semanticStateJson) {
+        if (!StringUtils.hasText(semanticStateJson)) {
+            return SemanticSummaryState.empty();
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(semanticStateJson);
+            List<String> activeTopics = parseTopicArray(root.path("activeTopics"));
+            List<String> comparisonTopics = comparisonTopicsFrom(root.path("comparisonTopics"));
+            if (comparisonTopics.isEmpty()) {
+                comparisonTopics = comparisonTopicsFrom(root.path("activeTopics"));
+            }
+            JsonNode confidence = root.path("topicConfidence");
+            return new SemanticSummaryState(
+                    shortenTopic(root.path("latestTopic").asText("")),
+                    trimToEmpty(root.path("latestTopicMessageRange").asText("")),
+                    confidence.isNumber() ? confidence.asDouble() : null,
+                    activeTopics,
+                    comparisonTopics
+            );
+        } catch (JsonProcessingException | IllegalArgumentException ignored) {
+            return SemanticSummaryState.empty();
+        }
+    }
+
+    private List<String> parseTopicArray(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<String> topics = new ArrayList<>();
+        for (JsonNode item : node) {
+            addTopic(topics, item.path("topic").asText(""));
+        }
+        return topics;
+    }
+
+    private List<String> comparisonTopicsFrom(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<String> topics = new ArrayList<>();
+        for (JsonNode item : node) {
+            String role = item.path("role").asText("");
+            if ("former".equals(role)) {
+                ensureComparisonSlot(topics, 0, item.path("topic").asText(""));
+            } else if ("latter".equals(role)) {
+                ensureComparisonSlot(topics, 1, item.path("topic").asText(""));
+            }
+        }
+        if (topics.size() < 2 || !StringUtils.hasText(topics.get(0)) || !StringUtils.hasText(topics.get(1))) {
+            return List.of();
+        }
+        return topics;
+    }
+
     private boolean containsFormer(String question) {
         return StringUtils.hasText(question) && question.contains("前者");
     }
@@ -236,8 +307,9 @@ public class QaTopicResolver {
 
     private ResolvedQuestion comparisonPronoun(String topic, List<String> comparisonTopics) {
         String resolvedTopic = shortenTopic(topic);
+        List<String> stableComparisonTopics = comparisonTopics == null ? List.of() : List.copyOf(comparisonTopics);
         return StringUtils.hasText(resolvedTopic)
-                ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), comparisonTopics, false, true)
+                ? new ResolvedQuestion(resolvedTopic, "comparison_pronoun", 0.86D, List.of(resolvedTopic), stableComparisonTopics, false, true)
                 : null;
     }
 
@@ -307,6 +379,18 @@ public class QaTopicResolver {
     }
 
     private record SummaryTopics(List<String> activeTopics, List<String> comparisonTopics) {
+    }
+
+    private record SemanticSummaryState(
+            String latestTopic,
+            String latestTopicMessageRange,
+            Double topicConfidence,
+            List<String> activeTopics,
+            List<String> comparisonTopics
+    ) {
+        private static SemanticSummaryState empty() {
+            return new SemanticSummaryState("", "", null, List.of(), List.of());
+        }
     }
 
     private static final class TopicState {
