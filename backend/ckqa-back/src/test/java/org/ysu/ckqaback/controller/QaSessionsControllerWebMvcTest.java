@@ -20,6 +20,7 @@ import org.ysu.ckqaback.qa.QaWorkflowService;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.stream.QaTaskEventStreamService;
@@ -85,6 +86,22 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(jsonPath("$.data.items[0].indexLockedAt").exists());
 
         then(qaWorkflowService).should().listSessions(eq(7L), argThat(request -> request.getPage() == 1L && request.getSize() == 50L));
+    }
+
+    @Test
+    void shouldReturnFormalSessionStatsAggregatedOverAllHistoryForCurrentUser() throws Exception {
+        given(qaWorkflowService.statsSessions(eq(7L), any()))
+                .willReturn(new QaSessionStatsResponse(128L, 940L, 6L));
+
+        mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/stats")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
+                        .param("status", "active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalSessions").value(128))
+                .andExpect(jsonPath("$.data.totalMessages").value(940))
+                .andExpect(jsonPath("$.data.courseCount").value(6));
+
+        then(qaWorkflowService).should().statsSessions(eq(7L), argThat(request -> "active".equals(request.getStatus())));
     }
 
     @Test

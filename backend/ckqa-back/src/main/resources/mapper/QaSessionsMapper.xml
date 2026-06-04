@@ -26,4 +26,25 @@
         index_locked_at, session_type, title, status, last_message_at, created_at, updated_at
     </sql>
 
+    <!-- 「问答记录」统计卡片：按筛选条件在库层聚合，反映全部历史的真实口径，不受分页截断影响 -->
+    <select id="selectFormalSessionStats" resultType="org.ysu.ckqaback.qa.dto.QaSessionStatsResponse">
+        SELECT
+          COUNT(DISTINCT s.id) AS totalSessions,
+          COUNT(m.id) AS totalMessages,
+          COUNT(DISTINCT s.course_id) AS courseCount
+        FROM qa_sessions s
+        LEFT JOIN qa_messages m ON m.session_id = s.id
+        WHERE s.user_id = #{userId}
+          AND s.session_type = 'formal'
+          <if test="status != null and status != ''">
+            AND s.status = #{status}
+          </if>
+          <if test="courseId != null and courseId != ''">
+            AND s.course_id = #{courseId}
+          </if>
+          <if test="knowledgeBaseId != null">
+            AND s.knowledge_base_id = #{knowledgeBaseId}
+          </if>
+    </select>
+
 </mapper>

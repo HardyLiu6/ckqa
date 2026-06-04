@@ -29,6 +29,7 @@ import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
@@ -87,6 +88,15 @@ public class QaSessionsController {
     ) {
         AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
         return ApiResponseUtils.success(qaWorkflowService.listSessions(currentUser == null ? null : currentUser.id(), request));
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<QaSessionStatsResponse> sessionStats(
+            @Valid @ModelAttribute QaSessionQueryRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        AuthenticatedUser currentUser = AuthContext.fromRequestOrCurrentJwt(servletRequest);
+        return ApiResponseUtils.success(qaWorkflowService.statsSessions(currentUser == null ? null : currentUser.id(), request));
     }
 
     @PostMapping("/{id}/messages")

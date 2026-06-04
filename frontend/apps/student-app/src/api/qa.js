@@ -13,6 +13,10 @@ export function createQaApi(client = { delete: del, del, get, patch, post, put }
       const { userId, ...safeParams } = params ?? {}
       return client.get('/qa-sessions', { params: safeParams })
     },
+    getQaSessionStats(params = {}) {
+      const { userId, ...safeParams } = params ?? {}
+      return client.get('/qa-sessions/stats', { params: safeParams })
+    },
     createQaSession(payload) {
       return client.post('/qa-sessions', payload)
     },
@@ -164,6 +168,7 @@ function parseStreamPayload(rawData) {
 const qaApi = createQaApi()
 
 export const listQaSessions = qaApi.listQaSessions
+export const getQaSessionStats = qaApi.getQaSessionStats
 export const createQaSession = qaApi.createQaSession
 export const getQaSession = qaApi.getQaSession
 export const updateQaSession = qaApi.updateQaSession

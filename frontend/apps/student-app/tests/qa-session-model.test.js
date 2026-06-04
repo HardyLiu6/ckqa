@@ -11,6 +11,8 @@ import {
   normalizeQaMessage,
   normalizeProgressEvents,
   normalizeQaSessionList,
+  normalizeQaSessionPage,
+  normalizeQaSessionStats,
   normalizeQaSources,
   normalizeQaSession,
   mergePartialStreamText,
@@ -383,6 +385,50 @@ test('会话列表兼容分页响应并过滤缺少 id 的脏数据', () => {
         isLegacy: false,
       },
     ],
+  )
+})
+
+test('会话分页响应保留后端真实总数而不是当前页条数', () => {
+  const page = normalizeQaSessionPage({
+    items: [
+      { id: 20, courseId: 'os', title: '死锁问答', indexRunId: 17 },
+      { id: 21, courseId: 'os', title: '页表问答', indexRunId: 17 },
+    ],
+    current: 1,
+    size: 20,
+    total: 128,
+    pages: 7,
+  })
+
+  assert.equal(page.total, 128)
+  assert.equal(page.items.length, 2)
+  assert.equal(page.items[0].id, 20)
+})
+
+test('会话分页响应在裸数组（无分页包裹）时回退用条数作为总数', () => {
+  const page = normalizeQaSessionPage([
+    { id: 20, courseId: 'os', title: '死锁问答', indexRunId: 17 },
+  ])
+
+  assert.equal(page.total, 1)
+  assert.equal(page.items.length, 1)
+})
+
+test('会话统计解析后端聚合的真实口径', () => {
+  assert.deepEqual(
+    normalizeQaSessionStats({ totalSessions: 128, totalMessages: 940, courseCount: 6 }),
+    { totalSessions: 128, totalMessages: 940, courseCount: 6 },
+  )
+})
+
+test('会话统计对缺失/异常字段安全兜底为 0', () => {
+  assert.deepEqual(
+    normalizeQaSessionStats(null),
+    { totalSessions: 0, totalMessages: 0, courseCount: 0 },
+  )
+  assert.deepEqual(
+    normalizeQaSessionStats({ totalSessions: '940', totalMessages: -3, courseCount: null }),
+    { totalSessions: 940, totalMessages: 0, courseCount: 0 },
   )
 })
 

@@ -7,7 +7,7 @@
           <el-button :icon="ArrowLeft" circle class="back-btn" @click="goBack" />
           <div class="header-title">
             <h1>问答记录</h1>
-            <span class="record-count">共 {{ sessionList.length }} 个对话</span>
+            <span class="record-count">共 {{ stats.totalSessions }} 个对话</span>
           </div>
         </div>
         <div class="header-actions">
@@ -50,13 +50,6 @@
             </el-icon></div>
           <div class="stat-info"><span class="stat-value">{{ stats.totalMessages }}</span><span
               class="stat-label">消息总数</span></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon orange"><el-icon>
-              <Star />
-            </el-icon></div>
-          <div class="stat-info"><span class="stat-value">{{ stats.favoriteCount }}</span><span
-              class="stat-label">收藏对话</span></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon purple"><el-icon>
@@ -155,7 +148,7 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-if="filteredSessions.length === 0" class="empty-state">
+        <div v-if="!loading && filteredSessions.length === 0" class="empty-state">
           <div class="empty-icon"><el-icon>
               <DocumentDelete />
             </el-icon></div>
@@ -165,25 +158,41 @@
               <ChatDotRound />
             </el-icon>开始提问</el-button>
         </div>
+
+        <!-- 无限滚动哨兵 + 加载状态 -->
+        <div ref="loadMoreSentinel" class="load-more-sentinel"></div>
+        <div v-if="sessionList.length > 0" class="list-footer">
+          <span v-if="loadingMore">正在加载更多…</span>
+          <span v-else-if="!hasMore">已加载全部 {{ total }} 个对话</span>
+        </div>
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
 import { listCourses } from '@/api/courses'
-import { listQaSessions, updateQaSession } from '@/api/qa'
-import { normalizeCourseList, normalizeQaSession, localDateString } from './qa-session-model'
+import { listQaSessions, getQaSessionStats, updateQaSession } from '@/api/qa'
+import { normalizeCourseList, normalizeQaSession, normalizeQaSessionPage, normalizeQaSessionStats, localDateString } from './qa-session-model'
 
 const router = useRouter()
 
 const courses = ref([])
 const sessionList = ref([])
 const loading = ref(false)
+
+// 分页 / 无限滚动状态
+const PAGE_SIZE = 20
+const page = ref(1)
+const total = ref(0)
+const loadingMore = ref(false)
+const loadMoreSentinel = ref(null)
+const serverStatus = () => (filterType.value === 'archived' ? 'archived' : 'active')
+const hasMore = computed(() => sessionList.value.length < total.value)
 
 // 筛选状态
 const searchKeyword = ref('')
@@ -199,13 +208,8 @@ const courseNameById = computed(() => Object.fromEntries(
   courses.value.map((course) => [course.courseId, course.name]),
 ))
 
-// 计算统计
-const stats = computed(() => ({
-  totalSessions: sessionList.value.length,
-  totalMessages: sessionList.value.reduce((sum, s) => sum + s.messageCount, 0),
-  favoriteCount: 0,
-  courseCount: new Set(sessionList.value.map(s => s.courseId)).size
-}))
+// 统计卡片：由后端按全部历史聚合得出，不受分页/无限滚动影响
+const stats = ref({ totalSessions: 0, totalMessages: 0, courseCount: 0 })
 
 // 过滤后的会话
 const filteredSessions = computed(() => {
@@ -309,25 +313,78 @@ const clearAll = async () => {
   ElMessage.info('清空记录功能暂未接入后端')
 }
 
+let scrollObserver = null
+
+function setupInfiniteScroll() {
+  if (typeof IntersectionObserver === 'undefined' || !loadMoreSentinel.value) {
+    return
+  }
+  scrollObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) {
+      loadMore()
+    }
+  }, { rootMargin: '240px' })
+  scrollObserver.observe(loadMoreSentinel.value)
+}
+
 onMounted(async () => {
   await loadHistory()
+  setupInfiniteScroll()
+})
+
+onUnmounted(() => {
+  if (scrollObserver) {
+    scrollObserver.disconnect()
+    scrollObserver = null
+  }
 })
 
 async function loadHistory() {
   loading.value = true
+  page.value = 1
   try {
-    const [coursePayload, sessionPayload] = await Promise.all([
+    const status = serverStatus()
+    const [coursePayload, statsPayload, sessionPayload] = await Promise.all([
       listCourses({ page: 1, size: 100, status: 'active' }),
-      listQaSessions({ status: filterType.value === 'archived' ? 'archived' : 'active', page: 1, size: 50 }),
+      getQaSessionStats({ status }),
+      listQaSessions({ status, page: 1, size: PAGE_SIZE }),
     ])
     courses.value = normalizeCourseList(coursePayload)
-    const sessions = Array.isArray(sessionPayload) ? sessionPayload : sessionPayload?.items ?? []
-    sessionList.value = sessions.map((session) => toSessionCard(normalizeQaSession(session)))
+    stats.value = normalizeQaSessionStats(statsPayload)
+    const pageData = normalizeQaSessionPage(sessionPayload)
+    total.value = pageData.total
+    sessionList.value = pageData.items.map((session) => toSessionCard(session))
   } catch (error) {
     ElMessage.error(error?.message || '问答记录加载失败')
     sessionList.value = []
+    total.value = 0
+    stats.value = { totalSessions: 0, totalMessages: 0, courseCount: 0 }
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore() {
+  if (loadingMore.value || loading.value || !hasMore.value) {
+    return
+  }
+  loadingMore.value = true
+  try {
+    const nextPage = page.value + 1
+    const pageData = normalizeQaSessionPage(
+      await listQaSessions({ status: serverStatus(), page: nextPage, size: PAGE_SIZE }),
+    )
+    total.value = pageData.total
+    const seen = new Set(sessionList.value.map((item) => item.id))
+    const appended = pageData.items
+      .filter((item) => !seen.has(item.id))
+      .map((session) => toSessionCard(session))
+    sessionList.value = [...sessionList.value, ...appended]
+    page.value = nextPage
+  } catch (error) {
+    ElMessage.error(error?.message || '加载更多对话失败')
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -498,10 +555,10 @@ $radius: 14px;
     max-width: 1000px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 14px;
 
-    @media (max-width: 768px) { grid-template-columns: repeat(2, 1fr); }
+    @media (max-width: 768px) { grid-template-columns: repeat(1, 1fr); }
   }
 
   .stat-card {
@@ -570,6 +627,17 @@ $radius: 14px;
   padding: 20px 24px;
 
   .history-container { max-width: 1000px; margin: 0 auto; }
+}
+
+.load-more-sentinel {
+  height: 1px;
+}
+
+.list-footer {
+  text-align: center;
+  padding: 18px 0 8px;
+  font-size: 13px;
+  color: $text-muted;
 }
 
 .history-group {

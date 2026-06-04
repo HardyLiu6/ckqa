@@ -6,6 +6,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 
 import java.time.LocalDateTime;
 
@@ -26,6 +27,8 @@ public interface QaSessionsService extends IService<QaSessions> {
     QaSessions createSession(CreateQaSessionRequest request, Long indexRunId, LocalDateTime indexLockedAt);
 
     ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request);
+
+    QaSessionStatsResponse statsFormalSessions(Long userId, QaSessionQueryRequest request);
 
     void lockIndexRun(Long id, Long indexRunId, LocalDateTime indexLockedAt);
 

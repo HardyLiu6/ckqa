@@ -12,6 +12,7 @@ import org.ysu.ckqaback.mapper.QaSessionsMapper;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 import org.ysu.ckqaback.service.QaSessionsService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.http.HttpStatus;
@@ -90,6 +91,17 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 page.getTotal(),
                 page.getPages()
         );
+    }
+
+    @Override
+    public QaSessionStatsResponse statsFormalSessions(Long userId, QaSessionQueryRequest request) {
+        QaSessionStatsResponse stats = baseMapper.selectFormalSessionStats(
+                userId,
+                request.getStatus(),
+                request.getCourseId(),
+                request.getKnowledgeBaseId()
+        );
+        return stats != null ? stats : new QaSessionStatsResponse(0L, 0L, 0L);
     }
 
     @Override

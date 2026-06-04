@@ -2,7 +2,9 @@ package org.ysu.ckqaback.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 
 /**
  * <p>
@@ -14,5 +16,15 @@ import org.ysu.ckqaback.entity.QaSessions;
  */
 @Mapper
 public interface QaSessionsMapper extends BaseMapper<QaSessions> {
+
+    /**
+     * 按筛选条件在数据库层聚合统计正式会话的真实口径，供「问答记录」统计卡片使用。
+     * 统计不受分页影响，反映命中条件的全部历史。
+     */
+    QaSessionStatsResponse selectFormalSessionStats(
+            @Param("userId") Long userId,
+            @Param("status") String status,
+            @Param("courseId") String courseId,
+            @Param("knowledgeBaseId") Long knowledgeBaseId);
 
 }

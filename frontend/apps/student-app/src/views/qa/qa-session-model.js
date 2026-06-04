@@ -407,6 +407,29 @@ export function normalizeQaSessionList(payload) {
     .filter((session) => session.id != null)
 }
 
+function normalizeNonNegativeInteger(value, fallback = 0) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num < 0) {
+    return fallback
+  }
+  return Math.floor(num)
+}
+
+export function normalizeQaSessionPage(payload) {
+  const items = normalizeQaSessionList(payload)
+  const rawTotal = Array.isArray(payload) ? items.length : payload?.total
+  return { items, total: normalizeNonNegativeInteger(rawTotal, items.length) }
+}
+
+export function normalizeQaSessionStats(payload) {
+  const source = payload ?? {}
+  return {
+    totalSessions: normalizeNonNegativeInteger(source.totalSessions, 0),
+    totalMessages: normalizeNonNegativeInteger(source.totalMessages, 0),
+    courseCount: normalizeNonNegativeInteger(source.courseCount, 0),
+  }
+}
+
 export function localDateString(date = new Date()) {
   const value = date instanceof Date ? date : new Date(date)
   if (Number.isNaN(value.getTime())) {

@@ -47,6 +47,7 @@ import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
@@ -219,6 +220,14 @@ public class QaWorkflowService {
         }
         usersService.getRequiredById(currentUserId);
         return qaSessionsService.pageFormalSessions(currentUserId, request);
+    }
+
+    public QaSessionStatsResponse statsSessions(Long currentUserId, QaSessionQueryRequest request) {
+        if (currentUserId == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        usersService.getRequiredById(currentUserId);
+        return qaSessionsService.statsFormalSessions(currentUserId, request);
     }
 
     public QaHybridWarmupResponse warmupHybrid(QaHybridWarmupRequest request, AuthenticatedUser currentUser) {
