@@ -327,6 +327,12 @@ export CKQA_NEO4J_TOPIC_BINDING_TIMEOUT_MS=3000
 ./mvnw spring-boot:run
 ```
 
+默认情况下后端会关闭 Spring DevTools 自动重启，避免本地服务运行时再执行 `./mvnw test`、`./mvnw clean` 或 IDE 重编译，触发 `target/classes` 短暂清空后重启失败。确实需要热重启时，启动前显式设置：
+
+```bash
+export CKQA_DEVTOOLS_RESTART_ENABLED=true
+```
+
 如果希望 GraphRAG API 继续手工独立启动，将 `GRAPHRAG_API_MANAGED_ENABLED` 设为 `false` 或不设置即可。
 
 如果 MySQL root 密码保存在本机 `mysql` 容器环境变量中，可先执行：
