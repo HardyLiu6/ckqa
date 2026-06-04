@@ -172,6 +172,24 @@ public class QaRetrievalLogs implements Serializable {
     private Integer contextCharCount;
 
     /**
+     * 上下文 token 数诊断。
+     */
+    @TableField("context_token_count")
+    private Integer contextTokenCount;
+
+    /**
+     * 上下文 token 统计器。
+     */
+    @TableField("context_tokenizer")
+    private String contextTokenizer;
+
+    /**
+     * 上下文预算降级原因。
+     */
+    @TableField("context_budget_fallback_reason")
+    private String contextBudgetFallbackReason;
+
+    /**
      * 是否应用追问改写
      */
     @TableField("rewrite_applied")
@@ -238,6 +256,84 @@ public class QaRetrievalLogs implements Serializable {
     private String topicStackJson;
 
     /**
+     * 会话语义状态版本。
+     */
+    @TableField("semantic_state_version")
+    private String semanticStateVersion;
+
+    /**
+     * 会话语义状态 JSON。
+     */
+    @TableField("semantic_state_json")
+    private String semanticStateJson;
+
+    /**
+     * 本轮是否应用 KG 主题实体弱绑定。
+     */
+    @TableField("topic_entity_binding_applied")
+    private Boolean topicEntityBindingApplied;
+
+    /**
+     * 主题实体弱绑定状态：skipped/success/fallback/failed/ambiguous。
+     */
+    @TableField("topic_entity_binding_status")
+    private String topicEntityBindingStatus;
+
+    /**
+     * 主题实体弱绑定策略。
+     */
+    @TableField("topic_entity_binding_strategy")
+    private String topicEntityBindingStrategy;
+
+    /**
+     * 记录的 TopN 候选数量。
+     */
+    @TableField("topic_entity_candidate_count")
+    private Integer topicEntityCandidateCount;
+
+    /**
+     * Top 候选得分。
+     */
+    @TableField("topic_entity_top_score")
+    private Double topicEntityTopScore;
+
+    /**
+     * 选中的实体 ID。
+     */
+    @TableField("topic_entity_selected_id")
+    private String topicEntitySelectedId;
+
+    /**
+     * 选中的实体名称。
+     */
+    @TableField("topic_entity_selected_name")
+    private String topicEntitySelectedName;
+
+    /**
+     * 选中的实体类型。
+     */
+    @TableField("topic_entity_selected_type")
+    private String topicEntitySelectedType;
+
+    /**
+     * 脱敏候选 JSON，仅包含 id/name/type/humanReadableId/score/matchReason/source。
+     */
+    @TableField("topic_entity_candidates_json")
+    private String topicEntityCandidatesJson;
+
+    /**
+     * 弱绑定未应用或失败的兜底原因。
+     */
+    @TableField("topic_entity_fallback_reason")
+    private String topicEntityFallbackReason;
+
+    /**
+     * 主题实体查询耗时（毫秒）。
+     */
+    @TableField("topic_entity_lookup_duration_ms")
+    private Long topicEntityLookupDurationMs;
+
+    /**
      * 智能推荐置信度
      */
     @TableField("routing_confidence")
@@ -290,6 +386,54 @@ public class QaRetrievalLogs implements Serializable {
      */
     @TableField("memory_size_chars")
     private Integer memorySizeChars;
+
+    /**
+     * 长期记忆 token 数诊断。
+     */
+    @TableField("memory_token_count")
+    private Integer memoryTokenCount;
+
+    /**
+     * 长期记忆 token 统计器。
+     */
+    @TableField("memory_tokenizer")
+    private String memoryTokenizer;
+
+    /**
+     * 长期记忆预算降级原因。
+     */
+    @TableField("memory_budget_fallback_reason")
+    private String memoryBudgetFallbackReason;
+
+    /**
+     * 长期记忆治理版本，仅用于脱敏诊断。
+     */
+    @TableField("memory_governance_version")
+    private String memoryGovernanceVersion;
+
+    /**
+     * 本轮实际注入的长期记忆条数。
+     */
+    @TableField("memory_long_term_count")
+    private Integer memoryLongTermCount;
+
+    /**
+     * 本轮实际注入的最近会话历史条数。
+     */
+    @TableField("memory_recent_history_count")
+    private Integer memoryRecentHistoryCount;
+
+    /**
+     * 长期记忆注入原因，不包含原文。
+     */
+    @TableField("memory_injection_reason")
+    private String memoryInjectionReason;
+
+    /**
+     * 脱敏来源 JSON，不包含 memory_text 或最近会话正文。
+     */
+    @TableField("memory_sources_json")
+    private String memorySourcesJson;
 
     /**
      * Python 查询引擎策略

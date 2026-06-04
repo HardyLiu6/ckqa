@@ -1,7 +1,9 @@
 package org.ysu.ckqaback.qa;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ysu.ckqaback.api.ApiResultCode;
 import org.ysu.ckqaback.auth.AuthenticatedUser;
@@ -22,14 +24,22 @@ import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.QaClientRoutingSnapshot;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.ForkQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionForkResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.context.BudgetSizeEstimate;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingCandidate;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
+import org.ysu.ckqaback.qa.context.TokenBudgetEstimator;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
@@ -41,6 +51,7 @@ import org.ysu.ckqaback.service.QaSessionSummariesService;
 import org.ysu.ckqaback.service.QaSessionsService;
 import org.ysu.ckqaback.service.UsersService;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -569,8 +580,16 @@ class QaWorkflowServiceTest {
                         "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
                         2,
                         66,
-                        List.of(new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。")),
-                        null
+                        List.of(
+                                new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。"),
+                                new GraphRagConversationMessage("user", "什么是时间片轮转？")
+                        ),
+                        null,
+                        "memory-governance-v1",
+                        1,
+                        1,
+                        "preference_enabled:auto",
+                        "[{\"memoryId\":101,\"memoryType\":\"explanation_preference\",\"textHash\":\"abc12345\",\"textChars\":10}]"
                 ));
         given(qaMessagesService.appendUserMessage(5L, "它为什么影响响应时间？")).willReturn(userMessage);
         given(qaRetrievalLogsService.createPendingTask(
@@ -584,7 +603,13 @@ class QaWorkflowServiceTest {
                         && "local_history_preference_only".equals(context.memoryStrategy())
                         && "local_history".equals(context.queryEngineStrategy())
                         && context.memoryHistoryJson().contains("学习记忆")
-                        && context.memorySourceCount() == 2)
+                        && context.memorySourceCount() == 2
+                        && "memory-governance-v1".equals(context.memoryGovernanceVersion())
+                        && context.memoryLongTermCount() == 1
+                        && context.memoryRecentHistoryCount() == 1
+                        && "preference_enabled:auto".equals(context.memoryInjectionReason())
+                        && context.memorySourcesJson().contains("\"textHash\":\"abc12345\"")
+                        && !context.memorySourcesJson().contains("偏好步骤化解释"))
         )).willReturn(task);
 
         CreateQaMessageRequest request = new CreateQaMessageRequest("local", "它为什么影响响应时间？");
@@ -596,6 +621,85 @@ class QaWorkflowServiceTest {
         assertThat(response.getMemoryScope()).contains("indexRunId=23");
         assertThat(response.getMemorySourceCount()).isEqualTo(2);
         assertThat(response.getMemorySizeEstimate()).isEqualTo(66);
+    }
+
+    @Test
+    void shouldWriteTokenBudgetEstimatesIntoPendingTaskContextAndResponse() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaMemoryContextService memoryContextService = mock(QaMemoryContextService.class);
+        TokenBudgetEstimator tokenBudgetEstimator = mock(TokenBudgetEstimator.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaMemoryContextService(memoryContextService);
+        workflowService.setTokenBudgetEstimator(tokenBudgetEstimator);
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是时间片轮转？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "时间片轮转是一种抢占式调度算法。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它为什么影响响应时间？");
+        QaRetrievalLogs task = pendingTask(9016L);
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(memoryContextService.buildContext(
+                "local",
+                "auto",
+                session,
+                List.of(previousUser, previousAssistant),
+                "它为什么影响响应时间？",
+                "时间片轮转"
+        )).willReturn(new QaMemoryContextResult(
+                true,
+                "local_history_preference_only",
+                "userId=7;courseId=os;knowledgeBaseId=3;indexRunId=23",
+                2,
+                66,
+                List.of(
+                        new GraphRagConversationMessage("assistant", "学习记忆：偏好步骤化解释。"),
+                        new GraphRagConversationMessage("user", "什么是时间片轮转？")
+                ),
+                null
+        ));
+        given(tokenBudgetEstimator.estimate(any(), any()))
+                .willAnswer(invocation -> new BudgetSizeEstimate(
+                        invocation.getArgument(1, Integer.class),
+                        17,
+                        "test:o200k_base",
+                        null
+                ));
+        given(qaMessagesService.appendUserMessage(5L, "它为什么影响响应时间？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("local"),
+                eq("关于上一轮主题「时间片轮转」：它为什么影响响应时间？"),
+                argThat(context -> context.contextTokenCount() == 17
+                        && "test:o200k_base".equals(context.contextTokenizer())
+                        && context.contextBudgetFallbackReason() == null
+                        && context.memoryTokenCount() == 17
+                        && "test:o200k_base".equals(context.memoryTokenizer())
+                        && context.memoryBudgetFallbackReason() == null)
+        )).willReturn(task);
+
+        CreateQaMessageRequest request = new CreateQaMessageRequest("local", "它为什么影响响应时间？");
+        request.setMemoryPolicy("auto");
+        QaTaskSubmissionResponse response = workflowService.sendMessage(5L, request);
+
+        assertThat(response.getContextSizeEstimate().getTokens()).isEqualTo(17);
+        assertThat(response.getContextSizeEstimate().getTokenizer()).isEqualTo("test:o200k_base");
+        assertThat(response.getContextSizeEstimate().getFallbackReason()).isNull();
     }
 
     @Test
@@ -658,6 +762,83 @@ class QaWorkflowServiceTest {
         assertThat(response.getRecommendedPollingIntervalSeconds()).isEqualTo(15);
         assertThat(response.getContextStrategy()).isEqualTo("recent");
         then(qaTaskWorker).should().dispatch(5L, 9012L);
+    }
+
+    @Test
+    void shouldWriteTopicEntityBindingDiagnosticsIntoLogContext() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        KnowledgeBasesService knowledgeBasesService = mock(KnowledgeBasesService.class);
+        QaTopicEntityBindingService bindingService = mock(QaTopicEntityBindingService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                knowledgeBasesService,
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaTopicEntityBindingService(bindingService);
+
+        QaSessions session = formalSession();
+        QaMessages previousUser = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages previousAssistant = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages userMessage = message(103L, 5L, "user", 3, "它和资源分配图有什么关系？");
+        QaRetrievalLogs task = pendingTask(9015L);
+        QaTopicEntityBindingCandidate candidate = new QaTopicEntityBindingCandidate(
+                "entity-deadlock",
+                "死锁",
+                "concept",
+                "E-42",
+                1.0D,
+                "exact_name",
+                "active_neo4j"
+        );
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(knowledgeBasesService.getRequiredById(3L)).willReturn(buildKnowledgeBase());
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(previousUser, previousAssistant));
+        given(bindingService.bind(any(), eq(3L), eq(23L)))
+                .willReturn(QaTopicEntityBindingResult.success(List.of(candidate), 12L));
+        given(qaMessagesService.appendUserMessage(5L, "它和资源分配图有什么关系？")).willReturn(userMessage);
+        given(qaRetrievalLogsService.createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                any()
+        )).willReturn(task);
+
+        workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "它和资源分配图有什么关系？"));
+
+        ArgumentCaptor<QaRetrievalLogContext> contextCaptor = ArgumentCaptor.forClass(QaRetrievalLogContext.class);
+        then(qaRetrievalLogsService).should().createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(23L),
+                eq(103L),
+                eq("basic"),
+                eq("关于上一轮主题「死锁」：它和资源分配图有什么关系？"),
+                contextCaptor.capture()
+        );
+        QaRetrievalLogContext context = contextCaptor.getValue();
+        assertThat(context.topicEntityBindingApplied()).isTrue();
+        assertThat(context.topicEntityBindingStatus()).isEqualTo("success");
+        assertThat(context.topicEntityBindingStrategy()).isEqualTo("active_neo4j_topic_match");
+        assertThat(context.topicEntityCandidateCount()).isEqualTo(1);
+        assertThat(context.topicEntityTopScore()).isEqualTo(1.0D);
+        assertThat(context.topicEntitySelectedId()).isEqualTo("entity-deadlock");
+        assertThat(context.topicEntitySelectedName()).isEqualTo("死锁");
+        assertThat(context.topicEntitySelectedType()).isEqualTo("concept");
+        assertThat(context.topicEntityCandidatesJson()).contains("\"id\":\"entity-deadlock\"");
+        assertThat(context.topicEntityCandidatesJson()).contains("\"source\":\"active_neo4j\"");
+        assertThat(context.topicEntityCandidatesJson()).doesNotContain("description", "snippet", "memoryText", "full_content");
+        assertThat(context.topicEntityLookupDurationMs()).isEqualTo(12L);
+        then(bindingService).should().bind(any(), eq(3L), eq(23L));
     }
 
     @Test
@@ -1162,6 +1343,18 @@ class QaWorkflowServiceTest {
         workflowService.sendMessage(5L, new CreateQaMessageRequest("basic", "继续提问"));
 
         then(qaSessionsService).should().lockIndexRun(eq(5L), eq(18L), any());
+        ArgumentCaptor<QaRetrievalLogContext> contextCaptor = ArgumentCaptor.forClass(QaRetrievalLogContext.class);
+        then(qaRetrievalLogsService).should().createPendingTask(
+                eq(5L),
+                eq("os"),
+                eq(18L),
+                eq(11L),
+                eq("basic"),
+                eq("继续提问"),
+                contextCaptor.capture()
+        );
+        assertThat(contextCaptor.getValue().semanticStateVersion()).isEqualTo("session_semantic_state_v1");
+        assertThat(contextCaptor.getValue().semanticStateJson()).contains("\"version\":\"session_semantic_state_v1\"");
     }
 
     @Test
@@ -1411,6 +1604,333 @@ class QaWorkflowServiceTest {
     }
 
     @Test
+    void shouldReturnTranscriptWithMessagesSummaryAndBoundaries() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService qaSessionSummariesService = mock(QaSessionSummariesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        workflowService.setQaSessionSummariesService(qaSessionSummariesService);
+
+        QaSessions session = formalSession();
+        session.setTranscriptVersion("v1");
+        QaMessages userMessage = message(101L, 5L, "user", 1, "什么是死锁？");
+        userMessage.setCopiedFromMessageId(77L);
+        QaMessages assistantMessage = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaSessionSummaries summary = new QaSessionSummaries();
+        summary.setSummaryText("本会话已讨论死锁定义。");
+        summary.setSummaryUntilSequenceNo(2);
+        summary.setSourceMessageCount(2);
+        summary.setLatestTopic("死锁");
+        summary.setLatestTopicMessageRange("1-2");
+        summary.setActiveTopicsJson("[{\"topic\":\"死锁\"}]");
+        summary.setSemanticStateVersion("semantic_state_v1");
+        summary.setCreatedAt(LocalDateTime.of(2026, 5, 17, 12, 5));
+        summary.setUpdatedAt(LocalDateTime.of(2026, 5, 17, 12, 6));
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(userMessage, assistantMessage));
+        given(qaRetrievalLogsService.findLatestByUserMessageIds(List.of(101L))).willReturn(Map.of());
+        given(qaSessionSummariesService.findLatestSuccessfulBySessionId(5L)).willReturn(summary);
+
+        QaTranscriptResponse response = workflowService.getTranscript(5L, 7L);
+
+        assertThat(response.getSession().getId()).isEqualTo(5L);
+        assertThat(response.getTranscriptVersion()).isEqualTo("v1");
+        assertThat(response.getMessageCount()).isEqualTo(2);
+        assertThat(response.getMaxSequenceNo()).isEqualTo(2);
+        assertThat(response.getMessages()).hasSize(2);
+        assertThat(response.getMessages().get(0).getCopiedFromMessageId()).isEqualTo(77L);
+        assertThat(response.getLatestSummary().getSummaryText()).isEqualTo("本会话已讨论死锁定义。");
+        assertThat(response.getLatestSummary().getLatestTopic()).isEqualTo("死锁");
+    }
+
+    @Test
+    void shouldForkFormalSessionFromUserBoundaryAtNextAssistantMessage() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions parent = formalSession();
+        parent.setTitle("死锁复习");
+        parent.setCourseMembershipId(88L);
+        parent.setIndexLockedAt(LocalDateTime.of(2026, 5, 17, 10, 0));
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages third = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaSessions child = new QaSessions();
+        child.setId(9L);
+        child.setSessionCode("qa-child");
+        child.setUserId(7L);
+        child.setCourseId("os");
+        child.setCourseMembershipId(88L);
+        child.setKnowledgeBaseId(3L);
+        child.setIndexRunId(23L);
+        child.setIndexLockedAt(parent.getIndexLockedAt());
+        child.setSessionType("formal");
+        child.setTitle("死锁分支");
+        child.setStatus("active");
+        child.setParentSessionId(5L);
+        child.setForkedFromMessageId(102L);
+        child.setForkedFromSequenceNo(2);
+        child.setForkReason("追问另一路");
+        child.setTranscriptVersion("v1");
+
+        ForkQaSessionRequest request = new ForkQaSessionRequest();
+        request.setForkedFromMessageId(101L);
+        request.setTitle("死锁分支");
+        request.setForkReason("追问另一路");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first, second, third));
+        given(qaSessionsService.createForkSession(eq(parent), eq(102L), eq(2), eq("死锁分支"), eq("追问另一路")))
+                .willReturn(child);
+        given(qaMessagesService.copyMessagesToSession(5L, 9L, 2)).willReturn(2);
+
+        QaSessionForkResponse response = workflowService.forkSession(5L, request, authenticatedStudent());
+
+        assertThat(response.getParentSessionId()).isEqualTo(5L);
+        assertThat(response.getChildSession().getId()).isEqualTo(9L);
+        assertThat(response.getForkedFromMessageId()).isEqualTo(102L);
+        assertThat(response.getForkedFromSequenceNo()).isEqualTo(2);
+        assertThat(response.getCopiedMessageCount()).isEqualTo(2);
+        assertThat(response.getChildSession().getLastMessageAt()).isNotNull();
+        then(qaSessionsService).should().createForkSession(parent, 102L, 2, "死锁分支", "追问另一路");
+        then(qaMessagesService).should().copyMessagesToSession(5L, 9L, 2);
+        then(qaSessionsService).should().touchLastMessageAt(9L);
+        then(qaRetrievalLogsService).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void shouldForkOmittedBoundaryAtLatestCompleteAssistantBeforePendingUser() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions parent = formalSession();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaMessages third = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaSessions child = formalSession();
+        child.setId(9L);
+        child.setParentSessionId(5L);
+        child.setForkedFromMessageId(102L);
+        child.setForkedFromSequenceNo(2);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first, second, third));
+        given(qaSessionsService.createForkSession(eq(parent), eq(102L), eq(2), eq(null), eq(null)))
+                .willReturn(child);
+        given(qaMessagesService.copyMessagesToSession(5L, 9L, 2)).willReturn(2);
+
+        QaSessionForkResponse response = workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent());
+
+        assertThat(response.getForkedFromMessageId()).isEqualTo(102L);
+        assertThat(response.getForkedFromSequenceNo()).isEqualTo(2);
+        assertThat(response.getCopiedMessageCount()).isEqualTo(2);
+        then(qaMessagesService).should().copyMessagesToSession(5L, 9L, 2);
+    }
+
+    @Test
+    void shouldRejectOmittedForkBoundaryWhenParentOnlyHasPendingUserMessages() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first));
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                })
+                .hasMessageContaining("分支边界必须落在已完成问答轮次");
+
+        then(qaSessionsService).should(never()).createForkSession(any(), any(), any(), any(), any());
+        then(qaMessagesService).should(never()).copyMessagesToSession(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void shouldRejectExplicitForkBoundaryAtDanglingUserMessage() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        ForkQaSessionRequest request = new ForkQaSessionRequest();
+        request.setForkedFromMessageId(103L);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(
+                message(101L, 5L, "user", 1, "什么是死锁？"),
+                message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(103L, 5L, "user", 3, "那银行家算法呢？")
+        ));
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                })
+                .hasMessageContaining("分支边界必须落在已完成问答轮次");
+
+        then(qaSessionsService).should(never()).createForkSession(any(), any(), any(), any(), any());
+        then(qaMessagesService).should(never()).copyMessagesToSession(anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void shouldKeepForkCreationAndMessageCopyInTransaction() throws NoSuchMethodException {
+        Method method = QaWorkflowService.class.getMethod(
+                "forkSession",
+                Long.class,
+                ForkQaSessionRequest.class,
+                AuthenticatedUser.class
+        );
+
+        assertThat(method.getAnnotation(Transactional.class)).isNotNull();
+    }
+
+    @Test
+    void shouldPropagateForkCopyFailureWithoutTouchingChildSession() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源的状态。");
+        QaSessions child = formalSession();
+        child.setId(9L);
+        child.setParentSessionId(5L);
+        child.setForkedFromMessageId(102L);
+        child.setForkedFromSequenceNo(2);
+        RuntimeException copyFailure = new RuntimeException("copy failed");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(first, second));
+        given(qaSessionsService.createForkSession(eq(parent), eq(102L), eq(2), eq(null), eq(null)))
+                .willReturn(child);
+        given(qaMessagesService.copyMessagesToSession(5L, 9L, 2)).willThrow(copyFailure);
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent()))
+                .isSameAs(copyFailure);
+
+        then(qaSessionsService).should(never()).touchLastMessageAt(9L);
+    }
+
+    @Test
+    void shouldRejectForkWhenBoundarySequenceIsMissing() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        ForkQaSessionRequest request = new ForkQaSessionRequest();
+        request.setForkedFromSequenceNo(99);
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(message(101L, 5L, "user", 1, "什么是死锁？")));
+
+        assertThatThrownBy(() -> workflowService.forkSession(5L, request, authenticatedStudent()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ApiResultCode.BAD_REQUEST.getCode());
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                })
+                .hasMessageContaining("分支边界消息不存在");
+    }
+
+    @Test
+    void shouldAllowEmptyForkWhenParentHasNoMessagesAndBoundaryIsOmitted() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                mock(QaRetrievalLogsService.class),
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+        QaSessions parent = formalSession();
+        parent.setTitle("新会话");
+        QaSessions child = formalSession();
+        child.setId(10L);
+        child.setTitle("新会话 的分支");
+        child.setParentSessionId(5L);
+        child.setTranscriptVersion("v1");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(parent);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of());
+        given(qaSessionsService.createForkSession(eq(parent), eq(null), eq(null), eq(null), eq(null))).willReturn(child);
+
+        QaSessionForkResponse response = workflowService.forkSession(5L, new ForkQaSessionRequest(), authenticatedStudent());
+
+        assertThat(response.getChildSession().getId()).isEqualTo(10L);
+        assertThat(response.getChildSession().getLastMessageAt()).isNull();
+        assertThat(response.getCopiedMessageCount()).isZero();
+        then(qaMessagesService).should(never()).copyMessagesToSession(anyLong(), anyLong(), any());
+        then(qaSessionsService).should(never()).touchLastMessageAt(anyLong());
+    }
+
+    @Test
     void shouldReturnModeSpecificPollingHintsForTaskDetail() {
         QaSessionsService qaSessionsService = mock(QaSessionsService.class);
         QaMessagesService qaMessagesService = mock(QaMessagesService.class);
@@ -1461,6 +1981,9 @@ class QaWorkflowServiceTest {
         task.setMemoryScope("userId=7;courseId=os;knowledgeBaseId=3;indexRunId=17");
         task.setMemorySourceCount(2);
         task.setMemorySizeChars(88);
+        task.setContextCharCount(120);
+        task.setContextTokenCount(31);
+        task.setContextTokenizer("jtokkit:o200k_base");
 
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
         given(qaRetrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
@@ -1478,6 +2001,9 @@ class QaWorkflowServiceTest {
         assertThat(response.getMemoryScope()).contains("knowledgeBaseId=3");
         assertThat(response.getMemorySourceCount()).isEqualTo(2);
         assertThat(response.getMemorySizeEstimate()).isEqualTo(88);
+        assertThat(response.getContextSizeEstimate().getChars()).isEqualTo(120);
+        assertThat(response.getContextSizeEstimate().getTokens()).isEqualTo(31);
+        assertThat(response.getContextSizeEstimate().getTokenizer()).isEqualTo("jtokkit:o200k_base");
         assertThat(response.getPartialResponseText()).isEqualTo("drift 已生成的部分回答");
         assertThat(response.getStreamEventSeq()).isEqualTo(18L);
         assertThat(response.getLatestLogs()).containsExactly("正在综合 DRIFT 检索到的课程上下文。");
@@ -1491,6 +2017,56 @@ class QaWorkflowServiceTest {
 
         assertThat(legacyResponse.getRequestedMode()).isEqualTo("drift");
         assertThat(legacyResponse.getResolvedMode()).isEqualTo("drift");
+    }
+
+    @Test
+    void shouldHydrateAssistantMessageWhenSuccessfulTaskLogHasNotBoundAssistantIdYet() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = formalSession();
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setUserMessageId(101L);
+        task.setAssistantMessageId(null);
+        task.setTaskStatus("success");
+        task.setProgressStage("done");
+        task.setRetrievalStatus("success");
+        task.setQueryMode("basic");
+        task.setRequestedMode("smart");
+        task.setResolvedMode("basic");
+        task.setQueryText("它有哪些基本要求？");
+        task.setMemoryApplied(false);
+
+        QaMessages user = message(101L, 5L, "user", 3, "它有哪些基本要求？");
+        QaMessages assistant = message(102L, 5L, "assistant", 4, "临界区的基本要求包括空闲让进、忙则等待、有限等待和让权等待。");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(qaRetrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(
+                message(99L, 5L, "assistant", 2, "上一轮回答"),
+                user,
+                assistant
+        ));
+
+        QaTaskDetailResponse response = workflowService.getTaskDetail(5L, 9001L);
+
+        assertThat(response.getTaskStatus()).isEqualTo("success");
+        assertThat(response.getAssistantMessageId()).isEqualTo(102L);
+        assertThat(response.getAssistantMessage()).isNotNull();
+        assertThat(response.getAssistantMessage().getContent()).contains("空闲让进");
+        assertThat(response.getAssistantMessage().getMode()).isEqualTo("basic");
     }
 
     private KnowledgeBases buildKnowledgeBase() {

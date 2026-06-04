@@ -66,6 +66,60 @@ class QaMemoryContextServiceTest {
     }
 
     @Test
+    void shouldBuildGovernanceSnapshotWithoutRawMemoryTextOrRecentHistoryText() {
+        QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
+        QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
+        QaMemoryContextService service = new QaMemoryContextService(preferencesService, memoriesService, new QaMemoryInjectionRouter());
+        QaSessions session = session();
+        QaLearningMemories memory = memory(101L, "学生偏好先给步骤再给例题。");
+        memory.setSourceSessionId(5L);
+        memory.setSourceMessageId(88L);
+        given(preferencesService.findByScope(7L, "os", 3L, 17L)).willReturn(enabledPreference());
+        given(memoriesService.listActiveByScope(7L, "os", 3L, 17L, 3)).willReturn(List.of(memory));
+
+        QaMemoryContextResult result = service.buildContext("local", "auto", session, List.of(
+                message(1L, "user", 1, "最近会话里的学生原话"),
+                message(2L, "assistant", 2, "最近会话里的助手原文")
+        ), "请继续复习我之前关注的内容", "时间片轮转");
+
+        assertThat(result.memoryGovernanceVersion()).isEqualTo("memory-governance-v1");
+        assertThat(result.memoryLongTermCount()).isEqualTo(1);
+        assertThat(result.memoryRecentHistoryCount()).isEqualTo(2);
+        assertThat(result.memoryInjectionReason()).isEqualTo("preference_enabled:auto");
+        assertThat(result.memorySourcesJson())
+                .contains("\"memoryId\":101")
+                .contains("\"memoryType\":\"explanation_preference\"")
+                .contains("\"sourceSessionId\":5")
+                .contains("\"sourceMessageId\":88")
+                .contains("\"includeReason\":\"preference_enabled:auto\"")
+                .contains("\"textHash\":\"")
+                .contains("\"textChars\":13")
+                .doesNotContain("学生偏好先给步骤再给例题", "最近会话里的学生原话", "最近会话里的助手原文", "memoryText");
+    }
+
+    @Test
+    void legacyResultConstructorShouldNotClassifyUnknownHistoryAsRecentMemory() {
+        QaMemoryContextResult result = new QaMemoryContextResult(
+                true,
+                "local_history",
+                "legacy",
+                2,
+                10,
+                List.of(
+                        new GraphRagConversationMessage("user", "旧调用没有来源分类"),
+                        new GraphRagConversationMessage("assistant", "不能归入 recent 治理诊断")
+                ),
+                "legacy_fallback"
+        );
+
+        assertThat(result.conversationHistory()).hasSize(2);
+        assertThat(result.memoryLongTermCount()).isZero();
+        assertThat(result.memoryRecentHistoryCount()).isZero();
+        assertThat(result.memoryInjectionReason()).isEqualTo("legacy_fallback");
+        assertThat(result.memorySourcesJson()).isEqualTo("[]");
+    }
+
+    @Test
     void shouldIsolateBySessionIndexRunId() {
         QaMemoryPreferencesService preferencesService = mock(QaMemoryPreferencesService.class);
         QaLearningMemoriesService memoriesService = mock(QaLearningMemoriesService.class);
@@ -107,6 +161,18 @@ class QaMemoryContextServiceTest {
         assertThat(result.sizeEstimate()).isLessThanOrEqualTo(3000);
         assertThat(result.conversationHistory().stream().filter(item -> item.content().startsWith("学习记忆（")).count())
                 .isLessThanOrEqualTo(2);
+        long retainedLongTermCount = result.conversationHistory().stream()
+                .filter(item -> item.content().startsWith("学习记忆（"))
+                .count();
+        long retainedRecentCount = result.conversationHistory().size() - retainedLongTermCount;
+        assertThat(result.memoryLongTermCount()).isEqualTo((int) retainedLongTermCount);
+        assertThat(result.memoryRecentHistoryCount()).isEqualTo((int) retainedRecentCount);
+        assertThat(result.memoryLongTermCount()).isEqualTo(2);
+        assertThat(result.memoryRecentHistoryCount()).isEqualTo(6);
+        assertThat(result.memorySourcesJson())
+                .contains("\"memoryId\":101")
+                .contains("\"memoryId\":103")
+                .doesNotContain("\"memoryId\":102");
     }
 
     @Test

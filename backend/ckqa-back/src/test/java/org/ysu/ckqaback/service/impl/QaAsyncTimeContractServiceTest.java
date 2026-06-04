@@ -11,6 +11,8 @@ import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,6 +75,41 @@ class QaAsyncTimeContractServiceTest {
     }
 
     @Test
+    void copyMessagesToSessionShouldKeepSequenceAndWriteProvenance() {
+        List<QaMessages> saved = new ArrayList<>();
+        QaMessages first = message(101L, 5L, "user", 1, "什么是死锁？");
+        first.setTokenCount(6);
+        QaMessages second = message(102L, 5L, "assistant", 2, "死锁是多个进程互相等待资源。");
+        QaMessages third = message(103L, 5L, "user", 3, "那银行家算法呢？");
+        QaMessagesServiceImpl service = new QaMessagesServiceImpl() {
+            @Override
+            public List<QaMessages> listBySessionId(Long sessionId) {
+                assertThat(sessionId).isEqualTo(5L);
+                return List.of(first, second, third);
+            }
+
+            @Override
+            public boolean save(QaMessages entity) {
+                saved.add(entity);
+                return true;
+            }
+        };
+
+        int copied = service.copyMessagesToSession(5L, 9L, 2);
+
+        assertThat(copied).isEqualTo(2);
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(0).getSessionId()).isEqualTo(9L);
+        assertThat(saved.get(0).getSequenceNo()).isEqualTo(1);
+        assertThat(saved.get(0).getContent()).isEqualTo("什么是死锁？");
+        assertThat(saved.get(0).getContentText()).isEqualTo(first.getContentText());
+        assertThat(saved.get(0).getTokenCount()).isEqualTo(6);
+        assertThat(saved.get(0).getCopiedFromMessageId()).isEqualTo(101L);
+        assertThat(saved.get(0).getCreatedAt()).isNotNull();
+        assertThat(saved.get(1).getCopiedFromMessageId()).isEqualTo(102L);
+    }
+
+    @Test
     void createPendingTaskShouldStampShanghaiLocalCreatedAt() {
         AtomicReference<QaRetrievalLogs> saved = new AtomicReference<>();
         QaRetrievalLogsServiceImpl service = new QaRetrievalLogsServiceImpl() {
@@ -101,6 +138,18 @@ class QaAsyncTimeContractServiceTest {
         assertThat(task.getTaskSeq()).isEqualTo(1);
         assertThat(task.getCreatedAt()).isNotNull();
         assertRecentShanghai(task.getCreatedAt());
+    }
+
+    private QaMessages message(Long id, Long sessionId, String role, int sequenceNo, String content) {
+        QaMessages message = new QaMessages();
+        message.setId(id);
+        message.setSessionId(sessionId);
+        message.setRole(role);
+        message.setSequenceNo(sequenceNo);
+        message.setContent(content);
+        message.setContentText(content);
+        message.setCreatedAt(LocalDateTime.of(2026, 5, 17, 10, sequenceNo));
+        return message;
     }
 
     @Test

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
@@ -25,8 +26,11 @@ import org.ysu.ckqaback.entity.QaSessions;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties.QueryTaskModePolicy;
+import org.ysu.ckqaback.integration.graphrag.GraphRagConversationMessage;
 import org.ysu.ckqaback.integration.graphrag.GraphRagHybridReadinessResult;
 import org.ysu.ckqaback.integration.graphrag.GraphRagTaskClient;
+import org.ysu.ckqaback.qa.context.BudgetSizeEstimate;
+import org.ysu.ckqaback.qa.context.CharFallbackTokenBudgetEstimator;
 import org.ysu.ckqaback.qa.context.QaContextAssembler;
 import org.ysu.ckqaback.qa.context.QaContextAssembly;
 import org.ysu.ckqaback.qa.context.QaContextPolicy;
@@ -35,21 +39,29 @@ import org.ysu.ckqaback.qa.context.QaQuestionRewriteClientPort;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteResult;
 import org.ysu.ckqaback.qa.context.QaQuestionRewriteService;
 import org.ysu.ckqaback.qa.context.QaRetrievalLogContext;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingResult;
+import org.ysu.ckqaback.qa.context.QaTopicEntityBindingService;
+import org.ysu.ckqaback.qa.context.TokenBudgetEstimator;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextResult;
 import org.ysu.ckqaback.qa.memory.QaMemoryContextService;
 import org.ysu.ckqaback.qa.dto.CreateQaMessageRequest;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.ContextSizeEstimateResponse;
+import org.ysu.ckqaback.qa.dto.ForkQaSessionRequest;
 import org.ysu.ckqaback.qa.dto.QaMessageResponse;
 import org.ysu.ckqaback.qa.dto.QaProgressEventResponse;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupRequest;
 import org.ysu.ckqaback.qa.dto.QaHybridWarmupResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionForkResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskDetailResponse;
 import org.ysu.ckqaback.qa.dto.QaTaskSubmissionResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptMessageResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptResponse;
+import org.ysu.ckqaback.qa.dto.QaTranscriptSummaryResponse;
 import org.ysu.ckqaback.qa.dto.UpdateQaSessionRequest;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.service.KnowledgeBasesService;
@@ -65,9 +77,11 @@ import org.ysu.ckqaback.service.UsersService;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.Set;
 
@@ -103,6 +117,8 @@ public class QaWorkflowService {
     private StudentRedisCacheService studentRedisCacheService;
     private StudentCacheKeyFactory studentCacheKeyFactory;
     private QaMemoryContextService qaMemoryContextService;
+    private QaTopicEntityBindingService qaTopicEntityBindingService;
+    private TokenBudgetEstimator tokenBudgetEstimator = new CharFallbackTokenBudgetEstimator();
 
     @Autowired(required = false)
     public void setQaSessionSummariesService(QaSessionSummariesService qaSessionSummariesService) {
@@ -152,6 +168,18 @@ public class QaWorkflowService {
     @Autowired(required = false)
     public void setQaMemoryContextService(QaMemoryContextService qaMemoryContextService) {
         this.qaMemoryContextService = qaMemoryContextService;
+    }
+
+    @Autowired(required = false)
+    public void setQaTopicEntityBindingService(QaTopicEntityBindingService qaTopicEntityBindingService) {
+        this.qaTopicEntityBindingService = qaTopicEntityBindingService;
+    }
+
+    @Autowired(required = false)
+    public void setTokenBudgetEstimator(TokenBudgetEstimator tokenBudgetEstimator) {
+        if (tokenBudgetEstimator != null) {
+            this.tokenBudgetEstimator = tokenBudgetEstimator;
+        }
     }
 
     public QaSessionResponse createSession(CreateQaSessionRequest request) {
@@ -381,6 +409,12 @@ public class QaWorkflowService {
                 null,
                 memoryContext.memoryApplied() && !memoryContext.conversationHistory().isEmpty()
         );
+        BudgetSizeEstimate contextBudgetEstimate = tokenBudgetEstimator.estimate(context.snapshotText(), context.charCount());
+        BudgetSizeEstimate memoryBudgetEstimate = tokenBudgetEstimator.estimate(
+                memoryEstimateText(memoryContext),
+                memoryContext.sizeEstimate()
+        );
+        QaTopicEntityBindingResult topicEntityBinding = bindTopicEntity(context.latestTopic(), session.getKnowledgeBaseId(), indexRunId);
         QaRetrievalLogContext logContext = new QaRetrievalLogContext(
                 request.getContent(),
                 rewrite.retrievalQueryText(),
@@ -405,6 +439,11 @@ public class QaWorkflowService {
                 memoryContext.scope(),
                 memoryContext.sourceCount(),
                 memoryContext.sizeEstimate(),
+                memoryContext.memoryGovernanceVersion(),
+                memoryContext.memoryLongTermCount(),
+                memoryContext.memoryRecentHistoryCount(),
+                memoryContext.memoryInjectionReason(),
+                memoryContext.memorySourcesJson(),
                 queryEngineStrategy,
                 memoryContext.historyFallbackReason(),
                 serializeMemoryHistory(memoryContext),
@@ -413,8 +452,11 @@ public class QaWorkflowService {
                 context.latestTopic(),
                 context.topicSource(),
                 context.topicConfidence(),
-                context.topicStackJson()
-        );
+                context.topicStackJson(),
+                context.semanticStateVersion(),
+                context.semanticStateJson()
+        ).withBudgetEstimates(contextBudgetEstimate, memoryBudgetEstimate)
+                .withTopicEntityBinding(topicEntityBinding);
 
         QaMessages userMessage = qaMessagesService.appendUserMessage(sessionId, request.getContent());
         qaSessionsService.touchLastMessageAt(sessionId);
@@ -445,7 +487,7 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 context.contextApplied(),
                 context.strategy(),
-                ContextSizeEstimateResponse.of(context.charCount()),
+                ContextSizeEstimateResponse.of(contextBudgetEstimate),
                 memoryContext.memoryApplied(),
                 memoryContext.strategy(),
                 memoryContext.scope(),
@@ -456,6 +498,13 @@ public class QaWorkflowService {
 
     private String normalizeRequestedMode(String rawMode) {
         return StringUtils.hasText(rawMode) ? rawMode.trim().toLowerCase(Locale.ROOT) : "basic";
+    }
+
+    private QaTopicEntityBindingResult bindTopicEntity(String topic, Long knowledgeBaseId, Long indexRunId) {
+        if (qaTopicEntityBindingService == null) {
+            return QaTopicEntityBindingResult.skipped("service_unavailable");
+        }
+        return qaTopicEntityBindingService.bind(topic, knowledgeBaseId, indexRunId);
     }
 
     private String resolveExecutionMode(CreateQaMessageRequest request, String requestedMode) {
@@ -478,6 +527,16 @@ public class QaWorkflowService {
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "长期记忆上下文格式不合法");
         }
+    }
+
+    private String memoryEstimateText(QaMemoryContextResult memoryContext) {
+        if (memoryContext == null || memoryContext.conversationHistory() == null || memoryContext.conversationHistory().isEmpty()) {
+            return "";
+        }
+        return memoryContext.conversationHistory().stream()
+                .map(GraphRagConversationMessage::content)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private String serializeRoutingSnapshot(CreateQaMessageRequest request) {
@@ -572,7 +631,9 @@ public class QaWorkflowService {
                 summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
                 summary.getLatestTopic(),
                 summary.getLatestTopicMessageRange(),
-                summary.getActiveTopicsJson()
+                summary.getActiveTopicsJson(),
+                summary.getSemanticStateVersion(),
+                summary.getSemanticStateJson()
         );
     }
 
@@ -591,6 +652,75 @@ public class QaWorkflowService {
 
     public QaSessionResponse getSession(Long id) {
         return QaSessionResponse.fromEntity(qaSessionsService.getRequiredById(id));
+    }
+
+    public QaTranscriptResponse getTranscript(Long sessionId, Long currentUserId) {
+        ensureSessionOwner(sessionId, currentUserId);
+        QaSessions session = qaSessionsService.getRequiredById(sessionId);
+        List<QaMessageResponse> messageResponses = listMessages(sessionId, currentUserId);
+        Map<Long, Long> copiedFromByMessageId = new HashMap<>();
+        for (QaMessages message : qaMessagesService.listBySessionId(sessionId)) {
+            copiedFromByMessageId.put(message.getId(), message.getCopiedFromMessageId());
+        }
+        List<QaTranscriptMessageResponse> transcriptMessages = messageResponses.stream()
+                .map(message -> QaTranscriptMessageResponse.fromMessage(
+                        message,
+                        copiedFromByMessageId.get(message.getId())
+                ))
+                .toList();
+        QaSessionSummaries latestSummary = qaSessionSummariesService == null
+                ? null
+                : qaSessionSummariesService.findLatestSuccessfulBySessionId(sessionId);
+        String transcriptVersion = StringUtils.hasText(session.getTranscriptVersion())
+                ? session.getTranscriptVersion()
+                : "v1";
+        return QaTranscriptResponse.of(
+                QaSessionResponse.fromEntity(session),
+                transcriptMessages,
+                QaTranscriptSummaryResponse.fromEntity(latestSummary),
+                transcriptVersion
+        );
+    }
+
+    @Transactional
+    public QaSessionForkResponse forkSession(
+            Long parentSessionId,
+            ForkQaSessionRequest request,
+            AuthenticatedUser currentUser
+    ) {
+        if (currentUser == null || currentUser.id() == null) {
+            throw new BusinessException(ApiResultCode.AUTH_REQUIRED, HttpStatus.UNAUTHORIZED);
+        }
+        ForkQaSessionRequest safeRequest = request == null ? new ForkQaSessionRequest() : request;
+        ensureSessionOwner(parentSessionId, currentUser.id());
+        QaSessions parent = qaSessionsService.getRequiredById(parentSessionId);
+        if (!"formal".equals(parent.getSessionType())) {
+            throw new BusinessException(ApiResultCode.BAD_REQUEST, HttpStatus.BAD_REQUEST, "只能 fork 正式问答会话");
+        }
+        List<QaMessages> parentMessages = qaMessagesService.listBySessionId(parentSessionId);
+        ForkBoundary boundary = resolveForkBoundary(parentMessages, safeRequest);
+        QaSessions child = qaSessionsService.createForkSession(
+                parent,
+                boundary.messageId(),
+                boundary.sequenceNo(),
+                safeRequest.getTitle(),
+                safeRequest.getForkReason()
+        );
+        int copiedMessageCount = boundary.sequenceNo() == null
+                ? 0
+                : qaMessagesService.copyMessagesToSession(parentSessionId, child.getId(), boundary.sequenceNo());
+        if (copiedMessageCount > 0) {
+            LocalDateTime lastMessageAt = LocalDateTime.now(SHANGHAI_ZONE);
+            qaSessionsService.touchLastMessageAt(child.getId());
+            child.setLastMessageAt(lastMessageAt);
+        }
+        return QaSessionForkResponse.of(
+                parentSessionId,
+                QaSessionResponse.fromEntity(child),
+                boundary.messageId(),
+                boundary.sequenceNo(),
+                copiedMessageCount
+        );
     }
 
     public List<QaMessageResponse> listMessages(Long sessionId) {
@@ -649,6 +779,74 @@ public class QaWorkflowService {
                 .toList();
     }
 
+    private ForkBoundary resolveForkBoundary(List<QaMessages> parentMessages, ForkQaSessionRequest request) {
+        List<QaMessages> messages = parentMessages == null ? List.of() : parentMessages;
+        if (request.getForkedFromMessageId() != null) {
+            QaMessages message = messages.stream()
+                    .filter(candidate -> request.getForkedFromMessageId().equals(candidate.getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ApiResultCode.BAD_REQUEST,
+                            HttpStatus.BAD_REQUEST,
+                            "分支边界消息不存在"
+                    ));
+            return resolveCompleteTurnBoundary(messages, message);
+        }
+        if (request.getForkedFromSequenceNo() != null) {
+            QaMessages message = messages.stream()
+                    .filter(candidate -> request.getForkedFromSequenceNo().equals(candidate.getSequenceNo()))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(
+                            ApiResultCode.BAD_REQUEST,
+                            HttpStatus.BAD_REQUEST,
+                            "分支边界消息不存在"
+                    ));
+            return resolveCompleteTurnBoundary(messages, message);
+        }
+
+        if (messages.isEmpty()) {
+            return new ForkBoundary(null, null);
+        }
+        return messages.stream()
+                .filter(message -> "assistant".equals(message.getRole()))
+                .filter(message -> message.getSequenceNo() != null)
+                .max(java.util.Comparator.comparing(QaMessages::getSequenceNo))
+                .map(message -> new ForkBoundary(message.getId(), message.getSequenceNo()))
+                .orElseThrow(this::incompleteForkBoundaryException);
+    }
+
+    private ForkBoundary resolveCompleteTurnBoundary(List<QaMessages> messages, QaMessages message) {
+        if ("assistant".equals(message.getRole())) {
+            return new ForkBoundary(message.getId(), message.getSequenceNo());
+        }
+        if (!"user".equals(message.getRole())) {
+            throw incompleteForkBoundaryException();
+        }
+        for (int index = 0; index < messages.size() - 1; index++) {
+            QaMessages current = messages.get(index);
+            if (!Objects.equals(current.getId(), message.getId())) {
+                continue;
+            }
+            QaMessages next = messages.get(index + 1);
+            if ("assistant".equals(next.getRole())) {
+                return new ForkBoundary(next.getId(), next.getSequenceNo());
+            }
+            break;
+        }
+        throw incompleteForkBoundaryException();
+    }
+
+    private BusinessException incompleteForkBoundaryException() {
+        return new BusinessException(
+                ApiResultCode.BAD_REQUEST,
+                HttpStatus.BAD_REQUEST,
+                "分支边界必须落在已完成问答轮次"
+        );
+    }
+
+    private record ForkBoundary(Long messageId, Integer sequenceNo) {
+    }
+
     private Map<Long, org.ysu.ckqaback.qa.dto.QaFeedbackResponse> loadFeedbackByMessage(
             List<QaMessages> messages,
             Long currentUserId
@@ -692,18 +890,19 @@ public class QaWorkflowService {
         qaSessionsService.getRequiredById(sessionId);
         QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
 
+        QaMessages resolvedAssistant = resolveTaskAssistantMessage(sessionId, task);
+        Long assistantMessageId = resolvedAssistant == null ? task.getAssistantMessageId() : resolvedAssistant.getId();
         QaMessageResponse assistantMessage = null;
-        if (task.getAssistantMessageId() != null) {
-            QaMessages message = qaMessagesService.getById(task.getAssistantMessageId());
+        if (resolvedAssistant != null) {
             List<QaSourceResponse> sources = qaRetrievalHitsService == null
                     ? List.of()
                     : qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(task.getId()))
                     .getOrDefault(task.getId(), List.of());
-            org.ysu.ckqaback.qa.dto.QaFeedbackResponse feedback = qaMessageFeedbackService == null || message == null || currentUserId == null
+            org.ysu.ckqaback.qa.dto.QaFeedbackResponse feedback = qaMessageFeedbackService == null || currentUserId == null
                     ? null
-                    : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(message.getId()), currentUserId)
-                    .get(message.getId());
-            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback, task.getQueryMode());
+                    : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(resolvedAssistant.getId()), currentUserId)
+                    .get(resolvedAssistant.getId());
+            assistantMessage = QaMessageResponse.fromEntity(resolvedAssistant, sources, feedback, task.getQueryMode());
         }
 
         List<QaProgressEventResponse> progressEvents = parseProgressEvents(task.getLatestLogs());
@@ -714,7 +913,7 @@ public class QaWorkflowService {
         return QaTaskDetailResponse.of(
                 task.getId(),
                 task.getUserMessageId(),
-                task.getAssistantMessageId(),
+                assistantMessageId,
                 task.getTaskStatus(),
                 task.getProgressStage(),
                 task.getRetrievalStatus(),
@@ -734,7 +933,7 @@ public class QaWorkflowService {
                 taskPolicy.timeoutMessage(),
                 !"none".equals(contextStrategy),
                 contextStrategy,
-                ContextSizeEstimateResponse.of(task.getContextCharCount()),
+                ContextSizeEstimateResponse.of(toContextBudgetEstimate(task)),
                 Boolean.TRUE.equals(task.getMemoryApplied()),
                 StringUtils.hasText(task.getMemoryStrategy()) ? task.getMemoryStrategy() : "none",
                 task.getMemoryScope(),
@@ -742,6 +941,41 @@ public class QaWorkflowService {
                 task.getMemorySizeChars() == null ? 0 : task.getMemorySizeChars(),
                 task.getPartialResponseText(),
                 task.getStreamEventSeq()
+        );
+    }
+
+    private QaMessages resolveTaskAssistantMessage(Long sessionId, QaRetrievalLogs task) {
+        if (task.getAssistantMessageId() != null) {
+            return qaMessagesService.getById(task.getAssistantMessageId());
+        }
+        if (!"success".equals(task.getTaskStatus()) || task.getUserMessageId() == null) {
+            return null;
+        }
+        List<QaMessages> messages = qaMessagesService.listBySessionId(sessionId);
+        QaMessages userMessage = messages.stream()
+                .filter(message -> Objects.equals(message.getId(), task.getUserMessageId()))
+                .findFirst()
+                .orElse(null);
+        if (userMessage == null || userMessage.getSequenceNo() == null) {
+            return null;
+        }
+        return messages.stream()
+                .filter(message -> "assistant".equals(message.getRole()))
+                .filter(message -> message.getSequenceNo() != null)
+                .filter(message -> message.getSequenceNo() > userMessage.getSequenceNo())
+                .min(Comparator.comparing(QaMessages::getSequenceNo))
+                .orElse(null);
+    }
+
+    private BudgetSizeEstimate toContextBudgetEstimate(QaRetrievalLogs task) {
+        if (task == null) {
+            return new BudgetSizeEstimate(0, null, null, null);
+        }
+        return new BudgetSizeEstimate(
+                task.getContextCharCount() == null ? 0 : task.getContextCharCount(),
+                task.getContextTokenCount(),
+                task.getContextTokenizer(),
+                task.getContextBudgetFallbackReason()
         );
     }
 

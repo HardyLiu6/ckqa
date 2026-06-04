@@ -2,6 +2,7 @@ package org.ysu.ckqaback.qa.dto;
 
 import lombok.Getter;
 import org.ysu.ckqaback.integration.graphrag.GraphRagProgressEventSnapshot;
+import org.ysu.ckqaback.qa.safety.QaSensitiveFieldFilter;
 
 import java.util.List;
 import java.util.Map;
@@ -30,8 +31,8 @@ public class QaProgressEventResponse {
         this.type = type;
         this.mode = mode;
         this.summary = summary;
-        this.metrics = metrics == null ? Map.of() : Map.copyOf(metrics);
-        this.evidence = evidence == null ? List.of() : List.copyOf(evidence);
+        this.metrics = QaSensitiveFieldFilter.sanitizeMap(metrics);
+        this.evidence = QaSensitiveFieldFilter.sanitizeMapList(evidence);
         this.eventSeq = eventSeq;
     }
 

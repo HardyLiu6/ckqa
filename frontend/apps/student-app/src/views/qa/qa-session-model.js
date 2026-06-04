@@ -528,6 +528,10 @@ export function resolveContextStatusText(task) {
     return '未使用历史上下文'
   }
   const strategy = task.contextStrategy || 'recent'
+  const tokens = Number(task.contextSizeEstimate?.tokens ?? 0)
+  if (Number.isFinite(tokens) && tokens > 0) {
+    return `已使用 ${strategy} 上下文，约 ${tokens} tokens`
+  }
   const chars = Number(task.contextSizeEstimate?.chars ?? 0)
   return `已使用 ${strategy} 上下文，约 ${Number.isFinite(chars) ? chars : 0} 字`
 }
@@ -553,7 +557,6 @@ export function normalizeLearningMemory(item = {}) {
   return {
     id: item.id ?? '',
     memoryType: item.memoryType ?? '',
-    memoryText: item.memoryText ?? '',
     createdAt: item.createdAt ?? '',
   }
 }
@@ -584,7 +587,12 @@ export function resolveMemoryStatusText(task = {}) {
     local_history_relevant_memory: '关注点辅助',
   }[strategy] ?? strategy
   const sourceCount = Number(task.memorySourceCount ?? 0)
-  const chars = Number(task.memorySizeEstimate?.chars ?? task.memorySizeEstimateChars ?? 0)
+  const sizeEstimate = task.memorySizeEstimate
+  const chars = Number(
+    typeof sizeEstimate === 'number'
+      ? sizeEstimate
+      : sizeEstimate?.chars ?? task.memorySizeEstimateChars ?? 0,
+  )
   return `本次按问题动态使用学习记忆：${strategyLabel}，${Number.isFinite(sourceCount) ? sourceCount : 0} 条，约 ${Number.isFinite(chars) ? chars : 0} 字`
 }
 

@@ -13,6 +13,8 @@
         <result column="latest_topic" property="latestTopic" />
         <result column="latest_topic_message_range" property="latestTopicMessageRange" />
         <result column="active_topics_json" property="activeTopicsJson" />
+        <result column="semantic_state_version" property="semanticStateVersion" />
+        <result column="semantic_state_json" property="semanticStateJson" />
         <result column="model" property="model" />
         <result column="duration_ms" property="durationMs" />
         <result column="input_char_count" property="inputCharCount" />
@@ -24,6 +26,7 @@
     <sql id="Base_Column_List">
         id, session_id, summary_text, summary_until_sequence_no, source_message_count,
         status, error_message, latest_topic, latest_topic_message_range, active_topics_json,
+        semantic_state_version, semantic_state_json,
         model, duration_ms, input_char_count, output_char_count,
         created_at, updated_at
     </sql>

@@ -70,6 +70,12 @@ public class QaMessages implements Serializable {
     private Integer tokenCount;
 
     /**
+     * fork 复制来源消息ID
+     */
+    @TableField("copied_from_message_id")
+    private Long copiedFromMessageId;
+
+    /**
      * 创建时间
      */
     @TableField("created_at")

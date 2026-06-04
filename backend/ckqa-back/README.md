@@ -290,6 +290,15 @@ docker compose ps
 ```bash
 cd backend/ckqa-back
 
+# 推荐：CRLF 安全加载 backend/ckqa-back/.env，避免 smtp\r 等脏值影响条件装配。
+scripts/run_local_backend.sh --mailer-type log
+```
+
+如果需要手工排查环境变量，也可以继续显式 export：
+
+```bash
+cd backend/ckqa-back
+
 export MYSQL_HOST=127.0.0.1
 export MYSQL_PORT=23306
 export MYSQL_DATABASE=ocqa
@@ -313,6 +322,7 @@ export GRAPHRAG_API_MANAGED_ENABLED=true
 export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
 export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
 export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
+export CKQA_NEO4J_TOPIC_BINDING_TIMEOUT_MS=3000
 
 ./mvnw spring-boot:run
 ```

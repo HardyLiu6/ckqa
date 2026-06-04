@@ -26,6 +26,9 @@
         <result column="context_strategy" property="contextStrategy" />
         <result column="context_message_range" property="contextMessageRange" />
         <result column="context_char_count" property="contextCharCount" />
+        <result column="context_token_count" property="contextTokenCount" />
+        <result column="context_tokenizer" property="contextTokenizer" />
+        <result column="context_budget_fallback_reason" property="contextBudgetFallbackReason" />
         <result column="rewrite_applied" property="rewriteApplied" />
         <result column="rewrite_reason" property="rewriteReason" />
         <result column="rewrite_source_message_range" property="rewriteSourceMessageRange" />
@@ -37,6 +40,19 @@
         <result column="topic_source" property="topicSource" />
         <result column="topic_confidence" property="topicConfidence" />
         <result column="topic_stack_json" property="topicStackJson" />
+        <result column="semantic_state_version" property="semanticStateVersion" />
+        <result column="semantic_state_json" property="semanticStateJson" />
+        <result column="topic_entity_binding_applied" property="topicEntityBindingApplied" />
+        <result column="topic_entity_binding_status" property="topicEntityBindingStatus" />
+        <result column="topic_entity_binding_strategy" property="topicEntityBindingStrategy" />
+        <result column="topic_entity_candidate_count" property="topicEntityCandidateCount" />
+        <result column="topic_entity_top_score" property="topicEntityTopScore" />
+        <result column="topic_entity_selected_id" property="topicEntitySelectedId" />
+        <result column="topic_entity_selected_name" property="topicEntitySelectedName" />
+        <result column="topic_entity_selected_type" property="topicEntitySelectedType" />
+        <result column="topic_entity_candidates_json" property="topicEntityCandidatesJson" />
+        <result column="topic_entity_fallback_reason" property="topicEntityFallbackReason" />
+        <result column="topic_entity_lookup_duration_ms" property="topicEntityLookupDurationMs" />
         <result column="routing_confidence" property="routingConfidence" />
         <result column="routing_confidence_band" property="routingConfidenceBand" />
         <result column="routing_review_priority" property="routingReviewPriority" />
@@ -46,6 +62,14 @@
         <result column="memory_scope" property="memoryScope" />
         <result column="memory_source_count" property="memorySourceCount" />
         <result column="memory_size_chars" property="memorySizeChars" />
+        <result column="memory_token_count" property="memoryTokenCount" />
+        <result column="memory_tokenizer" property="memoryTokenizer" />
+        <result column="memory_budget_fallback_reason" property="memoryBudgetFallbackReason" />
+        <result column="memory_governance_version" property="memoryGovernanceVersion" />
+        <result column="memory_long_term_count" property="memoryLongTermCount" />
+        <result column="memory_recent_history_count" property="memoryRecentHistoryCount" />
+        <result column="memory_injection_reason" property="memoryInjectionReason" />
+        <result column="memory_sources_json" property="memorySourcesJson" />
         <result column="query_engine_strategy" property="queryEngineStrategy" />
         <result column="history_fallback_reason" property="historyFallbackReason" />
         <result column="memory_history_json" property="memoryHistoryJson" />
@@ -63,11 +87,20 @@
         python_task_id, latest_logs, course_id, index_run_id, query_mode, requested_mode, resolved_mode,
         query_text, original_query_text,
         retrieval_query_text, standalone_query_text, context_snapshot_text, context_strategy, context_message_range,
-        context_char_count, rewrite_applied, rewrite_reason, rewrite_source_message_range,
+        context_char_count, context_token_count, context_tokenizer, context_budget_fallback_reason,
+        rewrite_applied, rewrite_reason, rewrite_source_message_range,
         rewrite_method, rewrite_model, rewrite_confidence, context_snapshot_version,
         resolved_topic, topic_source, topic_confidence, topic_stack_json,
+        semantic_state_version, semantic_state_json,
+        topic_entity_binding_applied, topic_entity_binding_status, topic_entity_binding_strategy,
+        topic_entity_candidate_count, topic_entity_top_score, topic_entity_selected_id,
+        topic_entity_selected_name, topic_entity_selected_type, topic_entity_candidates_json,
+        topic_entity_fallback_reason, topic_entity_lookup_duration_ms,
         routing_confidence, routing_confidence_band, routing_review_priority, routing_snapshot_json,
         memory_applied, memory_strategy, memory_scope, memory_source_count, memory_size_chars,
+        memory_token_count, memory_tokenizer, memory_budget_fallback_reason,
+        memory_governance_version, memory_long_term_count, memory_recent_history_count,
+        memory_injection_reason, memory_sources_json,
         query_engine_strategy, history_fallback_reason, memory_history_json,
         retrieval_status, error_message, started_at, last_heartbeat_at, finished_at, created_at
     </sql>

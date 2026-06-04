@@ -23,8 +23,14 @@ export function createQaApi(client = { delete: del, del, get, patch, post, put }
     getQaSession(sessionId) {
       return client.get(`/qa-sessions/${encodeURIComponent(sessionId)}`)
     },
+    getQaSessionTranscript(sessionId) {
+      return client.get(`/qa-sessions/${encodeURIComponent(sessionId)}/transcript`)
+    },
     updateQaSession(sessionId, payload) {
       return client.patch(`/qa-sessions/${encodeURIComponent(sessionId)}`, payload)
+    },
+    forkQaSession(sessionId, payload = {}) {
+      return client.post(`/qa-sessions/${encodeURIComponent(sessionId)}/fork`, payload)
     },
     sendQaMessage(sessionId, payload) {
       return client.post(`/qa-sessions/${encodeURIComponent(sessionId)}/messages`, payload, {
@@ -171,7 +177,9 @@ export const listQaSessions = qaApi.listQaSessions
 export const getQaSessionStats = qaApi.getQaSessionStats
 export const createQaSession = qaApi.createQaSession
 export const getQaSession = qaApi.getQaSession
+export const getQaSessionTranscript = qaApi.getQaSessionTranscript
 export const updateQaSession = qaApi.updateQaSession
+export const forkQaSession = qaApi.forkQaSession
 export const sendQaMessage = qaApi.sendQaMessage
 export const getQaTask = qaApi.getQaTask
 export const streamQaTaskEvents = qaApi.streamQaTaskEvents

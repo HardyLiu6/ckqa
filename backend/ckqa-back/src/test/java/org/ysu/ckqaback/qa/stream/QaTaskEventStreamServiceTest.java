@@ -173,6 +173,108 @@ class QaTaskEventStreamServiceTest {
     }
 
     @Test
+    void shouldFilterSensitiveFieldsBeforeForwardingPythonProgressEvents() throws Exception {
+        QaWorkflowService workflowService = mock(QaWorkflowService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        GraphRagTaskClient graphRagTaskClient = mock(GraphRagTaskClient.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        @SuppressWarnings("unchecked")
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
+        QaTaskStreamProperties properties = new QaTaskStreamProperties();
+        properties.setStatusIntervalSeconds(2L);
+
+        given(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(2L), eq(TimeUnit.SECONDS)))
+                .willAnswer(invocation -> {
+                    scheduledTask.set(invocation.getArgument(0));
+                    return scheduledFuture;
+                });
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningSmartGlobalDetail());
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setPythonTaskId("qt_stream_1");
+        given(retrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        ObjectMapper objectMapper = new ObjectMapper();
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<GraphRagTaskEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new GraphRagTaskEvent(
+                    "progress",
+                    objectMapper.readTree("""
+                            {
+                              "type": "context_selected",
+                              "summary": "已选取课程片段。",
+                              "stage": "retrieval",
+                              "metrics": {
+                                "textUnitCount": 2,
+                                "conversationHistory": [{"content": "学生历史原文"}],
+                                "memory_history_json": "[{\\"content\\":\\"长期记忆原文\\"}]",
+                                "full_content": "完整内部上下文",
+                                "fullContent": "驼峰完整内部上下文"
+                              },
+                              "evidence": [
+                                {
+                                  "kind": "text_unit",
+                                  "title": "操作系统教材",
+                                  "memoryText": "学习记忆正文",
+                                  "memorySourcesJson": "[{\\"memoryId\\":101}]",
+                                  "nested": {
+                                    "context_snapshot_text": "上下文快照原文",
+                                    "memory_sources_json": "[{\\"textHash\\":\\"secret\\"}]",
+                                    "safeCount": 1
+                                  }
+                                }
+                              ],
+                              "semanticStateJson": "{\\"topic\\":\\"死锁\\"}",
+                              "eventSeq": 21
+                            }
+                            """),
+                    21L
+            ));
+            return null;
+        }).when(graphRagTaskClient).streamTaskEvents(eq("qt_stream_1"), eq(0L), any());
+
+        TestableQaTaskEventStreamService service = new TestableQaTaskEventStreamService(
+                workflowService,
+                retrievalLogsService,
+                graphRagTaskClient,
+                properties,
+                scheduler,
+                new SyncTaskExecutor()
+        );
+        service.openStream(5L, 9001L, 7L, 0L);
+        scheduledTask.get().run();
+
+        assertThat(service.emitter.payloads).anySatisfy(payload -> {
+            assertThat(payload).isInstanceOf(Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> progress = (Map<String, Object>) payload;
+            assertThat(progress).containsEntry("type", "context_selected");
+            assertThat(progress).containsEntry("summary", "已选取课程片段。");
+            assertThat(progress).containsEntry("stage", "retrieval");
+            assertThat(progress).doesNotContainKeys("semanticStateJson");
+            assertThat(progress.toString()).doesNotContain(
+                    "conversationHistory",
+                    "memory_history_json",
+                    "full_content",
+                    "fullContent",
+                    "memorySourcesJson",
+                    "memory_sources_json",
+                    "memoryText",
+                    "context_snapshot_text",
+                    "学生历史原文",
+                    "长期记忆原文",
+                    "完整内部上下文",
+                    "驼峰完整内部上下文",
+                    "memoryId",
+                    "textHash",
+                    "学习记忆正文",
+                    "上下文快照原文"
+            );
+            assertThat(progress.toString()).contains("textUnitCount=2", "safeCount=1", "操作系统教材");
+        });
+    }
+
+    @Test
     void shouldForwardPythonStatusSnapshotWhenRestoredDbProgressIsStale() {
         QaWorkflowService workflowService = mock(QaWorkflowService.class);
         QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);

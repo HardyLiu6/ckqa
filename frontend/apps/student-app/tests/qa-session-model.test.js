@@ -527,7 +527,15 @@ test('消息模型保留每条消息自身的问答模式', () => {
   assert.equal(updated.mode, 'basic')
 })
 
-test('上下文状态文案只展示策略和字符数', () => {
+test('上下文状态文案优先展示 token 并保留字符兜底', () => {
+  assert.equal(
+    resolveContextStatusText({
+      contextApplied: true,
+      contextStrategy: 'recent',
+      contextSizeEstimate: { chars: 128, tokens: 32, tokenizer: 'jtokkit:o200k_base' },
+    }),
+    '已使用 recent 上下文，约 32 tokens',
+  )
   assert.equal(
     resolveContextStatusText({ contextApplied: true, contextStrategy: 'recent', contextSizeEstimate: { chars: 128 } }),
     '已使用 recent 上下文，约 128 字',
@@ -565,11 +573,10 @@ test('学习记忆条目规范化不要求后端返回完整字段', () => {
   }), {
     id: 'mem-1',
     memoryType: 'preference',
-    memoryText: '学生经常追问调度算法例题',
     createdAt: '2026-05-20T09:30:00',
   })
 
-  assert.equal(normalizeLearningMemory({}).memoryText, '')
+  assert.equal(Object.hasOwn(normalizeLearningMemory({ memoryText: '意外原文' }), 'memoryText'), false)
 })
 
 test('学习记忆类型标签覆盖自动生成的 Beta 类型', () => {
@@ -587,6 +594,16 @@ test('学习记忆状态文案区分使用、未使用和非 Local 模式', () =
       memoryStrategy: 'local_history_preference_only',
       memorySourceCount: 2,
       memorySizeEstimate: { chars: 320 },
+    }),
+    '本次按问题动态使用学习记忆：偏好辅助，2 条，约 320 字',
+  )
+  assert.equal(
+    resolveMemoryStatusText({
+      mode: 'local',
+      memoryApplied: true,
+      memoryStrategy: 'local_history_preference_only',
+      memorySourceCount: 2,
+      memorySizeEstimate: 320,
     }),
     '本次按问题动态使用学习记忆：偏好辅助，2 条，约 320 字',
   )

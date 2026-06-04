@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Run a real student QA smoke for Local history memory.
+"""Run a real student QA smoke for Local history context and memory.
 
 This script intentionally validates only fields exposed by the student API:
-task success, assistant message presence, and memoryApplied/memorySourceCount.
+task success, assistant message presence, and whether short context or memory
+was applied on a follow-up question.
 It does not assert queryEngineStrategy, which is reserved for admin/ops
 diagnostics.
 """
@@ -160,12 +161,24 @@ def compact_task(detail: dict[str, Any]) -> dict[str, Any]:
     return {
         "taskId": detail.get("taskId"),
         "taskStatus": detail.get("taskStatus"),
+        "contextApplied": detail.get("contextApplied"),
+        "contextStrategy": detail.get("contextStrategy"),
+        "contextSizeEstimate": detail.get("contextSizeEstimate"),
         "memoryApplied": detail.get("memoryApplied"),
         "memoryStrategy": detail.get("memoryStrategy"),
         "memorySourceCount": detail.get("memorySourceCount"),
         "assistantMessageId": assistant.get("id"),
         "answerPreview": content[:260],
     }
+
+
+def context_or_memory_applied(submission: dict[str, Any], detail: dict[str, Any]) -> bool:
+    if detail.get("memoryApplied") or submission.get("memoryApplied"):
+        return int(detail.get("memorySourceCount") or submission.get("memorySourceCount") or 0) > 0
+    if detail.get("contextApplied") or submission.get("contextApplied"):
+        return True
+    context_strategy = detail.get("contextStrategy") or submission.get("contextStrategy")
+    return bool(context_strategy and context_strategy != "none")
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -210,10 +223,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     first_submission, first_detail = send_and_wait(client, session_id, args.first_question, args.task_timeout)
     second_submission, second_detail = send_and_wait(client, session_id, args.second_question, args.task_timeout)
 
-    if not second_detail.get("memoryApplied"):
-        raise RuntimeError("second task succeeded but memoryApplied is not true")
-    if int(second_detail.get("memorySourceCount") or 0) <= 0:
-        raise RuntimeError("second task succeeded but memorySourceCount is empty")
+    if not context_or_memory_applied(second_submission, second_detail):
+        raise RuntimeError("second task succeeded but neither context nor memory was applied")
 
     return {
         "baseUrl": base_url,
@@ -233,10 +244,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "second": {
             "submission": {
                 "taskId": second_submission.get("taskId"),
+                "contextApplied": second_submission.get("contextApplied"),
+                "contextStrategy": second_submission.get("contextStrategy"),
                 "memoryApplied": second_submission.get("memoryApplied"),
                 "memorySourceCount": second_submission.get("memorySourceCount"),
-                "contextStrategy": second_submission.get("contextStrategy"),
             },
+            "contextOrMemoryApplied": context_or_memory_applied(second_submission, second_detail),
             "detail": compact_task(second_detail),
         },
     }

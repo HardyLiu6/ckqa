@@ -100,6 +100,9 @@ class GraphRagTaskClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks"))
                 .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(not(containsString("topicEntity"))))
+                .andExpect(content().string(not(containsString("semanticState"))))
+                .andExpect(content().string(not(containsString("entityCandidates"))))
                 .andExpect(content().json("""
                         {
                           "mode": "basic",
@@ -138,6 +141,10 @@ class GraphRagTaskClientTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo("http://127.0.0.1:8012/v1/query-tasks"))
                 .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(not(containsString("contextToken"))))
+                .andExpect(content().string(not(containsString("memoryToken"))))
+                .andExpect(content().string(not(containsString("tokenizer"))))
+                .andExpect(content().string(not(containsString("budget"))))
                 .andExpect(content().json("""
                         {
                           "mode": "local",

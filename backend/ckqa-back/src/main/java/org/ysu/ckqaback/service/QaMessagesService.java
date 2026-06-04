@@ -20,4 +20,6 @@ public interface QaMessagesService extends IService<QaMessages> {
     QaMessages appendAssistantMessage(Long sessionId, String content);
 
     List<QaMessages> listBySessionId(Long sessionId);
+
+    int copyMessagesToSession(Long sourceSessionId, Long targetSessionId, Integer boundarySequenceNo);
 }

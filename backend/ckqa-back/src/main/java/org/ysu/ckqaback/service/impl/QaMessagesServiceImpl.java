@@ -42,6 +42,30 @@ public class QaMessagesServiceImpl extends ServiceImpl<QaMessagesMapper, QaMessa
         return list(queryWrapper);
     }
 
+    @Override
+    public int copyMessagesToSession(Long sourceSessionId, Long targetSessionId, Integer boundarySequenceNo) {
+        if (boundarySequenceNo == null) {
+            return 0;
+        }
+        List<QaMessages> sourceMessages = listBySessionId(sourceSessionId).stream()
+                .filter(message -> message.getSequenceNo() != null && message.getSequenceNo() <= boundarySequenceNo)
+                .toList();
+        LocalDateTime now = LocalDateTime.now(SHANGHAI_ZONE);
+        for (QaMessages source : sourceMessages) {
+            QaMessages copy = new QaMessages();
+            copy.setSessionId(targetSessionId);
+            copy.setRole(source.getRole());
+            copy.setSequenceNo(source.getSequenceNo());
+            copy.setContent(source.getContent());
+            copy.setContentText(source.getContentText());
+            copy.setTokenCount(source.getTokenCount());
+            copy.setCopiedFromMessageId(source.getId());
+            copy.setCreatedAt(now);
+            save(copy);
+        }
+        return sourceMessages.size();
+    }
+
     private QaMessages appendMessage(Long sessionId, String role, String content) {
         QaMessages message = new QaMessages();
         message.setSessionId(sessionId);

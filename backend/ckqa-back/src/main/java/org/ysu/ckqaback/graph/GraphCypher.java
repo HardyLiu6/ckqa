@@ -113,6 +113,94 @@ public final class GraphCypher {
             """;
 
     /**
+     * QA 语义主题弱绑定（exact 阶段）：
+     * 当前只在 active_neo4j 这份已激活图上做诊断性候选查询，
+     * knowledgeBaseId / indexRunId 仅供上层日志记录与后续 scope 扩展使用；
+     * 现有 Neo4j schema 暂无 per-index / per-knowledge-base 过滤字段，不能假装已经做到精确 scope 绑定。
+     * 入参：topic（string）、limit（int，调用方默认 5）
+     * 出参：entityId, name, type, humanReadableId, score, matchReason, source
+     */
+    public static final String TOPIC_ENTITY_EXACT_CANDIDATES = """
+            MATCH (e:`__Entity__`)
+            WITH e,
+                 toLower(trim($topic)) AS topic,
+                 toLower(toString(coalesce(e.id, ''))) AS entityIdValue,
+                 toLower(toString(coalesce(e.name, ''))) AS nameValue,
+                 toLower(toString(coalesce(e.title, ''))) AS titleValue,
+                 toLower(toString(coalesce(e.type, ''))) AS typeValue,
+                 toLower(toString(coalesce(e.human_readable_id, ''))) AS humanReadableIdValue
+            WITH e,
+                 CASE
+                   WHEN entityIdValue = topic THEN 1.0
+                   WHEN nameValue = topic THEN 1.0
+                   WHEN titleValue = topic THEN 0.9800
+                   WHEN humanReadableIdValue = topic THEN 0.9600
+                   WHEN typeValue = topic THEN 0.6200
+                   ELSE 0.0
+                 END AS score,
+                 CASE
+                   WHEN entityIdValue = topic THEN 'exact_id'
+                   WHEN nameValue = topic THEN 'exact_name'
+                   WHEN titleValue = topic THEN 'exact_title'
+                   WHEN humanReadableIdValue = topic THEN 'exact_human_readable_id'
+                   WHEN typeValue = topic THEN 'exact_type'
+                   ELSE 'none'
+                 END AS matchReason
+            WHERE score > 0
+            RETURN coalesce(e.id, '') AS entityId,
+                   coalesce(e.name, e.title, '') AS name,
+                   coalesce(e.type, '') AS type,
+                   coalesce(e.human_readable_id, '') AS humanReadableId,
+                   score AS score,
+                   matchReason AS matchReason,
+                   'active_neo4j' AS source
+            ORDER BY score DESC, name ASC, entityId ASC
+            LIMIT $limit
+            """;
+
+    /**
+     * QA 语义主题弱绑定（contains fallback 阶段）：
+     * 仅当 exact 阶段没有任何候选时才执行，范围仍是当前 active_neo4j 图，不带 per-index 过滤。
+     */
+    public static final String TOPIC_ENTITY_CONTAINS_CANDIDATES = """
+            MATCH (e:`__Entity__`)
+            WITH e,
+                 toLower(trim($topic)) AS topic,
+                 toLower(toString(coalesce(e.id, ''))) AS entityIdValue,
+                 toLower(toString(coalesce(e.name, ''))) AS nameValue,
+                 toLower(toString(coalesce(e.title, ''))) AS titleValue,
+                 toLower(toString(coalesce(e.type, ''))) AS typeValue,
+                 toLower(toString(coalesce(e.human_readable_id, ''))) AS humanReadableIdValue
+            WITH e,
+                 CASE
+                   WHEN nameValue CONTAINS topic THEN 0.8800
+                   WHEN titleValue CONTAINS topic THEN 0.8600
+                   WHEN entityIdValue CONTAINS topic THEN 0.7800
+                   WHEN humanReadableIdValue CONTAINS topic THEN 0.7600
+                   WHEN typeValue CONTAINS topic THEN 0.5000
+                   ELSE 0.0
+                 END AS score,
+                 CASE
+                   WHEN nameValue CONTAINS topic THEN 'contains_name'
+                   WHEN titleValue CONTAINS topic THEN 'contains_title'
+                   WHEN entityIdValue CONTAINS topic THEN 'contains_id'
+                   WHEN humanReadableIdValue CONTAINS topic THEN 'contains_human_readable_id'
+                   WHEN typeValue CONTAINS topic THEN 'contains_type'
+                   ELSE 'none'
+                 END AS matchReason
+            WHERE score > 0
+            RETURN coalesce(e.id, '') AS entityId,
+                   coalesce(e.name, e.title, '') AS name,
+                   coalesce(e.type, '') AS type,
+                   coalesce(e.human_readable_id, '') AS humanReadableId,
+                   score AS score,
+                   matchReason AS matchReason,
+                   'active_neo4j' AS source
+            ORDER BY score DESC, name ASC, entityId ASC
+            LIMIT $limit
+            """;
+
+    /**
      * 健康检查 / 自测用的最小 Cypher。
      */
     public static final String PING = "RETURN 1 AS ok";

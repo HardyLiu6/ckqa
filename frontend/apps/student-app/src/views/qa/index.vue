@@ -1642,7 +1642,7 @@ function mergeProgressEvents(currentEvents, incomingEvents, options = {}) {
 }
 
 function estimateLearningMemoryChars() {
-  return learningMemoryItems.value.reduce((total, item) => total + String(item.memoryText ?? '').length, 0)
+  return 0
 }
 
 function sourceTitle(source) {

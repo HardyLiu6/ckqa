@@ -10,6 +10,7 @@ import org.ysu.ckqaback.entity.QaRetrievalLogs;
 import org.ysu.ckqaback.entity.QaSessionSummaries;
 import org.ysu.ckqaback.integration.config.CkqaIntegrationProperties;
 import org.ysu.ckqaback.qa.context.QaContextSummary;
+import org.ysu.ckqaback.qa.context.SessionSemanticState;
 import org.ysu.ckqaback.qa.context.QaTopicResolver;
 import org.ysu.ckqaback.qa.context.QaTopicStack;
 import org.ysu.ckqaback.service.QaMessagesService;
@@ -142,15 +143,10 @@ public class QaSessionSummaryService {
             if (!"user".equals(message.getRole())) {
                 continue;
             }
-            QaRetrievalLogs task = taskMap.get(message.getId());
-            if (task == null || !"success".equals(task.getTaskStatus()) || task.getAssistantMessageId() == null) {
-                break;
-            }
-            QaMessages assistant = byId.get(task.getAssistantMessageId());
-            if (assistant == null
-                    || !"assistant".equals(assistant.getRole())
-                    || assistant.getSequenceNo() == null
-                    || assistant.getSequenceNo() <= message.getSequenceNo()) {
+            QaMessages assistant = isCopiedMessage(message)
+                    ? findFollowingCopiedAssistant(message, messages)
+                    : findTaskAssistant(message, taskMap, byId);
+            if (assistant == null) {
                 break;
             }
             included.add(message);
@@ -160,6 +156,46 @@ public class QaSessionSummaryService {
         }
 
         return new CompletedWindow(included, charCount, lastSequenceNo);
+    }
+
+    private QaMessages findTaskAssistant(
+            QaMessages userMessage,
+            Map<Long, QaRetrievalLogs> taskMap,
+            Map<Long, QaMessages> byId
+    ) {
+        QaRetrievalLogs task = taskMap.get(userMessage.getId());
+        if (task == null || !"success".equals(task.getTaskStatus()) || task.getAssistantMessageId() == null) {
+            return null;
+        }
+        QaMessages assistant = byId.get(task.getAssistantMessageId());
+        if (assistant == null
+                || !"assistant".equals(assistant.getRole())
+                || assistant.getSequenceNo() == null
+                || userMessage.getSequenceNo() == null
+                || assistant.getSequenceNo() <= userMessage.getSequenceNo()) {
+            return null;
+        }
+        return assistant;
+    }
+
+    private QaMessages findFollowingCopiedAssistant(QaMessages userMessage, List<QaMessages> messages) {
+        if (userMessage.getSequenceNo() == null) {
+            return null;
+        }
+        for (QaMessages candidate : messages) {
+            if (candidate.getSequenceNo() == null || candidate.getSequenceNo() <= userMessage.getSequenceNo()) {
+                continue;
+            }
+            if ("assistant".equals(candidate.getRole()) && isCopiedMessage(candidate)) {
+                return candidate;
+            }
+            return null;
+        }
+        return null;
+    }
+
+    private boolean isCopiedMessage(QaMessages message) {
+        return message != null && message.getCopiedFromMessageId() != null;
     }
 
     private boolean shouldTrigger(CompletedWindow window) {
@@ -201,6 +237,16 @@ public class QaSessionSummaryService {
             summary.setLatestTopic(topicStack.latestTopic());
             summary.setLatestTopicMessageRange(topicStack.latestTopicMessageRange());
             summary.setActiveTopicsJson(topicStack.activeTopicsJson());
+            QaContextSummary currentSummary = new QaContextSummary(
+                    summary.getSummaryText(),
+                    window.lastSequenceNo(),
+                    topicStack.latestTopic(),
+                    topicStack.latestTopicMessageRange(),
+                    topicStack.activeTopicsJson()
+            );
+            SessionSemanticState semanticState = SessionSemanticState.from(topicStack, currentSummary, previousSummary != null);
+            summary.setSemanticStateVersion(semanticState.version());
+            summary.setSemanticStateJson(semanticState.json());
         } else {
             summary.setStatus("failed");
             summary.setErrorMessage(truncate(result.errorMessage(), 500));
@@ -217,7 +263,9 @@ public class QaSessionSummaryService {
                 summary.getSummaryUntilSequenceNo() == null ? 0 : summary.getSummaryUntilSequenceNo(),
                 summary.getLatestTopic(),
                 summary.getLatestTopicMessageRange(),
-                summary.getActiveTopicsJson()
+                summary.getActiveTopicsJson(),
+                summary.getSemanticStateVersion(),
+                summary.getSemanticStateJson()
         );
     }
 

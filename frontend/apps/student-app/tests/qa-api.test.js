@@ -69,7 +69,13 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
   await api.createQaSession({ userId: 3, courseId: 'os', knowledgeBaseId: 2, title: '操作系统问答' })
   await api.listQaSessions({ status: 'active', page: 1, size: 50, userId: 999 })
   await api.getQaSession(8)
+  await api.getQaSessionTranscript('session/8')
   await api.updateQaSession(8, { title: '死锁复习', status: 'archived' })
+  await api.forkQaSession('session/8', {
+    forkedFromMessageId: 102,
+    title: '死锁分支',
+    forkReason: '追问另一路',
+  })
   await api.sendQaMessage(8, {
     mode: 'basic',
     content: '什么是进程？',
@@ -123,9 +129,24 @@ test('问答 API 使用 qa-sessions 异步任务契约', async () => {
       config: {},
     },
     {
+      method: 'get',
+      url: '/qa-sessions/session%2F8/transcript',
+      config: {},
+    },
+    {
       method: 'patch',
       url: '/qa-sessions/8',
       data: { title: '死锁复习', status: 'archived' },
+      config: {},
+    },
+    {
+      method: 'post',
+      url: '/qa-sessions/session%2F8/fork',
+      data: {
+        forkedFromMessageId: 102,
+        title: '死锁分支',
+        forkReason: '追问另一路',
+      },
       config: {},
     },
     {

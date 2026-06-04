@@ -11,12 +11,13 @@
         <result column="content" property="content" />
         <result column="content_text" property="contentText" />
         <result column="token_count" property="tokenCount" />
+        <result column="copied_from_message_id" property="copiedFromMessageId" />
         <result column="created_at" property="createdAt" />
     </resultMap>
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, session_id, role, sequence_no, content, content_text, token_count, created_at
+        id, session_id, role, sequence_no, content, content_text, token_count, copied_from_message_id, created_at
     </sql>
 
 </mapper>

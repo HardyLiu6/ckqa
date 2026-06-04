@@ -52,6 +52,12 @@ public class QaSessionSummaries implements Serializable {
     @TableField("active_topics_json")
     private String activeTopicsJson;
 
+    @TableField("semantic_state_version")
+    private String semanticStateVersion;
+
+    @TableField("semantic_state_json")
+    private String semanticStateJson;
+
     @TableField("model")
     private String model;
 

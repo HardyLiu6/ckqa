@@ -74,6 +74,27 @@ class QaTopicResolverTest {
     }
 
     @Test
+    void shouldKeepComparisonPairAfterFormerPronounTurn() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁和饥饿有什么区别？"),
+                message(2L, "assistant", 2, "死锁是互相等待形成的循环僵局，饥饿是进程长期得不到资源。"),
+                message(3L, "user", 3, "前者如何检测？"),
+                message(4L, "assistant", 4, "死锁可以通过资源分配图或等待图检测。")
+        );
+
+        QaTopicStack stack = resolver.resolve("后者如何避免？", history, null);
+
+        assertThat(stack.latestTopic()).isEqualTo("饥饿");
+        assertThat(stack.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(stack.activeTopicsJson()).contains("死锁", "饥饿");
+        assertThat(stack.activeTopicsJson()).contains(
+                "{\"topic\":\"死锁\",\"role\":\"former\"}",
+                "{\"topic\":\"饥饿\",\"role\":\"latter\"}"
+        );
+    }
+
+    @Test
     void shouldStripDeSuffixFromLatterComparisonTopic() {
         QaTopicResolver resolver = new QaTopicResolver();
         List<QaMessages> history = List.of(
@@ -180,6 +201,95 @@ class QaTopicResolverTest {
 
         assertThat(stack.latestTopic()).isEqualTo("死锁");
         assertThat(stack.topicSource()).isEqualTo("summary");
+    }
+
+    @Test
+    void shouldRestoreTopicAndComparisonPairFromSemanticStateJsonOnly() {
+        String semanticStateJson = """
+                {"version":"session_semantic_state_v1","latestTopic":"资源分配图","latestTopicMessageRange":"9-10","topicSource":"history","topicConfidence":0.82,"activeTopics":[{"topic":"死锁"},{"topic":"银行家算法","role":"former"},{"topic":"资源分配图","role":"latter"}],"comparisonTopics":[{"topic":"银行家算法","role":"former"},{"topic":"资源分配图","role":"latter"}],"restoredFromSummary":true,"summaryUntilSequenceNo":12}
+                """;
+        QaContextSummary summary = new QaContextSummary(
+                "摘要字段迁移中只保留了结构化语义状态。",
+                12,
+                "",
+                "",
+                "",
+                SessionSemanticState.VERSION,
+                semanticStateJson
+        );
+        QaTopicResolver resolver = new QaTopicResolver();
+
+        QaTopicStack pronoun = resolver.resolve("它怎么用？", List.of(), summary);
+        QaTopicStack former = resolver.resolve("前者如何检测？", List.of(), summary);
+        QaTopicStack latter = resolver.resolve("后者如何使用？", List.of(), summary);
+
+        assertThat(pronoun.latestTopic()).isEqualTo("资源分配图");
+        assertThat(pronoun.latestTopicMessageRange()).isEqualTo("9-10");
+        assertThat(pronoun.topicSource()).isEqualTo("summary");
+        assertThat(pronoun.activeTopicsJson()).contains("死锁", "银行家算法", "资源分配图");
+        assertThat(former.latestTopic()).isEqualTo("银行家算法");
+        assertThat(former.topicSource()).isEqualTo("comparison_pronoun");
+        assertThat(latter.latestTopic()).isEqualTo("资源分配图");
+        assertThat(latter.topicSource()).isEqualTo("comparison_pronoun");
+    }
+
+    @Test
+    void shouldIgnoreOutOfOrderHistoryAndKeepSequenceLatestTopic() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(4L, "assistant", 4, "银行家算法通过安全性检查避免进入不安全状态。"),
+                message(1L, "user", 1, "什么是死锁？"),
+                message(3L, "user", 3, "那银行家算法呢？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。")
+        );
+
+        QaTopicStack stack = resolver.resolve("它有什么局限？", history, null);
+
+        assertThat(stack.latestTopic()).isEqualTo("银行家算法");
+        assertThat(stack.latestTopicMessageRange()).isEqualTo("3-4");
+        assertThat(stack.topicSource()).isEqualTo("history");
+        assertThat(stack.activeTopicsJson()).contains("死锁", "银行家算法");
+    }
+
+    @Test
+    void shouldPreferCurrentExplicitTopicOverLongPronounHistory() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "什么是死锁？"),
+                message(2L, "assistant", 2, "死锁是多个进程互相等待资源的状态。"),
+                message(3L, "user", 3, "它有什么特点？"),
+                message(4L, "assistant", 4, "死锁有四个必要条件。"),
+                message(5L, "user", 5, "这个怎么检测？"),
+                message(6L, "assistant", 6, "可以通过等待图检测。"),
+                message(7L, "user", 7, "上述方法有什么局限？"),
+                message(8L, "assistant", 8, "检测本身不能主动解除死锁。")
+        );
+
+        QaTopicStack stack = resolver.resolve("银行家算法是什么？", history, null);
+
+        assertThat(stack.latestTopic()).isEqualTo("银行家算法");
+        assertThat(stack.topicSource()).isEqualTo("explicit");
+        assertThat(stack.latestTopicMessageRange()).isEmpty();
+        assertThat(stack.activeTopicsJson()).contains("死锁", "银行家算法");
+    }
+
+    @Test
+    void shouldResetComparisonPronounsAfterLaterSingleTopic() {
+        QaTopicResolver resolver = new QaTopicResolver();
+        List<QaMessages> history = List.of(
+                message(1L, "user", 1, "死锁和饥饿有什么区别？"),
+                message(2L, "assistant", 2, "死锁与饥饿都和资源等待有关，但触发条件不同。"),
+                message(3L, "user", 3, "那银行家算法呢？"),
+                message(4L, "assistant", 4, "银行家算法通过安全性检查避免进入不安全状态。")
+        );
+
+        QaTopicStack former = resolver.resolve("前者如何检测？", history, null);
+        QaTopicStack pronoun = resolver.resolve("它有什么局限？", history, null);
+
+        assertThat(former.hasTopic()).isFalse();
+        assertThat(former.topicSource()).isEmpty();
+        assertThat(pronoun.latestTopic()).isEqualTo("银行家算法");
+        assertThat(pronoun.topicSource()).isEqualTo("history");
     }
 
     private QaMessages message(Long id, String role, int sequenceNo, String content) {

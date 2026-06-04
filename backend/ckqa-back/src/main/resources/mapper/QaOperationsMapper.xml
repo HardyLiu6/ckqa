@@ -31,6 +31,9 @@
         l.context_strategy AS contextStrategy,
         l.context_message_range AS contextMessageRange,
         l.context_char_count AS contextCharCount,
+        l.context_token_count AS contextTokenCount,
+        l.context_tokenizer AS contextTokenizer,
+        l.context_budget_fallback_reason AS contextBudgetFallbackReason,
         l.rewrite_applied AS rewriteApplied,
         l.rewrite_reason AS rewriteReason,
         l.rewrite_method AS rewriteMethod,
@@ -40,11 +43,18 @@
         l.routing_confidence_band AS routingConfidenceBand,
         l.routing_review_priority AS routingReviewPriority,
         l.routing_snapshot_json AS routingSnapshotJson,
+        l.resolved_topic AS resolvedTopic,
+        l.topic_source AS topicSource,
         l.memory_applied AS memoryApplied,
         l.memory_strategy AS memoryStrategy,
         l.memory_scope AS memoryScope,
         l.memory_source_count AS memorySourceCount,
         l.memory_size_chars AS memorySizeChars,
+        l.memory_token_count AS memoryTokenCount,
+        l.memory_tokenizer AS memoryTokenizer,
+        l.memory_budget_fallback_reason AS memoryBudgetFallbackReason,
+        l.memory_long_term_count AS memoryLongTermCount,
+        l.memory_recent_history_count AS memoryRecentHistoryCount,
         l.query_engine_strategy AS queryEngineStrategy,
         l.history_fallback_reason AS historyFallbackReason,
         l.created_at AS createdAt,
@@ -61,6 +71,26 @@
         (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND f.rating = 'needs_improvement') AS needsImprovementCount,
         (SELECT COUNT(*) FROM qa_message_feedback f WHERE f.retrieval_log_id = l.id AND CAST(f.tags AS CHAR) LIKE '%source_irrelevant%') AS sourceIssueCount,
         am.content AS assistantContent
+    </sql>
+
+    <sql id="QaOperationLogDetailColumns">
+        <include refid="QaOperationLogColumns" />,
+        l.semantic_state_version AS semanticStateVersion,
+        l.semantic_state_json AS semanticStateJson,
+        l.memory_governance_version AS memoryGovernanceVersion,
+        l.memory_injection_reason AS memoryInjectionReason,
+        l.memory_sources_json AS memorySourcesJson,
+        l.topic_entity_binding_applied AS topicEntityBindingApplied,
+        l.topic_entity_binding_status AS topicEntityBindingStatus,
+        l.topic_entity_binding_strategy AS topicEntityBindingStrategy,
+        l.topic_entity_candidate_count AS topicEntityCandidateCount,
+        l.topic_entity_top_score AS topicEntityTopScore,
+        l.topic_entity_selected_id AS topicEntitySelectedId,
+        l.topic_entity_selected_name AS topicEntitySelectedName,
+        l.topic_entity_selected_type AS topicEntitySelectedType,
+        l.topic_entity_candidates_json AS topicEntityCandidatesJson,
+        l.topic_entity_fallback_reason AS topicEntityFallbackReason,
+        l.topic_entity_lookup_duration_ms AS topicEntityLookupDurationMs
     </sql>
 
     <sql id="QaOperationFrom">
@@ -165,7 +195,7 @@
 
     <select id="selectLogDetail" resultType="org.ysu.ckqaback.qa.ops.QaOperationLogRow">
         SELECT
-        <include refid="QaOperationLogColumns" />
+        <include refid="QaOperationLogDetailColumns" />
         <include refid="QaOperationFrom" />
         WHERE l.id = #{retrievalLogId}
         <if test="!adminScope">

@@ -98,7 +98,86 @@ class QaSessionSummaryServiceTest {
                         && "3-4".equals(summary.getLatestTopicMessageRange())
                         && summary.getActiveTopicsJson().contains("死锁")
                         && summary.getActiveTopicsJson().contains("饥饿")
+                        && "session_semantic_state_v1".equals(summary.getSemanticStateVersion())
+                        && summary.getSemanticStateJson().contains("\"latestTopic\":\"饥饿\"")
+                        && summary.getSemanticStateJson().contains("\"role\":\"former\"")
+                        && summary.getSemanticStateJson().contains("\"role\":\"latter\"")
         ));
+    }
+
+    @Test
+    void shouldIncludeCopiedCompletedPrefixBeforeNewSuccessfulTask() {
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService summariesService = mock(QaSessionSummariesService.class);
+        StubSummaryClient summaryClient = new StubSummaryClient("本会话延续 fork 前缀并讨论银行家算法。");
+        QaSessionSummaryService service = new QaSessionSummaryService(
+                messagesService,
+                retrievalLogsService,
+                summariesService,
+                summaryClient,
+                Runnable::run,
+                true,
+                4,
+                3000,
+                800
+        );
+
+        List<QaMessages> messages = List.of(
+                copiedMessage(101L, "user", 1, "什么是死锁？", 1L),
+                copiedMessage(102L, "assistant", 2, "死锁是多个进程互相等待资源的状态。", 2L),
+                message(103L, "user", 3, "什么是银行家算法？"),
+                message(104L, "assistant", 4, "银行家算法用于避免系统进入不安全状态。")
+        );
+        given(messagesService.listBySessionId(5L)).willReturn(messages);
+        given(summariesService.findLatestSuccessfulBySessionId(5L)).willReturn(null);
+        given(retrievalLogsService.findLatestByUserMessageIds(List.of(101L, 103L)))
+                .willReturn(Map.of(103L, successTask(messages.get(2), messages.get(3))));
+
+        service.checkAndSummarizeAsync(5L);
+
+        assertThat(summaryClient.requestedText()).contains("学生：什么是死锁？", "助手：银行家算法用于避免系统进入不安全状态。");
+        then(summariesService).should().save(argThat(summary ->
+                "success".equals(summary.getStatus())
+                        && summary.getSummaryUntilSequenceNo() == 4
+                        && summary.getSourceMessageCount() == 4
+                        && "session_semantic_state_v1".equals(summary.getSemanticStateVersion())
+                        && summary.getSemanticStateJson().contains("\"summaryUntilSequenceNo\":4")
+        ));
+    }
+
+    @Test
+    void shouldBreakWhenCopiedUserHasNoCopiedAssistant() {
+        QaMessagesService messagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService retrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaSessionSummariesService summariesService = mock(QaSessionSummariesService.class);
+        StubSummaryClient summaryClient = new StubSummaryClient("不会调用");
+        QaSessionSummaryService service = new QaSessionSummaryService(
+                messagesService,
+                retrievalLogsService,
+                summariesService,
+                summaryClient,
+                Runnable::run,
+                true,
+                2,
+                20,
+                800
+        );
+
+        List<QaMessages> messages = List.of(
+                copiedMessage(101L, "user", 1, "什么是死锁？", 1L),
+                message(103L, "user", 2, "什么是银行家算法？"),
+                message(104L, "assistant", 3, "银行家算法用于避免系统进入不安全状态。")
+        );
+        given(messagesService.listBySessionId(5L)).willReturn(messages);
+        given(summariesService.findLatestSuccessfulBySessionId(5L)).willReturn(null);
+        given(retrievalLogsService.findLatestByUserMessageIds(List.of(101L, 103L)))
+                .willReturn(Map.of(103L, successTask(messages.get(1), messages.get(2))));
+
+        service.checkAndSummarizeAsync(5L);
+
+        assertThat(summaryClient.callCount()).isZero();
+        then(summariesService).should(never()).save(argThat(summary -> true));
     }
 
     @Test
@@ -234,6 +313,12 @@ class QaSessionSummaryServiceTest {
         message.setSequenceNo(sequenceNo);
         message.setContent(content);
         message.setCreatedAt(LocalDateTime.of(2026, 5, 17, 12, sequenceNo));
+        return message;
+    }
+
+    private QaMessages copiedMessage(Long id, String role, int sequenceNo, String content, Long copiedFromMessageId) {
+        QaMessages message = message(id, role, sequenceNo, content);
+        message.setCopiedFromMessageId(copiedFromMessageId);
         return message;
     }
 
