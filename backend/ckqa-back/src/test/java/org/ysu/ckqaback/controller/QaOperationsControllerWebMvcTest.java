@@ -17,6 +17,7 @@ import org.ysu.ckqaback.qa.QaOperationsService;
 import org.ysu.ckqaback.qa.dto.QaOperationLogExportRow;
 import org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceReviewResponse;
+import org.ysu.ckqaback.qa.export.QaOperationLogXlsxExporter;
 import org.ysu.ckqaback.service.QaSourceReviewsService;
 
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -45,7 +47,10 @@ class QaOperationsControllerWebMvcTest {
         sourceReviewsService = Mockito.mock(QaSourceReviewsService.class);
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new QaOperationsController(qaOperationsService, sourceReviewsService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new QaOperationsController(
+                        qaOperationsService,
+                        sourceReviewsService,
+                        new QaOperationLogXlsxExporter()))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -157,6 +162,28 @@ class QaOperationsControllerWebMvcTest {
     }
 
     @Test
+    void shouldReturnJsonErrorWhenXlsxGenerationFailsBeforeDownloadHeadersAreCommitted() throws Exception {
+        QaOperationLogXlsxExporter failingExporter = Mockito.mock(QaOperationLogXlsxExporter.class);
+        given(qaOperationsService.exportFlatRows(any(), eq(authenticatedAdmin())))
+                .willReturn(List.of(buildExportRow()));
+        willThrow(new NoClassDefFoundError("com/alibaba/excel/EasyExcel"))
+                .given(failingExporter).write(any(), any());
+        MockMvc failingMvc = MockMvcBuilders.standaloneSetup(new QaOperationsController(
+                        qaOperationsService,
+                        sourceReviewsService,
+                        failingExporter))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .setValidator(newValidator())
+                .build();
+
+        failingMvc.perform(get(ApiPaths.QA_OPERATIONS + "/logs/export.xlsx")
+                        .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedAdmin()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(header().string("Content-Type", org.hamcrest.Matchers.startsWith("application/json")))
+                .andExpect(jsonPath("$.code").value(5000));
+    }
+
+    @Test
     void shouldRejectInvalidOperationFilter() throws Exception {
         mockMvc.perform(get(ApiPaths.QA_OPERATIONS + "/logs")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedAdmin())
@@ -184,6 +211,12 @@ class QaOperationsControllerWebMvcTest {
         row.setSourceIssueCount(0L);
         row.setCreatedAt("2026-05-29 09:42:00");
         return row;
+    }
+
+    private LocalValidatorFactoryBean newValidator() {
+        LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+        validator.afterPropertiesSet();
+        return validator;
     }
 
     private QaSourceReviewResponse reviewResponse() {

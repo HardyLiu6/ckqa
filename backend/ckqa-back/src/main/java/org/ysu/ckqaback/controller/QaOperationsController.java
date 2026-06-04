@@ -1,7 +1,5 @@
 package org.ysu.ckqaback.controller;
 
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.support.ExcelTypeEnum;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -29,6 +27,7 @@ import org.ysu.ckqaback.qa.dto.QaOperationsQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaOperationsSummaryResponse;
 import org.ysu.ckqaback.qa.dto.QaSourceReviewResponse;
 import org.ysu.ckqaback.qa.dto.UpsertQaSourceReviewRequest;
+import org.ysu.ckqaback.qa.export.QaOperationLogXlsxExporter;
 import org.ysu.ckqaback.service.QaSourceReviewsService;
 
 import java.io.IOException;
@@ -37,6 +36,8 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -53,6 +54,7 @@ public class QaOperationsController {
 
     private final QaOperationsService qaOperationsService;
     private final QaSourceReviewsService sourceReviewsService;
+    private final QaOperationLogXlsxExporter xlsxExporter;
 
     @GetMapping("/logs")
     public ApiResponse<ApiPageData<QaOperationLogResponse>> listLogs(
@@ -85,7 +87,7 @@ public class QaOperationsController {
     /**
      * 扁平 Excel 导出。
      *
-     * <p>使用 EasyExcel 流式写入，便于大批量样本导出不触发 OOM。
+     * <p>先生成临时 xlsx 文件，成功后再写下载响应头，避免导出失败时把错误响应伪装成二进制文件。
      * 完整快照仍走 /logs/export 的 JSON 端点。
      */
     @GetMapping("/logs/export.xlsx")
@@ -94,14 +96,27 @@ public class QaOperationsController {
             HttpServletRequest servletRequest,
             HttpServletResponse response
     ) throws IOException {
-        List<QaOperationLogExportRow> rows = qaOperationsService.exportFlatRows(request, currentUser(servletRequest));
-        writeDownloadHeaders(response, "qa-operation-samples", "xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        try (OutputStream out = response.getOutputStream()) {
-            EasyExcel.write(out, QaOperationLogExportRow.class)
-                    .excelType(ExcelTypeEnum.XLSX)
-                    .sheet("问答运维样本")
-                    .doWrite(rows);
+        Path tempDir = Files.createTempDirectory("qa-operation-samples-");
+        Path tempFile = tempDir.resolve("qa-operation-samples.xlsx");
+        try {
+            List<QaOperationLogExportRow> rows = qaOperationsService.exportFlatRows(request, currentUser(servletRequest));
+            try {
+                xlsxExporter.write(tempFile, rows);
+            } catch (LinkageError error) {
+                throw new IllegalStateException("Excel导出依赖未正确加载，请重新构建并重启后端服务", error);
+            }
+            writeDownloadHeaders(response, "qa-operation-samples", "xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            try (OutputStream out = response.getOutputStream()) {
+                Files.copy(tempFile, out);
+            }
+        } finally {
+            try {
+                Files.deleteIfExists(tempFile);
+                Files.deleteIfExists(tempDir);
+            } catch (IOException error) {
+                // 临时文件删除失败不应影响已经完成的下载响应。
+            }
         }
     }
 
