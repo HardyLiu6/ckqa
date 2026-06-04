@@ -429,6 +429,7 @@ export function normalizeQaSessionStats(payload) {
     totalSessions: normalizeNonNegativeInteger(source.totalSessions, 0),
     totalMessages: normalizeNonNegativeInteger(source.totalMessages, 0),
     courseCount: normalizeNonNegativeInteger(source.courseCount, 0),
+    favoriteCount: normalizeNonNegativeInteger(source.favoriteCount, 0),
   }
 }
 

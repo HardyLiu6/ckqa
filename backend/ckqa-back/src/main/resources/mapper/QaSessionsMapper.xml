@@ -38,7 +38,8 @@
         SELECT
           COUNT(DISTINCT s.id) AS totalSessions,
           COUNT(m.id) AS totalMessages,
-          COUNT(DISTINCT s.course_id) AS courseCount
+          COUNT(DISTINCT s.course_id) AS courseCount,
+          COUNT(DISTINCT CASE WHEN s.is_favorite = 1 THEN s.id END) AS favoriteCount
         FROM qa_sessions s
         LEFT JOIN qa_messages m ON m.session_id = s.id
         WHERE s.user_id = #{userId}

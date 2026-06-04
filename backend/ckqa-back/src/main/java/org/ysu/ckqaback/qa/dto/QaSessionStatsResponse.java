@@ -24,9 +24,13 @@ public class QaSessionStatsResponse {
     /** 这些会话涉及的去重课程数。 */
     private long courseCount;
 
-    public QaSessionStatsResponse(long totalSessions, long totalMessages, long courseCount) {
+    /** 命中筛选条件的收藏会话数。 */
+    private long favoriteCount;
+
+    public QaSessionStatsResponse(long totalSessions, long totalMessages, long courseCount, long favoriteCount) {
         this.totalSessions = totalSessions;
         this.totalMessages = totalMessages;
         this.courseCount = courseCount;
+        this.favoriteCount = favoriteCount;
     }
 }

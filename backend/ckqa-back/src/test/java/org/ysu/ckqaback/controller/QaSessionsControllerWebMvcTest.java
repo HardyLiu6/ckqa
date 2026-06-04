@@ -104,7 +104,7 @@ class QaSessionsControllerWebMvcTest {
     @Test
     void shouldReturnFormalSessionStatsAggregatedOverAllHistoryForCurrentUser() throws Exception {
         given(qaWorkflowService.statsSessions(eq(7L), any()))
-                .willReturn(new QaSessionStatsResponse(128L, 940L, 6L));
+                .willReturn(new QaSessionStatsResponse(128L, 940L, 6L, 18L));
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/stats")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
@@ -112,7 +112,8 @@ class QaSessionsControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalSessions").value(128))
                 .andExpect(jsonPath("$.data.totalMessages").value(940))
-                .andExpect(jsonPath("$.data.courseCount").value(6));
+                .andExpect(jsonPath("$.data.courseCount").value(6))
+                .andExpect(jsonPath("$.data.favoriteCount").value(18));
 
         then(qaWorkflowService).should().statsSessions(eq(7L), argThat(request -> "active".equals(request.getStatus())));
     }

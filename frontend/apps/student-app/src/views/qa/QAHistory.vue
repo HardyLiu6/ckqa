@@ -58,6 +58,14 @@
               class="stat-value">{{ stats.courseCount }}</span><span class="stat-label">涉及课程</span>
           </div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon orange"><el-icon>
+              <StarFilled />
+            </el-icon></div>
+          <div class="stat-info"><span v-if="loading" class="stat-value stat-value-skeleton"></span><span v-else
+              class="stat-value">{{ stats.favoriteCount }}</span><span class="stat-label">已收藏</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -264,7 +272,8 @@ const courseNameById = computed(() => Object.fromEntries(
 ))
 
 // 统计卡片：由后端按全部历史聚合得出，不受分页/无限滚动影响
-const stats = ref({ totalSessions: 0, totalMessages: 0, courseCount: 0 })
+const EMPTY_STATS = { totalSessions: 0, totalMessages: 0, courseCount: 0, favoriteCount: 0 }
+const stats = ref({ ...EMPTY_STATS })
 
 // 过滤后的会话
 const filteredSessions = computed(() => {
@@ -417,7 +426,7 @@ async function loadHistory() {
     ElMessage.error(error?.message || '问答记录加载失败')
     sessionList.value = []
     total.value = 0
-    stats.value = { totalSessions: 0, totalMessages: 0, courseCount: 0 }
+    stats.value = { ...EMPTY_STATS }
   } finally {
     loading.value = false
   }
@@ -662,10 +671,11 @@ $radius: 14px;
     max-width: 1000px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
 
-    @media (max-width: 768px) { grid-template-columns: repeat(1, 1fr); }
+    @media (max-width: 1024px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 640px) { grid-template-columns: repeat(1, minmax(0, 1fr)); }
   }
 
   .stat-card {

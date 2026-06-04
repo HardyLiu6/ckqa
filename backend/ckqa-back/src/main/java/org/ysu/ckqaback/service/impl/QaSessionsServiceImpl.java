@@ -142,7 +142,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 request.getKnowledgeBaseId(),
                 request.getFavorite()
         );
-        return stats != null ? stats : new QaSessionStatsResponse(0L, 0L, 0L);
+        return stats != null ? stats : new QaSessionStatsResponse(0L, 0L, 0L, 0L);
     }
 
     private String resolveSessionOrderBy(String sort) {
