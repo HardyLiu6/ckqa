@@ -208,8 +208,8 @@ public class QaTopicEntityBindingService {
                 .filter(candidate -> StringUtils.hasText(candidate.id()) || StringUtils.hasText(candidate.name()))
                 .sorted(Comparator
                         .comparing(QaTopicEntityBindingCandidate::score, Comparator.nullsLast(Comparator.reverseOrder()))
-                        .thenComparing(QaTopicEntityBindingCandidate::name, Comparator.nullsLast(String::compareTo))
-                        .thenComparing(QaTopicEntityBindingCandidate::id, Comparator.nullsLast(String::compareTo)))
+                        .thenComparing(QaTopicEntityBindingCandidate::name, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(QaTopicEntityBindingCandidate::id, Comparator.nullsLast(Comparator.naturalOrder())))
                 .limit(DEFAULT_LIMIT)
                 .toList();
     }

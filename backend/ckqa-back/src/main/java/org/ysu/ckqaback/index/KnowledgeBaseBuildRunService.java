@@ -291,8 +291,8 @@ public class KnowledgeBaseBuildRunService {
         KnowledgeBaseBuildRuns current = buildRunsStore.getRequiredById(buildRunId);
         return buildRunsStore.listByKnowledgeBaseId(current.getKnowledgeBaseId()).stream()
                 .max(Comparator
-                        .comparing(KnowledgeBaseBuildRuns::getCreatedAt, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(KnowledgeBaseBuildRuns::getId, Comparator.nullsFirst(Long::compareTo)))
+                        .comparing(KnowledgeBaseBuildRuns::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(KnowledgeBaseBuildRuns::getId, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(latest -> latest.getId().equals(buildRunId))
                 .orElse(false);
     }
@@ -821,8 +821,8 @@ public class KnowledgeBaseBuildRunService {
                 .filter(run -> buildRun.getId().equals(run.getBuildRunId()))
                 .filter(run -> "success".equals(run.getStatus()))
                 .max(Comparator
-                        .comparing(this::indexRunSortTime, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(IndexRuns::getId, Comparator.nullsFirst(Long::compareTo)))
+                        .comparing(this::indexRunSortTime, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(IndexRuns::getId, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .map(IndexRuns::getId)
                 .orElse(null);
     }

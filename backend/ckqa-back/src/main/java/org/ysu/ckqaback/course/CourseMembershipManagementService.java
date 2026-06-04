@@ -53,7 +53,7 @@ public class CourseMembershipManagementService {
                 .filter(membership -> matches(membership.getMembershipRole(), request.getMembershipRole()))
                 .filter(membership -> matches(membership.getStatus(), request.getStatus()))
                 .filter(membership -> matchesKeyword(membership, usersById.get(membership.getUserId()), request.getKeyword()))
-                .sorted(Comparator.comparing(CourseMemberships::getId, Comparator.nullsLast(Long::compareTo)))
+                .sorted(Comparator.comparing(CourseMemberships::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
 
         long total = filtered.size();

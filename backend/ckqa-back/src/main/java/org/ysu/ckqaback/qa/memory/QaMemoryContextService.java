@@ -173,7 +173,7 @@ public class QaMemoryContextService {
                 .filter(message -> message != null && isHistoryRole(message.getRole()))
                 .sorted(Comparator.comparing(
                         QaMessages::getSequenceNo,
-                        Comparator.nullsLast(Integer::compareTo)
+                        Comparator.nullsLast(Comparator.naturalOrder())
                 ))
                 .toList();
         int fromIndex = Math.max(0, ordered.size() - QaContextPolicy.MAX_RECENT_MESSAGES);

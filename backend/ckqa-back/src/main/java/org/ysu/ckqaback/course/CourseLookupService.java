@@ -228,8 +228,8 @@ public class CourseLookupService {
         Optional<IndexRuns> latestIndexRun = knowledgeBases.stream()
                 .flatMap(knowledgeBase -> indexRunsService.listByKnowledgeBaseId(knowledgeBase.getId()).stream())
                 .max(Comparator
-                        .comparing(IndexRuns::getCreatedAt, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(IndexRuns::getId, Comparator.nullsLast(Long::compareTo)));
+                        .comparing(IndexRuns::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(IndexRuns::getId, Comparator.nullsLast(Comparator.naturalOrder())));
 
         return CourseSummaryResponse.builder()
                 .id(course.getId())
@@ -342,8 +342,8 @@ public class CourseLookupService {
                 .filter(membership -> "teacher".equalsIgnoreCase(membership.getMembershipRole()))
                 .filter(membership -> "active".equalsIgnoreCase(membership.getStatus()))
                 .sorted(Comparator
-                        .comparing(CourseMemberships::getCourseId, Comparator.nullsLast(String::compareTo))
-                        .thenComparing(CourseMemberships::getId, Comparator.nullsLast(Long::compareTo)))
+                        .comparing(CourseMemberships::getCourseId, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(CourseMemberships::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
         if (memberships.isEmpty()) {
             return Map.of();

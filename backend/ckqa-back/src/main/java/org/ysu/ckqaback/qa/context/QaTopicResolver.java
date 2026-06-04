@@ -194,7 +194,7 @@ public class QaTopicResolver {
         }
         return history.stream()
                 .filter(message -> "user".equals(message.getRole()) || "assistant".equals(message.getRole()))
-                .sorted(Comparator.comparing(QaMessages::getSequenceNo, Comparator.nullsLast(Integer::compareTo)))
+                .sorted(Comparator.comparing(QaMessages::getSequenceNo, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 

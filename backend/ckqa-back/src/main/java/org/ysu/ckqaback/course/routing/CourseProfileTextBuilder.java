@@ -52,7 +52,7 @@ public class CourseProfileTextBuilder {
 
         List<KnowledgeBases> knowledgeBases = knowledgeBasesService.listByCourseId(course.getCourseId());
         List<String> kbNames = knowledgeBases.stream()
-                .sorted(Comparator.comparing(KnowledgeBases::getId, Comparator.nullsLast(Long::compareTo)))
+                .sorted(Comparator.comparing(KnowledgeBases::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .flatMap(kb -> Stream.of(kb.getName(), kb.getDescription()))
                 .filter(StringUtils::hasText)
                 .toList();
@@ -67,7 +67,7 @@ public class CourseProfileTextBuilder {
         appendList(lines, "课程画像关键词", selectHintKeywords(hints));
 
         List<String> materialNames = courseMaterialsService.listByCourseId(course.getCourseId()).stream()
-                .sorted(Comparator.comparing(CourseMaterials::getId, Comparator.nullsLast(Long::compareTo)))
+                .sorted(Comparator.comparing(CourseMaterials::getId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(CourseMaterials::getDisplayName)
                 .filter(StringUtils::hasText)
                 .toList();

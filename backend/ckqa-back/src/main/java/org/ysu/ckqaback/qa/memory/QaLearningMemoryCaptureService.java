@@ -217,9 +217,9 @@ public class QaLearningMemoryCaptureService {
                 .filter(this::isActive)
                 .filter(memory -> memory.getId() != null)
                 .sorted(Comparator
-                        .comparing(QaLearningMemories::getUpdatedAt, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(QaLearningMemories::getCreatedAt, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(QaLearningMemories::getId, Comparator.nullsFirst(Long::compareTo)))
+                        .comparing(QaLearningMemories::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(QaLearningMemories::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(QaLearningMemories::getId, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .toList();
         int overflow = sorted.size() - MAX_ACTIVE_MEMORIES_PER_SCOPE;
         for (int index = 0; index < overflow; index += 1) {

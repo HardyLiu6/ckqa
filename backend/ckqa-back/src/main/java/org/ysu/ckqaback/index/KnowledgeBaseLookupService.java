@@ -185,8 +185,8 @@ public class KnowledgeBaseLookupService {
     private IndexRuns latestIndexRun(List<IndexRuns> indexRuns) {
         return indexRuns.stream()
                 .max(Comparator
-                        .comparing(IndexRuns::getCreatedAt, Comparator.nullsFirst(LocalDateTime::compareTo))
-                        .thenComparing(IndexRuns::getId, Comparator.nullsFirst(Long::compareTo)))
+                        .comparing(IndexRuns::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(IndexRuns::getId, Comparator.nullsFirst(Comparator.naturalOrder())))
                 .orElse(null);
     }
 
