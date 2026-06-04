@@ -646,6 +646,42 @@ test('local 关系依据标签使用概念关系语义和真实总数', () => {
   assert.equal(retrievalTraceEvidenceLabel(event, 'Local'), '概念关系 3 / 共 8 条')
 })
 
+test('text_unit 课程片段依据标签使用真实总数而不是预览样例数', () => {
+  const event = {
+    type: 'context_selected',
+    mode: 'basic',
+    summary: '已选取 8 个课程片段作为回答依据。',
+    metrics: {
+      textUnitCount: 8,
+    },
+    evidence: Array.from({ length: 5 }, (_, index) => ({
+      kind: 'text_unit',
+      title: `${20 + index}`,
+      snippet: `课程片段摘要 ${index + 1}`,
+    })),
+  }
+
+  assert.equal(retrievalTraceEvidenceLabel(event, '检索'), '课程片段 3 / 共 8 条')
+})
+
+test('report 课程报告依据标签使用真实总数而不是兜底样例', () => {
+  const event = {
+    type: 'context_selected',
+    mode: 'local',
+    summary: '已选取 8 份课程报告作为回答依据。',
+    metrics: {
+      reportCount: 8,
+    },
+    evidence: Array.from({ length: 5 }, (_, index) => ({
+      kind: 'report',
+      title: `课程报告 ${index + 1}`,
+      snippet: `课程报告摘要 ${index + 1}`,
+    })),
+  }
+
+  assert.equal(retrievalTraceEvidenceLabel(event, 'Local'), '课程报告 3 / 共 8 份')
+})
+
 test('hybrid 时间线展示低层 BM25 证据和融合上下文阶段', () => {
   const timeline = buildRetrievalTimeline([
     {
