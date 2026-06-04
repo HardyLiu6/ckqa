@@ -47,6 +47,15 @@ public class Neo4jProperties {
     private long readTimeoutMillis = 5000L;
 
     /**
+     * QA 语义主题弱绑定的外层等待预算（毫秒）。
+     * <p>
+     * 该查询只用于运维诊断增强，默认给到 3 秒以适配本地 Neo4j 冷启动和较慢索引；
+     * 实际执行仍不会超过 {@link #readTimeoutMillis}。
+     * </p>
+     */
+    private long topicBindingTimeoutMillis = 3000L;
+
+    /**
      * 顶层社区返回上限（overview.topN 默认）。
      */
     private int defaultOverviewTopN = 20;

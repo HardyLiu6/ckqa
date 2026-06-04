@@ -47,7 +47,7 @@ public class QaTopicEntityBindingService {
 
     private static final int DEFAULT_LIMIT = 5;
     private static final long DEFAULT_READ_TIMEOUT_MILLIS = 5000L;
-    private static final long MAX_QA_BINDING_BUDGET_MILLIS = 500L;
+    private static final long DEFAULT_TOPIC_BINDING_TIMEOUT_MILLIS = 3000L;
     private static final int LOOKUP_EXECUTOR_MAX_THREADS = 2;
     private static final long LOOKUP_EXECUTOR_KEEP_ALIVE_SECONDS = 30L;
     private static final AtomicInteger LOOKUP_THREAD_SEQUENCE = new AtomicInteger(0);
@@ -267,7 +267,16 @@ public class QaTopicEntityBindingService {
         long configuredReadTimeoutMillis = properties == null
                 ? DEFAULT_READ_TIMEOUT_MILLIS
                 : properties.getReadTimeoutMillis();
-        return Math.max(1L, Math.min(configuredReadTimeoutMillis, MAX_QA_BINDING_BUDGET_MILLIS));
+        long configuredBindingTimeoutMillis = properties == null
+                ? DEFAULT_TOPIC_BINDING_TIMEOUT_MILLIS
+                : properties.getTopicBindingTimeoutMillis();
+        long readTimeoutMillis = positiveOrDefault(configuredReadTimeoutMillis, DEFAULT_READ_TIMEOUT_MILLIS);
+        long bindingTimeoutMillis = positiveOrDefault(configuredBindingTimeoutMillis, DEFAULT_TOPIC_BINDING_TIMEOUT_MILLIS);
+        return Math.max(1L, Math.min(readTimeoutMillis, bindingTimeoutMillis));
+    }
+
+    private long positiveOrDefault(long value, long defaultValue) {
+        return value > 0L ? value : defaultValue;
     }
 
     private long remainingBudgetMillis(long startedNanos, long totalBudgetMillis) {

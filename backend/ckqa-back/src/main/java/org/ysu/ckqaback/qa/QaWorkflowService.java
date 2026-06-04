@@ -76,6 +76,7 @@ import org.ysu.ckqaback.service.UsersService;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -880,18 +881,19 @@ public class QaWorkflowService {
         qaSessionsService.getRequiredById(sessionId);
         QaRetrievalLogs task = qaRetrievalLogsService.getRequiredTask(sessionId, taskId);
 
+        QaMessages resolvedAssistant = resolveTaskAssistantMessage(sessionId, task);
+        Long assistantMessageId = resolvedAssistant == null ? task.getAssistantMessageId() : resolvedAssistant.getId();
         QaMessageResponse assistantMessage = null;
-        if (task.getAssistantMessageId() != null) {
-            QaMessages message = qaMessagesService.getById(task.getAssistantMessageId());
+        if (resolvedAssistant != null) {
             List<QaSourceResponse> sources = qaRetrievalHitsService == null
                     ? List.of()
                     : qaRetrievalHitsService.findSourcesByRetrievalLogIds(List.of(task.getId()))
                     .getOrDefault(task.getId(), List.of());
-            org.ysu.ckqaback.qa.dto.QaFeedbackResponse feedback = qaMessageFeedbackService == null || message == null || currentUserId == null
+            org.ysu.ckqaback.qa.dto.QaFeedbackResponse feedback = qaMessageFeedbackService == null || currentUserId == null
                     ? null
-                    : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(message.getId()), currentUserId)
-                    .get(message.getId());
-            assistantMessage = message == null ? null : QaMessageResponse.fromEntity(message, sources, feedback, task.getQueryMode());
+                    : qaMessageFeedbackService.findFeedbackByMessageIdsForUser(List.of(resolvedAssistant.getId()), currentUserId)
+                    .get(resolvedAssistant.getId());
+            assistantMessage = QaMessageResponse.fromEntity(resolvedAssistant, sources, feedback, task.getQueryMode());
         }
 
         List<QaProgressEventResponse> progressEvents = parseProgressEvents(task.getLatestLogs());
@@ -902,7 +904,7 @@ public class QaWorkflowService {
         return QaTaskDetailResponse.of(
                 task.getId(),
                 task.getUserMessageId(),
-                task.getAssistantMessageId(),
+                assistantMessageId,
                 task.getTaskStatus(),
                 task.getProgressStage(),
                 task.getRetrievalStatus(),
@@ -931,6 +933,29 @@ public class QaWorkflowService {
                 task.getPartialResponseText(),
                 task.getStreamEventSeq()
         );
+    }
+
+    private QaMessages resolveTaskAssistantMessage(Long sessionId, QaRetrievalLogs task) {
+        if (task.getAssistantMessageId() != null) {
+            return qaMessagesService.getById(task.getAssistantMessageId());
+        }
+        if (!"success".equals(task.getTaskStatus()) || task.getUserMessageId() == null) {
+            return null;
+        }
+        List<QaMessages> messages = qaMessagesService.listBySessionId(sessionId);
+        QaMessages userMessage = messages.stream()
+                .filter(message -> Objects.equals(message.getId(), task.getUserMessageId()))
+                .findFirst()
+                .orElse(null);
+        if (userMessage == null || userMessage.getSequenceNo() == null) {
+            return null;
+        }
+        return messages.stream()
+                .filter(message -> "assistant".equals(message.getRole()))
+                .filter(message -> message.getSequenceNo() != null)
+                .filter(message -> message.getSequenceNo() > userMessage.getSequenceNo())
+                .min(Comparator.comparing(QaMessages::getSequenceNo))
+                .orElse(null);
     }
 
     private BudgetSizeEstimate toContextBudgetEstimate(QaRetrievalLogs task) {

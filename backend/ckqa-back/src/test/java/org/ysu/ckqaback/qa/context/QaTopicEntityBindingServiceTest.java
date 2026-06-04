@@ -109,7 +109,38 @@ class QaTopicEntityBindingServiceTest {
         assertThat(result.candidatesJson()).contains("\"source\":\"active_neo4j\"");
         assertThat(result.candidatesJson()).doesNotContain("description", "snippet", "memoryText", "full_content");
         assertThat(queryCaptor.getValue().text()).isEqualTo(GraphCypher.TOPIC_ENTITY_EXACT_CANDIDATES);
-        assertThat(transactionConfigCaptor.getValue().timeout()).isEqualTo(Duration.ofMillis(500L));
+        assertThat(transactionConfigCaptor.getValue().timeout()).isEqualTo(Duration.ofMillis(3000L));
+    }
+
+    @Test
+    void shouldUseDedicatedTopicBindingTimeoutBelowReadTimeout() {
+        Driver driver = mock(Driver.class);
+        Session session = mock(Session.class);
+        Result queryResult = mock(Result.class);
+        Record record = mock(Record.class);
+        Neo4jProperties properties = new Neo4jProperties();
+        properties.setReadTimeoutMillis(5000L);
+        properties.setTopicBindingTimeoutMillis(1200L);
+
+        given(driver.session(any(SessionConfig.class))).willReturn(session);
+        given(session.run(any(Query.class), any(TransactionConfig.class))).willReturn(queryResult);
+        given(queryResult.list()).willReturn(List.of(record));
+        given(record.get("entityId")).willReturn(Values.value("entity-deadlock"));
+        given(record.get("name")).willReturn(Values.value("死锁"));
+        given(record.get("type")).willReturn(Values.value("concept"));
+        given(record.get("humanReadableId")).willReturn(Values.value("E-42"));
+        given(record.get("score")).willReturn(Values.value(1.0D));
+        given(record.get("matchReason")).willReturn(Values.value("exact_name"));
+        given(record.get("source")).willReturn(Values.value("active_neo4j"));
+
+        QaTopicEntityBindingResult result = new QaTopicEntityBindingService(driver, properties)
+                .bind("死锁", 3L, 17L);
+
+        ArgumentCaptor<TransactionConfig> transactionConfigCaptor = ArgumentCaptor.forClass(TransactionConfig.class);
+        verify(session).run(any(Query.class), transactionConfigCaptor.capture());
+
+        assertThat(result.status()).isEqualTo("success");
+        assertThat(transactionConfigCaptor.getValue().timeout()).isEqualTo(Duration.ofMillis(1200L));
     }
 
     @Test
@@ -160,6 +191,7 @@ class QaTopicEntityBindingServiceTest {
         Record record = mock(Record.class);
         Neo4jProperties properties = new Neo4jProperties();
         properties.setReadTimeoutMillis(2000L);
+        properties.setTopicBindingTimeoutMillis(500L);
         AtomicLong nowNanos = new AtomicLong(0L);
 
         given(driver.session(any(SessionConfig.class))).willReturn(session);
@@ -196,6 +228,7 @@ class QaTopicEntityBindingServiceTest {
         Result exactResult = mock(Result.class);
         Neo4jProperties properties = new Neo4jProperties();
         properties.setReadTimeoutMillis(2000L);
+        properties.setTopicBindingTimeoutMillis(500L);
         AtomicLong nowNanos = new AtomicLong(0L);
 
         given(driver.session(any(SessionConfig.class))).willReturn(session);

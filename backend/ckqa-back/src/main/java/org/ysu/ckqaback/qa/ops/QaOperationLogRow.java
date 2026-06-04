@@ -51,6 +51,8 @@ public class QaOperationLogRow {
     private String routingConfidenceBand;
     private String routingReviewPriority;
     private String routingSnapshotJson;
+    private String resolvedTopic;
+    private String topicSource;
     private String semanticStateVersion;
     private String semanticStateJson;
     private Boolean topicEntityBindingApplied;

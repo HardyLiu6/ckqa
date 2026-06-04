@@ -2019,6 +2019,56 @@ class QaWorkflowServiceTest {
         assertThat(legacyResponse.getResolvedMode()).isEqualTo("drift");
     }
 
+    @Test
+    void shouldHydrateAssistantMessageWhenSuccessfulTaskLogHasNotBoundAssistantIdYet() {
+        QaSessionsService qaSessionsService = mock(QaSessionsService.class);
+        QaMessagesService qaMessagesService = mock(QaMessagesService.class);
+        QaRetrievalLogsService qaRetrievalLogsService = mock(QaRetrievalLogsService.class);
+        QaWorkflowService workflowService = new QaWorkflowService(
+                qaSessionsService,
+                qaMessagesService,
+                qaRetrievalLogsService,
+                mock(KnowledgeBasesService.class),
+                mock(UsersService.class),
+                mock(QaTaskWorker.class),
+                buildTaskPolicyProperties()
+        );
+
+        QaSessions session = formalSession();
+        QaRetrievalLogs task = new QaRetrievalLogs();
+        task.setId(9001L);
+        task.setSessionId(5L);
+        task.setUserMessageId(101L);
+        task.setAssistantMessageId(null);
+        task.setTaskStatus("success");
+        task.setProgressStage("done");
+        task.setRetrievalStatus("success");
+        task.setQueryMode("basic");
+        task.setRequestedMode("smart");
+        task.setResolvedMode("basic");
+        task.setQueryText("它有哪些基本要求？");
+        task.setMemoryApplied(false);
+
+        QaMessages user = message(101L, 5L, "user", 3, "它有哪些基本要求？");
+        QaMessages assistant = message(102L, 5L, "assistant", 4, "临界区的基本要求包括空闲让进、忙则等待、有限等待和让权等待。");
+
+        given(qaSessionsService.getRequiredById(5L)).willReturn(session);
+        given(qaRetrievalLogsService.getRequiredTask(5L, 9001L)).willReturn(task);
+        given(qaMessagesService.listBySessionId(5L)).willReturn(List.of(
+                message(99L, 5L, "assistant", 2, "上一轮回答"),
+                user,
+                assistant
+        ));
+
+        QaTaskDetailResponse response = workflowService.getTaskDetail(5L, 9001L);
+
+        assertThat(response.getTaskStatus()).isEqualTo("success");
+        assertThat(response.getAssistantMessageId()).isEqualTo(102L);
+        assertThat(response.getAssistantMessage()).isNotNull();
+        assertThat(response.getAssistantMessage().getContent()).contains("空闲让进");
+        assertThat(response.getAssistantMessage().getMode()).isEqualTo("basic");
+    }
+
     private KnowledgeBases buildKnowledgeBase() {
         KnowledgeBases knowledgeBase = new KnowledgeBases();
         knowledgeBase.setId(3L);

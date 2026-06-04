@@ -36,6 +36,8 @@ public class QaOperationLogResponse {
     private final Double routingConfidence;
     private final String routingConfidenceBand;
     private final String routingReviewPriority;
+    private final String resolvedTopic;
+    private final String topicSource;
     private final Boolean memoryApplied;
     private final String memoryStrategy;
     private final Integer memorySourceCount;
@@ -80,6 +82,8 @@ public class QaOperationLogResponse {
         this.routingConfidence = row.getRoutingConfidence();
         this.routingConfidenceBand = row.getRoutingConfidenceBand();
         this.routingReviewPriority = row.getRoutingReviewPriority();
+        this.resolvedTopic = row.getResolvedTopic();
+        this.topicSource = row.getTopicSource();
         this.memoryApplied = row.getMemoryApplied();
         this.memoryStrategy = row.getMemoryStrategy();
         this.memorySourceCount = row.getMemorySourceCount();
