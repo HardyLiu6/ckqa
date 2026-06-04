@@ -39,3 +39,30 @@ test('问答副导航选择历史会话仍以历史 sessionId 跳转', () => {
     /router\.push\(\{\s*path:\s*['"]\/qa\/ask['"],\s*query:\s*buildQaRouteQuery\(route\.query,\s*queryPatch\)\s*\}\)/,
   )
 })
+
+test('问答副导航订阅会话变更事件并展示会话骨架屏', () => {
+  assert.match(
+    qaSideNavSource,
+    /import\s+\{\s*onQaSessionsChanged\s*\}\s+from\s+['"]@\/views\/qa\/qa-session-events['"]/,
+  )
+  assert.match(
+    qaSideNavSource,
+    /onQaSessionsChanged\(\(\)\s*=>\s*\{\s*if\s*\(route\.path\.startsWith\(['"]\/qa['"]\)\)\s*\{\s*loadRecentSessions\(\)\s*\}/,
+  )
+  assert.match(
+    qaSideNavSource,
+    /onUnmounted\(\(\)\s*=>\s*\{\s*stopSessionChangeListener\?\.\(\)/,
+  )
+  assert.match(qaSideNavSource, /class="session-skeleton-list"/)
+  assert.match(qaSideNavSource, /class="recent-pop-skeleton-list"/)
+})
+
+test('问答副导航搜索会重新请求后端会话库而不是只过滤当前页', () => {
+  assert.match(
+    qaSideNavSource,
+    /import\s+\{[^}]*buildQaSideNavQueryParams[^}]*\}\s+from\s+['"]@\/components\/module-nav\/qa-side-nav-model['"]/,
+  )
+  assert.match(qaSideNavSource, /listQaSessions\(buildQaSideNavQueryParams\(\{\s*keyword:/)
+  assert.match(qaSideNavSource, /watch\(\s*searchKeyword,/)
+  assert.doesNotMatch(qaSideNavSource, /sessions\.value\.filter\(\(s\)\s*=>\s*s\.title\.toLowerCase\(\)\.includes/)
+})

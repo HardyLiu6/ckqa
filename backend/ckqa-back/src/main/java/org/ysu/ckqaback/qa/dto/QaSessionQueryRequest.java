@@ -24,6 +24,9 @@ public class QaSessionQueryRequest {
 
     private Boolean favorite;
 
+    @Size(max = 128, message = "keyword长度不能超过128")
+    private String keyword;
+
     @Pattern(regexp = "newest|oldest|messages", message = "sort取值不合法")
     private String sort = "newest";
 

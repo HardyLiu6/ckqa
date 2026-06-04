@@ -56,6 +56,20 @@
           <if test="favorite != null">
             AND s.is_favorite = #{favorite}
           </if>
+          <if test="keyword != null and keyword != ''">
+            AND (
+              s.title LIKE CONCAT('%', #{keyword}, '%')
+              OR EXISTS (
+                SELECT 1
+                FROM qa_messages sm
+                WHERE sm.session_id = s.id
+                  AND (
+                    sm.content_text LIKE CONCAT('%', #{keyword}, '%')
+                    OR sm.content LIKE CONCAT('%', #{keyword}, '%')
+                  )
+              )
+            )
+          </if>
     </select>
 
     <select id="selectMessageCountsBySessionIds" resultType="org.ysu.ckqaback.qa.dto.QaSessionMessageCount">

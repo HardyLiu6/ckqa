@@ -1,10 +1,12 @@
 <!-- 问答模块副导航 · 展开态：胶囊风格 / 折叠态：GPT 风格图标条 -->
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listQaSessions } from '@/api/qa'
 import { localDateString, normalizeQaSessionList, toQaSideNavSession } from '@/views/qa/qa-session-model'
 import { buildQaRouteQuery, withoutQaSessionQuery } from '@/views/qa/qa-route-query-model'
+import { onQaSessionsChanged } from '@/views/qa/qa-session-events'
+import { buildQaSideNavQueryParams, normalizeQaSideNavSearchKeyword } from '@/components/module-nav/qa-side-nav-model'
 
 const router = useRouter()
 const route = useRoute()
@@ -19,6 +21,9 @@ const searchKeyword = ref('')
 const recentPopoverOpen = ref(false)
 const recentBtnRef = ref(null)
 const recentPopoverPos = ref({ top: 0, left: 0 })
+let recentLoadSeq = 0
+let stopSessionChangeListener = null
+let searchTimer = null
 
 function toggleRecentPopover() {
   if (recentPopoverOpen.value) {
@@ -45,21 +50,19 @@ const sessions = computed(() =>
   rawSessions.value.map((session) => toQaSideNavSession(session, activeSessionId.value)),
 )
 
+const normalizedSearchKeyword = computed(() => normalizeQaSideNavSearchKeyword(searchKeyword.value))
+
 // 最近 10 条（折叠态 popover 用）
 const recentTen = computed(() => sessions.value.slice(0, 10))
 
 // 按时间分组（展开态用）
 const groupedSessions = computed(() => {
-  const filtered = searchKeyword.value
-    ? sessions.value.filter((s) => s.title.toLowerCase().includes(searchKeyword.value.toLowerCase()))
-    : sessions.value
-
   const now = new Date()
   const todayStr = localDateString(now)
   const yesterday = localDateString(new Date(now.getTime() - 86400000))
 
   const groups = { today: [], yesterday: [], earlier: [] }
-  for (const session of filtered) {
+  for (const session of sessions.value) {
     const dateStr = session.dateStr || todayStr
     if (dateStr === todayStr) groups.today.push(session)
     else if (dateStr === yesterday) groups.yesterday.push(session)
@@ -73,6 +76,8 @@ const hasAnySession = computed(() =>
   || groupedSessions.value.yesterday.length
   || groupedSessions.value.earlier.length,
 )
+
+const emptyStateText = computed(() => normalizedSearchKeyword.value ? '没有找到相关历史会话' : '暂无历史会话')
 
 function createNew() {
   router.push({ path: '/qa/ask', query: withoutQaSessionQuery(route.query) })
@@ -91,28 +96,69 @@ function selectSession(session) {
   recentPopoverOpen.value = false
 }
 
-async function loadRecentSessions() {
+async function loadRecentSessions(keyword = searchKeyword.value) {
+  const seq = ++recentLoadSeq
   loading.value = true
   errorMessage.value = ''
+  const normalizedKeyword = normalizeQaSideNavSearchKeyword(keyword)
   try {
-    const payload = await listQaSessions({ status: 'active', page: 1, size: 20 })
-    rawSessions.value = normalizeQaSessionList(payload)
+    const payload = await listQaSessions(buildQaSideNavQueryParams({ keyword: normalizedKeyword, page: 1 }))
     // 只保留近一个月的会话
     const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    rawSessions.value = rawSessions.value.filter((s) => {
-      const ref = s.lastMessageAt || s.createdAt || ''
-      if (!ref) return true
-      return new Date(ref) >= oneMonthAgo
-    })
+    const normalizedSessions = normalizeQaSessionList(payload)
+    const nextSessions = normalizedKeyword
+      ? normalizedSessions
+      : normalizedSessions.filter((s) => {
+          const ref = s.lastMessageAt || s.createdAt || ''
+          if (!ref) return true
+          return new Date(ref) >= oneMonthAgo
+        })
+    if (seq === recentLoadSeq) {
+      rawSessions.value = nextSessions
+    }
   } catch (error) {
-    rawSessions.value = []
-    errorMessage.value = error?.message || '历史会话加载失败'
+    if (seq === recentLoadSeq) {
+      rawSessions.value = []
+      errorMessage.value = error?.message || '历史会话加载失败'
+    }
   } finally {
-    loading.value = false
+    if (seq === recentLoadSeq) {
+      loading.value = false
+    }
   }
 }
 
-onMounted(loadRecentSessions)
+function scheduleSearchReload() {
+  if (searchTimer) {
+    window.clearTimeout(searchTimer)
+  }
+  searchTimer = window.setTimeout(() => {
+    searchTimer = null
+    loadRecentSessions(searchKeyword.value)
+  }, 240)
+}
+
+onMounted(() => {
+  loadRecentSessions()
+  stopSessionChangeListener = onQaSessionsChanged(() => {
+    if (route.path.startsWith('/qa')) {
+      loadRecentSessions()
+    }
+  })
+})
+
+onUnmounted(() => {
+  stopSessionChangeListener?.()
+  stopSessionChangeListener = null
+  if (searchTimer) {
+    window.clearTimeout(searchTimer)
+    searchTimer = null
+  }
+})
+
+watch(searchKeyword, () => {
+  scheduleSearchReload()
+})
 
 watch(
   () => route.query.sessionId,
@@ -163,18 +209,33 @@ watch(
           >
             <div class="recent-pop-head">最近聊天</div>
             <div class="recent-pop-list">
-              <div
-                v-for="session in recentTen"
-                :key="session.id"
-                class="recent-pop-item"
-                :class="{ active: session.active }"
-                @click="selectSession(session)"
-              >
-                <svg class="recent-pop-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                <span class="recent-pop-title">{{ session.title }}</span>
+              <div v-if="loading" class="recent-pop-skeleton-list" aria-label="正在加载最近聊天">
+                <div
+                  v-for="index in 6"
+                  :key="`recent-pop-skeleton-${index}`"
+                  class="recent-pop-skeleton-item"
+                  :style="{ '--delay': `${index * 48}ms` }"
+                >
+                  <span class="recent-pop-skeleton-icon"></span>
+                  <span class="recent-pop-skeleton-title"></span>
+                </div>
               </div>
+              <div v-else-if="errorMessage" class="recent-pop-state error">{{ errorMessage }}</div>
+              <div v-else-if="!recentTen.length" class="recent-pop-state">暂无最近聊天</div>
+              <template v-else>
+                <div
+                  v-for="session in recentTen"
+                  :key="session.id"
+                  class="recent-pop-item"
+                  :class="{ active: session.active }"
+                  @click="selectSession(session)"
+                >
+                  <svg class="recent-pop-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span class="recent-pop-title">{{ session.title }}</span>
+                </div>
+              </template>
             </div>
           </div>
         </Transition>
@@ -217,9 +278,23 @@ watch(
     </div>
 
     <div class="session-scroll">
-      <div v-if="loading" class="session-state">正在加载…</div>
+      <div v-if="loading" class="session-skeleton-list" aria-label="正在加载历史会话">
+        <div class="session-skeleton-group"></div>
+        <div
+          v-for="index in 8"
+          :key="`qa-nav-skeleton-${index}`"
+          class="session-skeleton-item"
+          :style="{ '--delay': `${index * 52}ms` }"
+        >
+          <div class="session-skeleton-body">
+            <span class="session-skeleton-title"></span>
+            <span class="session-skeleton-sub"></span>
+          </div>
+          <span class="session-skeleton-time"></span>
+        </div>
+      </div>
       <div v-else-if="errorMessage" class="session-state error">{{ errorMessage }}</div>
-      <div v-else-if="!hasAnySession" class="session-state">暂无历史会话</div>
+      <div v-else-if="!hasAnySession" class="session-state">{{ emptyStateText }}</div>
       <template v-else>
         <template v-if="groupedSessions.today.length">
           <div class="group-label">今天</div>
@@ -527,6 +602,69 @@ watch(
   &.error { color: #b91c1c; }
 }
 
+.session-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 2px 12px;
+}
+
+.session-skeleton-group,
+.session-skeleton-title,
+.session-skeleton-sub,
+.session-skeleton-time {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.62), rgba(255, 255, 255, 0.92), rgba(226, 232, 240, 0.62));
+  background-size: 220% 100%;
+  animation: qaNavSkeletonShimmer 1.35s ease-in-out infinite;
+  animation-delay: var(--delay, 0ms);
+}
+
+.session-skeleton-group {
+  width: 54px;
+  height: 10px;
+  margin: 9px 8px 4px;
+  opacity: 0.72;
+}
+
+.session-skeleton-item {
+  min-height: 56px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.44);
+  border: 1px solid rgba(226, 232, 240, 0.34);
+}
+
+.session-skeleton-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-skeleton-title {
+  width: 82%;
+  height: 14px;
+}
+
+.session-skeleton-sub {
+  width: 54%;
+  height: 10px;
+  opacity: 0.76;
+}
+
+.session-skeleton-time {
+  width: 42px;
+  height: 10px;
+  margin-top: 3px;
+  opacity: 0.76;
+}
+
 .sidebar-foot {
   border-top: 1px solid rgba(226, 232, 240, 0.5);
   padding: 12px 2px 4px;
@@ -560,10 +698,25 @@ watch(
 /* Transition */
 .pop-enter-active, .pop-leave-active { transition: opacity $duration-fast $ease-out, transform $duration-fast $ease-out; }
 .pop-enter-from, .pop-leave-to { opacity: 0; transform: translateX(-4px) scale(0.96); }
+
+@media (prefers-reduced-motion: reduce) {
+  .session-skeleton-group,
+  .session-skeleton-title,
+  .session-skeleton-sub,
+  .session-skeleton-time {
+    animation: none;
+    background: rgba(226, 232, 240, 0.72);
+  }
+}
 </style>
 
 <style lang="scss">
 /* 非 scoped：Teleport 到 body 的 popover 样式 */
+@keyframes qaNavSkeletonShimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
 .recent-popover {
   position: fixed;
   width: 280px;
@@ -588,6 +741,52 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+.recent-pop-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px;
+}
+
+.recent-pop-skeleton-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.recent-pop-skeleton-icon,
+.recent-pop-skeleton-title {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.72), rgba(255, 255, 255, 0.96), rgba(226, 232, 240, 0.72));
+  background-size: 220% 100%;
+  animation: qaNavSkeletonShimmer 1.35s ease-in-out infinite;
+  animation-delay: var(--delay, 0ms);
+}
+
+.recent-pop-skeleton-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.recent-pop-skeleton-title {
+  width: 170px;
+  height: 13px;
+}
+
+.recent-pop-state {
+  padding: 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+
+  &.error { color: #b91c1c; }
 }
 
 .recent-pop-item {
@@ -617,5 +816,13 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recent-pop-skeleton-icon,
+  .recent-pop-skeleton-title {
+    animation: none;
+    background: rgba(226, 232, 240, 0.78);
+  }
 }
 </style>

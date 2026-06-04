@@ -13,6 +13,7 @@ import org.ysu.ckqaback.mapper.QaSessionsMapper;
 import org.ysu.ckqaback.qa.dto.QaSessionMessageCount;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
+import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -105,6 +107,48 @@ class QaSessionsServiceImplTest {
         assertThat(sql).contains("qa_messages");
         assertThat(sql.toUpperCase()).contains("COUNT");
         assertThat(sql.toUpperCase()).contains("DESC");
+    }
+
+    @Test
+    void pageFormalSessionsSearchesCurrentUsersFormalSessionsByTitleOrMessageText() {
+        AtomicReference<Wrapper<QaSessions>> captured = new AtomicReference<>();
+        QaSessionsServiceImpl service = new QaSessionsServiceImpl() {
+            @Override
+            public <E extends IPage<QaSessions>> E page(E page, Wrapper<QaSessions> queryWrapper) {
+                captured.set(queryWrapper);
+                return page;
+            }
+        };
+
+        QaSessionQueryRequest request = new QaSessionQueryRequest();
+        request.setKeyword(" 临界区 ");
+
+        service.pageFormalSessions(42L, request);
+
+        String sql = captured.get().getSqlSegment();
+        assertThat(sql).contains("user_id");
+        assertThat(sql).contains("session_type");
+        assertThat(sql).contains("title");
+        assertThat(sql).contains("qa_messages");
+        assertThat(sql).contains("content_text");
+        assertThat(sql).contains("content");
+    }
+
+    @Test
+    void statsFormalSessionsPassesKeywordToDatabaseAggregation() {
+        QaSessionsMapper mapper = mock(QaSessionsMapper.class);
+        QaSessionsServiceImpl service = new QaSessionsServiceImpl();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "baseMapper", mapper);
+
+        QaSessionQueryRequest request = new QaSessionQueryRequest();
+        request.setStatus("active");
+        request.setKeyword(" 线程 ");
+        given(mapper.selectFormalSessionStats(eq(42L), eq("active"), eq(null), eq(null), eq(null), eq("线程")))
+                .willReturn(new QaSessionStatsResponse(1L, 2L, 1L, 0L));
+
+        service.statsFormalSessions(42L, request);
+
+        then(mapper).should().selectFormalSessionStats(eq(42L), eq("active"), eq(null), eq(null), eq(null), eq("线程"));
     }
 
     @Test

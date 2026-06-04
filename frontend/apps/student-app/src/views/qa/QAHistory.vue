@@ -242,6 +242,7 @@ import { listCourses } from '@/api/courses'
 import { listQaSessions, getQaSessionStats, updateQaSession } from '@/api/qa'
 import { normalizeCourseList, normalizeQaSession, normalizeQaSessionPage, normalizeQaSessionStats, localDateString } from './qa-session-model'
 import { buildQaHistoryQueryParams, groupQaHistorySessions } from './qa-history-model'
+import { notifyQaSessionsChanged } from './qa-session-events'
 
 const router = useRouter()
 
@@ -319,6 +320,18 @@ const truncate = (text, len) => text?.length > len ? text.substring(0, len) + '.
 
 const cardEnterDelay = (index = 0) => `${Math.min(Number(index) || 0, 8) * 26}ms`
 
+function notifyHistorySessionChanged(type, session, patch = {}) {
+  const current = session ?? {}
+  notifyQaSessionsChanged({
+    source: 'qa-history',
+    type,
+    sessionId: current.id ?? patch.id ?? null,
+    title: patch.title ?? current.title ?? '',
+    status: patch.status ?? current.status ?? '',
+    isFavorite: patch.isFavorite ?? current.isFavorite ?? false,
+  })
+}
+
 const toggleFavorite = async (session) => {
   const nextFavorite = !session.isFavorite
   try {
@@ -326,11 +339,13 @@ const toggleFavorite = async (session) => {
     ElMessage.success(nextFavorite ? '会话已收藏' : '已取消收藏')
     if (filterType.value === 'favorite' && !nextFavorite) {
       await loadHistory()
+      notifyHistorySessionChanged('favorite', session, { isFavorite: nextFavorite })
       return
     }
     sessionList.value = sessionList.value.map((item) => (
       item.id === session.id ? { ...item, isFavorite: nextFavorite } : item
     ))
+    notifyHistorySessionChanged('favorite', session, { isFavorite: nextFavorite })
   } catch (error) {
     ElMessage.error(error?.message || '收藏状态更新失败')
   }
@@ -346,6 +361,7 @@ const renameSession = async (session) => {
     sessionList.value = sessionList.value.map((item) => (
       item.id === session.id ? toSessionCard(updated) : item
     ))
+    notifyHistorySessionChanged('rename', updated)
     ElMessage.success('会话标题已更新')
   } catch (error) {
     ElMessage.error(error?.message || '会话改名失败')
@@ -358,6 +374,7 @@ const toggleArchive = async (session) => {
     await updateQaSession(session.id, { status: nextStatus })
     ElMessage.success(nextStatus === 'archived' ? '会话已归档' : '会话已恢复')
     await loadHistory()
+    notifyHistorySessionChanged('archive', { ...session, status: nextStatus })
   } catch (error) {
     ElMessage.error(error?.message || '会话状态更新失败')
   }

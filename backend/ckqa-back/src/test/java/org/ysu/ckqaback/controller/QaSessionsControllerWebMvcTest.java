@@ -85,6 +85,7 @@ class QaSessionsControllerWebMvcTest {
                         .param("status", "active")
                         .param("favorite", "true")
                         .param("sort", "oldest")
+                        .param("keyword", "临界区")
                         .param("page", "1")
                         .param("size", "50"))
                 .andExpect(status().isOk())
@@ -98,6 +99,7 @@ class QaSessionsControllerWebMvcTest {
                         && request.getSize() == 50L
                         && Boolean.TRUE.equals(request.getFavorite())
                         && "oldest".equals(request.getSort())
+                        && "临界区".equals(request.getKeyword())
         ));
     }
 
@@ -108,14 +110,18 @@ class QaSessionsControllerWebMvcTest {
 
         mockMvc.perform(get(ApiPaths.QA_SESSIONS + "/stats")
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
-                        .param("status", "active"))
+                        .param("status", "active")
+                        .param("keyword", "进程通信"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.totalSessions").value(128))
                 .andExpect(jsonPath("$.data.totalMessages").value(940))
                 .andExpect(jsonPath("$.data.courseCount").value(6))
                 .andExpect(jsonPath("$.data.favoriteCount").value(18));
 
-        then(qaWorkflowService).should().statsSessions(eq(7L), argThat(request -> "active".equals(request.getStatus())));
+        then(qaWorkflowService).should().statsSessions(eq(7L), argThat(request ->
+                "active".equals(request.getStatus())
+                        && "进程通信".equals(request.getKeyword())
+        ));
     }
 
     @Test

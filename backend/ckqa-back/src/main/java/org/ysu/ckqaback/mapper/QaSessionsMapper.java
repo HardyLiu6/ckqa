@@ -30,7 +30,8 @@ public interface QaSessionsMapper extends BaseMapper<QaSessions> {
             @Param("status") String status,
             @Param("courseId") String courseId,
             @Param("knowledgeBaseId") Long knowledgeBaseId,
-            @Param("favorite") Boolean favorite);
+            @Param("favorite") Boolean favorite,
+            @Param("keyword") String keyword);
 
     /**
      * 批量查询当前页会话的真实消息数，避免前端对每张历史卡片逐个请求消息列表。

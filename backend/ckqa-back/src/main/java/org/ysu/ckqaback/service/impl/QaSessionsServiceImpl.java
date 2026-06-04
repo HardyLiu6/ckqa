@@ -108,6 +108,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
     public ApiPageData<QaSessionResponse> pageFormalSessions(Long userId, QaSessionQueryRequest request) {
         long current = request.getPage() == null ? 1L : request.getPage();
         long size = request.getSize() == null ? 20L : request.getSize();
+        String keyword = trimToNull(request.getKeyword());
         LambdaQueryWrapper<QaSessions> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(QaSessions::getUserId, userId)
                 .eq(QaSessions::getSessionType, "formal")
@@ -115,6 +116,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 .eq(request.getKnowledgeBaseId() != null, QaSessions::getKnowledgeBaseId, request.getKnowledgeBaseId())
                 .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus())
                 .eq(request.getFavorite() != null, QaSessions::getIsFavorite, request.getFavorite());
+        applyKeywordFilter(wrapper, keyword);
         wrapper.last(resolveSessionOrderBy(request.getSort()));
 
         IPage<QaSessions> page = page(new Page<>(current, size), wrapper);
@@ -140,9 +142,35 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 request.getStatus(),
                 request.getCourseId(),
                 request.getKnowledgeBaseId(),
-                request.getFavorite()
+                request.getFavorite(),
+                trimToNull(request.getKeyword())
         );
         return stats != null ? stats : new QaSessionStatsResponse(0L, 0L, 0L, 0L);
+    }
+
+    private void applyKeywordFilter(LambdaQueryWrapper<QaSessions> wrapper, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return;
+        }
+        String likeKeyword = "%" + keyword + "%";
+        wrapper.and(nested -> nested
+                .like(QaSessions::getTitle, keyword)
+                .or()
+                .apply("""
+                        EXISTS (
+                          SELECT 1
+                          FROM qa_messages m
+                          WHERE m.session_id = qa_sessions.id
+                            AND (m.content_text LIKE {0} OR m.content LIKE {0})
+                        )
+                        """, likeKeyword));
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 
     private String resolveSessionOrderBy(String sort) {
@@ -174,7 +202,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 .collect(Collectors.toMap(
                         QaSessionMessageCount::getSessionId,
                         item -> item.getMessageCount() == null ? 0L : Math.max(0L, item.getMessageCount()),
-                        Long::sum
+                        (left, right) -> (left == null ? 0L : left) + (right == null ? 0L : right)
                 ));
     }
 
