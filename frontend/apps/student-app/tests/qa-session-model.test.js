@@ -455,6 +455,7 @@ test('问答历史查询参数把收藏、课程和排序下沉到后端', () =>
     buildQaHistoryQueryParams({
       filterType: 'favorite',
       filterCourse: 'os',
+      searchKeyword: '  临界区  ',
       sortBy: 'oldest',
       page: 2,
       size: 20,
@@ -463,6 +464,7 @@ test('问答历史查询参数把收藏、课程和排序下沉到后端', () =>
       status: 'active',
       favorite: true,
       courseId: 'os',
+      keyword: '临界区',
       sort: 'oldest',
       page: 2,
       size: 20,

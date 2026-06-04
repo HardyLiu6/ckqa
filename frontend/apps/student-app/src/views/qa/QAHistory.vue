@@ -197,7 +197,7 @@
               <DocumentDelete />
             </el-icon></div>
           <h3>暂无对话记录</h3>
-          <p>{{ searchKeyword || filterCourse ? '没有找到符合条件的对话' : '开始你的第一次提问吧' }}</p>
+          <p>{{ normalizedSearchKeyword || filterCourse ? '没有找到符合条件的对话' : '开始你的第一次提问吧' }}</p>
           <el-button type="primary" @click="goToAsk"><el-icon>
               <ChatDotRound />
             </el-icon>开始提问</el-button>
@@ -241,7 +241,7 @@ import { ArrowLeft, Search, More, Download, Delete, ChatDotRound, Comment, Star,
 import { listCourses } from '@/api/courses'
 import { listQaSessions, getQaSessionStats, updateQaSession } from '@/api/qa'
 import { normalizeCourseList, normalizeQaSession, normalizeQaSessionPage, normalizeQaSessionStats, localDateString } from './qa-session-model'
-import { buildQaHistoryQueryParams, groupQaHistorySessions } from './qa-history-model'
+import { buildQaHistoryQueryParams, groupQaHistorySessions, normalizeQaHistorySearchKeyword } from './qa-history-model'
 import { notifyQaSessionsChanged } from './qa-session-events'
 
 const router = useRouter()
@@ -263,6 +263,7 @@ const searchKeyword = ref('')
 const filterType = ref('active')
 const filterCourse = ref('')
 const sortBy = ref('newest')
+let searchTimer = null
 
 const courseList = computed(() => courses.value.map((course) => ({
   id: course.courseId,
@@ -275,15 +276,11 @@ const courseNameById = computed(() => Object.fromEntries(
 // 统计卡片：由后端按全部历史聚合得出，不受分页/无限滚动影响
 const EMPTY_STATS = { totalSessions: 0, totalMessages: 0, courseCount: 0, favoriteCount: 0 }
 const stats = ref({ ...EMPTY_STATS })
+const normalizedSearchKeyword = computed(() => normalizeQaHistorySearchKeyword(searchKeyword.value))
 
 // 过滤后的会话
 const filteredSessions = computed(() => {
   let result = [...sessionList.value]
-
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase()
-    result = result.filter(s => s.title.toLowerCase().includes(kw) || s.lastMessage.toLowerCase().includes(kw))
-  }
 
   if (filterType.value === 'today') {
     const today = localDateString()
@@ -411,10 +408,24 @@ watch([filterCourse, sortBy], () => {
   loadHistory()
 })
 
+watch(searchKeyword, () => {
+  if (searchTimer) {
+    window.clearTimeout(searchTimer)
+  }
+  searchTimer = window.setTimeout(() => {
+    searchTimer = null
+    loadHistory()
+  }, 240)
+})
+
 onUnmounted(() => {
   if (scrollObserver) {
     scrollObserver.disconnect()
     scrollObserver = null
+  }
+  if (searchTimer) {
+    window.clearTimeout(searchTimer)
+    searchTimer = null
   }
 })
 
@@ -425,6 +436,7 @@ async function loadHistory() {
     const queryParams = buildQaHistoryQueryParams({
       filterType: filterType.value,
       filterCourse: filterCourse.value,
+      searchKeyword: searchKeyword.value,
       sortBy: sortBy.value,
       page: 1,
       size: PAGE_SIZE,
@@ -459,6 +471,7 @@ async function loadMore() {
     const queryParams = buildQaHistoryQueryParams({
       filterType: filterType.value,
       filterCourse: filterCourse.value,
+      searchKeyword: searchKeyword.value,
       sortBy: sortBy.value,
       page: nextPage,
       size: PAGE_SIZE,

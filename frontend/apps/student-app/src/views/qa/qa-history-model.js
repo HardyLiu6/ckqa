@@ -10,19 +10,32 @@ function normalizePositiveInteger(value, fallback) {
   return Math.floor(number)
 }
 
+function firstString(value) {
+  if (Array.isArray(value)) {
+    return firstString(value[0])
+  }
+  return value == null ? '' : String(value)
+}
+
 export function normalizeQaHistorySort(sortBy = 'newest') {
   const normalized = String(sortBy || '').trim()
   return QA_HISTORY_SORTS.has(normalized) ? normalized : 'newest'
 }
 
+export function normalizeQaHistorySearchKeyword(value) {
+  return firstString(value).trim().replace(/\s+/g, ' ')
+}
+
 export function buildQaHistoryQueryParams({
   filterType = 'active',
   filterCourse = '',
+  searchKeyword = '',
   sortBy = 'newest',
   page = 1,
   size = 20,
 } = {}) {
   const normalizedFilter = String(filterType || 'active')
+  const normalizedKeyword = normalizeQaHistorySearchKeyword(searchKeyword)
   const params = {
     status: normalizedFilter === 'archived' ? 'archived' : 'active',
     sort: normalizeQaHistorySort(sortBy),
@@ -34,6 +47,9 @@ export function buildQaHistoryQueryParams({
   }
   if (filterCourse) {
     params.courseId = String(filterCourse)
+  }
+  if (normalizedKeyword) {
+    params.keyword = normalizedKeyword
   }
   return params
 }
