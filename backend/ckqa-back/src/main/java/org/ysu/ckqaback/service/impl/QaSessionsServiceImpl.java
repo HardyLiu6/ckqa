@@ -10,6 +10,7 @@ import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.mapper.QaSessionsMapper;
 import org.ysu.ckqaback.qa.dto.CreateQaSessionRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionMessageCount;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
 import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
@@ -21,7 +22,10 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -63,6 +67,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
         session.setSessionType(StringUtils.hasText(request.getSessionType()) ? request.getSessionType() : "formal");
         session.setTitle(StringUtils.hasText(request.getTitle()) ? request.getTitle() : "新建问答会话");
         session.setStatus("active");
+        session.setIsFavorite(false);
         session.setCreatedAt(now);
         save(session);
         return session;
@@ -88,6 +93,7 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
         session.setSessionType("formal");
         session.setTitle(resolveForkTitle(parent.getTitle(), title));
         session.setStatus("active");
+        session.setIsFavorite(false);
         session.setParentSessionId(parent.getId());
         session.setForkedFromMessageId(forkedFromMessageId);
         session.setForkedFromSequenceNo(forkedFromSequenceNo);
@@ -107,15 +113,19 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 .eq(QaSessions::getSessionType, "formal")
                 .eq(StringUtils.hasText(request.getCourseId()), QaSessions::getCourseId, request.getCourseId())
                 .eq(request.getKnowledgeBaseId() != null, QaSessions::getKnowledgeBaseId, request.getKnowledgeBaseId())
-                .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus());
-        // 无消息会话 last_message_at 为 NULL，MySQL 在 DESC 下会把它们排到最后，
-        // 导致刚创建的会话被列表 size 截断而看不见。用 COALESCE 兜底到 created_at，
-        // 让会话按真实活跃时间排序，刚提问的会话也能出现在最近列表顶部。
-        wrapper.last(" ORDER BY COALESCE(last_message_at, created_at) DESC, created_at DESC");
+                .eq(StringUtils.hasText(request.getStatus()), QaSessions::getStatus, request.getStatus())
+                .eq(request.getFavorite() != null, QaSessions::getIsFavorite, request.getFavorite());
+        wrapper.last(resolveSessionOrderBy(request.getSort()));
 
         IPage<QaSessions> page = page(new Page<>(current, size), wrapper);
+        List<QaSessions> records = page.getRecords();
+        Map<Long, Long> messageCountBySessionId = loadMessageCounts(records);
         return new ApiPageData<>(
-                page.getRecords().stream().map(QaSessionResponse::fromEntity).toList(),
+                records.stream()
+                        .map(session -> QaSessionResponse.fromEntity(
+                                session,
+                                messageCountBySessionId.getOrDefault(session.getId(), 0L)))
+                        .toList(),
                 page.getCurrent(),
                 page.getSize(),
                 page.getTotal(),
@@ -129,9 +139,43 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
                 userId,
                 request.getStatus(),
                 request.getCourseId(),
-                request.getKnowledgeBaseId()
+                request.getKnowledgeBaseId(),
+                request.getFavorite()
         );
         return stats != null ? stats : new QaSessionStatsResponse(0L, 0L, 0L);
+    }
+
+    private String resolveSessionOrderBy(String sort) {
+        if ("oldest".equals(sort)) {
+            return " ORDER BY COALESCE(last_message_at, created_at) ASC, created_at ASC";
+        }
+        if ("messages".equals(sort)) {
+            return """
+                     ORDER BY (SELECT COUNT(*) FROM qa_messages m WHERE m.session_id = qa_sessions.id) DESC,
+                     COALESCE(last_message_at, created_at) DESC,
+                     created_at DESC
+                    """;
+        }
+        // 无消息会话 last_message_at 为 NULL，MySQL 在 DESC 下会把它们排到最后，
+        // 导致刚创建的会话被列表 size 截断而看不见。用 COALESCE 兜底到 created_at。
+        return " ORDER BY COALESCE(last_message_at, created_at) DESC, created_at DESC";
+    }
+
+    private Map<Long, Long> loadMessageCounts(List<QaSessions> sessions) {
+        List<Long> sessionIds = sessions.stream()
+                .map(QaSessions::getId)
+                .filter(id -> id != null)
+                .toList();
+        if (sessionIds.isEmpty()) {
+            return Map.of();
+        }
+        return baseMapper.selectMessageCountsBySessionIds(sessionIds).stream()
+                .filter(item -> item.getSessionId() != null)
+                .collect(Collectors.toMap(
+                        QaSessionMessageCount::getSessionId,
+                        item -> item.getMessageCount() == null ? 0L : Math.max(0L, item.getMessageCount()),
+                        Long::sum
+                ));
     }
 
     @Override
@@ -153,18 +197,21 @@ public class QaSessionsServiceImpl extends ServiceImpl<QaSessionsMapper, QaSessi
     }
 
     @Override
-    public QaSessions updateSession(Long id, String title, String status) {
+    public QaSessions updateSession(Long id, String title, String status, Boolean isFavorite) {
         QaSessions current = getRequiredById(id);
         String nextTitle = StringUtils.hasText(title) ? title.trim() : current.getTitle();
         String nextStatus = StringUtils.hasText(status) ? status.trim() : current.getStatus();
+        Boolean nextFavorite = isFavorite == null ? Boolean.TRUE.equals(current.getIsFavorite()) : isFavorite;
         LambdaUpdateWrapper<QaSessions> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(QaSessions::getId, id)
                 .set(QaSessions::getTitle, nextTitle)
                 .set(QaSessions::getStatus, nextStatus)
+                .set(QaSessions::getIsFavorite, nextFavorite)
                 .set(QaSessions::getUpdatedAt, LocalDateTime.now(SHANGHAI_ZONE));
         baseMapper.update(null, wrapper);
         current.setTitle(nextTitle);
         current.setStatus(nextStatus);
+        current.setIsFavorite(nextFavorite);
         current.setUpdatedAt(LocalDateTime.now(SHANGHAI_ZONE));
         return current;
     }

@@ -42,5 +42,5 @@ public interface QaSessionsService extends IService<QaSessions> {
 
     void touchLastMessageAt(Long id);
 
-    QaSessions updateSession(Long id, String title, String status);
+    QaSessions updateSession(Long id, String title, String status, Boolean isFavorite);
 }

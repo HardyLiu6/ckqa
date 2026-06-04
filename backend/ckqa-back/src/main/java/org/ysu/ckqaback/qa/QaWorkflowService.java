@@ -351,7 +351,12 @@ public class QaWorkflowService {
         if ("active".equals(request.getStatus()) && courseAccessService != null && StringUtils.hasText(session.getCourseId())) {
             courseAccessService.assertCourseReadable(session.getCourseId(), currentUser.userCode());
         }
-        QaSessions updated = qaSessionsService.updateSession(sessionId, request.getTitle(), request.getStatus());
+        QaSessions updated = qaSessionsService.updateSession(
+                sessionId,
+                request.getTitle(),
+                request.getStatus(),
+                request.getIsFavorite()
+        );
         return QaSessionResponse.fromEntity(updated);
     }
 

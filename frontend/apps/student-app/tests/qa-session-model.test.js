@@ -3,6 +3,10 @@ import assert from 'node:assert/strict'
 
 import * as qaSessionModel from '../src/views/qa/qa-session-model.js'
 import {
+  buildQaHistoryQueryParams,
+  groupQaHistorySessions,
+} from '../src/views/qa/qa-history-model.js'
+import {
   isTerminalTaskStatus,
   matchCourseForQuestion,
   normalizeCourseRoutingRecommendation,
@@ -345,6 +349,8 @@ test('会话模型保留固化索引和可恢复状态', () => {
       indexLockedAt: '2026-05-17T10:00:00',
       title: '死锁问答',
       status: 'active',
+      messageCount: 6,
+      isFavorite: true,
     }),
     {
       id: 20,
@@ -357,9 +363,19 @@ test('会话模型保留固化索引和可恢复状态', () => {
       status: 'active',
       lastMessageAt: '',
       createdAt: '',
+      messageCount: 6,
+      isFavorite: true,
       isLegacy: false,
     },
   )
+})
+
+test('会话模型兼容下划线消息数和收藏字段并对异常值兜底', () => {
+  assert.equal(normalizeQaSession({ id: 20, message_count: '9' }).messageCount, 9)
+  assert.equal(normalizeQaSession({ id: 21, messageCount: -2 }).messageCount, 0)
+  assert.equal(normalizeQaSession({ id: 22, is_favorite: true }).isFavorite, true)
+  assert.equal(normalizeQaSession({ id: 23, favorite: true }).isFavorite, true)
+  assert.equal(normalizeQaSession({ id: 24 }).isFavorite, false)
 })
 
 test('会话列表兼容分页响应并过滤缺少 id 的脏数据', () => {
@@ -382,6 +398,8 @@ test('会话列表兼容分页响应并过滤缺少 id 的脏数据', () => {
         status: 'active',
         lastMessageAt: '',
         createdAt: '',
+        messageCount: 0,
+        isFavorite: false,
         isLegacy: false,
       },
     ],
@@ -430,6 +448,51 @@ test('会话统计对缺失/异常字段安全兜底为 0', () => {
     normalizeQaSessionStats({ totalSessions: '940', totalMessages: -3, courseCount: null }),
     { totalSessions: 940, totalMessages: 0, courseCount: 0 },
   )
+})
+
+test('问答历史查询参数把收藏、课程和排序下沉到后端', () => {
+  assert.deepEqual(
+    buildQaHistoryQueryParams({
+      filterType: 'favorite',
+      filterCourse: 'os',
+      sortBy: 'oldest',
+      page: 2,
+      size: 20,
+    }),
+    {
+      status: 'active',
+      favorite: true,
+      courseId: 'os',
+      sort: 'oldest',
+      page: 2,
+      size: 20,
+    },
+  )
+  assert.deepEqual(
+    buildQaHistoryQueryParams({
+      filterType: 'archived',
+      sortBy: 'messages',
+    }),
+    {
+      status: 'archived',
+      sort: 'messages',
+      page: 1,
+      size: 20,
+    },
+  )
+})
+
+test('问答历史最早优先时日期分组按升序输出', () => {
+  const groups = groupQaHistorySessions([
+    { id: 1, date: '2026-06-04', title: '今天' },
+    { id: 2, date: '2026-06-02', title: '更早' },
+    { id: 3, date: '2026-06-03', title: '昨天' },
+  ], {
+    sortBy: 'oldest',
+    now: new Date('2026-06-04T10:00:00+08:00'),
+  })
+
+  assert.deepEqual(groups.map((group) => group.date), ['2026-06-02', '2026-06-03', '2026-06-04'])
 })
 
 test('问答侧栏会话卡片使用真实 session 时间和当前路由高亮', () => {

@@ -262,8 +262,10 @@ Content-Type: application/json
   "knowledgeBaseId": 3,
   "title": "操作系统问答",
   "status": "active",
+  "isFavorite": false,
   "lastMessageAt": null,
-  "createdAt": "2026-04-23T15:30:00"
+  "createdAt": "2026-04-23T15:30:00",
+  "messageCount": 0
 }
 ```
 
@@ -272,6 +274,9 @@ Content-Type: application/json
 - `userId` 必填且必须大于 `0`。
 - `knowledgeBaseId` 可空，但不绑定知识库的会话不能发送真实问答消息。
 - `status` 为 `active` 时才允许继续发送消息。
+- `GET /api/v1/qa-sessions` 列表项会返回当前会话真实 `messageCount` 与 `isFavorite`，供问答历史卡片、“消息最多”排序和收藏列表使用；创建和详情响应在未聚合时 `messageCount` 默认为 `0`。
+- 会话列表支持 `status=active|archived|deleted`、`favorite=true|false`、`courseId`、`knowledgeBaseId`、`sort=newest|oldest|messages`、`page`、`size` 查询参数；未传排序时默认 `newest`。
+- `PATCH /api/v1/qa-sessions/{id}` 支持轻量更新 `title`、`status` 和 `isFavorite`，字段为 `null` 或缺失时保持原值。
 
 ### 发送问答消息
 

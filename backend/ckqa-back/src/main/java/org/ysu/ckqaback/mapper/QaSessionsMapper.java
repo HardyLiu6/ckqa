@@ -4,7 +4,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.qa.dto.QaSessionMessageCount;
 import org.ysu.ckqaback.qa.dto.QaSessionStatsResponse;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * <p>
@@ -25,6 +29,12 @@ public interface QaSessionsMapper extends BaseMapper<QaSessions> {
             @Param("userId") Long userId,
             @Param("status") String status,
             @Param("courseId") String courseId,
-            @Param("knowledgeBaseId") Long knowledgeBaseId);
+            @Param("knowledgeBaseId") Long knowledgeBaseId,
+            @Param("favorite") Boolean favorite);
+
+    /**
+     * 批量查询当前页会话的真实消息数，避免前端对每张历史卡片逐个请求消息列表。
+     */
+    List<QaSessionMessageCount> selectMessageCountsBySessionIds(@Param("sessionIds") Collection<Long> sessionIds);
 
 }

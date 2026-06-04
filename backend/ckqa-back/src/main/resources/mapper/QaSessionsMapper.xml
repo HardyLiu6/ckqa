@@ -20,6 +20,7 @@
         <result column="transcript_version" property="transcriptVersion" />
         <result column="title" property="title" />
         <result column="status" property="status" />
+        <result column="is_favorite" property="isFavorite" />
         <result column="last_message_at" property="lastMessageAt" />
         <result column="created_at" property="createdAt" />
         <result column="updated_at" property="updatedAt" />
@@ -29,7 +30,7 @@
     <sql id="Base_Column_List">
         id, session_code, user_id, course_id, course_membership_id, knowledge_base_id, index_run_id,
         index_locked_at, session_type, parent_session_id, forked_from_message_id, forked_from_sequence_no,
-        fork_reason, transcript_version, title, status, last_message_at, created_at, updated_at
+        fork_reason, transcript_version, title, status, is_favorite, last_message_at, created_at, updated_at
     </sql>
 
     <!-- 「问答记录」统计卡片：按筛选条件在库层聚合，反映全部历史的真实口径，不受分页截断影响 -->
@@ -51,6 +52,21 @@
           <if test="knowledgeBaseId != null">
             AND s.knowledge_base_id = #{knowledgeBaseId}
           </if>
+          <if test="favorite != null">
+            AND s.is_favorite = #{favorite}
+          </if>
+    </select>
+
+    <select id="selectMessageCountsBySessionIds" resultType="org.ysu.ckqaback.qa.dto.QaSessionMessageCount">
+        SELECT
+          session_id AS sessionId,
+          COUNT(*) AS messageCount
+        FROM qa_messages
+        WHERE session_id IN
+        <foreach collection="sessionIds" item="sessionId" open="(" separator="," close=")">
+            #{sessionId}
+        </foreach>
+        GROUP BY session_id
     </select>
 
 </mapper>

@@ -22,6 +22,11 @@ public class QaSessionQueryRequest {
     @Pattern(regexp = "active|archived|deleted", message = "status取值不合法")
     private String status = "active";
 
+    private Boolean favorite;
+
+    @Pattern(regexp = "newest|oldest|messages", message = "sort取值不合法")
+    private String sort = "newest";
+
     @Positive(message = "page必须大于0")
     private Long page = 1L;
 

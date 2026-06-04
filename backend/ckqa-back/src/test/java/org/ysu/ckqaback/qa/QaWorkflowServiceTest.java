@@ -135,22 +135,26 @@ class QaWorkflowServiceTest {
         session.setSessionType("formal");
         session.setStatus("active");
         session.setTitle("旧标题");
+        session.setIsFavorite(false);
         given(qaSessionsService.getRequiredById(5L)).willReturn(session);
-        given(qaSessionsService.updateSession(5L, "死锁复习", "archived")).willAnswer(invocation -> {
+        given(qaSessionsService.updateSession(5L, "死锁复习", "archived", true)).willAnswer(invocation -> {
             session.setTitle(invocation.getArgument(1));
             session.setStatus(invocation.getArgument(2));
+            session.setIsFavorite(invocation.getArgument(3));
             return session;
         });
 
         UpdateQaSessionRequest request = new UpdateQaSessionRequest();
         request.setTitle("死锁复习");
         request.setStatus("archived");
+        request.setIsFavorite(true);
 
         var response = workflowService.updateSession(5L, request, authenticatedStudent());
 
         assertThat(response.getTitle()).isEqualTo("死锁复习");
         assertThat(response.getStatus()).isEqualTo("archived");
-        then(qaSessionsService).should().updateSession(5L, "死锁复习", "archived");
+        assertThat(response.isFavorite()).isTrue();
+        then(qaSessionsService).should().updateSession(5L, "死锁复习", "archived", true);
     }
 
     @Test
@@ -186,7 +190,7 @@ class QaWorkflowServiceTest {
                     assertThat(exception.getMessage()).contains("无课程访问权限");
                 });
 
-        then(qaSessionsService).should(never()).updateSession(anyLong(), any(), any());
+        then(qaSessionsService).should(never()).updateSession(anyLong(), any(), any(), any());
     }
 
     @Test

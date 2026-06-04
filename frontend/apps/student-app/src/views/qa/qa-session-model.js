@@ -396,6 +396,8 @@ export function normalizeQaSession(session = {}) {
     status: session.status ?? 'active',
     lastMessageAt: session.lastMessageAt ?? '',
     createdAt: session.createdAt ?? '',
+    messageCount: normalizeNonNegativeInteger(session.messageCount ?? session.message_count, 0),
+    isFavorite: Boolean(session.isFavorite ?? session.is_favorite ?? session.favorite ?? false),
     isLegacy: indexRunId == null,
   }
 }

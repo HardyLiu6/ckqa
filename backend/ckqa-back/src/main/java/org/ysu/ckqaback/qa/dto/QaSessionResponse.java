@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.qa.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import org.ysu.ckqaback.entity.QaSessions;
 
@@ -26,8 +27,11 @@ public class QaSessionResponse {
     private final String transcriptVersion;
     private final String title;
     private final String status;
+    @JsonProperty("isFavorite")
+    private final boolean isFavorite;
     private final LocalDateTime lastMessageAt;
     private final LocalDateTime createdAt;
+    private final long messageCount;
 
     private QaSessionResponse(
             Long id,
@@ -45,8 +49,10 @@ public class QaSessionResponse {
             String transcriptVersion,
             String title,
             String status,
+            boolean isFavorite,
             LocalDateTime lastMessageAt,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            long messageCount
     ) {
         this.id = id;
         this.sessionCode = sessionCode;
@@ -63,8 +69,10 @@ public class QaSessionResponse {
         this.transcriptVersion = transcriptVersion;
         this.title = title;
         this.status = status;
+        this.isFavorite = isFavorite;
         this.lastMessageAt = lastMessageAt;
         this.createdAt = createdAt;
+        this.messageCount = Math.max(0L, messageCount);
     }
 
     public static QaSessionResponse of(
@@ -97,8 +105,97 @@ public class QaSessionResponse {
                 "v1",
                 title,
                 status,
+                false,
                 lastMessageAt,
-                createdAt
+                createdAt,
+                0L
+        );
+    }
+
+    public static QaSessionResponse of(
+            Long id,
+            String sessionCode,
+            Long userId,
+            String courseId,
+            Long knowledgeBaseId,
+            Long indexRunId,
+            LocalDateTime indexLockedAt,
+            String sessionType,
+            Long parentSessionId,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String forkReason,
+            String transcriptVersion,
+            String title,
+            String status,
+            LocalDateTime lastMessageAt,
+            LocalDateTime createdAt,
+            long messageCount
+    ) {
+        return of(
+                id,
+                sessionCode,
+                userId,
+                courseId,
+                knowledgeBaseId,
+                indexRunId,
+                indexLockedAt,
+                sessionType,
+                parentSessionId,
+                forkedFromMessageId,
+                forkedFromSequenceNo,
+                forkReason,
+                transcriptVersion,
+                title,
+                status,
+                false,
+                lastMessageAt,
+                createdAt,
+                messageCount
+        );
+    }
+
+    public static QaSessionResponse of(
+            Long id,
+            String sessionCode,
+            Long userId,
+            String courseId,
+            Long knowledgeBaseId,
+            Long indexRunId,
+            LocalDateTime indexLockedAt,
+            String sessionType,
+            Long parentSessionId,
+            Long forkedFromMessageId,
+            Integer forkedFromSequenceNo,
+            String forkReason,
+            String transcriptVersion,
+            String title,
+            String status,
+            boolean isFavorite,
+            LocalDateTime lastMessageAt,
+            LocalDateTime createdAt,
+            long messageCount
+    ) {
+        return new QaSessionResponse(
+                id,
+                sessionCode,
+                userId,
+                courseId,
+                knowledgeBaseId,
+                indexRunId,
+                indexLockedAt,
+                sessionType,
+                parentSessionId,
+                forkedFromMessageId,
+                forkedFromSequenceNo,
+                forkReason,
+                transcriptVersion == null ? "v1" : transcriptVersion,
+                title,
+                status,
+                isFavorite,
+                lastMessageAt,
+                createdAt,
+                messageCount
         );
     }
 
@@ -121,7 +218,7 @@ public class QaSessionResponse {
             LocalDateTime lastMessageAt,
             LocalDateTime createdAt
     ) {
-        return new QaSessionResponse(
+        return of(
                 id,
                 sessionCode,
                 userId,
@@ -134,11 +231,13 @@ public class QaSessionResponse {
                 forkedFromMessageId,
                 forkedFromSequenceNo,
                 forkReason,
-                transcriptVersion == null ? "v1" : transcriptVersion,
+                transcriptVersion,
                 title,
                 status,
+                false,
                 lastMessageAt,
-                createdAt
+                createdAt,
+                0L
         );
     }
 
@@ -157,7 +256,49 @@ public class QaSessionResponse {
         return of(id, sessionCode, userId, courseId, knowledgeBaseId, null, null, sessionType, title, status, lastMessageAt, createdAt);
     }
 
+    public static QaSessionResponse of(
+            Long id,
+            String sessionCode,
+            Long userId,
+            String courseId,
+            Long knowledgeBaseId,
+            Long indexRunId,
+            LocalDateTime indexLockedAt,
+            String sessionType,
+            String title,
+            String status,
+            LocalDateTime lastMessageAt,
+            LocalDateTime createdAt,
+            boolean isFavorite
+    ) {
+        return new QaSessionResponse(
+                id,
+                sessionCode,
+                userId,
+                courseId,
+                knowledgeBaseId,
+                indexRunId,
+                indexLockedAt,
+                sessionType,
+                null,
+                null,
+                null,
+                null,
+                "v1",
+                title,
+                status,
+                isFavorite,
+                lastMessageAt,
+                createdAt,
+                0L
+        );
+    }
+
     public static QaSessionResponse fromEntity(QaSessions session) {
+        return fromEntity(session, 0L);
+    }
+
+    public static QaSessionResponse fromEntity(QaSessions session, long messageCount) {
         return of(
                 session.getId(),
                 session.getSessionCode(),
@@ -174,8 +315,10 @@ public class QaSessionResponse {
                 session.getTranscriptVersion(),
                 session.getTitle(),
                 session.getStatus(),
+                Boolean.TRUE.equals(session.getIsFavorite()),
                 session.getLastMessageAt(),
-                session.getCreatedAt()
+                session.getCreatedAt(),
+                messageCount
         );
     }
 }

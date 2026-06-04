@@ -83,14 +83,22 @@ class QaSessionsControllerWebMvcTest {
         mockMvc.perform(get(ApiPaths.QA_SESSIONS)
                         .requestAttr(AuthConstants.REQUEST_USER_ATTRIBUTE, authenticatedStudent())
                         .param("status", "active")
+                        .param("favorite", "true")
+                        .param("sort", "oldest")
                         .param("page", "1")
                         .param("size", "50"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].id").value(5))
+                .andExpect(jsonPath("$.data.items[0].messageCount").value(0))
                 .andExpect(jsonPath("$.data.items[0].indexRunId").value(17))
                 .andExpect(jsonPath("$.data.items[0].indexLockedAt").exists());
 
-        then(qaWorkflowService).should().listSessions(eq(7L), argThat(request -> request.getPage() == 1L && request.getSize() == 50L));
+        then(qaWorkflowService).should().listSessions(eq(7L), argThat(request ->
+                request.getPage() == 1L
+                        && request.getSize() == 50L
+                        && Boolean.TRUE.equals(request.getFavorite())
+                        && "oldest".equals(request.getSort())
+        ));
     }
 
     @Test
@@ -288,7 +296,8 @@ class QaSessionsControllerWebMvcTest {
                 "死锁复习",
                 "archived",
                 LocalDateTime.of(2026, 5, 17, 10, 5),
-                LocalDateTime.of(2026, 5, 17, 10, 0)
+                LocalDateTime.of(2026, 5, 17, 10, 0),
+                true
         );
         given(qaWorkflowService.updateSession(eq(5L), any(), eq(authenticatedStudent()))).willReturn(response);
 
@@ -298,15 +307,19 @@ class QaSessionsControllerWebMvcTest {
                         .content("""
                                 {
                                   "title": "死锁复习",
-                                  "status": "archived"
+                                  "status": "archived",
+                                  "isFavorite": true
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.title").value("死锁复习"))
-                .andExpect(jsonPath("$.data.status").value("archived"));
+                .andExpect(jsonPath("$.data.status").value("archived"))
+                .andExpect(jsonPath("$.data.isFavorite").value(true));
 
         then(qaWorkflowService).should().updateSession(eq(5L), argThat(request ->
-                "死锁复习".equals(request.getTitle()) && "archived".equals(request.getStatus())
+                "死锁复习".equals(request.getTitle())
+                        && "archived".equals(request.getStatus())
+                        && Boolean.TRUE.equals(request.getIsFavorite())
         ), eq(authenticatedStudent()));
     }
 

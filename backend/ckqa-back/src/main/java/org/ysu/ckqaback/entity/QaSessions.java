@@ -124,6 +124,12 @@ public class QaSessions implements Serializable {
     private String status;
 
     /**
+     * 是否收藏会话
+     */
+    @TableField("is_favorite")
+    private Boolean isFavorite;
+
+    /**
      * 最后消息时间
      */
     @TableField("last_message_at")

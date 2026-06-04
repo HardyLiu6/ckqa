@@ -7,12 +7,22 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.entity.QaSessions;
+import org.ysu.ckqaback.mapper.QaSessionsMapper;
+import org.ysu.ckqaback.qa.dto.QaSessionMessageCount;
 import org.ysu.ckqaback.qa.dto.QaSessionQueryRequest;
+import org.ysu.ckqaback.qa.dto.QaSessionResponse;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 class QaSessionsServiceImplTest {
 
@@ -50,5 +60,91 @@ class QaSessionsServiceImplTest {
                 .as("无消息会话应按 created_at 兜底排序,而不是被当成最旧沉底")
                 .contains("COALESCE(last_message_at, created_at)");
         assertThat(sql.toUpperCase()).contains("DESC");
+    }
+
+    @Test
+    void pageFormalSessionsCanFilterFavoritesAndOrderOldestFirst() {
+        AtomicReference<Wrapper<QaSessions>> captured = new AtomicReference<>();
+        QaSessionsServiceImpl service = new QaSessionsServiceImpl() {
+            @Override
+            public <E extends IPage<QaSessions>> E page(E page, Wrapper<QaSessions> queryWrapper) {
+                captured.set(queryWrapper);
+                return page;
+            }
+        };
+
+        QaSessionQueryRequest request = new QaSessionQueryRequest();
+        request.setFavorite(true);
+        request.setSort("oldest");
+
+        service.pageFormalSessions(42L, request);
+
+        String sql = captured.get().getSqlSegment();
+        assertThat(sql).contains("is_favorite");
+        assertThat(sql).contains("COALESCE(last_message_at, created_at)");
+        assertThat(sql.toUpperCase()).contains("ASC");
+    }
+
+    @Test
+    void pageFormalSessionsCanOrderByMessageCountInDatabase() {
+        AtomicReference<Wrapper<QaSessions>> captured = new AtomicReference<>();
+        QaSessionsServiceImpl service = new QaSessionsServiceImpl() {
+            @Override
+            public <E extends IPage<QaSessions>> E page(E page, Wrapper<QaSessions> queryWrapper) {
+                captured.set(queryWrapper);
+                return page;
+            }
+        };
+
+        QaSessionQueryRequest request = new QaSessionQueryRequest();
+        request.setSort("messages");
+
+        service.pageFormalSessions(42L, request);
+
+        String sql = captured.get().getSqlSegment();
+        assertThat(sql).contains("qa_messages");
+        assertThat(sql.toUpperCase()).contains("COUNT");
+        assertThat(sql.toUpperCase()).contains("DESC");
+    }
+
+    @Test
+    void pageFormalSessionsAttachesMessageCountsForCurrentPage() {
+        QaSessionsMapper mapper = mock(QaSessionsMapper.class);
+        QaSessionsServiceImpl service = new QaSessionsServiceImpl() {
+            @Override
+            public <E extends IPage<QaSessions>> E page(E page, Wrapper<QaSessions> queryWrapper) {
+                page.setRecords(List.of(session(5L), session(6L)));
+                page.setTotal(2L);
+                return page;
+            }
+        };
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "baseMapper", mapper);
+        given(mapper.selectMessageCountsBySessionIds(argThat(ids -> ids.containsAll(List.of(5L, 6L)))))
+                .willReturn(List.of(new QaSessionMessageCount(5L, 3L)));
+
+        QaSessionQueryRequest request = new QaSessionQueryRequest();
+        request.setPage(1L);
+        request.setSize(20L);
+
+        ApiPageData<QaSessionResponse> result = service.pageFormalSessions(42L, request);
+
+        assertThat(result.getItems()).extracting(QaSessionResponse::getMessageCount).containsExactly(3L, 0L);
+        then(mapper).should().selectMessageCountsBySessionIds(argThat(ids -> ids.containsAll(List.of(5L, 6L))));
+    }
+
+    private static QaSessions session(Long id) {
+        QaSessions session = new QaSessions();
+        session.setId(id);
+        session.setSessionCode("qa-" + id);
+        session.setUserId(42L);
+        session.setCourseId("os");
+        session.setKnowledgeBaseId(3L);
+        session.setIndexRunId(17L);
+        session.setSessionType("formal");
+        session.setTitle("会话 " + id);
+        session.setStatus("active");
+        session.setIsFavorite(false);
+        session.setCreatedAt(LocalDateTime.of(2026, 6, 4, 10, 0));
+        return session;
     }
 }

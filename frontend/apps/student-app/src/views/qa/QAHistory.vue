@@ -16,7 +16,6 @@
                 <Search />
               </el-icon></template>
           </el-input>
-          <el-button type="primary" :icon="Plus" @click="goToAsk">新建对话</el-button>
           <el-dropdown trigger="click">
             <el-button :icon="More" circle class="more-btn" />
             <template #dropdown>
@@ -41,22 +40,22 @@
           <div class="stat-icon blue"><el-icon>
               <ChatDotRound />
             </el-icon></div>
-          <div class="stat-info"><span class="stat-value">{{ stats.totalSessions }}</span><span
-              class="stat-label">对话总数</span></div>
+          <div class="stat-info"><span v-if="loading" class="stat-value stat-value-skeleton"></span><span v-else
+              class="stat-value">{{ stats.totalSessions }}</span><span class="stat-label">对话总数</span></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon green"><el-icon>
               <Comment />
             </el-icon></div>
-          <div class="stat-info"><span class="stat-value">{{ stats.totalMessages }}</span><span
-              class="stat-label">消息总数</span></div>
+          <div class="stat-info"><span v-if="loading" class="stat-value stat-value-skeleton"></span><span v-else
+              class="stat-value">{{ stats.totalMessages }}</span><span class="stat-label">消息总数</span></div>
         </div>
         <div class="stat-card">
           <div class="stat-icon purple"><el-icon>
               <Reading />
             </el-icon></div>
-          <div class="stat-info"><span class="stat-value">{{ stats.courseCount }}</span><span
-              class="stat-label">涉及课程</span>
+          <div class="stat-info"><span v-if="loading" class="stat-value stat-value-skeleton"></span><span v-else
+              class="stat-value">{{ stats.courseCount }}</span><span class="stat-label">涉及课程</span>
           </div>
         </div>
       </div>
@@ -69,15 +68,17 @@
           <el-radio-group v-model="filterType" @change="handleFilterChange">
             <el-radio-button value="active">进行中</el-radio-button>
             <el-radio-button value="archived">已归档</el-radio-button>
+            <el-radio-button value="favorite">已收藏</el-radio-button>
             <el-radio-button value="today">今天</el-radio-button>
             <el-radio-button value="week">本周</el-radio-button>
           </el-radio-group>
         </div>
         <div class="filter-right">
-          <el-select v-model="filterCourse" placeholder="选择课程" clearable class="course-filter">
+          <el-select v-model="filterCourse" placeholder="选择课程" clearable class="course-filter filter-select"
+            popper-class="qa-history-filter-dropdown">
             <el-option v-for="c in courseList" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
-          <el-select v-model="sortBy" class="sort-select">
+          <el-select v-model="sortBy" class="sort-select filter-select" popper-class="qa-history-filter-dropdown">
             <el-option value="newest" label="最新优先" />
             <el-option value="oldest" label="最早优先" />
             <el-option value="messages" label="消息最多" />
@@ -88,7 +89,38 @@
 
     <!-- 对话列表 -->
     <main class="history-main">
-      <div class="history-container">
+      <div class="history-container" :aria-busy="loading ? 'true' : 'false'">
+        <div v-if="loading" class="history-skeleton" aria-label="问答记录加载中">
+          <div v-for="groupIndex in 2" :key="`skeleton-group-${groupIndex}`" class="skeleton-group">
+            <div class="skeleton-group-header">
+              <span class="skeleton-line skeleton-line-date"></span>
+              <span class="skeleton-line skeleton-line-count"></span>
+            </div>
+            <div class="session-list">
+              <div v-for="cardIndex in 3" :key="`skeleton-card-${groupIndex}-${cardIndex}`"
+                class="session-card skeleton-card" :style="{ animationDelay: cardEnterDelay(cardIndex) }">
+                <div class="card-main">
+                  <div class="skeleton-avatar"></div>
+                  <div class="card-content">
+                    <div class="card-header">
+                      <span class="skeleton-line skeleton-line-title"></span>
+                      <span class="skeleton-line skeleton-line-tag"></span>
+                    </div>
+                    <span class="skeleton-line skeleton-line-preview"></span>
+                    <span class="skeleton-line skeleton-line-meta"></span>
+                  </div>
+                  <div class="skeleton-actions">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <template v-else>
         <div v-for="group in groupedSessions" :key="group.date" class="history-group">
           <div class="group-header">
             <span class="group-date">{{ group.dateLabel }}</span>
@@ -96,7 +128,8 @@
           </div>
 
           <div class="session-list">
-            <div v-for="session in group.items" :key="session.id" class="session-card" @click="goToDetail(session.id)">
+            <div v-for="(session, sessionIndex) in group.items" :key="session.id" class="session-card"
+              :style="{ animationDelay: cardEnterDelay(sessionIndex) }" @click="goToDetail(session.id)">
               <div class="card-main">
                 <div class="card-icon" :class="getCourseTheme(session.courseId)">
                   <el-icon>
@@ -125,6 +158,9 @@
                   </div>
                 </div>
                 <div class="card-actions">
+                  <el-tooltip :content="session.isFavorite ? '取消收藏' : '收藏'"><el-button
+                      :icon="session.isFavorite ? StarFilled : Star" circle class="favorite-btn"
+                      :class="{ active: session.isFavorite }" @click.stop="toggleFavorite(session)" /></el-tooltip>
                   <el-tooltip content="继续对话"><el-button :icon="ChatLineRound" circle
                       @click.stop="continueChat(session)" /></el-tooltip>
                   <el-tooltip content="改名"><el-button :icon="EditPen" circle
@@ -148,7 +184,7 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-if="!loading && filteredSessions.length === 0" class="empty-state">
+        <div v-if="filteredSessions.length === 0" class="empty-state">
           <div class="empty-icon"><el-icon>
               <DocumentDelete />
             </el-icon></div>
@@ -158,26 +194,46 @@
               <ChatDotRound />
             </el-icon>开始提问</el-button>
         </div>
+        </template>
 
         <!-- 无限滚动哨兵 + 加载状态 -->
         <div ref="loadMoreSentinel" class="load-more-sentinel"></div>
+        <div v-if="loadingMore" class="load-more-skeleton" aria-label="正在加载更多对话">
+          <div v-for="cardIndex in 2" :key="`load-more-skeleton-${cardIndex}`" class="session-card skeleton-card"
+            :style="{ animationDelay: cardEnterDelay(cardIndex) }">
+            <div class="card-main">
+              <div class="skeleton-avatar"></div>
+              <div class="card-content">
+                <span class="skeleton-line skeleton-line-title"></span>
+                <span class="skeleton-line skeleton-line-preview"></span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div v-if="sessionList.length > 0" class="list-footer">
           <span v-if="loadingMore">正在加载更多…</span>
           <span v-else-if="!hasMore">已加载全部 {{ total }} 个对话</span>
         </div>
       </div>
     </main>
+
+    <el-backtop :right="28" :bottom="28" :visibility-height="360" class="history-backtop">
+      <el-icon>
+        <Top />
+      </el-icon>
+    </el-backtop>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Search, Plus, More, Download, Delete, ChatDotRound, Comment, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Search, More, Download, Delete, ChatDotRound, Comment, Star, StarFilled, Reading, Clock, ChatLineRound, DocumentDelete, EditPen, RefreshLeft, Top } from '@element-plus/icons-vue'
 import { listCourses } from '@/api/courses'
 import { listQaSessions, getQaSessionStats, updateQaSession } from '@/api/qa'
 import { normalizeCourseList, normalizeQaSession, normalizeQaSessionPage, normalizeQaSessionStats, localDateString } from './qa-session-model'
+import { buildQaHistoryQueryParams, groupQaHistorySessions } from './qa-history-model'
 
 const router = useRouter()
 
@@ -191,7 +247,6 @@ const page = ref(1)
 const total = ref(0)
 const loadingMore = ref(false)
 const loadMoreSentinel = ref(null)
-const serverStatus = () => (filterType.value === 'archived' ? 'archived' : 'active')
 const hasMore = computed(() => sessionList.value.length < total.value)
 
 // 筛选状态
@@ -228,33 +283,12 @@ const filteredSessions = computed(() => {
     result = result.filter(s => new Date(s.date) >= weekAgo)
   }
 
-  if (filterCourse.value) result = result.filter(s => String(s.courseId) === String(filterCourse.value))
-
-  if (sortBy.value === 'oldest') result.sort((a, b) => new Date(a.date) - new Date(b.date))
-  else if (sortBy.value === 'messages') result.sort((a, b) => b.messageCount - a.messageCount)
-  else result.sort((a, b) => new Date(b.date) - new Date(a.date))
-
   return result
 })
 
 // 按日期分组
 const groupedSessions = computed(() => {
-  const groups = {}
-  const today = localDateString()
-  const yesterday = localDateString(new Date(Date.now() - 86400000))
-
-  filteredSessions.value.forEach(s => {
-    if (!groups[s.date]) {
-      let label = s.date
-      if (s.date === today) label = '今天'
-      else if (s.date === yesterday) label = '昨天'
-      else label = new Date(s.date).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
-      groups[s.date] = { date: s.date, dateLabel: label, items: [] }
-    }
-    groups[s.date].items.push(s)
-  })
-
-  return Object.values(groups).sort((a, b) => new Date(b.date) - new Date(a.date))
+  return groupQaHistorySessions(filteredSessions.value, { sortBy: sortBy.value })
 })
 
 // 方法
@@ -274,8 +308,23 @@ const getCourseTheme = (courseId) => {
 
 const truncate = (text, len) => text?.length > len ? text.substring(0, len) + '...' : text
 
-const toggleFavorite = () => {
-  ElMessage.info('收藏功能暂未接入后端')
+const cardEnterDelay = (index = 0) => `${Math.min(Number(index) || 0, 8) * 26}ms`
+
+const toggleFavorite = async (session) => {
+  const nextFavorite = !session.isFavorite
+  try {
+    await updateQaSession(session.id, { isFavorite: nextFavorite })
+    ElMessage.success(nextFavorite ? '会话已收藏' : '已取消收藏')
+    if (filterType.value === 'favorite' && !nextFavorite) {
+      await loadHistory()
+      return
+    }
+    sessionList.value = sessionList.value.map((item) => (
+      item.id === session.id ? { ...item, isFavorite: nextFavorite } : item
+    ))
+  } catch (error) {
+    ElMessage.error(error?.message || '收藏状态更新失败')
+  }
 }
 
 const renameSession = async (session) => {
@@ -332,6 +381,10 @@ onMounted(async () => {
   setupInfiniteScroll()
 })
 
+watch([filterCourse, sortBy], () => {
+  loadHistory()
+})
+
 onUnmounted(() => {
   if (scrollObserver) {
     scrollObserver.disconnect()
@@ -343,11 +396,17 @@ async function loadHistory() {
   loading.value = true
   page.value = 1
   try {
-    const status = serverStatus()
+    const queryParams = buildQaHistoryQueryParams({
+      filterType: filterType.value,
+      filterCourse: filterCourse.value,
+      sortBy: sortBy.value,
+      page: 1,
+      size: PAGE_SIZE,
+    })
     const [coursePayload, statsPayload, sessionPayload] = await Promise.all([
       listCourses({ page: 1, size: 100, status: 'active' }),
-      getQaSessionStats({ status }),
-      listQaSessions({ status, page: 1, size: PAGE_SIZE }),
+      getQaSessionStats(queryParams),
+      listQaSessions(queryParams),
     ])
     courses.value = normalizeCourseList(coursePayload)
     stats.value = normalizeQaSessionStats(statsPayload)
@@ -371,8 +430,15 @@ async function loadMore() {
   loadingMore.value = true
   try {
     const nextPage = page.value + 1
+    const queryParams = buildQaHistoryQueryParams({
+      filterType: filterType.value,
+      filterCourse: filterCourse.value,
+      sortBy: sortBy.value,
+      page: nextPage,
+      size: PAGE_SIZE,
+    })
     const pageData = normalizeQaSessionPage(
-      await listQaSessions({ status: serverStatus(), page: nextPage, size: PAGE_SIZE }),
+      await listQaSessions(queryParams),
     )
     total.value = pageData.total
     const seen = new Set(sessionList.value.map((item) => item.id))
@@ -394,13 +460,13 @@ function toSessionCard(session) {
   return {
     ...session,
     courseName: courseNameById.value[session.courseId] || session.courseId || '未绑定课程',
-    messageCount: 0,
+    messageCount: session.messageCount,
     lastTime: formatSessionTime(referenceTime),
     lastMessage: session.status === 'archived'
       ? '该会话已归档，可恢复后继续提问'
       : (session.isLegacy ? '旧会话仅可查看历史消息' : '点击继续这个真实问答会话'),
     date,
-    isFavorite: false,
+    isFavorite: Boolean(session.isFavorite),
     recentMessages: [],
   }
 }
@@ -469,8 +535,49 @@ $radius: 14px;
     --el-select-border-color-hover: rgba(147, 51, 234, 0.35);
   }
 
-  :deep(.el-select .el-input__wrapper) {
-    border-radius: 10px;
+  :deep(.filter-select .el-select__wrapper) {
+    min-height: 36px;
+    border-radius: 999px;
+    background: rgba(147, 51, 234, 0.08);
+    border: 1px solid rgba(147, 51, 234, 0.24);
+    box-shadow: none;
+    padding: 0 12px 0 16px;
+
+    &:hover {
+      background: rgba(147, 51, 234, 0.12);
+      border-color: rgba(147, 51, 234, 0.42);
+      box-shadow: 0 4px 14px rgba(147, 51, 234, 0.08);
+    }
+
+    &.is-focus {
+      background: #fff;
+      border-color: rgba(147, 51, 234, 0.62);
+      box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.12);
+    }
+  }
+
+  :deep(.filter-select .el-select__placeholder),
+  :deep(.filter-select .el-select__selected-item) {
+    font-size: 13px;
+    font-weight: 700;
+    color: $primary-dark;
+  }
+
+  :deep(.filter-select .el-select__placeholder.is-transparent) {
+    color: rgba(126, 34, 206, 0.68);
+    font-weight: 700;
+  }
+
+  :deep(.filter-select .el-select__caret) {
+    color: $primary;
+  }
+
+  :deep(.filter-select .el-icon) {
+    color: $primary;
+  }
+
+  :deep(.filter-select .el-select__suffix) {
+    color: $primary;
   }
 
   :deep(.el-radio-group) {
@@ -541,7 +648,7 @@ $radius: 14px;
     align-items: center;
     gap: 10px;
 
-    .search-input { width: 200px; }
+    .search-input { width: 240px; }
     .more-btn { border: 1px solid $border; background: $bg-card; border-radius: 10px; &:hover { border-color: rgba($primary, 0.3); color: $primary; background: rgba($primary, 0.04); } }
   }
 }
@@ -593,6 +700,12 @@ $radius: 14px;
       flex-direction: column;
 
       .stat-value { font-size: 22px; font-weight: 800; color: $text; }
+      .stat-value-skeleton {
+        width: 52px;
+        height: 28px;
+        border-radius: 8px;
+        display: block;
+      }
       .stat-label { font-size: 12px; color: $text-muted; margin-top: 2px; }
     }
   }
@@ -600,13 +713,16 @@ $radius: 14px;
 
 /* 筛选栏 */
 .filter-section {
-  background: $bg-card;
-  border-bottom: 1px solid $border;
-  padding: 14px 24px;
+  background: $bg;
+  padding: 10px 24px 14px;
 
   .filter-container {
     max-width: 1000px;
     margin: 0 auto;
+    background: $bg-card;
+    border: 1px solid $border;
+    border-radius: 16px;
+    padding: 12px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -617,9 +733,41 @@ $radius: 14px;
   .filter-right {
     display: flex;
     gap: 10px;
-    .course-filter { width: 160px; }
-    .sort-select { width: 110px; }
+    .course-filter { width: 154px; }
+    .sort-select { width: 126px; }
   }
+}
+
+.history-backtop {
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  color: $primary;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px);
+
+  &:hover {
+    background: #fff;
+    color: $primary-dark;
+    border-color: rgba(147, 51, 234, 0.3);
+    transform: translateY(-1px);
+  }
+}
+
+:global(.qa-history-filter-dropdown .el-select-dropdown__item) {
+  border-radius: 8px;
+  margin: 2px 6px;
+}
+
+:global(.qa-history-filter-dropdown .el-select-dropdown__item.is-selected) {
+  background: rgba(147, 51, 234, 0.1);
+  color: #7e22ce;
+  font-weight: 700;
+}
+
+:global(.qa-history-filter-dropdown .el-select-dropdown__item.is-hovering) {
+  background: rgba(147, 51, 234, 0.08);
 }
 
 /* 对话列表 */
@@ -631,6 +779,68 @@ $radius: 14px;
 
 .load-more-sentinel {
   height: 1px;
+}
+
+.history-skeleton,
+.load-more-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-group {
+  margin-bottom: 28px;
+}
+
+.skeleton-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid $border;
+}
+
+.skeleton-line,
+.skeleton-avatar,
+.skeleton-actions span {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #eef2f7 0%, #f8fafc 42%, #e8edf5 74%);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.25s ease-in-out infinite;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.skeleton-line-date { width: 52px; height: 14px; }
+.skeleton-line-count { width: 64px; }
+.skeleton-line-title { width: min(280px, 54vw); height: 16px; }
+.skeleton-line-tag { width: 96px; height: 20px; border-radius: 6px; }
+.skeleton-line-preview { width: min(520px, 70vw); margin-top: 8px; }
+.skeleton-line-meta { width: 170px; margin-top: 10px; }
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.skeleton-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+
+  span {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
 }
 
 .list-footer {
@@ -669,6 +879,12 @@ $radius: 14px;
   padding: 16px 18px;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  animation: history-card-enter 0.28s ease both;
+
+  &.skeleton-card {
+    cursor: default;
+    pointer-events: none;
+  }
 
   &:hover {
     border-color: rgba($primary, 0.3);
@@ -742,6 +958,8 @@ $radius: 14px;
       background: $bg-card;
       color: $text-muted;
       &:hover { background: rgba($primary, 0.06); color: $primary; border-color: rgba($primary, 0.25); }
+      &.favorite-btn.active,
+      &.favorite-btn:hover { background: rgba($warning, 0.1); color: #d97706; border-color: rgba($warning, 0.34); }
       &.delete-btn:hover { background: rgba($danger, 0.06); color: $danger; border-color: rgba($danger, 0.25); }
     }
   }
@@ -786,10 +1004,44 @@ $radius: 14px;
   p { font-size: 13px; color: $text-secondary; margin: 0 0 20px; }
 }
 
+@keyframes skeleton-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@keyframes history-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-card,
+  .history-backtop,
+  .skeleton-line,
+  .skeleton-avatar,
+  .skeleton-actions span {
+    animation: none;
+  }
+}
+
 @media (max-width: 768px) {
-  .page-header .header-actions .search-input { width: 160px; }
+  .page-header {
+    .header-content { gap: 12px; }
+    .header-actions .search-input { width: min(48vw, 200px); }
+  }
   .filter-section .filter-container { flex-direction: column; align-items: stretch; }
+  .filter-section .filter-right {
+    width: 100%;
+    .course-filter, .sort-select { flex: 1; width: auto; }
+  }
   .session-card .card-main { flex-direction: column; }
   .session-card .card-actions { align-self: flex-end; }
+  .skeleton-actions { align-self: flex-end; }
 }
 </style>

@@ -17,4 +17,6 @@ public class UpdateQaSessionRequest {
 
     @Pattern(regexp = "active|archived", message = "status取值不合法")
     private String status;
+
+    private Boolean isFavorite;
 }
