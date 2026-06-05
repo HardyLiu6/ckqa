@@ -77,6 +77,33 @@ class CourseRoutingServiceTest {
     }
 
     @Test
+    void shouldMatchShortThreadConceptQuestionWithAdjustedDefaultThreshold() {
+        Courses os = course("os", "操作系统");
+        Courses ds = course("ds", "数据结构");
+        given(coursesService.list()).willReturn(List.of(os, ds));
+        given(profileTextBuilder.build(os))
+                .willReturn(new CourseProfileSnapshot("操作系统画像：进程 线程 调度 内存", "hash-os"));
+        given(profileTextBuilder.build(ds))
+                .willReturn(new CourseProfileSnapshot("数据结构画像：数组 链表 树 图", "hash-ds"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        given(profilesService.findActiveByCourseAndModel("ds", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("ds", "hash-ds", "ds:text_embedding_v4:hash-ds")));
+        given(graphRagClient.recommend(any()))
+                .willReturn(new GraphRagCourseRoutingRecommendResponse(List.of(
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("os", "操作系统", 0.32D, "课程画像相似度 0.320", "hash-os"),
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("ds", "数据结构", 0.25D, "课程画像相似度 0.250", "hash-ds")
+                )));
+
+        var response = service().recommend(request("什么是线程"), student());
+
+        assertThat(response.getStatus()).isEqualTo("matched");
+        assertThat(response.getSelectedCourseId()).isEqualTo("os");
+        assertThat(response.getConfidence()).isEqualTo(0.32D);
+        assertThat(response.getMargin()).isEqualTo(0.07D);
+    }
+
+    @Test
     void shouldUpsertProfileWhenHashChangesAndReturnCandidatesForLowMargin() {
         Courses os = course("os", "操作系统");
         Courses ds = course("ds", "数据结构");

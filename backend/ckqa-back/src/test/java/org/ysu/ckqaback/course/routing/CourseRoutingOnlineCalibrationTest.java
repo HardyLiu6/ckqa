@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CourseRoutingOnlineCalibrationTest {
 
     private static final int GRAPHRAG_API_PORT = 18013;
-    private static final double DEFAULT_SCORE_THRESHOLD = 0.35D;
+    private static final double DEFAULT_SCORE_THRESHOLD = 0.30D;
     private static final double DEFAULT_MARGIN_THRESHOLD = 0.06D;
     private static final Path WORKTREE_ROOT = Path.of("").toAbsolutePath().normalize().getParent().getParent();
     private static final Path ENV_ROOT = Path.of(System.getProperty("ckqa.smoke.envRoot", WORKTREE_ROOT.toString()));
