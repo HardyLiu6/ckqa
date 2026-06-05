@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 import org.ysu.ckqaback.entity.KnowledgeBases;
@@ -12,6 +13,7 @@ import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.exception.BusinessException;
 import org.ysu.ckqaback.index.dto.BuildRunCreateRequest;
 import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
+import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.BuildRunGraphInputRequest;
 import org.ysu.ckqaback.index.dto.BuildRunMaterialSelectionRequest;
 import org.ysu.ckqaback.index.dto.BuildRunQaSmokeRequest;
@@ -36,6 +38,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.InstanceOfAssertFactories.MAP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -305,6 +308,38 @@ class KnowledgeBaseBuildRunServiceTest {
     }
 
     @Test
+    void shouldUseCurrentUserWhenQaSmokeBuildRunRequesterMissing() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = buildRunWithActiveIndex();
+        buildRun.setRequestedByUserId(null);
+        buildRun.setWorkspaceUri("user_0/kb_5/build_27");
+        workspaceService.createLayout(buildRun.getWorkspaceUri());
+
+        when(buildRunsStore.getRequiredById(27L)).thenReturn(buildRun);
+        when(qaWorkflowService.createSession(any(CreateQaSessionRequest.class)))
+                .thenReturn(QaSessionResponse.of(300L, "qa-smoke", 14L, "os", 5L, "smoke", "知识库构建冒烟验证", "active", null, LocalDateTime.now()));
+        when(qaWorkflowService.sendMessage(any(Long.class), any(CreateQaMessageRequest.class), any(Long.class)))
+                .thenReturn(QaTaskSubmissionResponse.of(
+                        QaMessageResponse.of(400L, 300L, "user", 1, "问题", LocalDateTime.now(), "pending", "queued"),
+                        9001L,
+                        "pending",
+                        "queued",
+                        null,
+                        LocalDateTime.now(),
+                        "basic",
+                        10L,
+                        300L,
+                        "timeout"
+                ));
+
+        service.runQaSmoke(27L, new BuildRunQaSmokeRequest(),
+                new AuthenticatedUser(14L, "ADM2026001", "admin.heqh", "何启航", List.of("admin"), List.of("*")));
+
+        ArgumentCaptor<CreateQaSessionRequest> sessionCaptor = ArgumentCaptor.forClass(CreateQaSessionRequest.class);
+        verify(qaWorkflowService).createSession(sessionCaptor.capture());
+        assertThat(sessionCaptor.getValue().getUserId()).isEqualTo(14L);
+    }
+
+    @Test
     void shouldWriteQaSmokeResponseAndMarkDoneWhenTaskIsTerminal() throws Exception {
         KnowledgeBaseBuildRuns buildRun = buildRunWithActiveIndex();
         workspaceService.createLayout(buildRun.getWorkspaceUri());
@@ -357,16 +392,55 @@ class KnowledgeBaseBuildRunServiceTest {
                 0L
         ));
 
-        service.runQaSmoke(27L, new BuildRunQaSmokeRequest());
+        BuildRunDetailResponse response = service.runQaSmoke(27L, new BuildRunQaSmokeRequest());
 
         assertThat(buildRun.getCurrentStage()).isEqualTo("done");
         assertThat(buildRun.getQaStatus()).isEqualTo("success");
+        assertThat(response.getQaSmokeResult())
+                .containsEntry("taskStatus", "success")
+                .containsEntry("requestedMode", "smart")
+                .containsEntry("resolvedMode", "basic");
+        assertThat(response.getQaSmokeResult())
+                .extractingByKey("assistantMessage")
+                .asInstanceOf(MAP)
+                .containsEntry("content", "回答");
         assertThat(Files.readString(tempDir.resolve("user_7/kb_5/build_27/qa-smoke/response.json")))
                 .contains("\"taskStatus\":\"success\"", "\"requestedMode\":\"smart\"", "\"resolvedMode\":\"basic\"", "回答");
         com.fasterxml.jackson.databind.JsonNode metadata =
                 new com.fasterxml.jackson.databind.ObjectMapper().readTree(buildRun.getBuildMetadata());
         assertThat(metadata.get("requestedMode").asText()).isEqualTo("smart");
         assertThat(metadata.get("resolvedMode").asText()).isEqualTo("basic");
+    }
+
+    @Test
+    void shouldReturnSavedQaSmokeResultWhenPollingBuildRun() throws Exception {
+        KnowledgeBaseBuildRuns buildRun = buildRunWithActiveIndex();
+        buildRun.setCurrentStage("done");
+        buildRun.setQaStatus("success");
+        workspaceService.createLayout(buildRun.getWorkspaceUri());
+        Path responseFile = tempDir.resolve("user_7/kb_5/build_27/qa-smoke/response.json");
+        Files.createDirectories(responseFile.getParent());
+        Files.writeString(responseFile, """
+                {
+                  "taskStatus": "success",
+                  "requestedMode": "basic",
+                  "resolvedMode": "basic",
+                  "assistantMessage": {
+                    "content": "轮询拿到的真实回答"
+                  }
+                }
+                """);
+        when(buildRunsStore.getRequiredById(27L)).thenReturn(buildRun);
+
+        BuildRunDetailResponse response = service.getBuildRun(27L);
+
+        assertThat(response.getQaSmokeResult())
+                .containsEntry("taskStatus", "success")
+                .containsEntry("requestedMode", "basic");
+        assertThat(response.getQaSmokeResult())
+                .extractingByKey("assistantMessage")
+                .asInstanceOf(MAP)
+                .containsEntry("content", "轮询拿到的真实回答");
     }
 
     private KnowledgeBases knowledgeBase() {

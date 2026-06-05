@@ -193,6 +193,40 @@ export function resolveOperationFeedback(operationKey, state, snapshot = {}) {
   }
 }
 
+export function resolveQaSmokeAnswerContent(snapshot = {}, fallback = '问答验证已通过。') {
+  return firstNonBlankText(
+    snapshot?.qaSmokeResult?.assistantMessage?.content,
+    snapshot?.qaSmokeResult?.answer,
+    snapshot?.qaSmokeResult?.qaMessage,
+    snapshot?.assistantMessage?.content,
+    snapshot?.answer,
+    snapshot?.qaMessage,
+    fallback,
+  )
+}
+
+function firstNonBlankText(...values) {
+  for (const value of values) {
+    const text = normalizeTextValue(value)
+    if (text) {
+      return text
+    }
+  }
+  return ''
+}
+
+function normalizeTextValue(value) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (value && typeof value.content === 'string') {
+    return value.content.trim()
+  }
+
+  return ''
+}
+
 function resolveOperationMessage(operation, state, snapshot, apiError) {
   if (state === 'confirming') {
     return '请求可能仍在后端执行，正在确认最新状态。'

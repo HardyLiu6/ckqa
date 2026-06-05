@@ -17,6 +17,7 @@ import org.ysu.ckqaback.index.dto.BuildRunDetailResponse;
 import org.ysu.ckqaback.index.dto.IndexRunResponse;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -125,13 +126,17 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
 
     @Test
     void shouldRunQaSmoke() throws Exception {
-        given(buildRunService.runQaSmoke(Mockito.eq(27L), any()))
+        given(buildRunService.runQaSmoke(Mockito.eq(27L), any(), any()))
                 .willReturn(BuildRunDetailResponse.builder()
                         .id(27L)
                         .status("success")
                         .currentStage("qa_smoke")
                         .qaStatus("running")
                         .activeIndexRunId(18L)
+                        .qaSmokeResult(Map.of(
+                                "taskStatus", "success",
+                                "assistantMessage", Map.of("content", "真实回答")
+                        ))
                         .build());
 
         mockMvc.perform(post(ApiPaths.KNOWLEDGE_BASE_BUILD_RUNS + "/27/qa-smoke")
@@ -145,7 +150,9 @@ class KnowledgeBaseBuildRunsControllerWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(27))
                 .andExpect(jsonPath("$.data.currentStage").value("qa_smoke"))
-                .andExpect(jsonPath("$.data.qaStatus").value("running"));
+                .andExpect(jsonPath("$.data.qaStatus").value("running"))
+                .andExpect(jsonPath("$.data.qaSmokeResult.taskStatus").value("success"))
+                .andExpect(jsonPath("$.data.qaSmokeResult.assistantMessage.content").value("真实回答"));
     }
 
     @Test

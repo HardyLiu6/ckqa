@@ -182,6 +182,7 @@ import {
   resolveBuildStepQuery,
   resolveCleanBuildStepQuery,
   resolveOperationFeedback,
+  resolveQaSmokeAnswerContent,
   resolveApiErrorAction,
   selectLatestRunningOrSuccess,
 } from './views/pages/module-page-model.js'
@@ -3165,7 +3166,22 @@ test('构建页 QA smoke 提交后必须轮询 build-run 终态', () => {
   assert.match(qaSmokeBlock, /getBuildRun\(buildRunId/)
   assert.match(qaSmokeBlock, /isBuildRunQaSmokeSuccess/)
   assert.match(qaSmokeBlock, /isBuildRunQaSmokeFailed/)
+  assert.match(qaSmokeBlock, /resolveQaSmokeAnswerContent\(snapshot\)/)
   assert.doesNotMatch(qaSmokeBlock, /const result = await runBuildRunQaSmoke[\s\S]*?actionState\.value = 'success'/)
+})
+
+test('构建页 QA smoke 成功后优先展示后端返回的真实回答', () => {
+  assert.equal(resolveQaSmokeAnswerContent({
+    qaSmokeResult: {
+      assistantMessage: {
+        content: '当前知识库覆盖进程调度、内存管理和文件系统。',
+      },
+    },
+  }), '当前知识库覆盖进程调度、内存管理和文件系统。')
+  assert.equal(resolveQaSmokeAnswerContent({
+    assistantMessage: { content: '兼容旧字段回答' },
+  }), '兼容旧字段回答')
+  assert.equal(resolveQaSmokeAnswerContent({}), '问答验证已通过。')
 })
 
 test('构建页 loadPage 统一规范化选择集和非法步骤 query', () => {

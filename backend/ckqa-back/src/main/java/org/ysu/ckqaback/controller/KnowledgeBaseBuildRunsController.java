@@ -1,5 +1,6 @@
 package org.ysu.ckqaback.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.ysu.ckqaback.api.ApiPaths;
 import org.ysu.ckqaback.api.ApiResponse;
 import org.ysu.ckqaback.api.ApiResponseUtils;
+import org.ysu.ckqaback.auth.AuthContext;
 import org.ysu.ckqaback.index.IndexWorkflowService;
 import org.ysu.ckqaback.index.KnowledgeBaseBuildRunService;
 import org.ysu.ckqaback.index.dto.BuildRunCustomPromptDraftRequest;
@@ -120,9 +122,10 @@ public class KnowledgeBaseBuildRunsController {
     @PostMapping("/{id}/qa-smoke")
     public ApiResponse<BuildRunDetailResponse> runQaSmoke(
             @PathVariable @Positive(message = "id必须大于0") Long id,
-            @Valid @RequestBody(required = false) BuildRunQaSmokeRequest request
+            @Valid @RequestBody(required = false) BuildRunQaSmokeRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponseUtils.success(buildRunService.runQaSmoke(id, request));
+        return ApiResponseUtils.success(buildRunService.runQaSmoke(id, request, AuthContext.fromRequestOrCurrentJwt(servletRequest)));
     }
 
     @PostMapping("/{id}/prompt-tune")

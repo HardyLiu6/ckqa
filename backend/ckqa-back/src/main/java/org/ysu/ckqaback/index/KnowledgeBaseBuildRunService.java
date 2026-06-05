@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.ysu.ckqaback.api.ApiPageData;
 import org.ysu.ckqaback.api.ApiResultCode;
+import org.ysu.ckqaback.auth.AuthenticatedUser;
 import org.ysu.ckqaback.entity.IndexRuns;
 import org.ysu.ckqaback.entity.CourseMaterials;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
@@ -155,7 +156,7 @@ public class KnowledgeBaseBuildRunService {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         syncQaSmokeTerminalIfAvailable(buildRun);
         KnowledgeBaseBuildRuns refreshed = buildRunsStore.getRequiredById(id);
-        return BuildRunDetailResponse.fromEntity(refreshed, resolveIndexProgress(refreshed));
+        return BuildRunDetailResponse.fromEntity(refreshed, resolveIndexProgress(refreshed), resolveQaSmokeResult(refreshed));
     }
 
     private org.ysu.ckqaback.index.dto.IndexProgress resolveIndexProgress(KnowledgeBaseBuildRuns buildRun) {
@@ -494,6 +495,11 @@ public class KnowledgeBaseBuildRunService {
 
     @Transactional
     public BuildRunDetailResponse runQaSmoke(Long id, BuildRunQaSmokeRequest request) {
+        return runQaSmoke(id, request, null);
+    }
+
+    @Transactional
+    public BuildRunDetailResponse runQaSmoke(Long id, BuildRunQaSmokeRequest request, AuthenticatedUser currentUser) {
         KnowledgeBaseBuildRuns buildRun = buildRunsStore.getRequiredById(id);
         Long smokeIndexRunId = resolveSmokeIndexRunId(buildRun);
         if (smokeIndexRunId == null) {
@@ -520,7 +526,7 @@ public class KnowledgeBaseBuildRunService {
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
 
-        QaSessionResponse session = qaWorkflowService.createSession(createSmokeSessionRequest(buildRun));
+        QaSessionResponse session = qaWorkflowService.createSession(createSmokeSessionRequest(buildRun, currentUser));
         QaTaskSubmissionResponse submission = qaWorkflowService.sendMessage(session.getId(), new CreateQaMessageRequest(mode, question), smokeIndexRunId);
         buildRun.setBuildMetadata(stageMetadata("qa_smoke", Map.of(
                 "question", question,
@@ -532,7 +538,8 @@ public class KnowledgeBaseBuildRunService {
         buildRun.setUpdatedAt(LocalDateTime.now());
         buildRunsStore.updateById(buildRun);
         syncQaSmokeTerminalIfAvailable(buildRun, session.getId(), submission.getTaskId());
-        return BuildRunDetailResponse.fromEntity(buildRunsStore.getRequiredById(id));
+        KnowledgeBaseBuildRuns refreshed = buildRunsStore.getRequiredById(id);
+        return BuildRunDetailResponse.fromEntity(refreshed, null, resolveQaSmokeResult(refreshed));
     }
 
     private void assertCustomDraftExists(KnowledgeBaseBuildRuns buildRun) {
@@ -803,9 +810,11 @@ public class KnowledgeBaseBuildRunService {
         }
     }
 
-    private CreateQaSessionRequest createSmokeSessionRequest(KnowledgeBaseBuildRuns buildRun) {
+    private CreateQaSessionRequest createSmokeSessionRequest(KnowledgeBaseBuildRuns buildRun, AuthenticatedUser currentUser) {
         CreateQaSessionRequest request = new CreateQaSessionRequest();
-        request.setUserId(buildRun.getRequestedByUserId() == null ? 1L : buildRun.getRequestedByUserId());
+        Long currentUserId = currentUser == null ? null : currentUser.id();
+        Long smokeUserId = currentUserId == null ? buildRun.getRequestedByUserId() : currentUserId;
+        request.setUserId(smokeUserId == null ? 1L : smokeUserId);
         request.setCourseId(buildRun.getCourseId());
         request.setKnowledgeBaseId(buildRun.getKnowledgeBaseId());
         request.setSessionType("smoke");
@@ -903,6 +912,21 @@ public class KnowledgeBaseBuildRunService {
             Files.writeString(responseFile, toJson(payload));
         } catch (IOException exception) {
             throw new BusinessException(ApiResultCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR, "QA冒烟响应写入失败");
+        }
+    }
+
+    private Map<String, Object> resolveQaSmokeResult(KnowledgeBaseBuildRuns buildRun) {
+        if (buildRun == null || !StringUtils.hasText(buildRun.getWorkspaceUri())) {
+            return null;
+        }
+        Path responseFile = workspaceService.resolve(buildRun.getWorkspaceUri()).resolve("qa-smoke/response.json");
+        if (!Files.exists(responseFile)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(Files.readString(responseFile), new TypeReference<>() {});
+        } catch (IOException exception) {
+            throw new BusinessException(ApiResultCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR, "QA冒烟响应读取失败");
         }
     }
 

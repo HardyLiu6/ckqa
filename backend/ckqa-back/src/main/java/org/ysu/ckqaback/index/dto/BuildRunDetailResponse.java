@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.ysu.ckqaback.entity.KnowledgeBaseBuildRuns;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 构建流水线详情响应。
@@ -26,6 +27,7 @@ public class BuildRunDetailResponse {
     private final Long activeIndexRunId;
     private final String workspaceUri;
     private final String buildMetadata;
+    private final Map<String, Object> qaSmokeResult;
     private final LocalDateTime startedAt;
     private final LocalDateTime finishedAt;
     private final LocalDateTime createdAt;
@@ -41,6 +43,14 @@ public class BuildRunDetailResponse {
     }
 
     public static BuildRunDetailResponse fromEntity(KnowledgeBaseBuildRuns buildRun, IndexProgress indexProgress) {
+        return fromEntity(buildRun, indexProgress, null);
+    }
+
+    public static BuildRunDetailResponse fromEntity(
+            KnowledgeBaseBuildRuns buildRun,
+            IndexProgress indexProgress,
+            Map<String, Object> qaSmokeResult
+    ) {
         return BuildRunDetailResponse.builder()
                 .id(buildRun.getId())
                 .knowledgeBaseId(buildRun.getKnowledgeBaseId())
@@ -55,6 +65,7 @@ public class BuildRunDetailResponse {
                 .activeIndexRunId(buildRun.getActiveIndexRunId())
                 .workspaceUri(buildRun.getWorkspaceUri())
                 .buildMetadata(buildRun.getBuildMetadata())
+                .qaSmokeResult(qaSmokeResult)
                 .startedAt(buildRun.getStartedAt())
                 .finishedAt(buildRun.getFinishedAt())
                 .createdAt(buildRun.getCreatedAt())

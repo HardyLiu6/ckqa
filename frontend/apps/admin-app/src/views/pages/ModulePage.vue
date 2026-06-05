@@ -130,6 +130,7 @@ import {
   resolveBuildStepQuery,
   resolveCleanBuildStepQuery,
   resolveOperationFeedback,
+  resolveQaSmokeAnswerContent,
 } from './module-page-model.js'
 import { validateCourseMaterialFile } from './material-file-model.js'
 import { pickResumableBuildRuns, toResumeCard } from './resume-build-model.js'
@@ -2821,10 +2822,7 @@ async function runQaSmoke() {
         state: 'success',
         sessionId: snapshot?.sessionId,
         taskId: snapshot?.taskId,
-        content: snapshot?.assistantMessage?.content
-          ?? snapshot?.answer
-          ?? snapshot?.qaMessage
-          ?? '问答验证已通过。',
+        content: resolveQaSmokeAnswerContent(snapshot),
       }
       await navigateAfterBuildRunAction(buildRunId, resolveBuildStepQuery(route.query, 'qa_check'))
     },
