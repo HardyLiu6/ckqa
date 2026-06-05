@@ -417,7 +417,7 @@ public class QaTaskEventStreamService {
     private void completeQuietly(SseEmitter emitter) {
         try {
             emitter.complete();
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             log.debug("QA 任务事件流关闭失败: {}", ex.getMessage());
         }
     }

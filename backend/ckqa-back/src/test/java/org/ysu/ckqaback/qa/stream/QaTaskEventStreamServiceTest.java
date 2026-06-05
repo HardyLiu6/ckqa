@@ -2,6 +2,7 @@ package org.ysu.ckqaback.qa.stream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.SyncTaskExecutor;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.ysu.ckqaback.entity.QaRetrievalLogs;
@@ -431,6 +432,37 @@ class QaTaskEventStreamServiceTest {
     }
 
     @Test
+    void shouldIgnoreBrokenResponseWhenCompletingAfterConnectionWriteFailure() {
+        QaWorkflowService workflowService = mock(QaWorkflowService.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        @SuppressWarnings("unchecked")
+        ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        AtomicReference<Runnable> scheduledTask = new AtomicReference<>();
+        QaTaskStreamProperties properties = new QaTaskStreamProperties();
+        properties.setStatusIntervalSeconds(2L);
+        given(scheduler.scheduleAtFixedRate(any(Runnable.class), eq(0L), eq(2L), eq(TimeUnit.SECONDS)))
+                .willAnswer(invocation -> {
+                    scheduledTask.set(invocation.getArgument(0));
+                    return scheduledFuture;
+                });
+        given(workflowService.getTaskDetail(5L, 9001L, 7L)).willReturn(runningDetail());
+
+        DisconnectingQaTaskEventStreamService service = new DisconnectingQaTaskEventStreamService(
+                workflowService,
+                mock(QaRetrievalLogsService.class),
+                mock(GraphRagTaskClient.class),
+                properties,
+                scheduler,
+                new SyncTaskExecutor()
+        );
+        service.openStream(5L, 9001L, 7L);
+
+        assertThatCode(() -> scheduledTask.get().run()).doesNotThrowAnyException();
+        assertThat(service.emitter.completed).isTrue();
+        then(scheduledFuture).should().cancel(false);
+    }
+
+    @Test
     void statusEventShouldExposeLatestLogsForProgressDisplay() {
         QaTaskStreamStatusEvent event = QaTaskStreamStatusEvent.from(runningDetailWithLogs());
 
@@ -573,10 +605,30 @@ class QaTaskEventStreamServiceTest {
         }
     }
 
-    private static final class RecordingSseEmitter extends SseEmitter {
+    private static final class DisconnectingQaTaskEventStreamService extends QaTaskEventStreamService {
+        private final DisconnectingSseEmitter emitter = new DisconnectingSseEmitter();
+
+        private DisconnectingQaTaskEventStreamService(
+                QaWorkflowService qaWorkflowService,
+                QaRetrievalLogsService qaRetrievalLogsService,
+                GraphRagTaskClient graphRagTaskClient,
+                QaTaskStreamProperties properties,
+                ScheduledExecutorService scheduler,
+                SyncTaskExecutor qaTaskExecutor
+        ) {
+            super(qaWorkflowService, qaRetrievalLogsService, graphRagTaskClient, properties, scheduler, qaTaskExecutor);
+        }
+
+        @Override
+        protected SseEmitter createEmitter(long timeoutMillis) {
+            return emitter;
+        }
+    }
+
+    private static class RecordingSseEmitter extends SseEmitter {
         private final List<SseEventBuilder> events = new ArrayList<>();
         private final List<Object> payloads = new ArrayList<>();
-        private boolean completed;
+        protected boolean completed;
         private boolean completedWithError;
 
         @Override
@@ -605,5 +657,29 @@ class QaTaskEventStreamServiceTest {
             }
             return text.toString();
         }
+    }
+
+    private static final class DisconnectingSseEmitter extends RecordingSseEmitter {
+        private int sendCount;
+
+        @Override
+        public void send(SseEventBuilder builder) throws IOException {
+            if (sendCount > 0) {
+                throw new AsyncRequestNotUsableException("Response not usable after response errors.");
+            }
+            sendCount += 1;
+            super.send(builder);
+        }
+
+        @Override
+        public void complete() {
+            completed = true;
+            sneakyThrow(new AsyncRequestNotUsableException("Response not usable after response errors."));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> void sneakyThrow(Throwable ex) throws E {
+        throw (E) ex;
     }
 }
