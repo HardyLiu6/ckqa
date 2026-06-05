@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import org.ysu.ckqaback.api.ApiErrorDetail;
 import org.ysu.ckqaback.api.ApiResultCode;
@@ -87,6 +88,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleException(Exception exception, HttpServletResponse response) {
+        if (isDisconnectedEventStreamClient(exception, response)) {
+            log.debug("SSE 客户端连接已断开: {}", exception.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
         log.error("未处理的接口异常", exception);
         if (isEventStreamResponse(response)) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -116,5 +121,9 @@ public class GlobalExceptionHandler {
         }
         String contentType = response.getContentType();
         return contentType != null && contentType.startsWith(MediaType.TEXT_EVENT_STREAM_VALUE);
+    }
+
+    private boolean isDisconnectedEventStreamClient(Exception exception, HttpServletResponse response) {
+        return exception instanceof AsyncRequestNotUsableException && isEventStreamResponse(response);
     }
 }

@@ -3,11 +3,15 @@ package org.ysu.ckqaback.exception;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,6 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerWebMvcTest {
 
     @Test
@@ -48,6 +53,22 @@ class GlobalExceptionHandlerWebMvcTest {
 
         assertThat(entity.getStatusCode().value()).isEqualTo(500);
         assertThat(entity.getBody()).isNull();
+    }
+
+    @Test
+    void shouldNotLogDisconnectedSseClientAsUnhandledException(CapturedOutput output) {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
+
+        var entity = handler.handleException(
+                new AsyncRequestNotUsableException("Servlet container error notification for disconnected client"),
+                response
+        );
+
+        assertThat(entity.getStatusCode().value()).isEqualTo(500);
+        assertThat(entity.getBody()).isNull();
+        assertThat(output).doesNotContain("未处理的接口异常");
     }
 
     @RestController
