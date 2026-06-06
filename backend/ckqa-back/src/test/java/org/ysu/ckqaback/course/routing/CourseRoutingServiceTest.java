@@ -104,6 +104,58 @@ class CourseRoutingServiceTest {
     }
 
     @Test
+    void shouldNotAutoRouteDefinitionWhenTopCourseProfileDoesNotContainTerm() {
+        Courses os = course("os", "操作系统");
+        Courses ai = course("ai", "人工智能导论");
+        given(coursesService.list()).willReturn(List.of(os, ai));
+        given(profileTextBuilder.build(os))
+                .willReturn(new CourseProfileSnapshot("操作系统画像：进程 线程 调度 内存 死锁", "hash-os"));
+        given(profileTextBuilder.build(ai))
+                .willReturn(new CourseProfileSnapshot("人工智能画像：搜索 推理 机器学习", "hash-ai"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        given(profilesService.findActiveByCourseAndModel("ai", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("ai", "hash-ai", "ai:text_embedding_v4:hash-ai")));
+        given(graphRagClient.recommend(any()))
+                .willReturn(new GraphRagCourseRoutingRecommendResponse(List.of(
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("os", "操作系统", 0.329692D, "课程画像相似度 0.330", "hash-os"),
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("ai", "人工智能导论", 0.256491D, "课程画像相似度 0.256", "hash-ai")
+                )));
+
+        var response = service().recommend(request("什么是二叉树"), student());
+
+        assertThat(response.getStatus()).isEqualTo("no_match");
+        assertThat(response.getSelectedCourseId()).isNull();
+        assertThat(response.getConfidence()).isEqualTo(0.329692D);
+    }
+
+    @Test
+    void shouldAutoRouteDefinitionWhenTopCourseProfileContainsTerm() {
+        Courses os = course("os", "操作系统");
+        Courses ai = course("ai", "人工智能导论");
+        given(coursesService.list()).willReturn(List.of(os, ai));
+        given(profileTextBuilder.build(os))
+                .willReturn(new CourseProfileSnapshot("操作系统画像：进程 线程 调度 内存 死锁", "hash-os"));
+        given(profileTextBuilder.build(ai))
+                .willReturn(new CourseProfileSnapshot("人工智能画像：搜索 推理 机器学习", "hash-ai"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        given(profilesService.findActiveByCourseAndModel("ai", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("ai", "hash-ai", "ai:text_embedding_v4:hash-ai")));
+        given(graphRagClient.recommend(any()))
+                .willReturn(new GraphRagCourseRoutingRecommendResponse(List.of(
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("os", "操作系统", 0.308855D, "课程画像相似度 0.309", "hash-os"),
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("ai", "人工智能导论", 0.173857D, "课程画像相似度 0.174", "hash-ai")
+                )));
+
+        var response = service().recommend(request("什么是死锁"), student());
+
+        assertThat(response.getStatus()).isEqualTo("matched");
+        assertThat(response.getSelectedCourseId()).isEqualTo("os");
+        assertThat(response.getConfidence()).isEqualTo(0.308855D);
+    }
+
+    @Test
     void shouldUpsertProfileWhenHashChangesAndReturnCandidatesForLowMargin() {
         Courses os = course("os", "操作系统");
         Courses ds = course("ds", "数据结构");
@@ -212,6 +264,24 @@ class CourseRoutingServiceTest {
 
         assertThat(relevance.evaluated()).isTrue();
         assertThat(relevance.confidence()).isEqualTo(0.42D);
+    }
+
+    @Test
+    void shouldRaiseScopeRelevanceFloorForDefinitionCoreTerm() {
+        Courses os = course("os", "操作系统");
+        given(coursesService.getOne(any())).willReturn(os);
+        given(profileTextBuilder.build(os)).willReturn(new CourseProfileSnapshot("操作系统画像：死锁 线程 进程", "hash-os"));
+        given(profilesService.findActiveByCourseAndModel("os", "text-embedding-v4", 1024))
+                .willReturn(Optional.of(profile("os", "hash-os", "os:text_embedding_v4:hash-os")));
+        given(graphRagClient.recommend(any()))
+                .willReturn(new GraphRagCourseRoutingRecommendResponse(List.of(
+                        new GraphRagCourseRoutingRecommendResponse.Candidate("os", "操作系统", 0.308855D, "课程画像相似度 0.309", "hash-os")
+                )));
+
+        ScopeRelevance relevance = service().evaluateScopeRelevance("os", "什么是死锁");
+
+        assertThat(relevance.evaluated()).isTrue();
+        assertThat(relevance.confidence()).isEqualTo(0.33D);
     }
 
     @Test

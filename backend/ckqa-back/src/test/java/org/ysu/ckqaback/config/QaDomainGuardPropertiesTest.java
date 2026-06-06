@@ -11,6 +11,6 @@ class QaDomainGuardPropertiesTest {
         QaDomainGuardProperties properties = new QaDomainGuardProperties();
 
         assertThat(properties.isEnabled()).isTrue();
-        assertThat(properties.getOutOfScopeThreshold()).isEqualTo(0.25D);
+        assertThat(properties.getOutOfScopeThreshold()).isEqualTo(0.33D);
     }
 }

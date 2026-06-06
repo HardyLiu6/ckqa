@@ -11,6 +11,7 @@ class CourseRoutingPropertiesTest {
         CourseRoutingProperties properties = new CourseRoutingProperties();
 
         assertThat(properties.getScoreThreshold()).isEqualTo(0.30D);
+        assertThat(properties.getDefinitionOffTopicScoreThreshold()).isEqualTo(0.33D);
         assertThat(properties.getMarginThreshold()).isEqualTo(0.06D);
     }
 }

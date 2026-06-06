@@ -18,6 +18,7 @@ public class CourseRoutingProperties {
     private boolean enabled = true;
     private int topK = 3;
     private double scoreThreshold = 0.30D;
+    private double definitionOffTopicScoreThreshold = 0.33D;
     private double marginThreshold = 0.06D;
     private String embeddingModel = "text-embedding-v4";
     private int embeddingDimensions = 1024;

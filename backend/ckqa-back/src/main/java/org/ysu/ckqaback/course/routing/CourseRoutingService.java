@@ -71,8 +71,9 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
         }
 
         List<CourseRoutingCandidateResponse> candidates;
+        Map<String, CourseProfileSnapshot> profileSnapshots;
         try {
-            ensureProfiles(readableCourses);
+            profileSnapshots = ensureProfiles(readableCourses);
 
             List<String> courseIds = readableCourses.stream().map(Courses::getCourseId).toList();
             int limit = request.getLimit() == null ? properties.getTopK() : Math.min(request.getLimit(), properties.getTopK());
@@ -96,7 +97,7 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
         }
 
         CourseRoutingDecision decision = new CourseRoutingDecisionPolicy(
-                properties.getScoreThreshold(),
+                effectiveScoreThreshold(request.getQuestion(), candidates, profileSnapshots),
                 properties.getMarginThreshold()
         ).decide(candidates);
         return logAndReturn(request, currentUser, candidates, decision);
@@ -113,7 +114,7 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
             if (course == null || !isRoutableCourse(course)) {
                 return ScopeRelevance.notEvaluated();
             }
-            ensureProfiles(List.of(course));
+            Map<String, CourseProfileSnapshot> snapshots = ensureProfiles(List.of(course));
             var response = graphRagClient.recommend(
                     new GraphRagCourseRoutingRecommendRequest(question, List.of(courseId), 1));
             var candidates = response == null ? null : response.candidates();
@@ -124,16 +125,90 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
             if (confidence == null) {
                 return ScopeRelevance.notEvaluated();
             }
+            if (isDefinitionCoreTerm(question, snapshots.get(courseId))) {
+                confidence = Math.max(confidence, properties.getDefinitionOffTopicScoreThreshold());
+            }
             return ScopeRelevance.evaluated(confidence);
         } catch (RuntimeException ex) {
             return ScopeRelevance.notEvaluated();
         }
     }
 
-    private void ensureProfiles(List<Courses> courses) {
+    private double effectiveScoreThreshold(
+            String question,
+            List<CourseRoutingCandidateResponse> candidates,
+            Map<String, CourseProfileSnapshot> profileSnapshots
+    ) {
+        if (candidates == null || candidates.isEmpty()) {
+            return properties.getScoreThreshold();
+        }
+        CourseRoutingCandidateResponse top = candidates.getFirst();
+        CourseProfileSnapshot topSnapshot = profileSnapshots == null ? null : profileSnapshots.get(top.getCourseId());
+        if (isDefinitionQuestion(question) && !isDefinitionCoreTerm(question, topSnapshot)) {
+            return Math.max(properties.getScoreThreshold(), properties.getDefinitionOffTopicScoreThreshold());
+        }
+        return properties.getScoreThreshold();
+    }
+
+    private boolean isDefinitionCoreTerm(String question, CourseProfileSnapshot snapshot) {
+        String term = extractDefinitionTerm(question);
+        if (!StringUtils.hasText(term) || snapshot == null || !StringUtils.hasText(snapshot.profileText())) {
+            return false;
+        }
+        return normalizeConceptText(snapshot.profileText()).contains(normalizeConceptText(term));
+    }
+
+    private boolean isDefinitionQuestion(String question) {
+        return StringUtils.hasText(extractDefinitionTerm(question));
+    }
+
+    private String extractDefinitionTerm(String question) {
+        if (!StringUtils.hasText(question)) {
+            return "";
+        }
+        String normalized = question.trim()
+                .replaceAll("[？?。.!！]+$", "")
+                .replaceAll("\\s+", "");
+        List<String> prefixes = List.of("请问什么是", "什么是", "何为", "什么叫", "请解释", "请介绍");
+        for (String prefix : prefixes) {
+            if (normalized.startsWith(prefix) && normalized.length() > prefix.length()) {
+                return cleanupDefinitionTerm(normalized.substring(prefix.length()));
+            }
+        }
+        if (normalized.endsWith("是什么") && normalized.length() > "是什么".length()) {
+            return cleanupDefinitionTerm(normalized.substring(0, normalized.length() - "是什么".length()));
+        }
+        return "";
+    }
+
+    private String cleanupDefinitionTerm(String term) {
+        if (!StringUtils.hasText(term)) {
+            return "";
+        }
+        String cleaned = term
+                .replaceAll("(的)?定义$", "")
+                .replaceAll("(的)?概念$", "")
+                .replaceAll("[，,；;：:].*$", "")
+                .trim();
+        if (cleaned.length() < 2 || cleaned.length() > 12) {
+            return "";
+        }
+        if (cleaned.matches(".*(和|与|及|、|/).*")) {
+            return "";
+        }
+        return cleaned;
+    }
+
+    private String normalizeConceptText(String value) {
+        return value == null ? "" : value.replaceAll("[\\s\\p{Punct}，。；：？！、（）《》【】“”‘’/]+", "").toLowerCase();
+    }
+
+    private Map<String, CourseProfileSnapshot> ensureProfiles(List<Courses> courses) {
+        Map<String, CourseProfileSnapshot> snapshots = new LinkedHashMap<>();
         List<ProfileUpsertCandidate> upsertCandidates = new ArrayList<>();
         for (Courses course : courses) {
             CourseProfileSnapshot snapshot = profileTextBuilder.build(course);
+            snapshots.put(course.getCourseId(), snapshot);
             Optional<CourseRouteProfiles> existing = profilesService.findActiveByCourseAndModel(
                     course.getCourseId(),
                     properties.getEmbeddingModel(),
@@ -148,7 +223,7 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
         }
 
         if (upsertCandidates.isEmpty()) {
-            return;
+            return snapshots;
         }
 
         List<GraphRagCourseRoutingProfileUpsertRequest.Item> requestItems = upsertCandidates.stream()
@@ -187,6 +262,7 @@ public class CourseRoutingService implements CourseScopeRelevanceProvider {
             profile.setUpdatedAt(now);
             profilesService.saveOrUpdate(profile);
         });
+        return snapshots;
     }
 
     private String resolveCourseName(List<Courses> courses, String courseId, String fallback) {

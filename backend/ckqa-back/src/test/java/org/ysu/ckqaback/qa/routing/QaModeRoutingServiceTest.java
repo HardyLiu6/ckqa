@@ -35,6 +35,17 @@ class QaModeRoutingServiceTest {
     }
 
     @Test
+    void shouldRecommendBasicForDeadlockDefinitionQuestion() {
+        QaModeRoutingService service = buildService();
+        QaModeRecommendationRequest request = request("什么是死锁？", false, false);
+
+        var decision = service.recommend(request, student());
+
+        assertThat(decision.getRecommendedMode()).isEqualTo("basic");
+        assertThat(decision.getReasons()).contains("definition_intent");
+    }
+
+    @Test
     void shouldRecommendLocalForMaterialLocatorQuestion() {
         QaModeRoutingService service = buildService();
         QaModeRecommendationRequest request = request("请根据第 3 章解释银行家算法的安全性检查过程", false, false);

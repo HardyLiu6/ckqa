@@ -75,6 +75,9 @@ public class QaQuestionDomainGuardService {
         if (hasContext) {
             return QaQuestionDomainCheckResponse.allowed();
         }
+        if (!properties.isEnabled()) {
+            return QaQuestionDomainCheckResponse.allowed();
+        }
         if (relevanceProvider == null) {
             return QaQuestionDomainCheckResponse.allowed();
         }

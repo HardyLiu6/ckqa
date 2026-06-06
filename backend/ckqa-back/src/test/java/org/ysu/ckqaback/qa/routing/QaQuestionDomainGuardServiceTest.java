@@ -42,6 +42,33 @@ class QaQuestionDomainGuardServiceTest {
     }
 
     @Test
+    void shouldBlockLowRelevanceOffTopicConceptWithDefaultThreshold() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        given(provider.evaluateScopeRelevance(eq("os"), any())).willReturn(ScopeRelevance.evaluated(0.329692D));
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, new QaDomainGuardProperties());
+
+        QaQuestionDomainCheckRequest request = request("什么是二叉树");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("out_of_scope");
+        assertThat(response.getReasonCode()).isEqualTo("low_course_relevance");
+    }
+
+    @Test
+    void shouldAllowDeadlockDefinitionWithDefaultThreshold() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        given(provider.evaluateScopeRelevance(eq("os"), any())).willReturn(ScopeRelevance.evaluated(0.371970D));
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, new QaDomainGuardProperties());
+
+        QaQuestionDomainCheckRequest request = request("什么是死锁？");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+    }
+
+    @Test
     void shouldAllowWhenCourseRelevanceAtOrAboveThreshold() {
         CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
         given(provider.evaluateScopeRelevance(eq("os"), any())).willReturn(ScopeRelevance.evaluated(0.42D));
@@ -53,6 +80,22 @@ class QaQuestionDomainGuardServiceTest {
 
         assertThat(response.getStatus()).isEqualTo("allowed");
         assertThat(response.getStrategy()).isEqualTo("semantic_relevance_v1");
+    }
+
+    @Test
+    void shouldAllowWithoutEvaluatingWhenDomainGuardDisabled() {
+        CourseScopeRelevanceProvider provider = mock(CourseScopeRelevanceProvider.class);
+        QaDomainGuardProperties properties = new QaDomainGuardProperties();
+        properties.setEnabled(false);
+        properties.setOutOfScopeThreshold(0.33D);
+        QaQuestionDomainGuardService service = serviceWithProvider(provider, properties);
+
+        QaQuestionDomainCheckRequest request = request("今天晚上吃什么");
+        request.setCourseId("os");
+        var response = service.check(request, student());
+
+        assertThat(response.getStatus()).isEqualTo("allowed");
+        then(provider).should(never()).evaluateScopeRelevance(any(), any());
     }
 
     @Test
@@ -193,11 +236,18 @@ class QaQuestionDomainGuardServiceTest {
     }
 
     private QaQuestionDomainGuardService serviceWithProvider(CourseScopeRelevanceProvider provider, double threshold) {
+        QaDomainGuardProperties properties = new QaDomainGuardProperties();
+        properties.setOutOfScopeThreshold(threshold);
+        return serviceWithProvider(provider, properties);
+    }
+
+    private QaQuestionDomainGuardService serviceWithProvider(
+            CourseScopeRelevanceProvider provider,
+            QaDomainGuardProperties properties
+    ) {
         QaQuestionDomainGuardService service = new QaQuestionDomainGuardService(
                 mock(QaSessionsService.class), mock(KnowledgeBasesService.class));
         service.setRelevanceProvider(provider);
-        QaDomainGuardProperties properties = new QaDomainGuardProperties();
-        properties.setOutOfScopeThreshold(threshold);
         service.setProperties(properties);
         return service;
     }
