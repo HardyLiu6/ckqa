@@ -1,538 +1,177 @@
-# CKQA 项目入口文档
+# CKQA · 课程知识图谱问答平台
 
-> 审计日期：2026-06-02
-> 目标：把仓库入口、模块边界、主链路和阅读顺序整理成一份可信的导航页。
+[English](README.en.md) | [开发文档](#开发文档) | [快速开始](#快速开始)
 
-CKQA 是一个面向课程资料的混合型问答系统。按当前仓库代码、目录和依赖配置来看，知识生产与问答能力的主链路仍然由两个 Python 模块承担：
+CKQA（Course Knowledge Question Answering）是一套面向课程资料的知识生产与问答平台。它将课程 PDF 解析为可追溯的标准化文本，构建 Microsoft GraphRAG 知识图谱，并通过学生端、管理端和 Java API 提供课程问答、知识库构建与运维能力。
 
-1. `pdf_ingest/`
-   负责课程 PDF 上传、MinerU 云解析、MinIO/MySQL 落库，以及标准化文档与 GraphRAG 输入导出。
-2. `graphrag_pipeline/`
-   负责拉取导出的 JSON、执行 Microsoft GraphRAG 建索引，并通过 FastAPI 提供 OpenAI 兼容问答接口。
+> 一期基线已经完成：PDF 解析、课程资料管理、知识库构建、GraphRAG 问答、异步流式任务、学生端与管理端的核心业务闭环均可在本地联调。项目仍持续演进；未开放的页面和能力会在界面与模块文档中明确标注。
 
-其余目录目前属于编排入口、基础设施或配套前端/后端工作区：
+## 核心能力
 
-- `infra/`：本地基础设施统一 Docker Compose 入口，管理 MySQL、MinIO、One API、Neo4j 和 Redis；运行态数据目录不入库。
-- `sql/`：MySQL 初始化脚本与增量迁移脚本的仓库级来源。
-- `frontend/apps/student-app/`：学员端前端原型，界面与路由更完整；登录注册、课程只读入口、问答会话、SSE 任务事件流、检索进度轨迹、断线恢复、学习记忆、无显式课程时的课程画像路由和知识图谱浏览已开始接入 Java `/api/v1`，社区/分析等板块仍保留显式占位页。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，核心运维页已经接入 Java `/api/v1`，并已完成 Element Plus + Pinia + Sass 样式基座迁移，覆盖系统健康、课程、资料上传与生命周期、资料详情解析进度、解析结果详情、知识库、构建向导、QA 冒烟验证、问答运维列表和统一错误页。
-- `backend/ckqa-back/`：Spring Boot 4 + Java 21 一期编排入口，承接 `/api/v1` 下的课程、PDF、知识库、索引、课程路由、QA 模式推荐、异步 QA、QA 事件流、QA 运维聚合、QA 冒烟会话和系统健康检查接口，但真实解析、索引和问答仍依赖两个 Python 模块。
+| 能力 | 说明 |
+| --- | --- |
+| 课程资料处理 | 上传 PDF、调用 MinerU 解析、记录页级进度，并将原文件和元数据分别保存到 MinIO 与 MySQL。 |
+| 标准化导出 | 生成 `normalized_docs.json` 供人工验收，并生成 `section_docs.json` / `page_docs.json` 供下游建图。 |
+| 知识库构建 | 按课程和构建批次隔离 GraphRAG 输入、输出、日志与 QA smoke 快照，避免不同索引相互污染。 |
+| 课程问答 | 支持 `basic`、`local`、`global`、`drift` 与 `hybrid_v0`；学生端可查看检索进度、流式回答和来源。 |
+| 智能编排 | Java `/api/v1` 统一承接认证、课程路由、模式推荐、异步 QA、SSE 断线恢复及管理端运维接口。 |
+| 可观测运维 | 管理端提供课程、资料、解析进度、构建向导、QA smoke、问答检索日志、来源人工复核和系统健康检查。 |
 
-如果文档、注释和代码不一致，请优先相信目录结构、脚本入口、`pyproject.toml` / `pom.xml` / `package.json` 里的真实定义。
-
-## 一眼看懂仓库
-
-| 板块 | 当前角色 | 状态 | 入口文档 |
-| --- | --- | --- | --- |
-| `pdf_ingest/` | PDF 解析与标准化导出 | 主链路，最完整 | [pdf_ingest/README.md](pdf_ingest/README.md) |
-| `graphrag_pipeline/` | GraphRAG 建图、检索、API | 主链路，依赖运行环境 | [graphrag_pipeline/README.md](graphrag_pipeline/README.md) |
-| `infra/` | 本地 Docker 基础设施 | 统一 compose 入口，含 MySQL / MinIO / One API / Neo4j / Redis，数据目录默认保留现状 | [infra/README.md](infra/README.md) |
-| `sql/` | MySQL schema 与迁移 | 仓库级数据库脚本来源 | [sql/ocqa.sql](sql/ocqa.sql) |
-| `frontend/apps/student-app/` | 学员端前端原型 | 认证、问答、课程画像路由、课程只读和知识图谱基础浏览已接 Java `/api/v1`，SSE 支持检索进度、原生流式 delta、断线恢复和轮询兜底，路由状态可随 `courseId/sessionId/mode/topic` 恢复 | [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md) |
-| `frontend/apps/admin-app/` | 管理端/教师端控制台前端 | 核心运维页已接 Java `/api/v1`，资料上传默认 200MB，资料详情已展示解析进度并支持进入解析结果详情，问答运维列表已接后端筛选/聚合，样式基座已切到 Element Plus + Pinia + Sass，含 Playwright 故障注入验收 | [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md) |
-| `backend/ckqa-back/` | Java 编排后端 | 一期 `/api/v1` 编排接口，含学生端路由、缓存、QA 事件流和管理端运维聚合，依赖 Python 主链路 | [backend/ckqa-back/README.md](backend/ckqa-back/README.md) |
-
-## 本机启动前后端服务
-
-开发阶段推荐把入口分成三层：
-
-默认端口：GraphRAG API `8012`，Java 后端 `8080`，admin-app `5173`，student-app `5174`，Redis `16379`。
-
-- 基础设施容器统一由根目录 `infra/docker-compose.yml` 管理。
-- 前端用 `pnpm` 原生命令启动，不额外包一层 shell 脚本。
-- 后端用 Java 编排层启动；开发态可让 Java 在启动时托管拉起 GraphRAG Python API。
-- `pdf_ingest/` 当前没有常驻 HTTP 服务，Java 后端会在解析/导出动作发生时按需调用它的 CLI。
-
-### 0. 一键启动基础设施容器
-
-首次使用先准备本机密钥文件：
-
-```bash
-cd infra
-cp .env.example .env
-# 编辑 infra/.env，填入当前 MySQL root 密码、MinIO 账号和密码；Redis 本地调试固定匿名访问
-```
-
-统一启动：
-
-```bash
-cd infra
-docker compose up -d
-docker compose ps
-```
-
-如果当前机器已经存在旧容器，第一次切换到统一 compose 时只删除容器对象，不删除数据目录：
-
-```bash
-docker stop neo4j one-api mysql minio redis
-docker rm neo4j one-api mysql minio redis
-
-cd infra
-docker compose up -d
-```
-
-当前数据保留策略见 [infra/README.md](infra/README.md)：MySQL 继续挂载 `/home/sunlight/mysql/data`，MinIO 继续挂载 `/home/sunlight/minio/data`，One API、Neo4j 和 Redis 数据位于仓库根目录 `infra/` 下。
-
-### 1. 一键启动前端
-
-```bash
-# 仓库根目录
-pnpm --dir frontend/apps/admin-app install
-pnpm --dir frontend/apps/student-app install
-
-pnpm dev:admin
-pnpm dev:student
-```
-
-也可以进入具体应用目录启动：
-
-```bash
-cd frontend/apps/admin-app
-pnpm dev:local
-
-cd frontend/apps/student-app
-pnpm dev:local
-```
-
-admin-app 和 student-app 开发态默认从浏览器请求同源 `/api/v1`，由 Vite 代理到 Java 后端 `http://127.0.0.1:8080`。这样在远程开发或端口转发场景下，浏览器不需要直接访问后端所在环境的 `8080`。
-
-### 2. 一键启动 Java 后端和托管 GraphRAG API
-
-```bash
-cd backend/ckqa-back
-
-# 推荐：CRLF 安全加载 backend/ckqa-back/.env，并可显式覆盖本地邮件发送方式。
-scripts/run_local_backend.sh --mailer-type log
-```
-
-如果需要逐项排障，也可以继续手工 export 后启动：
-
-```bash
-cd backend/ckqa-back
-
-export MYSQL_HOST=127.0.0.1
-export MYSQL_PORT=23306
-export MYSQL_DATABASE=ocqa
-export MYSQL_USER=root
-export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
-export CKQA_REDIS_HOST=127.0.0.1
-export CKQA_REDIS_PORT=16379
-export CKQA_STUDENT_CACHE_ENABLED=true
-
-export MINIO_ENDPOINT=localhost:9000
-export MINIO_ACCESS_KEY=admin
-export MINIO_SECRET_KEY=12345678
-export MINIO_SECURE=false
-export COURSE_COVER_BUCKET=course-artifacts
-export COURSE_COVER_OBJECT_PREFIX=course-covers
-export COURSE_MATERIAL_BUCKET=course-artifacts
-export COURSE_MATERIAL_OBJECT_PREFIX=course-materials
-export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
-export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
-export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
-export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
-export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
-export GRAPHRAG_API_HOST=127.0.0.1
-export GRAPHRAG_API_PORT=8012
-export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
-export GRAPHRAG_API_MANAGED_ENABLED=true
-export CKQA_JWT_SECRET=please-change-this-local-jwt-secret-at-least-32-chars
-export CKQA_NEO4J_TOPIC_BINDING_TIMEOUT_MS=3000
-
-./mvnw spring-boot:run
-```
-
-开启 `GRAPHRAG_API_MANAGED_ENABLED=true` 后，Java 后端会在启动阶段检查 `GRAPHRAG_API_BASE_URL/health`：如果 GraphRAG API 已经可访问，就复用外部服务；如果不可访问，就在 `GRAPHRAG_ROOT` 下启动 `utils/main.py`。Java 进程退出时会同步停止由它托管启动的 GraphRAG 子进程。
-
-如果希望 GraphRAG API 继续手工独立启动，把 `GRAPHRAG_API_MANAGED_ENABLED` 设为 `false` 或不设置即可。
-
-下面保留手工启动顺序，方便排查 Java 托管启动以外的环境问题。
-
-### 3. 手工排障启动顺序
-
-#### 3.1 确认基础依赖
-
-MySQL、MinIO、One API、Neo4j、Redis 等容器由根目录 `infra/docker-compose.yml` 统一管理。至少先确认 MySQL 暴露在 `127.0.0.1:23306`，Redis 暴露在 `127.0.0.1:16379`，`GRAPHRAG_ROOT` 指向可用的 `graphrag_pipeline/`，并为构建流水线准备本地运行目录 `graphrag_pipeline/runtime/kb-build-runs/`。共享 `graphrag_pipeline/output/` 现在主要作为 CLI 手工排障路径；管理端构建向导会优先使用每个 build run 自己的 `index/output/`。
-
-```bash
-docker ps
-```
-
-如果当前机器的 MySQL root 密码来自容器环境变量，后端启动时可以这样注入，避免把密码写入仓库文件：
-
-```bash
-export MYSQL_PASSWORD="$(docker exec mysql printenv MYSQL_ROOT_PASSWORD)"
-```
-
-#### 3.2 手工启动 GraphRAG Python API
-
-```bash
-cd graphrag_pipeline
-
-GRAPHRAG_API_HOST=127.0.0.1 \
-GRAPHRAG_API_PORT=8012 \
-GRAPHRAG_OUTPUT_DIR="$PWD/output" \
-GRAPHRAG_STORAGE_DIR="$PWD/output" \
-GRAPHRAG_LANCEDB_URI="$PWD/output/lancedb" \
-conda run -n graphrag-oneapi python utils/main.py
-```
-
-验收：
-
-```bash
-curl http://127.0.0.1:8012/health
-curl http://127.0.0.1:8012/v1/models
-```
-
-如果 `8012` 被占用，可以把 `GRAPHRAG_API_PORT` 改成其他端口，并在后端启动时同步修改 `GRAPHRAG_API_BASE_URL`。
-
-#### 3.3 手工启动 Java 后端
-
-另开终端：
-
-```bash
-cd backend/ckqa-back
-
-scripts/run_local_backend.sh --mailer-type log
-```
-
-或继续手工启动：
-
-```bash
-cd backend/ckqa-back
-
-export MYSQL_HOST=127.0.0.1
-export MYSQL_PORT=23306
-export MYSQL_DATABASE=ocqa
-export MYSQL_USER=root
-export MYSQL_PASSWORD="${MYSQL_PASSWORD:?请先设置 MYSQL_PASSWORD}"
-export CKQA_REDIS_HOST=127.0.0.1
-export CKQA_REDIS_PORT=16379
-export CKQA_STUDENT_CACHE_ENABLED=true
-
-export MINIO_ENDPOINT=localhost:9000
-export MINIO_ACCESS_KEY=admin
-export MINIO_SECRET_KEY=12345678
-export MINIO_SECURE=false
-export COURSE_COVER_BUCKET=course-artifacts
-export COURSE_COVER_OBJECT_PREFIX=course-covers
-export COURSE_MATERIAL_BUCKET=course-artifacts
-export COURSE_MATERIAL_OBJECT_PREFIX=course-materials
-export COURSE_MATERIAL_MAX_FILE_SIZE_BYTES=209715200
-export CKQA_MULTIPART_MAX_FILE_SIZE=200MB
-export CKQA_MULTIPART_MAX_REQUEST_SIZE=200MB
-export PDF_INGEST_ROOT=/home/sunlight/Projects/ckqa/pdf_ingest
-export GRAPHRAG_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline
-export GRAPHRAG_OUTPUT_DIR=/home/sunlight/Projects/ckqa/graphrag_pipeline/output
-export GRAPHRAG_LANCEDB_URI=/home/sunlight/Projects/ckqa/graphrag_pipeline/output/lancedb
-export GRAPHRAG_BUILD_RUNS_ROOT=/home/sunlight/Projects/ckqa/graphrag_pipeline/runtime/kb-build-runs
-export GRAPHRAG_ALLOW_CONCURRENT_KB_BUILDS=true
-export GRAPHRAG_AUTO_ACTIVATION_POLICY=latest-build-only
-export GRAPHRAG_API_BASE_URL=http://127.0.0.1:8012
-export CKQA_NEO4J_TOPIC_BINDING_TIMEOUT_MS=3000
-
-./mvnw spring-boot:run
-```
-
-验收：
-
-```bash
-curl http://127.0.0.1:8080/api/v1/system/health
-curl http://127.0.0.1:8080/api/v1/courses
-curl http://127.0.0.1:8080/api/v1/knowledge-bases
-```
-
-`/api/v1/system/health` 现在保持轻量，重点确认 `mysql`、`redis`、`pdf-ingest-root`、`graphrag-root`、`graphrag-build-runs-root`、`graphrag-api`、`graphrag-ready` 和 `neo4j`。如果需要检查共享 CLI 调试产物，再调用 `/api/v1/system/readiness`；其中 `graphrag-output` 只代表 `GRAPHRAG_ROOT/output` 与 `output/lancedb` 的手工排障状态，不再是管理端 build-run 流程的唯一就绪条件。
-
-#### 3.4 手工启动 admin-app 前端
-
-另开终端：
-
-```bash
-cd frontend/apps/admin-app
-pnpm install
-pnpm dev:local
-```
-
-浏览器访问：
-
-```text
-http://127.0.0.1:5173/app/health
-http://127.0.0.1:5173/app/courses
-http://127.0.0.1:5173/app/knowledge-bases
-```
-
-登录页使用真实 JWT 鉴权。本地测试账号来自 `sql/migrations/20260506_jwt_auth_credentials.sql`：管理员端 `admin.heqh / Ckqa@2026`，教师端 `teacher.zhangwb / Ckqa@2026`，学生端 `student.zhouzh / Ckqa@2026`。
-
-### 4. 前端/后端回归验证
-
-```bash
-cd frontend/apps/admin-app
-pnpm test
-pnpm build
-pnpm test:e2e
-```
-
-```bash
-cd backend/ckqa-back
-./mvnw test
-```
-
-```bash
-cd pdf_ingest
-conda run -n courseKg python -m pytest tests/test_ocqa_business_schema_contract.py -q
-```
-
-## 本次审计结论
-
-- 当前唯一稳定的知识生产与问答能力主链路仍然是 `pdf_ingest -> graphrag_pipeline`。
-- `graphrag_pipeline` 的 GraphRAG 版本基线统一以 `pyproject.toml` 为准，当前固定为 `graphrag==3.0.9`。
-- `backend/ckqa-back/` 已经不再是空骨架；它是 Java 一期编排入口，统一响应体为 `code / message / data / timestamp`，业务成功码为 `200`，课程、资料、知识库、索引和 QA 冒烟验证都通过 `/api/v1` 暴露给前端，但真实 PDF 解析、索引和问答仍调用两个 Python 模块。
-- `frontend/apps/student-app/` 仍是学员端原型，但已不只是静态页面：登录注册、课程只读入口、问答会话/任务事件流、检索进度轨迹、SSE 断线恢复、模式推荐、学习记忆和知识图谱浏览都已有 Java `/api/v1` 接入；社区、学习分析、部分用户中心页面仍以“未开放”状态页兜底。
-- `frontend/apps/admin-app/` 已不再是起步页原型；它现在是一个独立可运行的管理员/教师共用控制台前端，已具备 Element Plus + Pinia + Sass 样式基座、主题系统、路由守卫、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、资料上传校验、构建向导、QA 冒烟验证、问答运维列表、统一 403/404/500 错误页和 Playwright 浏览器级故障注入验收。
-- 文档阅读时要区分“主流程模块”和“占位模块”，不要把尚未集成的板块误判为可直接投入使用。
-
-## 人类与机器入口
-
-- 人类阅读入口：优先读本文件，再按模块进入各自 `README.md`，它们负责解释模块角色、运行路径和边界。
-- 机器阅读入口：优先读 [AGENTS.md](AGENTS.md)、[.codex](.codex)、[pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md)、[graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)，它们负责约束 Agent 的默认判断、命令、边界和安全规则。
-- 如果人类文档与机器文档冲突，以当前代码、依赖配置和可运行命令为准，并在改动时同步修正文档。
-
-## 主流程
+## 架构概览
 
 ```text
 课程 PDF
-  -> pdf_ingest 将原始资料对象按 MD5 存入 MinIO/material_objects，并在 course_materials 中登记课程资料关系
-  -> 调用 MinerU 云 API 解析
-  -> 导出 normalized_docs.json / section_docs.json / page_docs.json
-  -> graphrag_pipeline 从 MinIO 拉取 JSON 到 input/
-  -> graphrag index --root .
-  -> output/*.parquet + output/lancedb/
-  -> FastAPI /v1/chat/completions
+  │
+  ▼
+pdf_ingest ── MinerU / MinIO / MySQL
+  │  normalized_docs.json / section_docs.json / page_docs.json
+  ▼
+graphrag_pipeline ── Microsoft GraphRAG 3.0.9 / LanceDB / Neo4j（可选）
+  │  内部 query-task、streaming、课程画像接口
+  ▼
+backend/ckqa-back ── Spring Boot 4 / Java 21 / /api/v1
+  ├── frontend/apps/student-app   学员端
+  └── frontend/apps/admin-app     管理员与教师端
 ```
 
-这条链路也是当前最值得维护和继续补强的项目主线。
+浏览器正式边界始终是 Java `/api/v1`。Python GraphRAG 服务提供内部查询与构建能力，由 Java 编排；前端不直接调用 Python `/v1` 接口。
 
-## 建议阅读顺序
+## 技术栈
 
-第一次进入仓库，建议按这个顺序建立上下文：
+- Python 3.10+：PDF 处理、FastAPI、Microsoft GraphRAG `3.0.9`
+- Java 21：Spring Boot `4.0.5`、MyBatis-Plus
+- Vue 3 + Vite：Element Plus、Pinia、Vue Router、Sass
+- MySQL、MinIO、Redis、Neo4j（可选图谱浏览）、One API/OpenAI 兼容模型服务
+- Docker Compose：本地基础设施统一入口
 
-1. [AGENTS.md](AGENTS.md)
-2. [pdf_ingest/README.md](pdf_ingest/README.md)
-3. [pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md)
-4. [graphrag_pipeline/README.md](graphrag_pipeline/README.md)
-5. [graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)
+## 快速开始
 
-按需补充：
+完整运行需要可用的 MinerU 与 OpenAI 兼容模型服务凭据。所有本地密钥只放在各模块 `.env` 中，切勿提交到仓库。
 
-- [docs/标准化导出验证说明.md](docs/标准化导出验证说明.md)
-- [pdf_ingest/docs/MinerU PDF Parser.md](<pdf_ingest/docs/MinerU PDF Parser.md>)
-- [pdf_ingest/docs/课程文本规范与预处理流程.md](pdf_ingest/docs/课程文本规范与预处理流程.md)
-- [graphrag_pipeline/PROMPT_TUNING_PIPELINE.md](graphrag_pipeline/PROMPT_TUNING_PIPELINE.md)
-- [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
-- [docs/student-backend-graphrag-api-contract.md](docs/student-backend-graphrag-api-contract.md)
-- [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
-- [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
-- [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
+### 前置条件
 
-## 目录导航
+- Docker 与 Docker Compose
+- Python/Conda：建议分别准备 `courseKg` 和 `graphrag-oneapi` 环境
+- JDK 21
+- Node.js `^20.19.0 || >=22.12.0` 与 pnpm
 
-```text
-ckqa/
-├── AGENTS.md
-├── README.md
-├── docs/
-├── scripts/
-│   └── audit_repo_drift.py
-├── infra/
-│   ├── README.md
-│   └── docker-compose.yml
-├── sql/
-│   ├── ocqa.sql
-│   └── migrations/
-├── pdf_ingest/
-│   ├── README.md
-│   ├── CLAUDE.md
-│   ├── scripts/pdf_processor/
-│   ├── tests/
-│   └── docs/
-├── graphrag_pipeline/
-│   ├── README.md
-│   ├── CLAUDE.md
-│   ├── scripts/
-│   ├── utils/
-│   ├── tests/
-│   ├── prompts/
-│   ├── input/
-│   └── output/
-├── frontend/apps/admin-app/
-│   ├── README.md
-│   └── src/
-├── frontend/apps/student-app/
-│   ├── README.md
-│   └── src/
-└── backend/ckqa-back/
-    ├── README.md
-    ├── pom.xml
-    └── src/
+### 1. 克隆并启动基础设施
+
+```bash
+git clone <your-fork-or-repository-url> ckqa
+cd ckqa
+
+cp infra/.env.example infra/.env
+# 编辑 infra/.env，设置本机 MySQL、MinIO 与模型代理相关配置
+docker compose --env-file infra/.env -f infra/docker-compose.yml up -d
+docker compose --env-file infra/.env -f infra/docker-compose.yml ps
 ```
 
-## 模块入口
+基础设施包括 MySQL、MinIO、One API、Neo4j 和 Redis。数据卷策略、端口及安全注意事项见 [infra/README.md](infra/README.md)。
 
-### `infra/`
-
-- 角色：本地 MySQL、MinIO、One API、Neo4j、Redis 统一容器入口
-- 主入口：`docker-compose.yml`
-- 运行态数据：MySQL 与 MinIO 保留本机既有外部挂载，Neo4j、One API 与 Redis 数据位于 `infra/` 下并被 Git 忽略
-- 文档入口：[infra/README.md](infra/README.md)
-
-### `sql/`
-
-- 角色：仓库级 MySQL schema 与迁移脚本来源
-- 主入口：`ocqa.sql`
-- 当前迁移：课程资料、QA 会话类型、角色测试数据、知识库 build-run、课程封面、成员权限测试数据、JWT 凭据、用户头像、资料管理、解析进度、Prompt tuning、QA 上下文、引用来源、hybrid_v0、课程画像路由和 QA stream resume
-- 使用边界：从 `pdf_ingest/` 或 Java 后端引用 SQL 时都应回到仓库根目录 `sql/`
-
-### `pdf_ingest/`
-
-- 角色：课程 PDF 解析、标准化与导出
-- 主入口：`scripts/pdf_processor/mineru_parser.py`
-- 关键产物：`normalized_docs.json`、`section_docs.json`、`page_docs.json`
-- 本地清理：`scripts/cleanup_legacy_course_data.py` 可 dry-run / 执行清理旧版课程 ID 的 MySQL 与 MinIO 数据
-- 运行环境：`courseKg`
-- 文档入口：[pdf_ingest/README.md](pdf_ingest/README.md)
-
-### `graphrag_pipeline/`
-
-- 角色：GraphRAG 输入同步、索引、问答 API
-- 主入口：`utils/fetch_from_minio.py`、`utils/main.py`
-- 配套脚本：`scripts/build_prompt_tuning_samples.py`、`scripts/build_audit_extraction_set.py`、`scripts/generate_candidate_prompts.py`、`scripts/run_graphrag_prompt_tune.py`、`scripts/finalize_candidate_prompt.py`
-- 脚本分层：实现代码见 `graphrag_pipeline/scripts/README.md`，根目录同名脚本保留兼容入口
-- 关键产物：手工 CLI 调试使用 `input/*.json`、`output/*.parquet`、`output/lancedb/`；Java 管理端构建使用 `runtime/kb-build-runs/user_*/kb_*/build_*/index/input|output|logs`
-- 当前服务能力：`/v1/query-tasks` 支持 `basic/local/global/drift/hybrid_v0`，并可向 Java 转发 GraphRAG 原生 streaming `delta`、`progress`、`sources` 等事件；课程画像路由内部接口只供 Java `/api/v1` 调用
-- 当前重建前状态：旧输入、旧索引和旧调优产物已清空，默认 Prompt 回到 `prompts/*.txt` 基础模板
-- 运行环境：`graphrag-oneapi`
-- 文档入口：[graphrag_pipeline/README.md](graphrag_pipeline/README.md)
-
-### `frontend/apps/student-app/`
-
-- 角色：学员端前端原型
-- 主入口：`src/main.js`、`src/router/index.js`
-- 当前状态：登录/注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、检索进度轨迹、事件序号断线恢复、学习记忆、模式推荐和知识图谱浏览已走 Java `/api/v1`；路由 query 会保留 `courseId/sessionId/mode/topic`，便于从图谱、侧栏和刷新场景恢复上下文
-- 文档入口：[frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
-
-### `frontend/apps/admin-app/`
-
-- 角色：管理员端/教师端共用控制台前端
-- 主入口：`src/App.vue`
-- 当前状态：已落地运维台壳层、主题系统、工作台、系统健康页、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、课程资料上传、知识库构建向导、QA 冒烟验证、问答运维列表、统一错误页和 Playwright E2E 故障注入；正式业务流只访问 Java `/api/v1`
-- 文档入口：[frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
-- 结构设计入口：[docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
-
-### `backend/ckqa-back/`
-
-- 角色：Java 一期编排后端
-- 主入口：`src/main/java/org/ysu/ckqaback/CkqaBackApplication.java`
-- 当前状态：已经具备 `/api/v1` 统一响应、MyBatis-Plus 标准表代码、课程/资料/知识库读接口、PDF/索引/异步问答编排、学生端缓存、课程画像路由、QA 模式推荐、QA SSE 事件流、QA 运维聚合、QA 冒烟会话和系统健康检查；仍不是 Python 主链路的替代实现
-- 文档入口：[backend/ckqa-back/README.md](backend/ckqa-back/README.md)
-
-## 端到端最短跑通路径
-
-下面这条路径是当前最稳妥的最小可运行方案。
-
-### 1. 解析课程 PDF
+### 2. 准备 Python 主链路
 
 ```bash
 cd pdf_ingest
 conda activate courseKg
 pip install -e ".[dev]"
 
-python scripts/pdf_processor/mineru_parser.py upload <course_id> -f data/<course_id>/book.pdf --parse
-python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section --with-page-docs
-```
-
-当前共享开发环境里的 `courseKg` 已安装 `pytest`，进入模块目录后可直接执行 `python -m pytest tests/` 做快速验证；如果是新环境，仍建议按上面的开发依赖安装方式准备。
-
-### 2. 同步到 GraphRAG 输入目录
-
-```bash
 cd ../graphrag_pipeline
 conda activate graphrag-oneapi
 pip install -e ".[all]"
+pip install pytest
+```
 
+分别配置 `pdf_ingest/.env` 与 `graphrag_pipeline/.env` 后，可按下列顺序验证知识生产链路：
+
+```bash
+# 在 pdf_ingest/
+python scripts/pdf_processor/mineru_parser.py upload <course_id> -f <course.pdf> --parse
+python scripts/pdf_processor/mineru_parser.py export-graphrag <course_id> --material-id <material_id> --mode section --with-page-docs
+
+# 在 graphrag_pipeline/
 python utils/fetch_from_minio.py <course_id> --material-id <material_id> --clean
-```
-
-当前共享开发环境里的 `graphrag-oneapi` 也已安装 `pytest`，可直接执行 `python -m pytest tests/`；如果是新环境，仅执行 `pip install -e ".[all]"` 还不够，需再补装 `pytest`。
-
-### 3. 建索引
-
-```bash
 graphrag index --root .
-```
-
-### 4. 启动问答 API
-
-```bash
 python utils/main.py
 ```
 
-### 5. 可选：启动 Java 编排后端
+更多参数、输入输出约定和验收方式请看 [PDF Ingest 文档](pdf_ingest/README.md) 与 [GraphRAG Pipeline 文档](graphrag_pipeline/README.md)。
 
-如果需要验证 `/api/v1` 业务入口，先保持 GraphRAG API 可访问，再启动 Java 后端：
+### 3. 启动后端与前端
 
 ```bash
-cd ../backend/ckqa-back
-./mvnw spring-boot:run
+# 终端 1：在 backend/ckqa-back/ 配置 .env 后启动 Java 编排层
+cd backend/ckqa-back
+scripts/run_local_backend.sh --mailer-type log
+
+# 终端 2：启动管理端
+pnpm --dir ../../frontend/apps/admin-app install
+pnpm --dir ../../frontend/apps/admin-app dev:local
+
+# 终端 3：启动学生端
+pnpm --dir ../../frontend/apps/student-app install
+pnpm --dir ../../frontend/apps/student-app dev:local
 ```
 
-常用入口：
+后端可以通过 `GRAPHRAG_API_MANAGED_ENABLED=true` 管理 GraphRAG API；也可先独立启动 `graphrag_pipeline/utils/main.py`。后端配置项、健康检查和完整联调顺序见 [后端 README](backend/ckqa-back/README.md)。
+
+默认开发地址：管理端 `http://127.0.0.1:5173`、学生端 `http://127.0.0.1:5174`、后端 `http://127.0.0.1:8080`、GraphRAG API `http://127.0.0.1:8012`。
+
+### 4. 验证
 
 ```bash
+# 基础设施与 Java 服务
 curl http://127.0.0.1:8080/api/v1/system/health
+
+# 各模块回归
+cd pdf_ingest && python -m pytest tests/
+cd ../graphrag_pipeline && python -m pytest tests/
+cd ../frontend/apps/admin-app && pnpm test && pnpm build
+cd ../../../backend/ckqa-back && ./mvnw test
+
+# 活跃文档与关键入口漂移审计（仓库根目录）
+cd ../..
+python scripts/audit_repo_drift.py --strict
 ```
 
-## 当前需要特别记住的事实
+测试受本机外部服务、模型凭据和已有索引数据影响；遇到失败时，请先根据模块 README 核对环境而不是直接修改运行态产物。
 
-- 多 PDF 课程下，`pdf_ingest` 侧优先使用 `--material-id`，旧 `--file-id` / `--file-name` 仅作为兼容入口；`graphrag_pipeline` 侧优先使用 `--material-id`。
-- `normalized_docs.json` 主要用于人工验收和字段保真检查；GraphRAG 默认更直接消费 `section_docs.json` / `page_docs.json`。
-- `graphrag_pipeline/utils/main.py` 会优先读取仓库内 `.env` / 当前环境变量，默认输出目录是仓库内 `output/`，并统一通过 `graphrag query` 提供查询能力。
-- `graphrag_pipeline` 当前活动 Prompt 由 `.env` 中的 `GRAPHRAG_*_PROMPT_FILE` 决定；旧调优产物清理后默认候选为 `base`，指向 `prompts/*.txt`，只有重新固化候选 Prompt 后才会生成 `prompts/final/active_prompt.json`。
-- 本地重新抽取前如果要清空旧课程运行态数据，使用 `cd pdf_ingest && python scripts/cleanup_legacy_course_data.py --env-file .env` 先 dry-run，再加 `--execute` 执行；默认会把不符合 `crs-YYYYMMDD-HHMMSS` 的课程 ID 当作旧课程。
-- `graphrag_pipeline/output/` 里的 parquet 与 `output/lancedb/` 对手工 CLI 查询缺一不可；Java 管理端构建会把输入、输出、日志和 QA smoke 快照隔离到 `runtime/kb-build-runs/` 下。
-- `backend/ckqa-back/` 的问答链路通过 `graphrag_pipeline` 的 `/v1/query-tasks` 异步任务接口工作；跨服务时间字段对外统一按 `Asia/Shanghai` 的无偏移 `LocalDateTime` 字符串解释。
-- 学生端 QA 事件流优先走 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`，Java 可桥接 Python 原生 streaming；前端用 `afterEventSeq` 恢复断线后的 `progress` / `delta`，事件流不可用时必须回退轮询。
-- `hybrid_v0` 当前默认走 BM25 证据注入 GraphRAG Basic 的路径；它是 Java 和 GraphRAG 内部支持的 QA mode，`smart` 只属于学生端触发模式推荐的前端选择项。
-- Redis 已进入本地基础设施：后端用它做登录限频、邮箱验证码短期状态和学生端低风险读缓存。Redis 异常时业务应回源 MySQL / GraphRAG，不应把它当作事实源。
-- `backend/ckqa-back/` 与 `frontend/apps/admin-app/` 的课程资料上传上限已经统一为单个 PDF 默认 200MB；如果调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 Spring multipart 限制，需要同步前端 `material-file-model.js` 校验文案。
-- 当前共享开发环境的两个 Python 环境 `courseKg` 与 `graphrag-oneapi` 都已安装 `pytest`，各模块目录下可直接运行 `python -m pytest tests/` 做基础回归。
-- 仓库根目录 `scripts/` 现在只保留仓库级工具；模块专属脚本统一收口到各自子模块目录，例如 `graphrag_pipeline/scripts/`。
-- `frontend/apps/student-app/` 现已按 CKQA 根仓库下的普通子目录管理；依赖安装与构建产物继续由该目录自己的 `.gitignore` 约束，包管理以 `pnpm-lock.yaml` 为准。
-- `pdf_ingest` 和 `graphrag_pipeline` 都已进入课程资料模型：`material_objects` 按 MD5 去重物理对象，`course_materials` 维护课程内资料关系，解析状态、导出产物和日志按 `course_material_id` 隔离。
-- 管理端问答运维列表已接 Java `/api/v1/qa-operations/logs` 与 `/logs/summary`；列表筛选和概览统计来自后端聚合，检索日志详情/全量审计页面仍按未开放或后续补齐处理。
-- 任何涉及导出字段、命名或 MinIO 路径的改动，都必须同时检查上下游契约兼容性。
-- 活跃入口文档和关键脚本可通过 `python scripts/audit_repo_drift.py --strict` 做仓库级漂移审计。
+## 仓库结构
 
-## 文档地图
+| 路径 | 职责 | 入口文档 |
+| --- | --- | --- |
+| `pdf_ingest/` | PDF 解析、文本清洗、标准化和 GraphRAG 导出 | [README](pdf_ingest/README.md) |
+| `graphrag_pipeline/` | 输入同步、索引、GraphRAG 查询和内部任务服务 | [README](graphrag_pipeline/README.md) |
+| `backend/ckqa-back/` | Java 业务编排与浏览器 API 边界 | [README](backend/ckqa-back/README.md) |
+| `frontend/apps/student-app/` | 学员端课程与问答体验 | [README](frontend/apps/student-app/README.md) |
+| `frontend/apps/admin-app/` | 管理员/教师的课程、构建和 QA 运维控制台 | [README](frontend/apps/admin-app/README.md) |
+| `infra/` | 本地 MySQL、MinIO、One API、Neo4j、Redis Compose | [README](infra/README.md) |
+| `sql/` | MySQL 初始化基线和增量迁移 | [ocqa.sql](sql/ocqa.sql) |
 
-### 项目级
+## 开发文档
 
-- [AGENTS.md](AGENTS.md)
-- [docs/student-backend-graphrag-api-contract.md](docs/student-backend-graphrag-api-contract.md)
-- [docs/标准化导出验证说明.md](docs/标准化导出验证说明.md)
-- [docs/archive/MIGRATION_GRAPHRAG_3_0_9.md](docs/archive/MIGRATION_GRAPHRAG_3_0_9.md)（历史归档）
-- [docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md](docs/archive/GRAPHRAG_3_0_9_VERIFICATION_CHECKLIST.md)（历史归档）
-- [docs/archive/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md](docs/archive/GRAPHRAG_3_0_9_ROLLBACK_PLAN.md)（历史归档）
+| 读者与场景 | 建议入口 |
+| --- | --- |
+| 想了解产品和快速运行项目的开发者 | 本文档与 [English README](README.en.md) |
+| 修改 PDF 解析、导出或课程资料模型 | [pdf_ingest/README.md](pdf_ingest/README.md)、[pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md) |
+| 修改索引、检索、Prompt 或 GraphRAG API | [graphrag_pipeline/README.md](graphrag_pipeline/README.md)、[graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md) |
+| 修改学生端、Java 后端与 GraphRAG 的联调边界 | [学生端 API 契约](docs/student-backend-graphrag-api-contract.md) |
+| 修改管理端业务页面或 QA 运维 | [admin-app README](frontend/apps/admin-app/README.md) |
+| 供贡献者和编码代理理解仓库约束 | [AGENTS.md](AGENTS.md)、[.codex](.codex) |
+| 审计标准化导出质量 | [标准化导出验证说明](docs/标准化导出验证说明.md) |
 
-### 模块级
+## 贡献约定
 
-- [pdf_ingest/README.md](pdf_ingest/README.md)
-- [pdf_ingest/CLAUDE.md](pdf_ingest/CLAUDE.md)
-- [graphrag_pipeline/README.md](graphrag_pipeline/README.md)
-- [graphrag_pipeline/CLAUDE.md](graphrag_pipeline/CLAUDE.md)
-- [frontend/apps/student-app/README.md](frontend/apps/student-app/README.md)
-- [frontend/apps/admin-app/README.md](frontend/apps/admin-app/README.md)
-- [docs/admin-teacher-frontend-structure.md](docs/admin-teacher-frontend-structure.md)
-- [backend/ckqa-back/README.md](backend/ckqa-back/README.md)
-- [docs/superpowers/archive/README.md](docs/superpowers/archive/README.md)（已完成设计/计划归档索引）
-  - 已归档：异步 QA 任务化设计/计划、课程资料模型实施计划、管理员端 UI 重构、管理端真实数据接入、Element Plus 样式重构。
+- 新的浏览器业务接口必须经过 Java `/api/v1`；不要将前端直连到 Python GraphRAG 内部接口。
+- 涉及 `normalized_docs.json`、GraphRAG metadata、MinIO 路径或资料命名的修改，必须检查 `pdf_ingest` 与 `graphrag_pipeline` 的契约兼容性。
+- 不要提交 `.env`、索引输出、缓存、运行时目录、`node_modules` 或包含真实凭据的数据。
+- 修改活跃入口文档、运行配置或 GraphRAG 版本后，运行 `python scripts/audit_repo_drift.py --strict`。
+
+## 当前边界
+
+- `hybrid_v0` 是 Java 内部业务模式：将 BM25 证据注入 GraphRAG Basic；它不是 OpenAI 兼容模型名。
+- `smart` 仅是学生端的推荐入口，最终会落到 `basic`、`local`、`global`、`drift` 或 `hybrid_v0` 之一。
+- 课程学习内容、社区、全局搜索、细粒度 RBAC 编辑和完整审计分析等非一期范围功能会显式显示为未开放，而不是伪造为可用能力。
+- Redis 与图谱构建产物均不是课程与问答业务事实的唯一来源；MySQL、MinIO 及 GraphRAG 索引职责应保持清晰。
+
+欢迎通过 Issue 或 Pull Request 讨论课程资料处理、GraphRAG 检索质量与产品体验改进。
