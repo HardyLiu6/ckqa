@@ -46,7 +46,8 @@ async function loginStudent(page, baseUrl) {
 
 async function loginAdmin(page, baseUrl) {
   await page.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('button', { name: /登录/ }).last().click()
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: '进入控制台' }).click()
   await page.waitForURL(/\/app\//, { timeout: 20_000 })
 }
 
@@ -66,15 +67,17 @@ async function ensureStudentAnswer(page, options) {
 
 async function captureAdmin(page, options) {
   await page.goto(`${options['admin-url']}/app/materials/${encodeURIComponent(options['material-id'])}`, { waitUntil: 'domcontentloaded' })
-  await settle(page, '.material-detail-grid')
+  await page.waitForLoadState('networkidle')
+  await settle(page, '.detail-layout')
   await applyPrivacyMask(page)
-  await page.locator('.module-page').screenshot({ path: path.join(options.out, 'admin-materials.png') })
+  await page.locator('.workspace').screenshot({ path: path.join(options.out, 'admin-materials.png') })
 
   const buildUrl = `${options['admin-url']}/app/knowledge-bases/${encodeURIComponent(options['kb-id'])}/build?buildRunId=${encodeURIComponent(options['build-run-id'])}&step=index`
   await page.goto(buildUrl, { waitUntil: 'domcontentloaded' })
+  await page.waitForLoadState('networkidle')
   await settle(page, '.build-step-index__done')
   await applyPrivacyMask(page)
-  await page.locator('.module-page').screenshot({ path: path.join(options.out, 'admin-build-smoke-demo.png') })
+  await page.locator('.workspace').screenshot({ path: path.join(options.out, 'admin-build-smoke-demo.png') })
 }
 
 const options = parseArgs(process.argv.slice(2))
