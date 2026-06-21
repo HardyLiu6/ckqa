@@ -6,7 +6,7 @@
 
 - 技术栈：Vue 3 + Vite + Vue Router + Axios + Element Plus + Pinia + Sass + Playwright
 - 包管理：pnpm
-- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程资料上传、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、构建向导、QA 冒烟验证、问答运维列表和统一错误页
+- 当前代码形态：已具备运维台壳层、主题系统、JWT 登录、路由守卫、请求层、工作台、系统健康页、课程封面上传、课程资料上传、课程/资料/知识库 live 页面、资料详情解析进度、解析结果详情、构建向导、QA 冒烟验证、问答运维列表与详情、来源复核和统一错误页
 - 当前角色：管理员/教师共用控制台前端；核心业务页走 Java `/api/v1`，正式业务代码不直接访问 GraphRAG Python `/v1`
 
 如果你正在寻找当前系统的主入口，请优先回到仓库根目录和两个 Python 模块：
@@ -17,7 +17,6 @@
 
 本次已完成的结构设计、视觉重构、真实数据接入与样式基座重构文档已归档，可按需回看：
 
-- [../../../docs/admin-teacher-frontend-structure.md](../../../docs/admin-teacher-frontend-structure.md)
 - [../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md](../../../docs/superpowers/archive/specs/2026-04-26-admin-app-ui-redesign-design.md)
 - [../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md](../../../docs/superpowers/archive/plans/2026-04-26-admin-app-ui-redesign-implementation-plan.md)
 - [../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md](../../../docs/superpowers/archive/specs/2026-04-28-admin-app-live-api-integration-design.md)
@@ -96,12 +95,7 @@ VITE_API_TIMEOUT=15000
 
 正式业务代码不应直接请求 GraphRAG Python `/v1`。GraphRAG Python 服务仍由 Java 后端编排。
 
-本地 JWT 登录测试账号来自后端迁移 `sql/migrations/20260506_jwt_auth_credentials.sql`：
-
-| 端 | 用户名 | 密码 |
-| --- | --- | --- |
-| 管理员端 | `admin.heqh` | `Ckqa@2026` |
-| 教师端 | `teacher.zhangwb` | `Ckqa@2026` |
+本地 JWT 演示账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 初始化。请仅在隔离的本地开发环境中使用并自行重置密码；公开文档不记录可直接复用的账号密码。
 
 ## 已落地的骨架能力
 
@@ -124,12 +118,11 @@ VITE_API_TIMEOUT=15000
 17. 通用业务页通过 `DataSourceChip` 标记 `mock` / `live` 数据来源，table / overview / workflow 三类模板由 `module-content.js` 配置驱动。
 18. 当前样式基座已经完成 Element Plus + Pinia + Sass 迁移，并通过 `src/styles/index.scss` 统一加载 token、Element Plus 覆盖与组件样式。
 19. 主题系统支持 `light / dark / auto` 和固定主题色色板，偏好存入 `localStorage`。
-20. 问答运维列表走 Java `/api/v1/qa-operations/logs` 与 `/qa-operations/logs/summary`；筛选条件自动生效，概览卡片按后端全库聚合统计，不再基于当前页估算。
+20. 问答运维列表与详情走 Java `/api/v1/qa-operations/*`：筛选条件自动生效，概览卡片按后端全库聚合统计；详情页可查看回答、重写/上下文、学生反馈和来源，并保存来源相关性/引用质量复核。
 21. Playwright E2E 会自动启动 Vite，并通过 mock `/api/v1` 注入资料、索引和 QA 失败场景验证局部反馈。
 
 ## 当前限制
 
 1. 课程资料上传 v1 仅支持 PDF；如果后端调整 `COURSE_MATERIAL_MAX_FILE_SIZE_BYTES` 或 multipart 限制，需要同步 `src/views/pages/material-file-model.js`。
-2. 授权审计日志、用户详情和完整检索日志详情仍是“未开放”或后续补齐路由；问答运维列表本身已经是 live 数据页。
+2. 授权审计日志、用户详情、细粒度 RBAC 编辑和全量审计分析仍是“未开放”或后续补齐路由；问答运维的列表、详情与来源复核已经是 live 数据页。
 3. 403 页面已支持展示缺失权限；若需要精确权限文案，需要路由守卫跳转时附带 `required` 查询参数。
-4. 细粒度 RBAC 编辑和全量审计页面仍待后续后端契约确认。

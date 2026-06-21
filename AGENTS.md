@@ -4,6 +4,10 @@
 
 This file applies to the whole repository.
 
+## Version Status
+
+CKQA 的一期主链路已经可用：课程资料解析与导出、GraphRAG 建索引与问答、Java `/api/v1` 编排、学生端核心问答流程，以及管理端课程/构建/QA 运维流程均已接通。维护时应把未开放页面视为明确的产品边界，而不是把整个前端或后端称为“空原型”。
+
 ## Working Language
 
 - Use Chinese for comments, docs, prompts, and user-facing explanations unless the task explicitly requires English.
@@ -22,12 +26,12 @@ This repository currently has seven notable areas, with the two Python modules a
    - Dependency source of truth is `pyproject.toml`, currently pinned to Microsoft GraphRAG `3.0.9`.
    - Builds indexes and serves an OpenAI-compatible FastAPI endpoint plus internal query-task, streaming, hybrid, and course-routing helpers for Java.
 3. `frontend/apps/student-app/`
-   - Student-facing Vue 3 + Vite prototype managed directly inside the CKQA root repository.
-   - Richer than `admin-app`, with Element Plus, Pinia, Vue Router, and multiple page prototypes.
-   - Auth, course read APIs, QA sessions/task events, retrieval progress traces, stream resume, learning memory, mode recommendation, and knowledge graph browsing are now partially wired to Java `/api/v1`; community, analysis, and some user flows remain explicit placeholders.
+   - Student-facing Vue 3 + Vite v1 application managed directly inside the CKQA root repository.
+   - Uses Element Plus, Pinia and Vue Router. Authentication, course read APIs, QA sessions/task events, retrieval progress traces, stream resume, learning memory, mode recommendation, and knowledge graph browsing are wired to Java `/api/v1`.
+   - Community, learning analysis, learning-content playback and a portion of user-center functionality remain explicitly unavailable product scope.
 4. `frontend/apps/admin-app/`
    - Shared admin/teacher Vue 3 + Vite console frontend.
-   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, QA operations list, unified 403/404/500 pages, and Playwright browser fault-injection tests.
+   - Has theme tokens, route guards, dashboard, system health page, live course/material/knowledge-base pages, material detail parse-progress presentation, live parse-results detail, course material upload feedback, knowledge-base build wizard, QA smoke validation, QA operations list/detail with source review, unified 403/404/500 pages, and Playwright browser fault-injection tests.
    - Secondary unless the task explicitly targets frontend work or repo entry docs.
 5. `backend/ckqa-back/`
    - Spring Boot 4.0.5 + Java 21 phase-1 orchestration backend.
@@ -54,7 +58,7 @@ Read these when needed for more detail:
 - `pdf_ingest/docs/MinerU PDF Parser.md`
 - `graphrag_pipeline/README.md`
 - `frontend/apps/student-app/README.md`
-- `docs/admin-teacher-frontend-structure.md` when touching admin-app information architecture, routes, or RBAC
+- `frontend/apps/admin-app/README.md` when touching admin-app information architecture, routes, or RBAC
 - `backend/ckqa-back/README.md`
 - `docs/student-backend-graphrag-api-contract.md` when touching student/backend/GraphRAG API integration
 - `infra/README.md` when touching Docker Compose, local container deployment, or data mount layout
@@ -182,13 +186,13 @@ Notes:
 
 ### `frontend/apps/student-app/`
 
-- Vue 3 + Vite standalone student-side prototype.
+- Vue 3 + Vite standalone student-side v1 application.
 - Preferred commands: `pnpm install`, `pnpm dev`, `pnpm build`, `pnpm preview`, `pnpm format`
 - `package.json` currently uses the repo-aligned package name `student-app`.
 - `package.json` currently declares Node `^20.19.0 || >=22.12.0`.
 - Treat `node_modules/` as generated dependencies, not source.
 - Treat this directory as part of the main CKQA repository, not as a separate nested Git repository.
-- Current route tree is broader than the actual implemented views; unopened routes should use the explicit "未开放" status page rather than blank pages.
+- The route tree is broader than v1 scope; unopened routes must use the explicit "未开放" status page rather than blank pages or fabricated data.
 - `src/axios/index.js` injects JWT auth headers from the Pinia user store; `src/api/auth.js`, `src/api/courses.js`, `src/api/qa.js`, and `src/api/graph.js` are the current Java `/api/v1` browser boundary.
 - The QA page should preserve `courseId`, `sessionId`, `mode`, and `topic` in route query via `src/views/qa/qa-route-query-model.js`; avoid remounting the whole module view for query-only changes.
 - QA task streaming prefers `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events`; preserve `afterEventSeq` resume semantics for progress/delta events and keep task polling as the fallback path.
@@ -200,8 +204,8 @@ Notes:
 - Preferred commands: `pnpm install`, `pnpm test`, `pnpm test:e2e`, `pnpm build`, `pnpm dev`, `pnpm preview`
 - Treat `node_modules/` as generated dependencies, not source.
 - Java `/api/v1` remains the formal browser boundary; do not wire formal UI flows directly to GraphRAG Python `/v1`.
-- Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, live material detail, live parse-results detail, knowledge-base list/detail, build wizard, index detail, and QA smoke validation are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
-- QA operations list is implemented against Java `/api/v1/qa-operations/logs` and `/logs/summary`; list filters and overview metrics should stay backend-aggregated rather than computed from the current page.
+- Current state: shell, theme system, dashboard, health page, login/status pages, unified error pages, courses, course detail, material upload/lifecycle, live material detail, live parse-results detail, knowledge-base list/detail, build wizard, index detail, QA smoke validation, QA operation list/detail and source review are implemented against Java `/api/v1`; unopened routes still use explicit "未开放" pages.
+- QA operations list/detail is implemented against Java `/api/v1/qa-operations/*`; list filters and overview metrics must stay backend-aggregated rather than computed from the current page, and source reviews must continue to go through the backend contract.
 - Material detail and parse-results pages should stay aligned with Java `/api/v1/pdf-files/*` compatibility routes: the detail page surfaces parse status plus `parseProgress`, while the parse-results page remains a read-only artifact list unless the task explicitly expands that scope.
 - Course material upload currently accepts PDF only and defaults to a single-file 200MB limit; keep `frontend/apps/admin-app/src/views/pages/material-file-model.js`, Java `CourseMaterialProperties`, and Spring multipart config aligned when changing this limit.
 - Knowledge-base build wizard state should be driven by Java build-run APIs and the URL `buildRunId`, not by browser-only query/sessionStorage state once a build run exists.
@@ -233,4 +237,4 @@ Any change to exported metadata, naming, or storage structure must be checked fo
 - Do not casually edit `.env` files, generated outputs, caches, `node_modules/`, or IDE metadata.
 - Do not expose or reuse real secrets, tokens, database passwords, or service credentials found in the repo.
 - Prefer minimal, scoped changes in the relevant module.
-- If a task is ambiguous, assume the Python pipelines are the main target before touching Java orchestration or frontend prototypes.
+- If a task is ambiguous, assume the Python pipelines are the main target before touching Java orchestration or frontend applications.

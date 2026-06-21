@@ -1,16 +1,16 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文为编码代理维护 `pdf_ingest/` 时的工作说明；命令、数据契约与安全边界均以当前代码为准。
 
 ## Project Overview
 
-CKG (Course Knowledge Graph) — a PDF processing pipeline that parses course materials via the MinerU cloud API, stores physical material objects in MinIO, tracks course-material relations and parse state in MySQL, and transforms parsed content into GraphRAG-compatible input format.
+CKG（Course Knowledge Graph）是 CKQA 的 PDF 知识生产链路：它通过 MinerU 云 API 解析课程资料，将物理对象存入 MinIO、在 MySQL 中追踪课程资料关系与解析状态，并输出 GraphRAG 可消费的输入格式。一期课程资料模型、解析、页级进度与标准化导出已落地；改动时优先保护下游导出契约。
 
 输出规范补充：课程文本标准 schema 与预处理目标见 `docs/课程文本规范与预处理流程.md`。
 手工验证与抽样验收流程见 `../docs/标准化导出验证说明.md`。
 
-**Language:** Python 3 (>=3.10)
-**Build system:** `pyproject.toml` (setuptools) — script-based project with `.env` runtime configuration.
+**语言与运行时：** Python 3（`>=3.10`）。
+**构建与配置：** `pyproject.toml`（setuptools）是依赖基线；脚本通过 `.env` 读取运行配置。
 
 ## Commands
 

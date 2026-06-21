@@ -1,11 +1,11 @@
 # CKQA Codex Project Config
 
-本仓库当前有七块主要目录。知识生产与检索主线仍然是两个 Python 子项目，Java 后端负责一期业务编排，前端仍以原型为主：
+本仓库当前有七块主要目录。知识生产与检索主线由两个 Python 子项目承担，Java 后端负责一期业务编排，学生端与管理端的核心流程已完成真实接入；未开放路由是明确的产品边界，不代表一期整体仍是空原型：
 
 - `pdf_ingest/`：课程 PDF 解析、清洗、标准化导出。
 - `graphrag_pipeline/`：消费导出结果，建索引并提供问答 API；同时提供 Java 内部使用的 query-task、streaming、hybrid_v0 和课程画像路由辅助接口。
-- `frontend/apps/student-app/`：学员端 Vue 3 + Vite 原型，登录注册、课程只读入口、问答会话/任务事件流、检索进度轨迹、断线恢复、学习记忆、模式推荐和知识图谱浏览已部分接入 Java `/api/v1`。
-- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、资料详情解析进度、解析结果详情、问答运维列表、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
+- `frontend/apps/student-app/`：学员端 Vue 3 + Vite v1 应用，登录注册、课程只读入口、问答会话/任务事件流、检索进度轨迹、断线恢复、学习记忆、模式推荐和知识图谱浏览均经 Java `/api/v1` 接入。
+- `frontend/apps/admin-app/`：管理员端/教师端共用控制台前端，已完成 Element Plus + Pinia + Sass 样式基座、主题系统、工作台、系统健康页、资料上传反馈、资料详情解析进度、解析结果详情、问答运维列表/详情、来源复核、统一错误页和核心运维页真实接入，但仍不是知识生产主链路入口。
 - `backend/ckqa-back/`：Java 21 + Spring Boot 4 一期编排后端，提供 `/api/v1` 课程、课程资料、PDF、索引、课程路由、QA 路由、异步问答、SSE 事件流、QA 运维与系统健康检查接口，仍依赖两个 Python 模块完成真实处理。
 - `infra/`：仓库根目录统一 Docker Compose 入口，管理 MySQL、MinIO、One API、Neo4j 和 Redis。
 - `sql/`：仓库级 MySQL 初始化脚本和迁移脚本来源，`sql/ocqa.sql` 是 schema 基线。
@@ -26,7 +26,7 @@
 - `graphrag_pipeline/README.md`
 - `frontend/apps/student-app/README.md`
 - `frontend/apps/admin-app/README.md`
-- `docs/admin-teacher-frontend-structure.md`（涉及 admin-app 页面结构、路由或 RBAC 时）
+- `frontend/apps/admin-app/README.md`（涉及 admin-app 页面结构、路由或 RBAC 时）
 - `backend/ckqa-back/README.md`
 - `docs/student-backend-graphrag-api-contract.md`（涉及 student-app、Java 后端或 GraphRAG API 联调时）
 
@@ -45,7 +45,7 @@
 
 - 默认使用中文沟通、注释、提交说明与文档更新。
 - 优先做最小范围修改，不顺手重构无关模块。
-- 修改前先确认自己处在哪个子项目目录，避免混淆两套 Python 环境、一套 Java 编排后端和两套 Node 前端原型。
+- 修改前先确认自己处在哪个子项目目录，避免混淆两套 Python 环境、一套 Java 编排后端和两套 Node 前端应用。
 - 不要随意编辑 `.env`、`output/`、`reports/`、`cache/`、`node_modules/`、`*.egg-info/`、IDE 元数据和其它生成物。
 - 不要传播或复用仓库中的真实密钥、Token、账号密码；如果发现硬编码敏感值，应视为风险点而不是示例配置。
 
@@ -139,7 +139,7 @@
 
 ### 3. `frontend/apps/student-app/`
 
-- 当前是学员端 Vue 3 + Vite 原型，技术栈包含 Element Plus、Pinia、Vue Router、Sass。
+- 当前是学员端 Vue 3 + Vite v1 应用，技术栈包含 Element Plus、Pinia、Vue Router、Sass。
 - `src/axios/index.js` 会从 Pinia 用户会话注入 `Authorization` 与 `X-CKQA-User-Code`；Java `/api/v1` 请求封装分布在 `src/api/auth.js`、`src/api/courses.js`、`src/api/qa.js`、`src/api/graph.js`。
 - 问答页使用 `src/views/qa/qa-route-query-model.js` 保持 `courseId/sessionId/mode/topic` 路由状态；切换 query 不应强制重挂整个模块视图。
 - 问答任务优先消费 `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` 事件流，不可用时回退到任务轮询；保留 `afterEventSeq` 以恢复断线后的 `progress/delta`。
@@ -151,7 +151,7 @@
   - `pnpm dev`
   - `pnpm build`
   - `node --test tests/*.test.js`
-- 当前课程、问答和知识图谱已经有部分真实接口接入；社区、学习分析和部分用户中心页面仍以显式“未开放”路由兜底。
+- 课程、问答和知识图谱已走真实接口；社区、学习分析、学习内容与部分用户中心页面仍以显式“未开放”路由兜底。
 
 ### 4. `frontend/apps/admin-app/`
 
@@ -162,8 +162,8 @@
   - `pnpm test`
   - `pnpm build`
   - `pnpm dev`
-- 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证/问答运维列表等核心运维页的 Java `/api/v1` 真实接入；资料详情会展示解析进度，解析结果详情页也已走 live 数据；正式浏览器接口边界仍是 Java `/api/v1`。
-- 问答运维列表使用 `/api/v1/qa-operations/logs` 和 `/logs/summary`；筛选和概览指标来自后端聚合，不要用当前页数据伪造全库统计。
+- 目前已完成控制台壳层、Element Plus + Pinia + Sass 样式基座、主题系统、工作台、健康页、登录页与状态页，以及课程/资料/知识库/构建向导/QA 冒烟验证/问答运维列表与详情/来源复核等核心运维页的 Java `/api/v1` 真实接入；资料详情会展示解析进度，解析结果详情页也已走 live 数据；正式浏览器接口边界仍是 Java `/api/v1`。
+- 问答运维列表和详情使用 `/api/v1/qa-operations/*`；筛选和概览指标来自后端聚合，来源复核也必须经由 Java 接口保存，不要用当前页数据伪造全库统计。
 - 课程资料上传 UI 已接 Java `/api/v1/courses/{courseId}/materials`，当前只接受 PDF，单文件默认 200MB；修改限制时要同步后端 `CourseMaterialProperties`、Spring multipart 配置和前端 `material-file-model.js`。
 - 403/404/500 已使用统一错误页承载，权限和缺失页面体验不要再回退到旧的通用“未开放”页。
 - `node_modules/` 已出现在仓库中，但它不是源码，不要把依赖目录当成改动目标。

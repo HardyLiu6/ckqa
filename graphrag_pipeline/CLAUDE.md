@@ -1,13 +1,13 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文为编码代理维护 `graphrag_pipeline/` 时的工作说明；版本、运行路径与接口边界以当前代码和 `pyproject.toml` 为准。
 
 ## Project Overview
 
-Knowledge graph Q&A system built around Microsoft GraphRAG, currently pinned to `graphrag==3.0.9` in `pyproject.toml`. The project uses an OpenAI-compatible LLM / embedding endpoint (often routed through OneAPI) and exposes an OpenAI-compatible FastAPI API with `local`, `global`, `drift`, and `basic` search modes. Java-internal query-task APIs additionally support `hybrid_v0` and native streaming events for browser-facing SSE through `backend/ckqa-back`.
+这是以 Microsoft GraphRAG 为核心的知识图谱问答系统，`pyproject.toml` 当前固定 `graphrag==3.0.9`。项目使用 OpenAI 兼容的聊天/向量接口（通常经 One API），通过 FastAPI 暴露 `local`、`global`、`drift` 和 `basic` 查询。Java 内部 query-task 还支持 `hybrid_v0` 与原生流式事件，并经 `backend/ckqa-back` 桥接为浏览器 SSE。一期的输入同步、隔离 build run、异步查询和流式桥接均已落地；浏览器正式边界始终是 Java `/api/v1`。
 
-**Language:** Chinese (comments, prompts, docs, and commit messages are in Chinese).
-**Build system:** `pyproject.toml` (setuptools) with `.env` / `settings.yaml` for GraphRAG CLI, plus a small runtime config layer in `utils/main.py`.
+**语言：** 注释、Prompt、文档与提交说明默认使用中文。
+**构建与配置：** `pyproject.toml`（setuptools）配合 `.env` / `settings.yaml` 驱动 GraphRAG CLI；`utils/main.py` 提供小型运行时配置层。
 
 标准化导出验证流程见 `../docs/标准化导出验证说明.md`。
 

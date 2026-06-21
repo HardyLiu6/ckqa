@@ -1,6 +1,6 @@
 # student-app
 
-`frontend/apps/student-app/` 是 CKQA 仓库里的学员端前端原型。它已经包含首页、课程、问答、知识图谱等页面骨架，以及 Vue Router、Pinia、Element Plus 等基础设施；账号登录注册、课程只读入口、问答会话/任务事件流、学习记忆、模式推荐和知识图谱浏览已开始接入 Java 后端 `/api/v1`。
+`frontend/apps/student-app/` 是 CKQA 的学员端 v1 应用。它提供首页、课程、问答和知识图谱体验，并以 Vue Router、Pinia、Element Plus 为基础；账号登录注册、课程只读入口、问答会话/任务事件流、学习记忆、模式推荐和知识图谱浏览均通过 Java 后端 `/api/v1` 接入。
 
 如果你当前目标是跑通 CKQA 真实问答流程，请优先查看：
 
@@ -12,21 +12,20 @@
 
 - 技术栈：Vue 3、Vite、Element Plus、Pinia、Vue Router、Sass
 - 动效与体验依赖：AOS、GSAP、Lenis
-- 当前角色：学员端页面与交互原型，不是完整正式业务前端
-- 当前数据状态：登录注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、无显式课程时的课程画像路由、模式推荐和知识图谱浏览已走 Java `/api/v1`；社区、学习分析和部分用户中心页面仍是占位或本地原型
+- 当前角色：学员端 v1 体验入口；核心课程问答闭环使用正式 Java `/api/v1` 契约
+- 当前数据状态：登录注册、课程列表/详情只读入口、问答会话、任务事件流/轮询兜底、学习记忆、无显式课程时的课程画像路由、模式推荐和知识图谱浏览已走 Java `/api/v1`；社区、学习分析、学习内容和部分用户中心页面不属于一期范围
 - 当前工程形态：已纳入 CKQA 根仓库直接管理，依赖锁文件以 `pnpm-lock.yaml` 为准，生成依赖和构建产物继续通过本目录 `.gitignore` 忽略
 
-这意味着它更适合做：
+一期已覆盖的使用场景：
 
-- 学员端信息架构和页面流程演示
-- Vue 3 + Element Plus 技术方案验证
-- 后续继续补齐课程、问答、知识图谱和学习分析的正式学生端体验
+- 学生登录、课程选择、课程知识问答与会话恢复
+- 检索进度、流式回答、来源展示与断线恢复
+- 课程画像辅助选课、模式推荐、学习记忆与知识图谱浏览
 
-暂时不适合假设：
+仍不应假设：
 
-- 全部页面都已经完成正式后端闭环
-- 用户中心、社区、知识图谱等页面已经全部可用
-- 可以直接把它当成 CKQA 当前正式前端入口
+- 全部路由都已经完成正式后端闭环
+- 用户中心、社区、学习分析与课程学习内容已经全部可用
 
 ## 真实入口与关键文件
 
@@ -35,16 +34,16 @@
 | `src/main.js` | Vue 应用挂载入口，注册 Pinia 与 Vue Router |
 | `src/router/index.js` | 路由总入口，定义落地页、首页、问答、课程及大量预留路由 |
 | `src/App.vue` | 应用壳层，承载 `RouterView` 与全局 loading |
-| `src/views/layout/index.vue` | 落地页 / 介绍页原型 |
+| `src/views/layout/index.vue` | 落地页 / 介绍页 |
 | `src/views/auth/AuthAccess.vue` | 学生登录 / 注册 JWT 页面 |
-| `src/views/index.vue` | 登录后首页原型，展示热门提问、课程与知识图谱卡片 |
+| `src/views/index.vue` | 登录后首页，展示热门提问、课程与知识图谱卡片 |
 | `src/api/auth.js` | 学生登录、注册、邮箱验证码、当前用户与头像上传接口 |
 | `src/api/courses.js` | 课程列表、课程详情、课程资料、知识库、章节与学习进度接口封装 |
 | `src/api/qa.js` | 问答会话、消息、任务详情、任务事件流、模式推荐、混合检索预热、学习记忆与反馈接口封装 |
 | `src/api/graph.js` | 知识图谱健康检查、知识库选择、总览、实体邻域和实体详情接口封装 |
-| `src/views/qa/` | 问答页、历史页、详情页原型 |
+| `src/views/qa/` | 问答页、历史页与详情页 |
 | `src/views/qa/qa-route-query-model.js` | 规范化 `courseId/sessionId/mode/topic` 路由 query，支持刷新与侧栏跳转恢复上下文 |
-| `src/views/course/` | 课程列表、详情、学习页、我的课程原型 |
+| `src/views/course/` | 课程列表、详情、学习页与我的课程 |
 | `src/views/knowledge/KnowledgeGraph.vue` | 知识图谱浏览页，按课程选择可用知识库并跳转问答时携带课程上下文 |
 | `src/components/NavHeader.vue` | 顶部导航组件 |
 | `src/layouts/moduleSideNavLoaders.js` | 模块副导航懒加载与顶栏预加载共用的 loader |
@@ -94,11 +93,7 @@ cp .env.example .env
 
 对应示例见 `.env.example`。当前 `src/axios/index.js` 会自动读取它们，并导出默认实例与 `get` / `post` / `put` / `patch` / `del` 这些最常用方法。
 
-本地 JWT 登录测试账号来自后端迁移 `sql/migrations/20260506_jwt_auth_credentials.sql`：
-
-| 用户名 | 密码 |
-| --- | --- |
-| `student.zhouzh` | `Ckqa@2026` |
+本地 JWT 演示账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 初始化。请仅在隔离的本地开发环境中使用并自行重置密码；公开文档不记录可直接复用的账号密码。
 
 ## 常用命令
 
@@ -121,8 +116,7 @@ http://127.0.0.1:5174
 
 ## 当前实现特点
 
-- 页面视觉层已经明显超出 Vite 默认模板，适合继续往正式学员端演进
-- 路由、菜单、页面结构已经初步成型
+- 页面视觉层、路由、菜单与核心页面结构已构成学生端 v1 基线
 - Pinia user store 已保存 JWT 会话并向 Axios 注入 `Authorization` 和 `X-CKQA-User-Code`
 - 真实问答页优先使用 Java `/api/v1/qa-sessions/{sessionId}/tasks/{taskId}/events` SSE 任务事件流；后端可桥接 Python GraphRAG 原生 streaming `progress/delta/sources`，不可用时自动回退到 task 轮询或最终答案分段
 - 事件流会记录 `eventSeq`，断线重连时通过 `afterEventSeq` 只请求后续 progress/delta，避免重复拼接已展示的流式文本；检索进度通过 `QaRetrievalTrace` 组件展示
@@ -143,10 +137,10 @@ http://127.0.0.1:5174
 - `node_modules/` 是生成依赖，不应当作文档、审计或提交的主对象
 - 如果你要把它正式接入 CKQA，浏览器正式业务边界应统一走 `backend/ckqa-back` 的 Java `/api/v1`，不要把 student-app 直接接到 `graphrag_pipeline` 的 Python `/v1`
 
-## 后续接入前建议先补齐什么
+## 非一期范围的后续方向
 
-1. 以 `docs/student-backend-graphrag-api-contract.md` 为准，继续补齐课程学习、用户中心、社区和学习分析接口契约。
-2. 把仍依赖本地 store 或静态内容的页面逐步迁移到 `src/api/*` 封装，并补齐失败恢复策略。
+1. 以 `docs/student-backend-graphrag-api-contract.md` 为准，扩展课程学习、用户中心、社区和学习分析接口契约。
+2. 将仍依赖本地 store 或静态内容的非一期页面逐步迁移到 `src/api/*` 封装，并补齐失败恢复策略。
 3. 为课程、问答和知识图谱的真实接口补充更完整的浏览器级 Mock/E2E 验收。
 4. 继续优化构建体积，重点关注字体、Element Plus 与图谱相关 chunk。
 

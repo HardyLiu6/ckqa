@@ -2,6 +2,8 @@
 
 `graphrag_pipeline/` 是 CKQA 主链路中的建图、检索和问答服务模块。它消费 `pdf_ingest/` 导出的 JSON，构建 Microsoft GraphRAG 索引，并通过 FastAPI 提供 OpenAI 兼容接口。
 
+> 一期基线：输入同步、隔离 build run、GraphRAG CLI 查询、Java 内部异步 query-task 与原生流式事件桥接均已落地。浏览器仍只通过 Java `/api/v1` 使用这些能力。
+
 ## 模块定位
 
 - 从 MinIO 拉取 `section_docs.json`、`page_docs.json` 或 `normalized_docs.json`
@@ -27,7 +29,7 @@ Java 管理端的知识库构建会使用 `runtime/kb-build-runs/` 下的独立 
 - 真实依赖基线是 `graphrag==3.0.9`
 - `utils/main.py` 已收口为纯 CLI 查询包装层
 - API 运行时配置会优先读取仓库内 `.env` / 当前环境变量，并把查询统一委托给 GraphRAG CLI
-- 当前本地旧索引、旧输入和旧调优产物已清空；重新抽取后需要先同步输入、重建索引，再启动正式问答验证
+- 本地重置后，旧索引、输入和调优产物可能为空；应从当前课程资料重新同步输入、重建索引，再启动问答验证
 - Prompt 默认回到 `prompts/*.txt` 基础模板；`prompts/final/active_prompt.json` 只会在重新固化候选 Prompt 后生成
 
 ## 真实入口与关键文件

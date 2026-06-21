@@ -2,7 +2,7 @@
 
 `backend/ckqa-back/` 是 CKQA 仓库中的 Java 后端一期编排入口，基于 Spring Boot 4.0.5、Java 21 与 MyBatis-Plus 3.5.16。
 
-当前目标不是重写 `pdf_ingest/` 或 `graphrag_pipeline/`，而是在不破坏现有 Python 主链路的前提下，提供统一的 `/api/v1` 业务入口，先打通：
+一期编排能力已经落地。它不重写 `pdf_ingest/` 或 `graphrag_pipeline/`，而是在不破坏现有 Python 主链路的前提下，提供统一的 `/api/v1` 业务入口，打通：
 
 1. PDF 解析触发
 2. GraphRAG 输入导出
@@ -123,6 +123,8 @@
 - `GET /api/v1/qa-operations/logs`
 - `GET /api/v1/qa-operations/logs/summary`
 - `GET /api/v1/qa-operations/logs/export`
+- `GET /api/v1/qa-operations/logs/export.csv`
+- `GET /api/v1/qa-operations/logs/export.xlsx`
 - `GET /api/v1/qa-operations/logs/{retrievalLogId}`
 - `PUT /api/v1/qa-operations/source-reviews/{retrievalHitId}`
 
@@ -165,7 +167,7 @@
 - 后端已经接入 Spring Security Resource Server，`/api/v1/auth/admin/login`、`/api/v1/auth/student/login`、`/api/v1/auth/student/register`、`/api/v1/system/health`、`/api/v1/course-covers/**` 与 `/api/v1/user-avatars/**` 可匿名访问，其余 `/api/v1/**` 默认需要 `Authorization: Bearer <jwt>`。
 - 管理端登录允许 `admin` / `teacher` 角色，学生端登录只允许 `student` 角色。
 - 课程列表、课程详情和课程成员授权接口会优先读取 JWT 中的 `userCode`；`X-CKQA-User-Code` 仅作为本地测试与兼容兜底。
-- 本地联调测试账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 补充密码哈希，演示密码统一为 `Ckqa@2026`。
+- 本地联调演示账号由 `sql/migrations/20260506_jwt_auth_credentials.sql` 初始化。仅可在隔离开发环境中使用，并应在部署前自行重置；公开文档不记录可直接复用的账号密码。
 
 ## 目录说明
 
@@ -599,6 +601,6 @@ export CKQA_SMOKE_PARSE_RESULT_EXPECT_CONTAINS='content'
 - `parse` 与 `index` 仍是同步长任务，一期主要靠命令超时与陈旧任务恢复兜底
 - 问答链路已改成异步任务模式，修的是“超时语义”，不是 `global` / `drift` 查询速度
 - Python 任务快照目前仍是进程内内存态，Python 服务重启会导致 Java 把对应任务标记为 `failed`
-- `qa_retrieval_hits` 与 `qa_source_reviews` 已作为来源持久化和复核基础表落地；管理端列表已可查看聚合来源摘要，但完整检索日志详情与来源复核工作台仍待继续补齐
+- `qa_retrieval_hits` 与 `qa_source_reviews` 已作为来源持久化和复核基础表落地；管理端已提供检索日志详情、学生反馈查看与来源复核。全量审计分析和更细的权限策略仍可继续扩展
 - `system/health` 目前是“就绪前置条件检查”，不是完整语义级问答探活
 - Java 侧已经承接课程资料 PDF 上传 v1；非 PDF、多文件批量上传和更细的上传后处理仍待后续扩展。`/api/v1/pdf-files` 现在只是兼容路由，内部实际读写的是 `course_materials` / `material_objects`
