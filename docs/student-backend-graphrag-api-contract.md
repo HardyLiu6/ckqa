@@ -1,16 +1,16 @@
 # Student App 到后端与 GraphRAG API 契约
 
-> 审查日期：2026-06-02
+> 审查日期：2026-06-21
 > 适用范围：`frontend/apps/student-app/`、`backend/ckqa-back/`、`graphrag_pipeline/`
 
-本文档定义学员端前端、Java 编排后端和 GraphRAG Python 服务之间的最小稳定契约。当前约定是：`student-app` 只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
+本文档定义一期学员端前端、Java 编排后端和 GraphRAG Python 服务之间的稳定契约，并补充管理端共用的构建与 QA 运维边界。当前约定是：浏览器只直接调用 `backend/ckqa-back` 的 `/api/v1` 业务接口；`backend/ckqa-back` 再按需调用 `graphrag_pipeline` 的内部任务接口。除调试工具外，前端不应直接调用 `graphrag_pipeline`。
 
 ## 角色边界
 
 | 模块 | 角色 | 对外暴露给谁 |
 | --- | --- | --- |
 | `frontend/apps/student-app/` | 学员端页面、状态展示、任务事件流/轮询兜底、错误提示 | 用户浏览器 |
-| `backend/ckqa-back/` | `/api/v1` 业务 API、统一响应、MySQL 状态、Python 编排 | `student-app` |
+| `backend/ckqa-back/` | `/api/v1` 业务 API、统一响应、MySQL 状态、Python 编排 | `student-app`、`admin-app` |
 | `graphrag_pipeline/` | GraphRAG CLI 查询包装、异步查询任务、OpenAI 兼容调试接口 | `backend/ckqa-back` 或开发调试工具 |
 
 ### 架构决策
@@ -217,11 +217,27 @@ GET /api/v1/knowledge-bases/{knowledgeBaseId}/graph/entities/{entityId}/neighbor
 | `POST` | `/api/v1/knowledge-base-build-runs/{id}/graph-input` | 同步 GraphRAG 输入到独立 workspace |
 | `POST` | `/api/v1/knowledge-base-build-runs/{id}/prompt-confirmation` | 确认 Prompt 策略 |
 | `POST` | `/api/v1/knowledge-base-build-runs/{id}/index-runs` | 在 build-run workspace 内建索引 |
-| `POST` | `/api/v1/knowledge-base-build-runs/{id}/qa-smoke` | 使用该 build run 的索引发起 QA 冒烟验证 |
+| `POST` | `/api/v1/knowledge-base-build-runs/{id}/qa-smoke` | 使用该 build run 的索引发起真实 QA 冒烟验证，并返回本次任务的真实答复与状态 |
 
 学生端当前不直接触发这些构建接口；它只消费已经激活的知识库索引。后端不会把 `${GRAPHRAG_BUILD_RUNS_ROOT}` 下的绝对路径暴露给浏览器。
 
 这些 `/api/v1/pdf-files/*` 路径同样是兼容保留名；`{id}` 当前实际对应 `course_materials.id`，响应体会额外补出 `materialId` 与 `materialObjectId`。
+
+### 管理端 QA 运维入口
+
+下列接口供 `admin-app` 的问答运维页面使用，学生端不应直接调用。列表、概览、详情和来源复核均由 Java 聚合和鉴权，浏览器不读取 Python 的内部任务数据。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1/qa-operations/logs` | 按课程、知识库、用户、模式、任务状态、时间范围等条件分页查询检索日志。 |
+| `GET` | `/api/v1/qa-operations/logs/summary` | 按同一筛选条件返回全库聚合指标；概览卡片不能由当前页数据自行推算。 |
+| `GET` | `/api/v1/qa-operations/logs/{retrievalLogId}` | 查看回答正文、rewrite/上下文、路由快照、学习记忆、学生反馈和来源。 |
+| `GET` | `/api/v1/qa-operations/logs/export` | 导出完整 JSON 快照。 |
+| `GET` | `/api/v1/qa-operations/logs/export.csv` | 导出扁平 CSV。 |
+| `GET` | `/api/v1/qa-operations/logs/export.xlsx` | 导出扁平 Excel。 |
+| `PUT` | `/api/v1/qa-operations/source-reviews/{retrievalHitId}` | 保存单条来源的相关性、引用质量与备注复核。 |
+
+来源复核是持久化的管理动作：前端应提交后端返回的复核结果，不能只在当前页面本地修改显示状态。
 
 导出请求体：
 
@@ -712,7 +728,7 @@ GET /health
 - 前端直接触发 GraphRAG `graphrag index`。
 - `full` 查询模式。
 - WebSocket 双向通道。
-- 完整引用来源管理工作台；当前 `qa_retrieval_hits` / `qa_source_reviews` 已作为来源持久化和复核基础表存在，admin-app 已有问答运维列表，但检索日志详情与来源复核体验仍需继续补齐。
+- 更深度的全量审计分析与细粒度角色权限编辑；当前 `qa_retrieval_hits` / `qa_source_reviews` 已持久化，admin-app 已具备问答运维列表、详情和来源复核。
 
 ## 最小验证命令
 

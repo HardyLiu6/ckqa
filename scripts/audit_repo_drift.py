@@ -20,6 +20,7 @@ from typing import Iterable, Sequence
 
 ACTIVE_AUDIT_PATHS = (
     Path("README.md"),
+    Path("README.en.md"),
     Path("AGENTS.md"),
     Path(".codex"),
     Path("infra/README.md"),
