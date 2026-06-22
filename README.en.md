@@ -2,39 +2,195 @@
 
 [简体中文](README.md) | [Documentation](#documentation) | [Quick start](#quick-start)
 
-CKQA (Course Knowledge Question Answering) is a course-material knowledge production and question-answering platform. It turns course PDFs into traceable normalized text, builds Microsoft GraphRAG knowledge graphs, and exposes course Q&A, knowledge-base builds, and operations through student, admin, and Java API applications.
+CKQA (Course Knowledge Question Answering) is a course-material knowledge production and question-answering platform. It turns course PDFs into traceable normalized text, builds course knowledge-graph indexes powered by Microsoft GraphRAG, and exposes course Q&A, knowledge-base builds, and operations through student, admin, and Java API applications.
 
 > The v1 baseline is complete: PDF processing, course-material management, knowledge-base builds, GraphRAG Q&A, asynchronous streaming tasks, and the core student/admin workflows can be integrated locally. The project is still evolving; out-of-scope pages and capabilities are explicitly labelled in the UI and module documentation.
 
+## Product Preview
+
+![Student app course knowledge-graph Q&A: retrieval trace, streamed answer, and source citations](docs/assets/readme/student-qa-demo.png)
+
+*Student app using Basic mode to ask "Please define deadlock and explain the four necessary conditions for deadlock to occur," showing retrieval progress, streamed answer, and expandable page-level source citations.*
+
+The student app issues questions against selected courses and active indexes. Java handles course and mode orchestration, then bridges Python GraphRAG's retrieval progress, answer deltas, and source events to the browser.
+
+## Why Not Traditional Document RAG
+
+| Dimension | Traditional Document RAG | CKQA Knowledge-Graph Q&A |
+| --- | --- | --- |
+| **Data source** | Raw PDF text chunks, usually lacking page/section structure | MinerU parsing + normalized export, preserving page numbers, sections, and layout |
+| **Knowledge production** | Direct chunking + vectorization | Isolated GraphRAG build runs extracting entities, relations, communities, and community reports |
+| **Retrieval approach** | Single vector retrieval or BM25 | Five modes (`basic` / `local` / `global` / `drift` / `hybrid_v0`) selected by question type |
+| **System boundary** | Usually Python monolith or LangChain app | Java `/api/v1` orchestrates auth, course routing, mode recommendation, and SSE streaming bridge |
+| **Traceability** | Retrieved chunks usually text-only, hard to locate in source | Page-level and section-level sources; admin can manually review retrieval logs and sources |
+| **Operations** | Index rebuilds usually overwrite global state | Isolated index artifacts, logs, and QA smoke snapshots by course and build batch |
+
+CKQA is not superior in all scenarios: for single-document quick Q&A or tasks without multi-hop reasoning, simple vector retrieval may suffice. But for educational scenarios requiring cross-chapter reasoning, community summaries, and course-level knowledge organization, GraphRAG's structured knowledge production and multi-mode queries deliver better answer quality and explainability.
+
+## Project Highlights
+
+- **Complete knowledge production pipeline**: From course PDF upload, MinerU parsing, normalized export to GraphRAG indexing and QA Smoke (smoke testing) validation
+- **GraphRAG multi-mode Q&A**: Supports basic, local, global, drift, and hybrid_v0, adapting to factual Q&A, cross-chapter summaries, and course-level knowledge organization
+- **Java orchestration boundary**: Frontend uniformly accesses Java `/api/v1`; Java handles auth, course routing, mode recommendation, async tasks, and SSE streaming bridge
+- **Observable operations loop**: Admin app supports material parsing progress, build wizards, Q&A logs, source reviews, and system health checks
+
 ## Highlights
+
+## Core Capabilities
 
 | Capability | What it does |
 | --- | --- |
 | Course material processing | Uploads PDFs, invokes MinerU, records page-level progress, and stores objects and metadata in MinIO and MySQL. |
 | Normalized exports | Produces `normalized_docs.json` for review and `section_docs.json` / `page_docs.json` for graph construction. |
-| Knowledge-base builds | Isolates GraphRAG inputs, outputs, logs, and QA smoke snapshots by course and build run. |
+| Knowledge-base builds | Isolates GraphRAG inputs, outputs, logs, and QA Smoke (smoke testing) snapshots by course and build run. |
 | Course Q&A | Supports `basic`, `local`, `global`, `drift`, and `hybrid_v0`, with retrieval progress, streamed answers, and sources in the student app. |
 | Service orchestration | Java `/api/v1` handles auth, course routing, mode recommendation, asynchronous QA, SSE resume, and admin operations. |
-| Operational visibility | The admin app covers courses, materials, parsing progress, build wizards, QA smoke tests, retrieval logs, source reviews, and health checks. |
+| Operational visibility | The admin app covers courses, materials, parsing progress, build wizards, QA Smoke (smoke testing), retrieval logs, source reviews, and health checks. |
+
+## Knowledge Production Pipeline
+
+```mermaid
+flowchart LR
+  PDF[Course PDF] --> API[Java /api/v1 upload]
+  API --> INGEST[pdf_ingest / MinerU]
+  INGEST --> NORM[normalized_docs.json]
+  NORM --> PROJ[section_docs / page_docs]
+  PROJ --> BUILD[Isolated GraphRAG build run]
+  BUILD --> INDEX[LanceDB + Parquet graph artifacts]
+  INDEX --> SMOKE[QA Smoke testing]
+  SMOKE --> READY[Queryable knowledge base]
+  INGEST -.metadata & state.-> MYSQL[(MySQL)]
+  INGEST -.original files & parsed artifacts.-> MINIO[(MinIO)]
+```
 
 ## Architecture
 
-```text
-Course PDF
-  │
-  ▼
-pdf_ingest ── MinerU / MinIO / MySQL
-  │  normalized_docs.json / section_docs.json / page_docs.json
-  ▼
-graphrag_pipeline ── Microsoft GraphRAG 3.0.9 / LanceDB / Neo4j (optional)
-  │  internal query-task, streaming, and course-profile APIs
-  ▼
-backend/ckqa-back ── Spring Boot 4 / Java 21 / /api/v1
-  ├── frontend/apps/student-app   Student experience
-  └── frontend/apps/admin-app     Administrator and teacher console
+```mermaid
+flowchart TB
+  subgraph U[User Layer]
+    STUDENT[Student App Vue]
+    ADMIN[Admin App Vue]
+  end
+  subgraph J[Business Orchestration Layer]
+    JAVA[Spring Boot /api/v1]
+    AUTH[JWT & Permissions]
+    ROUTE[Course Routing & Mode Recommendation]
+    SSE[SSE & afterEventSeq Resume]
+  end
+  subgraph G[Knowledge Q&A Layer]
+    PY[FastAPI query-task]
+    MODES[basic · local · global · drift · hybrid_v0]
+  end
+  subgraph D[Knowledge Production & Storage Layer]
+    PDFI[pdf_ingest / MinerU]
+    STORE[(MySQL · MinIO · Redis)]
+    GRAPH[(Parquet · LanceDB · Neo4j)]
+    LLM[One API / OpenAI-compatible]
+  end
+  STUDENT --> JAVA
+  ADMIN --> JAVA
+  JAVA --> AUTH
+  JAVA --> ROUTE
+  JAVA --> SSE
+  JAVA --> PY
+  PY --> MODES
+  PY --> GRAPH
+  PY --> LLM
+  JAVA --> PDFI
+  JAVA --> STORE
 ```
 
 Java `/api/v1` is the formal browser boundary. The Python GraphRAG service is orchestrated internally by Java; browser clients do not call Python `/v1` endpoints directly.
+
+## Q&A Flow
+
+```mermaid
+sequenceDiagram
+  participant S as Student App
+  participant J as Java /api/v1
+  participant P as GraphRAG query-task
+  participant M as MySQL
+  S->>J: Submit course question
+  J->>J: Course domain validation & mode orchestration
+  J->>P: Create basic/local/global/drift/hybrid_v0 task
+  P-->>J: progress / delta / sources
+  J-->>S: SSE streaming bridge
+  S-->>J: Reconnect with afterEventSeq after disconnect
+  J->>M: Save final answer, retrieval logs, and sources
+```
+
+## Query Modes
+
+```mermaid
+flowchart TD
+  Q[User Question] --> SMART[smart recommendation entry]
+  SMART --> BASIC[basic]
+  SMART --> LOCAL[local]
+  SMART --> GLOBAL[global]
+  SMART --> DRIFT[drift]
+  SMART --> HYBRID[hybrid_v0]
+  BM25[BM25 course evidence] --> HYBRID
+  HYBRID --> GB[GraphRAG Basic]
+```
+
+`smart` is not a final query mode but an orchestration entry that recommends `basic` / `local` / `global` / `drift` or `hybrid_v0` based on question characteristics. `hybrid_v0` is a business query mode, not an OpenAI-compatible `model` name; it injects BM25 course evidence before GraphRAG Basic.
+
+## Admin Capabilities
+
+![Admin app course material detail: parsing completed and course metadata](docs/assets/readme/admin-materials.png)
+
+*Operating Systems course material detail page, showing course cover, description, instructors, and basic info. Supports viewing material parsing status, normalized export artifacts, and knowledge-base build entry.*
+
+The admin app provides a complete operations loop around courses, materials, knowledge bases, and build batches:
+
+- **Course and material management**: Create courses, upload PDFs, view parsing progress and normalized export artifacts
+- **Knowledge-base build wizard**: Select materials, configure build params, execute GraphRAG indexing, view graph statistics
+- **QA Smoke (smoke testing)**: Validate Q&A availability with built-in test sets before activating the index
+- **Q&A logs and source review**: View student Q&A records, retrieval traces, retrieved sources, and manual annotations
+
+![Admin app knowledge-base build completed: graph statistics and index artifacts](docs/assets/readme/admin-build-smoke-demo.png)
+
+*Knowledge-base build wizard index step completed, showing graph statistics (3776 entities, 9345 relations, 930 communities), build duration, and QA Smoke validation results.*
+
+## Demo Walkthrough
+
+Complete demonstration path:
+
+1. **Upload and parse**: Admin uploads course PDF, system invokes MinerU and records page-level progress
+2. **Normalized export**: Generates `normalized_docs.json` for manual review and `section_docs.json` / `page_docs.json` for downstream graph construction
+3. **Isolated build**: Creates independent GraphRAG workspace by course and build batch, avoiding cross-index pollution
+4. **QA Smoke (smoke testing)**: Validates entity, relation, and community report quality with built-in test sets before activating the index
+5. **Student Q&A**: Student app selects course and asks questions, viewing retrieval progress, streamed answer, and source citations
+6. **Source review**: Admin views Q&A logs, retrieval traces, retrieved sources, and manual accuracy annotations
+
+## Demo Data and Reproduction
+
+The three screenshots in this README are from the current repository's real running state:
+
+- **Course**: Operating Systems 2026 Spring (Computer Operating Systems textbook, 408 pages)
+- **Index**: GraphRAG 3.0.9, auto-tuned Prompt, 3776 entities / 9345 relations / 930 communities
+- **Q&A**: Student app Basic mode, real LLM answer with GraphRAG retrieval sources
+
+Reproduce the Q&A scenario in the screenshots locally:
+
+```bash
+# Assumes infrastructure, Python environments, backend, and frontend started per Quick Start
+
+# 1. Restore demo data (if local database is empty)
+#    See docs/superpowers/plans/2026-06-21-readme-showcase-refresh.md Task 1
+
+# 2. Start services
+cd backend/ckqa-back && scripts/run_local_backend.sh --mailer-type log
+cd frontend/apps/admin-app && pnpm dev:local  # 5173
+cd frontend/apps/student-app && pnpm dev:local  # 5174
+
+# 3. Visit student app and ask
+#    http://127.0.0.1:5174/qa/ask?courseId=<your-course-id>&mode=basic
+#    "Please define deadlock and explain the four necessary conditions for deadlock to occur."
+
+# 4. View admin build completed state
+#    http://127.0.0.1:5173/app/knowledge-bases/<kb-id>/build?buildRunId=<build-run-id>&step=index
+```
 
 ## Tech stack
 
