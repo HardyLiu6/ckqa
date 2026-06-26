@@ -21,6 +21,7 @@ The student app issues questions against selected courses and active indexes. Ja
 | **Data source** | Raw PDF text chunks, usually lacking page/section structure | MinerU parsing + normalized export, preserving page numbers, sections, and layout |
 | **Knowledge production** | Direct chunking + vectorization | Isolated GraphRAG build runs extracting entities, relations, communities, and community reports |
 | **Retrieval approach** | Single vector retrieval or BM25 | Five modes (`basic` / `local` / `global` / `drift` / `hybrid_v0`) selected by question type |
+| **Context understanding** | Requests are usually handled as single-turn questions | Sessions lock indexes, maintain recent context / rolling summaries / semantic topic stacks, and separate retrieval queries from generation context for follow-ups |
 | **System boundary** | Usually Python monolith or LangChain app | Java `/api/v1` orchestrates auth, course routing, mode recommendation, and SSE streaming bridge |
 | **Traceability** | Retrieved chunks usually text-only, hard to locate in source | Page-level and section-level sources; admin can manually review retrieval logs and sources |
 | **Operations** | Index rebuilds usually overwrite global state | Isolated index artifacts, logs, and QA smoke snapshots by course and build batch |
@@ -31,10 +32,10 @@ CKQA is not superior in all scenarios: for single-document quick Q&A or tasks wi
 
 - **Complete knowledge production pipeline**: From course PDF upload, MinerU parsing, normalized export to GraphRAG indexing and QA Smoke (smoke testing) validation
 - **GraphRAG multi-mode Q&A**: Supports basic, local, global, drift, and hybrid_v0, adapting to factual Q&A, cross-chapter summaries, and course-level knowledge organization
+- **Context-aware Q&A core**: Sessions lock active indexes and combine recent dialogue, rolling summaries, semantic topic stacks, and follow-up rewriting to reduce multi-turn drift
+- **Course profiles and intelligent routing**: Course metadata, knowledge bases, material titles, and GraphRAG hints form derived course profiles for course recommendation, domain checks, and mode routing
 - **Java orchestration boundary**: Frontend uniformly accesses Java `/api/v1`; Java handles auth, course routing, mode recommendation, async tasks, and SSE streaming bridge
 - **Observable operations loop**: Admin app supports material parsing progress, build wizards, Q&A logs, source reviews, and system health checks
-
-## Highlights
 
 ## Core Capabilities
 
@@ -44,7 +45,8 @@ CKQA is not superior in all scenarios: for single-document quick Q&A or tasks wi
 | Normalized exports | Produces `normalized_docs.json` for review and `section_docs.json` / `page_docs.json` for graph construction. |
 | Knowledge-base builds | Isolates GraphRAG inputs, outputs, logs, and QA Smoke (smoke testing) snapshots by course and build run. |
 | Course Q&A | Supports `basic`, `local`, `global`, `drift`, and `hybrid_v0`, with retrieval progress, streamed answers, and sources in the student app. |
-| Service orchestration | Java `/api/v1` handles auth, course routing, mode recommendation, asynchronous QA, SSE resume, and admin operations. |
+| Context management | Locks `indexRunId` for formal sessions and builds recent context, rolling summaries, semantic topic stacks, and follow-up rewrites by strategy. |
+| Service orchestration | Java `/api/v1` handles auth, course-profile routing, domain checks, mode recommendation, asynchronous QA, SSE resume, and admin operations. |
 | Operational visibility | The admin app covers courses, materials, parsing progress, build wizards, QA Smoke (smoke testing), retrieval logs, source reviews, and health checks. |
 
 ## Knowledge Production Pipeline
@@ -74,7 +76,9 @@ flowchart TB
   subgraph J[Business Orchestration Layer]
     JAVA[Spring Boot /api/v1]
     AUTH[JWT & Permissions]
-    ROUTE[Course Routing & Mode Recommendation]
+    ROUTE[Course-Profile Routing & Domain Checks]
+    MODE[Intelligent Mode Routing]
+    CTX[Context Strategy & Follow-up Rewrite]
     SSE[SSE & afterEventSeq Resume]
   end
   subgraph G[Knowledge Q&A Layer]
@@ -91,6 +95,8 @@ flowchart TB
   ADMIN --> JAVA
   JAVA --> AUTH
   JAVA --> ROUTE
+  JAVA --> MODE
+  JAVA --> CTX
   JAVA --> SSE
   JAVA --> PY
   PY --> MODES
@@ -110,14 +116,55 @@ sequenceDiagram
   participant J as Java /api/v1
   participant P as GraphRAG query-task
   participant M as MySQL
-  S->>J: Submit course question
-  J->>J: Course domain validation & mode orchestration
-  J->>P: Create basic/local/global/drift/hybrid_v0 task
+  S->>J: Submit question, session, and optional course
+  J->>J: Course-profile routing and domain check
+  J->>J: Resolve smart recommendation to final mode
+  J->>J: Lock indexRunId, assemble context, rewrite follow-up
+  J->>P: retrievalQuery + generationContext + mode
   P-->>J: progress / delta / sources
   J-->>S: SSE streaming bridge
   S-->>J: Reconnect with afterEventSeq after disconnect
   J->>M: Save final answer, retrieval logs, and sources
 ```
+
+## Intelligent Q&A Design
+
+CKQA does not simply forward a browser question to GraphRAG. Before Java creates a Python query task, it makes a set of explainable decisions so course selection, context, retrieval mode, and observability all stay inside one business workflow.
+
+### Context Management
+
+- Formal QA sessions lock the active `indexRunId`, so one conversation does not mix indexes when a new build is activated in the background.
+- Context strategies include `none`, `recent`, `summary`, and `summary_recent`: recent messages handle short follow-ups, while rolling summaries and the semantic topic stack preserve longer-running topics.
+- The system separates the user's original question into a retrieval-oriented `retrievalQuery` and generation-oriented `generationContext`. Follow-ups such as "what are its four conditions?" are resolved before bounded context is passed to GraphRAG.
+- Learning memory is an opt-in Beta capability used only as an appropriate cross-dialogue hint; course facts remain grounded in MySQL, MinIO, and GraphRAG indexes.
+
+### Course Profiles and Routing
+
+- Each queryable course has an internal derived profile built from course name, description, difficulty, tags, learning objectives, knowledge-base descriptions, document titles, material names, and hints extracted from GraphRAG artifacts.
+- Profile text is embedded into the course-routing LanceDB table. When no course is explicitly selected, Java first filters courses the student can read, then asks the internal router for `matched`, `needs_confirmation`, or `no_match`.
+- Course profiles also power domain checks after a course is selected, preventing clearly off-topic questions from being forced into the course knowledge base.
+
+### Intelligent Mode Routing
+
+Student-app `smart` is a recommendation entrypoint, not a final retrieval mode. Routing currently has three layers:
+
+1. **Course routing**: recommend candidate courses from profiles when no course is selected.
+2. **Course domain check**: decide whether the question belongs in the selected course knowledge base.
+3. **Mode recommendation**: map definition, material lookup, summary, relation expansion, evidence-seeking, and follow-up signals to a final mode.
+
+| Final mode | Best fit | Technical meaning |
+| --- | --- | --- |
+| `basic` | Concepts, definitions, basic facts | Lightweight GraphRAG Basic query for direct answers. |
+| `local` | Details in a chapter, page, or material | Precise retrieval over local entities, text units, and source evidence. |
+| `global` | Course-wide frameworks and chapter-level summaries | Uses community reports for global synthesis. |
+| `drift` | Relations, causes, impacts, and cross-topic expansion | Starts from local hits and drifts across related graph evidence for multi-hop explanation. |
+| `hybrid_v0` | Evidence-heavy questions that need source comparison or relation proof | Selects low-level BM25 course evidence before injecting it into GraphRAG Basic; this is a CKQA business mode, not an OpenAI model name. |
+
+### Observable Loop
+
+- SSE events carry increasing sequence numbers, so the student app can resume progress, answer deltas, and source events with `afterEventSeq`; polling remains as a compatibility fallback.
+- Each QA run records the original question, rewritten question, context strategy, route scores, topic stack, Python task state, retrieved sources, and final answer. Admin users can review source quality.
+- Routing evaluation examples, QA Smoke, retrieval logs, and manual source annotations form the quality loop: validate whether a build is queryable before activation, then inspect whether real questions are routed and cited correctly after release.
 
 ## Query Modes
 
